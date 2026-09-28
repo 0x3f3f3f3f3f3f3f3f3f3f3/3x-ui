@@ -231,3 +231,73 @@ func TestConnectorOpenSSHIPv6Target(t *testing.T) {
 		t.Fatal("independent IPv6 target did not observe request")
 	}
 }
+
+func TestBridgeOpenSSHForwardingAndPinFailure(t *testing.T) {
+	config := testOpenSSH(t)
+	m := bridgeManager(t)
+	outbound := Outbound{Tag: "actual-openssh", Settings: config}
+	stage, err := m.Prepare([]Outbound{outbound})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage.Commit()
+	target, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer target.Close()
+	var calls atomic.Int64
+	received := make(chan string, 2)
+	go func() {
+		for {
+			conn, err := target.Accept()
+			if err != nil {
+				return
+			}
+			calls.Add(1)
+			go func() {
+				defer conn.Close()
+				_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
+				data, _ := io.ReadAll(conn)
+				received <- string(data)
+				_, _ = conn.Write([]byte("response-through-ssh"))
+			}()
+		}
+	}()
+	_, port, _ := net.SplitHostPort(target.Addr().String())
+	client, err := dialBridge(t, renderedBridge(t, m, outbound), net.JoinHostPort("localhost", port))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	_ = client.SetDeadline(time.Now().Add(3 * time.Second))
+	if _, err := client.Write([]byte("request-through-ssh")); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.(*net.TCPConn).CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
+	response, err := io.ReadAll(client)
+	if err != nil || string(response) != "response-through-ssh" {
+		t.Fatalf("actual bridge response=%q err=%v", response, err)
+	}
+	if got := <-received; got != "request-through-ssh" {
+		t.Fatalf("independent SSH target received %q", got)
+	}
+	_, outbound.Settings.HostKey = testKey(t)
+	stage, err = m.Prepare([]Outbound{outbound})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage.Commit()
+	rejected, err := dialBridge(t, renderedBridge(t, m, outbound), target.Addr().String())
+	if rejected != nil {
+		_ = rejected.Close()
+	}
+	if err == nil || !strings.Contains(err.Error(), "connection refused") || rejected != nil {
+		t.Fatalf("wrong host pin did not refuse CONNECT: %v", err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("failed pin used a direct fallback: target connections=%d", calls.Load())
+	}
+}

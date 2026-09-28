@@ -101,6 +101,7 @@ The following narrower scopes now have implementation and direct evidence:
 | OpenSSH configuration and actual host-key export | V | SQLite/PostgreSQL public-key-only metadata; actual OpenSSH parser; browser downloads consumed by OpenSSH, mismatched host key refused; exported files contain no private key; initial application follows the existing 30-second configuration scheduler |
 | SSH generated API types and existing option endpoint | V | Go→Zod/types/OpenAPI regenerated; real authenticated browser reads the host public key; complete API/bulk/portable/export/deployment acceptance remains open |
 | Internal upstream TCP connector | V | Real OpenSSH 9.6p1: 43008-byte request/echo, half-close, wrong pin/key rejection, IPv6 target. Wire peers: 128-flow capacity/reuse, encrypted keys, pinned algorithm selection, deadlines/cancellation/shutdown and concurrent bytes under race detector. Public bridge, route selection, runtime/editor/API/probes and end-to-end policy billing remain N |
+| Internal authenticated upstream bridge and staged generations | V | SOCKS → actual OpenSSH → independent target, half-close and wrong-pin no-fallback; wire tests for auth/UDP rejection, rollback/commit/selective revocation, port conflict, 512 pending connections, five-second negotiation timeout and restart. Panel/runtime/editor/probe integration remains N |
 
 ## Protocol-specific applicability
 

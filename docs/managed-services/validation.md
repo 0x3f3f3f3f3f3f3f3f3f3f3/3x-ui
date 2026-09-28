@@ -1437,3 +1437,68 @@ cost, 128-flow per-connector admission and fatal active-timeout behavior are
 specified in [the connector plan](ssh-upstream-connector.md). Aggregate
 throughput/RAM/CPU, global outbound resource bounds, actual route selection and
 single billing through the future bridge remain unverified requirements.
+
+### Authenticated SSH upstream bridge and staged generations (2026-09-28)
+
+The new internal bridge sends SOCKS5 CONNECT through the pinned connector. It
+requires username/password authentication, keeps domain/IP targets intact, and
+rejects UDP, BIND and malformed requests before any upstream connection. A
+process-random HMAC secret derives generation-specific credentials; rendering
+configuration opens no listener. Prepare stages new connectors beside active
+ones; rollback leaves old streams and credentials usable; commit closes changed
+or deleted streams and credentials while an unrelated existing stream survives.
+Port conflicts and invalid settings preserve working state. Close and an empty
+committed desired set release the listener; subsequent prepare restarts it.
+
+The initial two tests failed against the unimplemented bridge
+(`/tmp/3x-ui-ssh-upstream-bridge-red.log`). The first implementation exposed a test
+assumption: x/net's context SOCKS dial returns a `socks.Conn`, not a TCPConn. The
+fixture now uses its actual `DialWithConn` handshake on an owned TCP connection,
+so half-close is tested through a real socket without asserting the wrong type.
+No production behavior or expected payload was relaxed.
+
+The actual OpenSSH 9.6p1 fixture receives `request-through-ssh` at an independent
+loopback TCP target and returns `response-through-ssh` after request half-close.
+Committing a syntactically valid wrong host pin makes the next SOCKS CONNECT
+return connection-refused; the target connection count remains exactly one.
+This verifies SOCKS → SSH traversal and no direct fallback. It does not yet
+prove Xray routing or ingress accounting through the new outbound.
+
+Capacity testing fills 512 accepted connections waiting for authentication,
+observes immediate closure of the next connection, and observes capacity become
+usable after one closes, with zero upstream accepts. A correctly authenticated
+client that never supplies its CONNECT request is closed by the five-second
+negotiation deadline, before the independent six-second observation timeout.
+The parser rejects unsupported envelope/settings fields, invalid keys/tags,
+duplicate SSH/native tags and more than 32 SSH outbounds. These limits apply to
+this managed bridge; measured aggregate memory/throughput remains open.
+
+Eleven mutations each caused the expected behavioral failure and were restored:
+password verification, no-auth rejection, rollback selection, generation
+revocation, connection cap, UDP rejection, strict unknown fields, duplicate tags,
+outbound count, handshake deadline and automatic port fallback. Logs:
+`/tmp/3x-ui-ssh-bridge-mutation-{auth,noauth,rollback,revocation,capacity,udp,unknown-fields,duplicate,outbound-capacity,handshake-deadline,port-fallback}.log`.
+The real-server bridge run separately passed in 1.540s under the race detector
+(`/tmp/3x-ui-ssh-upstream-real-bridge.log`).
+
+Final complete package command:
+`SSH_E2E_SERVER=/usr/sbin/sshd go test -race -shuffle=on ./internal/sshoutbound -count=1 -v`
+passed 26 top-level tests and their subtests in 16.460s, with no skips or races
+(`/tmp/3x-ui-ssh-upstream-bridge-race-final.log`). Whole Go static analysis passed
+with 0 issues after replacing the production listener call with
+`net.ListenConfig.Listen(context.Background(), ...)` as required by `noctx`;
+log `/tmp/3x-ui-ssh-upstream-bridge-lint-final.log`.
+
+The implementation and tests remain internal; the next service-layer RED test
+still reports the current Xray validator's `unknown config id: ssh`. Saving,
+previewing and applying SSH outbounds through the panel is Task 2, followed by
+editor/probe/node/backup/deployment and full policy acceptance. Those requirements
+remain incomplete. No new database migration or frontend contract is involved
+in this internal bridge increment; previous full-suite results are not counted
+as fresh evidence for it.
+
+Updated package/test cross-compilation also passed for Windows amd64 and macOS
+arm64 with `CGO_ENABLED=0 go test -c ./internal/sshoutbound`, producing PE32+ and
+Mach-O artifacts under `/tmp/3x-ui-ssh-bridge-{windows.test.exe,darwin.test}`.
+Logs `/tmp/3x-ui-ssh-bridge-{windows,darwin}-build.log` are empty on success.
+These are compile checks, not runtime or whole-panel platform acceptance.

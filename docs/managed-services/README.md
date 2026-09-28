@@ -8,6 +8,7 @@ It is not a declaration that the protocols or policy enforcement are ready.
 - [Architecture and data paths](design.md)
 - [Implementation plan and status](plan.md)
 - [SSH upstream connector and remaining integration](ssh-upstream-connector.md)
+- [SSH upstream bridge and runtime plan](ssh-upstream-integration.md)
 - [Accounting and enforcement semantics](semantics.md)
 - [Verification evidence](validation.md)
 - [Installation, recovery and rollback](operations.md)

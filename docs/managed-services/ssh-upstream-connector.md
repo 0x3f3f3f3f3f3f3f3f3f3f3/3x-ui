@@ -78,17 +78,19 @@ branch, independently checking its remote SHA as required by the main plan.
 
 ## Implemented boundary
 
-The package is an internal backend primitive; it has no production caller yet.
-No public SSH outbound can be selected until the bridge/runtime/editor work below
-is implemented. There is no UDP encapsulation, local destination resolution,
-direct fallback, transport reuse, new billing source or global resource manager.
+The package now also contains an authenticated, staged SOCKS bridge, described in
+[the integration plan](ssh-upstream-integration.md). It has no panel/runtime caller
+yet. No public SSH outbound can be selected until runtime/editor integration is
+implemented. There is no UDP encapsulation, local destination resolution,
+direct fallback, transport reuse or new billing source.
 
 Each active flow consumes one upstream TCP connection and SSH handshake. The
 pinned SSH implementation advertises a 2 MiB receive window per channel; this is
 not a total process-memory bound. The connector adds no unbounded payload queue
 and admits at most 128 pending/established flows. Caller buffers, SSH transport
 buffers and goroutines still have costs; aggregate RAM/CPU/throughput measurements
-and a limit shared across all configured outbounds remain open integration work.
+remain open integration work. The new bridge bounds all accepted connections,
+including authentication, to 512 across at most 32 configured SSH outbounds.
 Callers must close returned streams to release their capacity, including after
 EOF or timeout. Timers exist only while application operations are pending.
 
