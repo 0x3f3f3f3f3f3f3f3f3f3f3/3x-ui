@@ -1834,6 +1834,36 @@ button-name selector omitted Ant Design's accessible icon name. The harness was
 corrected to `/panel/outbound` and its actual button label; these failed runs
 are not counted as acceptance.
 
-PostgreSQL restoration of these authored outbounds, automatic node-owned bridge
+At this editor commit PostgreSQL outbound restoration was still open; the next
+acceptance extension below closes that scenario. Automatic node-owned bridge
 distribution, continuous upstream health, packaging and the remaining full-task
-protocol/policy acceptance are still open.
+protocol/policy acceptance remain open.
+
+### PostgreSQL backup and browser acceptance extension
+
+The same script now optionally accepts `XUI_E2E_PG_DSN`, a PostgreSQL URL for an
+isolated local test instance, with `psql`, `pg_dump` and `pg_restore` on `PATH`.
+Its test account must be permitted to create databases. The script creates a
+random `xui_ssh_ui_...` database and points the panel at that database; it uses
+the supplied administrative database only to create/drop the owned fixture.
+Connection credentials travel through environment variables, never psql command
+arguments, and failure text redacts the URL/password. Cleanup drops only the
+newly created database, on successful acceptance and failed fixture startup.
+
+Executed against PostgreSQL/client tools **16.15**, using the task-local server
+at `127.0.0.1:55432`. The downloaded backup has the native `PGDMP` signature;
+the existing import API restores it after a wrong-pin refusal. After panel
+restart and fresh login, the exact authored key/pin and actual route are restored.
+All other browser, probe, target-count and authorization assertions run unchanged.
+Result: 3 target connections, 186 bytes, 6 SSH authentications, HTTP 200,
+anonymous 404, monitor/node-sync 403 and `backupRestored: true`,
+`database: "postgres"`. Log: `/tmp/3x-ui-ssh-outbound-postgres-browser.log`.
+
+The extended script's default SQLite path also passed all assertions with the
+same independent counts (`/tmp/3x-ui-ssh-outbound-sqlite-browser2.log`). PostgreSQL
+catalog inspection after success found zero `xui_ssh_ui_...` databases. A deliberate
+missing-panel-binary run exited 1 with the expected startup `ENOENT`, then another
+catalog check found zero fixture databases, proving failure cleanup as well
+(`/tmp/3x-ui-ssh-outbound-pg-cleanup-failure.log`). Script syntax/format and
+`git diff --check` pass. This test/documentation extension changes no production
+code and does not claim another full frontend/Go/race run.

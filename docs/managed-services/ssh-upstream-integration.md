@@ -141,9 +141,9 @@ node capability rejection must be explicit until its runtime supports the bridge
 
 Editor increment evidence: actual Chromium creates/saves/reloads and edits pins;
 Xray/OpenSSH traffic and a public HTTP probe execute; anonymous and valid monitor/
-node-sync token access is denied; SQLite database download/import restores the
-key/pin and real route after panel restart. Node template distribution and the
-PostgreSQL outbound-backup scenario remain open, so the combined distribution
+node-sync token access is denied; SQLite and PostgreSQL database download/import
+restore the key/pin and real route after panel restart. Node template distribution
+remains open, so the combined distribution
 checkbox above stays incomplete. See [validation](validation.md).
 
 Other protocols, full multi-node policy execution, deployment/upgrade safeguards

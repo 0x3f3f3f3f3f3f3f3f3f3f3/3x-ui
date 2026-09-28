@@ -157,7 +157,7 @@ tag, transport source and original destination into real Xray. Tests verify
 user/domain/IP/port/source routing, two observable exits, block priority and
 no duplicate billing. Runtime now handles canonical credentials, delayed expiry,
 selective revocation, reset recovery, listener failures and router process exit.
-Membership/rename isolation, complete UI, upstream editor and multi-node
+Membership/rename isolation, remaining management UI and multi-node
 wiring remain open; narrower upstream Runtime evidence is recorded below.
 Standard -R does not reveal the client-side target to the server; listener ACLs
 do not claim to enforce that target. See semantics.md for the open constraint.
@@ -172,9 +172,12 @@ installed-core validation, staged application, failure recovery and exit cleanup
 Real double-SSH tests cover selected exits, blocking, no fallback, shared rates,
 quota mutations and single billing. The existing probe service now verifies real
 SSH HTTP routes through an isolated bridge, preserving applied flows. The dedicated
-editor, browser/API acceptance, backup/node/
-deployment acceptance and remaining public health/status integration still belong
-to this same Task 5. API-less SSH upstream activation is explicitly unsupported.
+outbound editor now passes real browser create/edit/reload/probe and wrong-pin
+traffic checks. Anonymous and restricted API scopes cannot access its secrets;
+SQLite and PostgreSQL native backup restoration recover the actual SSH route
+after panel restart. Node distribution, deployment acceptance and remaining public
+health/status integration still belong to this same Task 5. API-less SSH upstream
+activation is explicitly unsupported.
 
 ## Task 6: mieru vertical integration
 

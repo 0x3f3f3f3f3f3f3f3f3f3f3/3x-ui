@@ -51,6 +51,48 @@ let page;
 let target;
 let targetConnections = 0;
 let targetBytes = 0;
+let pgAdminEnv;
+let pgDatabase;
+
+function pgSQL(sql, database = pgAdminEnv.PGDATABASE) {
+  return execFileSync('psql', ['--no-psqlrc', '--quiet', '--set', 'ON_ERROR_STOP=1'], {
+    env: { ...pgAdminEnv, PGDATABASE: database },
+    input: sql,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+}
+
+function initPostgres() {
+  if (!process.env.XUI_E2E_PG_DSN) return;
+  secrets.push(process.env.XUI_E2E_PG_DSN);
+  const url = new URL(process.env.XUI_E2E_PG_DSN);
+  assert(
+    ['postgres:', 'postgresql:'].includes(url.protocol),
+    'XUI_E2E_PG_DSN must be a PostgreSQL URL',
+  );
+  assert(
+    ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname),
+    'Use an isolated local PostgreSQL test instance',
+  );
+  const password = decodeURIComponent(url.password);
+  secrets.push(password);
+  pgAdminEnv = {
+    ...process.env,
+    PGHOST: url.hostname.replace(/^\[|\]$/g, ''),
+    PGPORT: url.port || '5432',
+    PGUSER: decodeURIComponent(url.username),
+    PGPASSWORD: password,
+    PGDATABASE: decodeURIComponent(url.pathname.slice(1)) || 'postgres',
+    PGSSLMODE: url.searchParams.get('sslmode') || 'prefer',
+  };
+  const name = 'xui_ssh_ui_' + randomUUID().replaceAll('-', '');
+  pgSQL(`CREATE DATABASE "${name}";`);
+  pgDatabase = name;
+  url.pathname = '/' + name;
+  env.XUI_DB_TYPE = 'postgres';
+  env.XUI_DB_DSN = url.toString();
+  secrets.push(env.XUI_DB_DSN);
+}
 
 async function port() {
   const server = net.createServer();
@@ -147,6 +189,7 @@ async function echoThroughSocks(proxyPort, targetPort) {
 try {
   mkdirSync(env.XUI_DB_FOLDER);
   mkdirSync(env.XUI_BIN_FOLDER);
+  initPostgres();
   const panelPort = await port();
   const sshPort = await port();
   const socksPort = await port();
@@ -193,15 +236,23 @@ try {
     xrayTemplateConfig: JSON.stringify(template),
     xrayOutboundTestUrl: testURL,
   };
-  execFileSync(
-    'python3',
-    [
-      '-c',
-      'import json,sqlite3,sys\nc=sqlite3.connect(sys.argv[1])\nfor k,v in json.load(sys.stdin).items():\n c.execute("delete from settings where key=?",(k,))\n c.execute("insert into settings(key,value) values (?,?)",(k,v))\nc.commit()',
-      path.join(env.XUI_DB_FOLDER, 'x-ui.db'),
-    ],
-    { input: JSON.stringify(settings) },
-  );
+  if (pgDatabase) {
+    const quote = (value) => "'" + value.replaceAll("'", "''") + "'";
+    const statements = Object.entries(settings).map(
+      ([key, value]) =>
+        `DELETE FROM settings WHERE key=${quote(key)}; INSERT INTO settings(key,value) VALUES (${quote(key)},${quote(value)});`,
+    );
+    pgSQL('BEGIN;\n' + statements.join('\n') + '\nCOMMIT;', pgDatabase);
+  } else
+    execFileSync(
+      'python3',
+      [
+        '-c',
+        'import json,sqlite3,sys\nc=sqlite3.connect(sys.argv[1])\nfor k,v in json.load(sys.stdin).items():\n c.execute("delete from settings where key=?",(k,))\n c.execute("insert into settings(key,value) values (?,?)",(k,v))\nc.commit()',
+        path.join(env.XUI_DB_FOLDER, 'x-ui.db'),
+      ],
+      { input: JSON.stringify(settings) },
+    );
   symlinkSync(
     path.resolve(xrayBinary),
     path.join(env.XUI_BIN_FOLDER, `xray-linux-${process.arch === 'x64' ? 'amd64' : process.arch}`),
@@ -411,9 +462,10 @@ try {
   const backupResponse = await page.request.get(origin + '/panel/api/server/getDb');
   assert(backupResponse.ok(), 'Admin could not download a database backup');
   const backup = await backupResponse.body();
+  const signature = pgDatabase ? Buffer.from('PGDMP') : Buffer.from('SQLite format 3\0');
   assert(
-    backup.subarray(0, 16).equals(Buffer.from('SQLite format 3\0')),
-    'Backup was not a SQLite database',
+    backup.subarray(0, signature.length).equals(signature),
+    'Backup did not use the expected database format',
   );
   await editPin(wrongHost);
   await assert.rejects(
@@ -424,7 +476,11 @@ try {
   const imported = await page.request.post(origin + '/panel/api/server/importDB', {
     headers: { 'X-CSRF-Token': csrf.obj },
     multipart: {
-      db: { name: 'ssh-outbound.db', mimeType: 'application/octet-stream', buffer: backup },
+      db: {
+        name: pgDatabase ? 'ssh-outbound.dump' : 'ssh-outbound.db',
+        mimeType: 'application/octet-stream',
+        buffer: backup,
+      },
     },
   });
   assert(imported.ok() && (await imported.json()).success, 'Database restore failed');
@@ -480,11 +536,12 @@ try {
       unauthorizedStatus: denied.status(),
       restrictedScopes: ['monitor', 'node-sync'],
       backupRestored: true,
+      database: env.XUI_DB_TYPE,
     }),
   );
 } catch (error) {
   let message = error.message;
-  for (const secret of secrets) message = message.split(secret).join('[redacted]');
+  for (const secret of secrets.filter(Boolean)) message = message.split(secret).join('[redacted]');
   console.error(`${phase}: ${message}`);
   await screenshot().catch(() => {});
   process.exitCode = 1;
@@ -494,5 +551,13 @@ try {
   for (const socket of targetSockets) socket.destroy();
   if (target) await new Promise((resolve) => target.close(resolve));
   for (const log of logs) closeSync(log);
+  if (pgDatabase) {
+    try {
+      pgSQL(`DROP DATABASE "${pgDatabase}" WITH (FORCE);`);
+    } catch {
+      console.error('Failed to remove the owned PostgreSQL fixture database');
+      process.exitCode = 1;
+    }
+  }
   rmSync(temp, { recursive: true, force: true });
 }

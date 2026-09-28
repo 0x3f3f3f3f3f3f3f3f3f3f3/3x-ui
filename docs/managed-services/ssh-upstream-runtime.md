@@ -155,14 +155,15 @@ The current node protocol does not distribute outbound templates; automatic
 node-owned SSH bridge provisioning remains open. Do not install a master's
 compiled loopback outbound on another node.
 
-The SQLite browser acceptance downloads a real database backup, changes to a
+The SQLite and PostgreSQL browser acceptance downloads a real database backup, changes to a
 wrong host pin and verifies refusal, restores that backup through the existing
 import endpoint, waits for panel restart, logs in again and proves traffic
 through a fresh SSH connector with the restored key and pin. Backups contain
 the administrative private key and must be protected like existing credentials.
-PostgreSQL SSH runtime/settings tests exist, but this new browser backup/restore
-scenario has only been run on SQLite; PostgreSQL restoration remains unverified
-for this outbound increment.
+Both engine paths are exercised: the native SQLite database and PostgreSQL
+custom-format dump, using PostgreSQL/pg_dump/pg_restore 16.15. The PostgreSQL
+fixture creates and removes its own uniquely named database on an isolated local
+test instance; it never restores over the connection URL's administrative database.
 
 See [verification evidence](validation.md) and the
 [remaining integration plan](ssh-upstream-integration.md).
