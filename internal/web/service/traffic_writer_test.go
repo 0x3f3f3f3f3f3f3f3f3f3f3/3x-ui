@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -186,5 +188,36 @@ func waitTrafficWriterErr(t *testing.T, ch <-chan error) error {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for traffic writer result")
 		return nil
+	}
+}
+
+func TestTrafficWriterSaturatedQueueKeepsCancellationBounded(t *testing.T) {
+	resetTrafficWriterForTest(t)
+	StartTrafficWriter()
+	started, release := make(chan struct{}), make(chan struct{})
+	first := make(chan error, 1)
+	go func() { first <- submitTrafficWrite(func() error { close(started); <-release; return nil }) }()
+	waitTrafficWriterSignal(t, started, "writer did not start")
+	twMu.Lock()
+	queue := twQueue
+	twMu.Unlock()
+	for range cap(queue) {
+		queue <- &trafficWriteRequest{apply: func() error { return nil }, done: make(chan error, 1)}
+	}
+	waiting := make(chan error, 1)
+	go func() { waiting <- submitTrafficWrite(func() error { return nil }) }()
+	defer func() { close(release); <-first; <-waiting }()
+	time.Sleep(50 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() { result <- submitTrafficWriteContext(ctx, func() error { return nil }) }()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("cancelled full-queue submission returned %v", err)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("one full-queue submission blocked another caller's cancellation")
 	}
 }

@@ -17,6 +17,11 @@ type authenticatedSession struct {
 	cancel context.CancelFunc
 }
 
+func ValidateClients(config []Client) error {
+	_, err := validateClients(config)
+	return err
+}
+
 func validateClients(config []Client) (map[string]Client, error) {
 	clients := make(map[string]Client)
 	for _, client := range config {

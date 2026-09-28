@@ -54,27 +54,29 @@ type Client struct {
 }
 
 type Config struct {
-	InboundTag string
-	HostKey    ssh.Signer
-	Clients    []Client
+	InboundTag    string
+	HostKey       ssh.Signer
+	Clients       []Client
+	Authenticated func(context.Context, string) error
 }
 
 type Server struct {
-	tag        string
-	sshConfig  *ssh.ServerConfig
-	clients    map[string]Client
-	sessions   map[net.Conn]authenticatedSession
-	controller *policyflow.Controller
-	dial       DialFunc
-	ctx        context.Context
-	cancel     context.CancelFunc
-	mu         sync.Mutex
-	listener   net.Listener
-	started    bool
-	conns      map[net.Conn]struct{}
-	slots      chan struct{}
-	listeners  chan struct{}
-	workers    sync.WaitGroup
+	tag           string
+	sshConfig     *ssh.ServerConfig
+	clients       map[string]Client
+	sessions      map[net.Conn]authenticatedSession
+	controller    *policyflow.Controller
+	dial          DialFunc
+	authenticated func(context.Context, string) error
+	ctx           context.Context
+	cancel        context.CancelFunc
+	mu            sync.Mutex
+	listener      net.Listener
+	started       bool
+	conns         map[net.Conn]struct{}
+	slots         chan struct{}
+	listeners     chan struct{}
+	workers       sync.WaitGroup
 }
 
 func NewServer(config Config, controller *policyflow.Controller, dial DialFunc) (*Server, error) {
@@ -87,6 +89,7 @@ func NewServer(config Config, controller *policyflow.Controller, dial DialFunc) 
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &Server{tag: config.InboundTag, clients: clients, controller: controller, dial: dial, ctx: ctx, cancel: cancel, conns: make(map[net.Conn]struct{}), slots: make(chan struct{}, 256), listeners: make(chan struct{}, 256)}
+	s.authenticated = config.Authenticated
 	s.sessions = make(map[net.Conn]authenticatedSession)
 	s.sshConfig = &ssh.ServerConfig{MaxAuthTries: 3, PublicKeyCallback: s.authenticate, ServerVersion: "SSH-2.0-3x-ui-tunnel"}
 	s.sshConfig.AddHostKey(config.HostKey)
@@ -172,6 +175,11 @@ func (s *Server) handle(raw net.Conn) {
 		return
 	}
 	defer releaseSession()
+	if s.authenticated != nil {
+		if err := s.authenticated(sessionCtx, client.PolicyID); err != nil {
+			return
+		}
+	}
 	transport, err := s.controller.Open(sessionCtx, client.PolicyID, raw)
 	if err != nil {
 		return

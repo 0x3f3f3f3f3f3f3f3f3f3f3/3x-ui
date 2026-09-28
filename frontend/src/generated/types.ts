@@ -429,6 +429,7 @@ export interface Client {
   reverse?: ClientReverse | null;
   secret?: string;
   security: string;
+  ssh?: SSHClient | null;
   subId: string;
   tgId: number;
   totalGB: number;
@@ -481,6 +482,7 @@ export interface ClientRecord {
   reverse: unknown;
   secret: string;
   security: string;
+  ssh?: unknown;
   subId: string;
   tgId: number;
   totalGB: number;
@@ -978,6 +980,22 @@ export interface RealityScanResult {
   tls13: boolean;
   tlsVersion: string;
   x25519: boolean;
+}
+
+export interface SSHClient {
+  publicKeys: string[];
+  reverse?: SSHRemoteBind[];
+  targets: SSHTarget[];
+}
+
+export interface SSHRemoteBind {
+  address: string;
+  port: number;
+}
+
+export interface SSHTarget {
+  host: string;
+  port: number;
 }
 
 export interface ServerSettings {

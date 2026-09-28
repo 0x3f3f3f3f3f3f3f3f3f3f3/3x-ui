@@ -126,8 +126,12 @@ func runTrafficWriter(ctx context.Context, queue chan *trafficWriteRequest, done
 // remote node call would stall all traffic accounting for up to the remote
 // timeout. Apply runtime changes after this returns.
 func runSerializedTx(fn func(tx *gorm.DB) error) error {
-	return submitTrafficWrite(func() error {
-		return database.GetDB().Transaction(func(tx *gorm.DB) error {
+	return runSerializedTxContext(context.Background(), fn)
+}
+
+func runSerializedTxContext(ctx context.Context, fn func(tx *gorm.DB) error) error {
+	return submitTrafficWriteContext(ctx, func() error {
+		return database.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 			ctx := context.WithValue(tx.Statement.Context, serializedTxContextKey{}, true)
 			return fn(tx.WithContext(ctx))
 		})
@@ -153,20 +157,26 @@ func safeApply(fn func() error) (err error) {
 }
 
 func submitTrafficWrite(fn func() error) error {
+	return submitTrafficWriteContext(context.Background(), fn)
+}
+
+func submitTrafficWriteContext(caller context.Context, fn func() error) error {
+	if err := caller.Err(); err != nil {
+		return err
+	}
 	req := &trafficWriteRequest{apply: fn, done: make(chan error, 1)}
 
 	twMu.Lock()
 	queue := twQueue
 	ctx := twCtx
 	done := twDone
+	twMu.Unlock()
 	if queue == nil || ctx == nil || done == nil {
-		twMu.Unlock()
 		return safeApply(fn)
 	}
 
 	select {
 	case <-ctx.Done():
-		twMu.Unlock()
 		return safeApply(fn)
 	default:
 	}
@@ -175,15 +185,19 @@ func submitTrafficWrite(fn func() error) error {
 	defer timer.Stop()
 	select {
 	case queue <- req:
-		twMu.Unlock()
+	case <-caller.Done():
+		return caller.Err()
+	case <-ctx.Done():
+		return errors.New("traffic writer stopped before write was queued")
 	case <-timer.C:
-		twMu.Unlock()
 		return errors.New("traffic writer queue full")
 	}
 
 	select {
 	case err := <-req.done:
 		return err
+	case <-caller.Done():
+		return caller.Err()
 	case <-done:
 		select {
 		case err := <-req.done:

@@ -83,6 +83,10 @@ func TestClientPolicyIdentityMigration_Postgres(t *testing.T) {
 	if len(rows) != 1003 {
 		t.Fatalf("migrated %d PostgreSQL clients; want 1003", len(rows))
 	}
+	var missingSSH int64
+	if err := GetDB().Model(&model.ClientRecord{}).Where("ssh_config IS NULL").Count(&missingSSH).Error; err != nil || missingSSH != 0 {
+		t.Fatalf("PostgreSQL migration left NULL SSH configuration: %v", err)
+	}
 	unique := make(map[string]bool, len(rows))
 	for _, row := range rows {
 		if _, err := uuid.Parse(row.PolicyID); err != nil || unique[row.PolicyID] || row.Enable {
@@ -119,7 +123,7 @@ func TestClientPolicyIdentityMigration_Postgres(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	imported := model.ClientRecord{Email: "cross-dialect", PolicyID: rows[0].PolicyID}
+	imported := model.ClientRecord{Email: "cross-dialect", PolicyID: rows[0].PolicyID, SSHConfig: `{"publicKeys":["public-only-fixture"],"targets":[{"host":"example.invalid","port":443}],"reverse":[{"address":"::1","port":32001}]}`}
 	if err := source.Create(&imported).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -144,6 +148,9 @@ func TestClientPolicyIdentityMigration_Postgres(t *testing.T) {
 	var copied model.ClientRecord
 	if err := GetDB().Where("email = ?", imported.Email).First(&copied).Error; err != nil {
 		t.Fatal(err)
+	}
+	if copied.SSHConfig != imported.SSHConfig {
+		t.Fatal("SQLite to PostgreSQL migration lost SSH credentials or permissions")
 	}
 	if copied.PolicyID != imported.PolicyID {
 		t.Fatalf("SQLite→Postgres replaced identity %q with %q", imported.PolicyID, copied.PolicyID)

@@ -1767,6 +1767,14 @@ export const SCHEMAS: Record<string, unknown> = {
         "description": "Security method (e.g., \"auto\", \"aes-128-gcm\")",
         "type": "string"
       },
+      "ssh": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SSHClient"
+          }
+        ],
+        "nullable": true
+      },
       "subId": {
         "description": "Subscription identifier",
         "type": "string"
@@ -1974,6 +1982,7 @@ export const SCHEMAS: Record<string, unknown> = {
       "security": {
         "type": "string"
       },
+      "ssh": {},
       "subId": {
         "type": "string"
       },
@@ -4301,6 +4310,63 @@ export const SCHEMAS: Record<string, unknown> = {
       "tls13",
       "tlsVersion",
       "x25519"
+    ],
+    "type": "object"
+  },
+  "SSHClient": {
+    "properties": {
+      "publicKeys": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "reverse": {
+        "items": {
+          "$ref": "#/components/schemas/SSHRemoteBind"
+        },
+        "type": "array"
+      },
+      "targets": {
+        "items": {
+          "$ref": "#/components/schemas/SSHTarget"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "publicKeys",
+      "targets"
+    ],
+    "type": "object"
+  },
+  "SSHRemoteBind": {
+    "properties": {
+      "address": {
+        "type": "string"
+      },
+      "port": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "address",
+      "port"
+    ],
+    "type": "object"
+  },
+  "SSHTarget": {
+    "properties": {
+      "host": {
+        "type": "string"
+      },
+      "port": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "host",
+      "port"
     ],
     "type": "object"
   },

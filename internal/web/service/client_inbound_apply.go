@@ -476,6 +476,10 @@ func (s *ClientService) AddInboundClient(inboundSvc *InboundService, data *model
 			if client.Email == "" {
 				return false, common.NewError("empty client email")
 			}
+		case "ssh":
+			if client.SSH == nil {
+				return false, common.NewError("SSH client requires public keys and target permissions")
+			}
 		default:
 			if client.ID == "" {
 				return false, common.NewError("empty client ID")
@@ -696,7 +700,7 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 		newClientId = clients[0].Auth
 	case "wireguard", "amneziawg":
 		newClientId = clients[0].Email
-	case "mtproto":
+	case "mtproto", "ssh":
 		newClientId = clients[0].Email
 	default:
 		newClientId = clients[0].ID
@@ -716,6 +720,10 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 
 	if newClientId == "" || clientIndex == -1 {
 		return false, common.NewError("empty client ID")
+	}
+	if oldInbound.Protocol == model.SSH && clients[0].SSH == nil {
+		clients[0].SSH = oldClients[clientIndex].SSH
+		interfaceClients[0].(map[string]any)["ssh"] = clients[0].SSH
 	}
 	if strings.TrimSpace(clients[0].Email) == "" {
 		return false, common.NewError("client email is required")

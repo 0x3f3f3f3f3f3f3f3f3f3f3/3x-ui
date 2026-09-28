@@ -171,6 +171,14 @@ func TestClientPolicyIdentityBackfillsMoreThanOneBatchAndRestores(t *testing.T) 
 		identities[row.Id] = row.PolicyID
 		unique[row.PolicyID] = true
 	}
+	var missingSSH int64
+	if err := GetDB().Model(&model.ClientRecord{}).Where("ssh_config IS NULL").Count(&missingSSH).Error; err != nil || missingSSH != 0 {
+		t.Fatalf("legacy SSH migration left NULL credentials: %v", err)
+	}
+	sshConfig := `{"publicKeys":["public-only-fixture"],"targets":[{"host":"example.invalid","port":443}],"reverse":[{"address":"::1","port":32001}]}`
+	if err := GetDB().Model(&model.ClientRecord{}).Where("id = ?", 501).Update("ssh_config", sshConfig).Error; err != nil {
+		t.Fatal(err)
+	}
 	if identities[501] != existing {
 		t.Fatalf("migration rewrote a preexisting policy identity: %q", identities[501])
 	}
@@ -196,6 +204,9 @@ func TestClientPolicyIdentityBackfillsMoreThanOneBatchAndRestores(t *testing.T) 
 		t.Fatalf("restore retained %d identities; want 1003", len(rows))
 	}
 	for _, row := range rows {
+		if row.Id == 501 && row.SSHConfig != sshConfig {
+			t.Fatal("SQLite backup/restore lost SSH credentials or permissions")
+		}
 		if row.PolicyID != identities[row.Id] {
 			t.Fatalf("restoring client %d replaced identity %q with %q", row.Id, identities[row.Id], row.PolicyID)
 		}

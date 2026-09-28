@@ -201,7 +201,7 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 		if inbound.NodeID != nil {
 			continue
 		}
-		if inbound.Protocol == model.MTProto || inbound.Protocol == model.AmneziaWG || inbound.Protocol == model.TUIC {
+		if inbound.Protocol == model.MTProto || inbound.Protocol == model.AmneziaWG || inbound.Protocol == model.TUIC || inbound.Protocol == model.SSH {
 			continue
 		}
 		settings := map[string]any{}
@@ -448,6 +448,9 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 		injectNodeEgresses(xrayConfig, nodes)
 	}
 
+	if err := prepareManagedSSH(xrayConfig, inbounds); err != nil {
+		return nil, err
+	}
 	return xrayConfig, nil
 }
 
@@ -1576,6 +1579,7 @@ func addOutboundReconciling(api *xray.XrayAPI, outbound []byte) error {
 func (s *XrayService) StopXray() error {
 	lock.Lock()
 	defer lock.Unlock()
+	stopManagedSSH()
 	isManuallyStopped.Store(true)
 	logger.Debug("Attempting to stop Xray...")
 	process := currentXrayProcess()

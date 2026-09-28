@@ -450,6 +450,7 @@ export const ClientSchema = z.object({
   reverse: z.lazy(() => ClientReverseSchema).nullable().optional(),
   secret: z.string().optional(),
   security: z.string(),
+  ssh: z.lazy(() => SSHClientSchema).nullable().optional(),
   subId: z.string(),
   tgId: z.number().int(),
   totalGB: z.number().int(),
@@ -505,6 +506,7 @@ export const ClientRecordSchema = z.object({
   reverse: z.unknown(),
   secret: z.string(),
   security: z.string(),
+  ssh: z.unknown().optional(),
   subId: z.string(),
   tgId: z.number().int(),
   totalGB: z.number().int(),
@@ -1040,6 +1042,25 @@ export const RealityScanResultSchema = z.object({
   x25519: z.boolean(),
 });
 export type RealityScanResult = z.infer<typeof RealityScanResultSchema>;
+
+export const SSHClientSchema = z.object({
+  publicKeys: z.array(z.string()),
+  reverse: z.array(z.lazy(() => SSHRemoteBindSchema)).optional(),
+  targets: z.array(z.lazy(() => SSHTargetSchema)),
+});
+export type SSHClient = z.infer<typeof SSHClientSchema>;
+
+export const SSHRemoteBindSchema = z.object({
+  address: z.string(),
+  port: z.number().int(),
+});
+export type SSHRemoteBind = z.infer<typeof SSHRemoteBindSchema>;
+
+export const SSHTargetSchema = z.object({
+  host: z.string(),
+  port: z.number().int(),
+});
+export type SSHTarget = z.infer<typeof SSHTargetSchema>;
 
 export const ServerSettingsSchema = z.object({
   contentPaddingAddition: z.string().optional(),

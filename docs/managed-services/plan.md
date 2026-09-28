@@ -140,11 +140,15 @@ frontend protocol schemas/forms, translations, sub/export, deployment.
 The internal SSH server now implements authenticated TCP forwarding, bounded
 authorized reverse listeners, live key revocation and shared policy flows.
 Real OpenSSH verifies duplex shaping, quota at four multipliers and server/
-controller restart. It has no production manager or panel creation path yet.
+controller restart. Existing panel creation/edit/reset services now drive a
+production manager; real OpenSSH → panel-managed Xray tests run on SQLite and
+PostgreSQL. Public policy controls and the rest of the vertical remain open.
 The concrete private SOCKS bridge now carries authenticated identity, inbound
 tag, transport source and original destination into real Xray. Tests verify
 user/domain/IP/port/source routing, two observable exits, block priority and
-no duplicate billing. Production Runtime/configuration wiring remains open.
+no duplicate billing. Runtime now handles canonical credentials, delayed expiry,
+selective revocation, reset recovery, listener failures and router process exit.
+Membership/rename isolation, UI, upstream SSH and multi-node wiring remain open.
 Standard -R does not reveal the client-side target to the server; listener ACLs
 do not claim to enforce that target. See semantics.md for the open constraint.
 

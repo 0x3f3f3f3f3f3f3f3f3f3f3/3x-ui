@@ -192,6 +192,9 @@ func initModels() error {
 	if err := migrateClientTrafficResetColumns(); err != nil {
 		return err
 	}
+	if err := db.Model(&model.ClientRecord{}).Where("ssh_config IS NULL").UpdateColumn("ssh_config", "").Error; err != nil {
+		return err
+	}
 	if err := migrateClientResetWeekdayColumns(); err != nil {
 		return err
 	}

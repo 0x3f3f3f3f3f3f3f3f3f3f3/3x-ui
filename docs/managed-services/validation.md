@@ -573,3 +573,90 @@ remain subject to their documented prerequisites and are not counted as executed
 zero issues; `go build -o /tmp/3x-ui-panel-lifecycle .` succeeds. Formatter output
 and `git diff --check` are clean. This milestone changes no frontend source or
 public API schema; prior frontend results remain recorded above.
+
+
+## SSH production Runtime increment (partial vertical)
+
+Existing Inbound/Client service methods now create and edit an actual dedicated
+SSH listener through Runtime. `TestSSHInboundRunsThroughProductionXrayLifecycle`
+uses fresh test keys, strict OpenSSH known_hosts, the pinned real Xray executable,
+a domain-routed echo target and a second independent SSH identity. It verifies:
+
+- Default 1× billing: the first 16-byte upload and 16-byte download produce exactly
+  32 billed bytes. Bridge traffic is not billed again.
+- Starting the service leaves negative expiry untouched; signed authentication
+  sets the same positive expiry in canonical, traffic and inbound settings.
+- Metadata updates retain credentials; key revocation, reset, quota reduction and
+  manual disable close affected flows while the unrelated existing flow continues.
+- Reset automatically obtains a fresh source; one subsequent byte each way gives
+  exactly 2 new billed bytes. Raising quota restores eligible access.
+- Disabled listeners stay closed before the next core application; re-enable and
+  actual core restart recover. An occupied public port logs one protected-state
+  warning and recovers after release. Core configuration permissions remain 0600.
+- Directly stopping the actual child process, without the panel's SSH shutdown,
+  closes the SSH listener in approximately 206–232ms (test limit 1.25s). Panel stop
+  also closes an established flow. A native Xray listener is removed when converted
+  to an empty SSH service.
+
+Behavioral RED preceded fixes for missing canonical credentials, missing account
+ownership, delayed-expiry authentication, missing-key creation, resurrection of a
+disabled listener, unrelated-client disruption on disable, silent bind failure,
+detached credential edits, blocked authentication behind the writer, saturated
+queue cancellation, protocol-conversion listener leakage, partial preparation and
+new SSH logins authenticating before their renamed routing identity was applied.
+A real short-lived child-process race test exposed `Cmd.Start` publication racing
+`IsRunning`; `2ec493e05ccd8ca2a18acbc035373ec7a70f7b81` fixes it, was pushed, and
+was matched exactly by remote SHA lookup.
+
+Observed checks before the final full regression:
+
+- Focused race tests for SSH services and existing managed lifecycle paths:
+  PASS, 35.702s, including actual PostgreSQL cases. An earlier broader run failed
+  with `sql: Scan called without calling Next`; replacing scalar protocol Pluck
+  with an existence count fixed the legacy synchronization regression.
+- All `internal/sshtunnel` tests with race detection, real OpenSSH and real Xray:
+  PASS, 16.806s. `internal/routedbridge` also passed. Rate/quota tests were executed,
+  not inferred from the service test's default unlimited/1× settings.
+- SQLite and PostgreSQL old-schema/identity tests plus SSH JSON/merge and real
+  service tests: PASS (`database` 17.420s, `model` 1.135s, `service` 10.920s).
+  SSH credentials/permissions survive SQLite backup restore and actual
+  SQLite→PostgreSQL migration; stale merges cannot restore old credentials.
+- `npm run gen`, `npm run typecheck`, `npm run lint`, `npm run build`: exit 0.
+- Existing generated API/example/runtime-contract tests: 3 files, 67 tests passed.
+
+Reproduce using the pinned Xray binary described in the routing milestone:
+
+```sh
+XRAY_E2E_BINARY=/path/to/pinned-xray \
+XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' \
+go test -race ./internal/web/service -run '^(TestSSH|TestManagedUsage|TestTrafficWriter)' -count=1 -timeout=240s -v
+XRAY_E2E_BINARY=/path/to/pinned-xray go test -race ./internal/sshtunnel ./internal/routedbridge -count=1 -timeout=240s -v
+```
+
+The PostgreSQL server and port are a task-local test fixture, not deployment
+instructions. Missing executable/database prerequisites skip their gated cases;
+those skips never count as data-path verification. SSH upstream, public rate and
+multiplier controls, UI/export, native mixed attachments, node policies and the
+other new protocols remain open. This increment does not pass whole-task acceptance.
+
+
+Final rename guard verification: race-enabled SSH service and writer cases passed
+in 16.770s on SQLite and PostgreSQL. Before the guard, both focused and full Go
+runs correctly rejected authentication with a newly renamed label while the
+bridge still held the old identity. After application, the new login forwards
+and retains the original billing policy UUID. Saturated writer queue cancellation
+also passed; queue waits no longer hold the global writer-state mutex.
+
+Final increment checks: `make test-go` with both real-backend environment variables
+passed all 50 tested packages (database 65.279s, service 71.509s). Final Go lint
+reported 0 issues; `go build ./...`, generated-file freshness and `git diff --check`
+passed. Logs are `/tmp/3x-ui-ssh-full-regression-final.log`,
+`/tmp/3x-ui-ssh-final-lint.log`, `/tmp/3x-ui-ssh-final-build.log` and
+`/tmp/3x-ui-ssh-gen-check.log`. These checks validate this partial increment, not
+unimplemented protocols, UI controls, global node policy or full acceptance.
+
+The commit hook initially failed because staged generated TypeScript files match
+lint-staged but are intentionally ignored by oxfmt. The formatter's documented
+`--no-error-on-unmatched-pattern` option now permits that empty ignored set; normal
+source files still run through formatting and linting. This tooling prerequisite
+is committed separately as `263a7c78`; hooks were not disabled.

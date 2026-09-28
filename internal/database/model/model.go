@@ -34,6 +34,7 @@ const (
 	MTProto     Protocol = "mtproto"
 	AmneziaWG   Protocol = "amneziawg"
 	TUIC        Protocol = "tuic"
+	SSH         Protocol = "ssh"
 )
 
 // User represents a user account in the 3x-ui panel.
@@ -874,6 +875,7 @@ type ClientReverse struct {
 
 // Client represents a client configuration for Xray inbounds with traffic limits and settings.
 type Client struct {
+	SSH        *SSHClient     `json:"ssh,omitempty"`
 	ID         string         `json:"id,omitempty"`       // Unique client identifier
 	Security   string         `json:"security"`           // Security method (e.g., "auto", "aes-128-gcm")
 	Password   string         `json:"password,omitempty"` // Client password
@@ -917,6 +919,7 @@ type Client struct {
 }
 
 type ClientRecord struct {
+	SSHConfig       string `json:"ssh,omitempty" gorm:"column:ssh_config;not null;default:''"`
 	Id              int    `json:"id" gorm:"primaryKey;autoIncrement"`
 	PolicyID        string `json:"-" gorm:"column:policy_id;size:36;not null;default:'';uniqueIndex:idx_clients_policy_id,where:policy_id <> '';<-:create"`
 	Email           string `json:"email" gorm:"uniqueIndex;not null"`
@@ -976,10 +979,12 @@ func (r ClientRecord) MarshalJSON() ([]byte, error) {
 	type alias ClientRecord
 	return json.Marshal(struct {
 		alias
-		Reverse json.RawMessage `json:"reverse"`
+		Reverse   json.RawMessage `json:"reverse"`
+		SSHConfig json.RawMessage `json:"ssh,omitempty"`
 	}{
-		alias:   alias(r),
-		Reverse: jsonStringFieldToRaw(r.Reverse),
+		alias:     alias(r),
+		Reverse:   jsonStringFieldToRaw(r.Reverse),
+		SSHConfig: jsonStringFieldToRaw(r.SSHConfig),
 	})
 }
 
@@ -989,7 +994,8 @@ func (r *ClientRecord) UnmarshalJSON(data []byte) error {
 	type alias ClientRecord
 	aux := struct {
 		*alias
-		Reverse json.RawMessage `json:"reverse"`
+		Reverse   json.RawMessage `json:"reverse"`
+		SSHConfig json.RawMessage `json:"ssh"`
 	}{
 		alias: (*alias)(r),
 	}
@@ -997,6 +1003,7 @@ func (r *ClientRecord) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	r.Reverse = jsonStringFieldFromRaw(aux.Reverse)
+	r.SSHConfig = jsonStringFieldFromRaw(aux.SSHConfig)
 	return nil
 }
 
@@ -1179,6 +1186,11 @@ func (c *Client) ToRecord() *ClientRecord {
 			rec.Reverse = string(b)
 		}
 	}
+	if c.SSH != nil {
+		if b, err := json.Marshal(c.SSH); err == nil {
+			rec.SSHConfig = string(b)
+		}
+	}
 	return rec
 }
 
@@ -1237,6 +1249,12 @@ func (r *ClientRecord) ToClient() *Client {
 		var rev ClientReverse
 		if err := json.Unmarshal([]byte(r.Reverse), &rev); err == nil {
 			c.Reverse = &rev
+		}
+	}
+	if r.SSHConfig != "" {
+		var settings SSHClient
+		if err := json.Unmarshal([]byte(r.SSHConfig), &settings); err == nil {
+			c.SSH = &settings
 		}
 	}
 	return c
@@ -1300,6 +1318,12 @@ func MergeClientRecord(existing *ClientRecord, incoming *ClientRecord) []ClientM
 
 	incomingNewer := incoming.UpdatedAt > existing.UpdatedAt ||
 		(incoming.UpdatedAt == existing.UpdatedAt && incoming.CreatedAt > existing.CreatedAt)
+	if incoming.SSHConfig != "" && incoming.SSHConfig != existing.SSHConfig {
+		if incomingNewer || existing.SSHConfig == "" {
+			existing.SSHConfig = incoming.SSHConfig
+			keepSecret("ssh")
+		}
+	}
 
 	if existing.UUID != incoming.UUID && incoming.UUID != "" {
 		if incomingNewer || existing.UUID == "" {

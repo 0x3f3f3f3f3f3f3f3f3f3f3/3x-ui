@@ -764,6 +764,7 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 				"password":          merged.Password,
 				"auth":              merged.Auth,
 				"secret":            merged.Secret,
+				"ssh_config":        merged.SSHConfig,
 				"flow":              merged.Flow,
 				"security":          merged.Security,
 				"wg_private_key":    merged.PrivateKey,

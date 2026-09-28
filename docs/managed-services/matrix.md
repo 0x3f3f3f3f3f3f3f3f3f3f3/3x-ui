@@ -79,6 +79,20 @@ Unauthenticated HTTP/SOCKS/TUN/forwarding requires owned resource bindings.
 | Multi-node / source deduplication | N | N | N | N | N | N | N |
 | Real-client TCP / UDP interoperability | N | N | N | N | N | N | N |
 
+### SSH verified slices of the incomplete vertical
+
+The broad SSH rows above remain N where the full bundled capability is incomplete.
+The following narrower scopes now have implementation and direct evidence:
+
+| Scope | Status | Evidence / limit |
+|---|---|---|
+| Existing service create/edit, key-only client creation, disabled listener protection | V | `TestSSHInboundPreservesCanonicalCredentials`, real managed lifecycle test |
+| Public-key rotation, manual disable, metadata edit: unrelated existing client stays connected | V | actual two-client SSH → Xray path on SQLite and PostgreSQL |
+| Raw/billed payload at default 1×, delayed expiry, reset source replacement, quota reduction | V | real service mutations and TCP payload; public rate/multiplier controls remain N |
+| Port collision logging/retry, core exit protection, core stop/restart | V | actual occupied listener and actual Xray process; capacity/complete fault rollback remain N |
+| Credential and permission persistence | V | canonical JSON/merge, old SQLite/PostgreSQL migration, SQLite backup restore and cross-dialect migration |
+| SSH settings generated API types | U | generated schemas/typecheck; complete HTTP/controller, UI and export acceptance remains open |
+
 ## Protocol-specific applicability
 
 Standard SSH direct-tcpip/forwarded-tcpip channels carry TCP only: native UDP

@@ -58,6 +58,16 @@ func (l *ClientUsageLedger) Read(ctx context.Context, policyID string) (model.Cl
 	return a, err
 }
 
+func (l *ClientUsageLedger) Ensure(ctx context.Context, policyID string) error {
+	return l.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := requireAdmissionDurability(tx); err != nil {
+			return err
+		}
+		_, _, err := lockClientUsage(tx, policyID)
+		return err
+	})
+}
+
 func (l *ClientUsageLedger) Register(ctx context.Context, policyID, source, meterID string) (model.ClientUsageMeter, error) {
 	var meter model.ClientUsageMeter
 	if _, err := uuid.Parse(meterID); err != nil || source == "" || len(source) > 200 || strings.TrimSpace(source) != source {

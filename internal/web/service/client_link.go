@@ -20,6 +20,9 @@ import (
 // those separately. Shared by SyncInbound (per-inbound persistence) and Update
 // (the no-attached-inbound fallback) so the two paths cannot diverge.
 func applyClientRecordMerge(row *model.ClientRecord, incoming *model.ClientRecord) {
+	if incoming.SSHConfig != "" {
+		row.SSHConfig = incoming.SSHConfig
+	}
 	if incoming.UUID != "" {
 		row.UUID = incoming.UUID
 	}
@@ -215,7 +218,29 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 		wantedIds = append(wantedIds, id)
 	}
 
-	return s.reconcileInboundLinks(tx, inboundId, wantedFlow, wantedIds, detachEmails, prune)
+	if err := s.reconcileInboundLinks(tx, inboundId, wantedFlow, wantedIds, detachEmails, prune); err != nil {
+		return err
+	}
+	hasSSH := false
+	newIDs := make(map[int]bool)
+	for _, record := range toCreate {
+		newIDs[record.Id] = true
+		hasSSH = hasSSH || record.SSHConfig != ""
+	}
+	for _, record := range existing {
+		hasSSH = hasSSH || record.SSHConfig != ""
+	}
+	if !hasSSH && len(wantedIds) > 0 {
+		var count int64
+		if err := tx.Model(&model.Inbound{}).Where("id = ? AND protocol = ?", inboundId, model.SSH).Count(&count).Error; err != nil {
+			return err
+		}
+		hasSSH = count > 0
+	}
+	if hasSSH {
+		return reconcileSSHUsageTx(tx, wantedIds, newIDs)
+	}
+	return nil
 }
 
 // reconcileInboundLinks writes only the client_inbounds rows that differ. prune

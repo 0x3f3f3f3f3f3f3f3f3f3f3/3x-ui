@@ -40,6 +40,11 @@ type Bridge struct {
 	clients map[string]credential
 }
 
+func (b *Bridge) MatchesBinding(policyID, email string) bool {
+	client, ok := b.clients[policyID]
+	return ok && client.Email == email
+}
+
 func New(tag string, address netip.AddrPort, bindings []ClientBinding) (*Bridge, error) {
 	if tag == "" || !address.IsValid() || !address.Addr().IsLoopback() || address.Addr().Zone() != "" || address.Port() == 0 || len(bindings) == 0 {
 		return nil, ErrConfig
@@ -105,6 +110,25 @@ func (b *Bridge) DialTCP(ctx context.Context, policyID string, source netip.Addr
 	return conn, nil
 }
 
+// Check verifies the actual listener's private credentials without creating an outbound flow.
+func (b *Bridge) Check(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", b.address.String())
+	if err != nil {
+		return ErrUnavailable
+	}
+	defer conn.Close()
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
+	deadline, _ := ctx.Deadline()
+	_ = conn.SetDeadline(deadline)
+	for _, client := range b.clients {
+		return b.handshake(conn, client, netip.MustParseAddrPort("127.0.0.1:1"), nil)
+	}
+	return ErrIdentity
+}
+
 func socksAddress(host string, port uint16) ([]byte, error) {
 	var address []byte
 	if ip, err := netip.ParseAddr(host); err == nil {
@@ -157,6 +181,9 @@ func (b *Bridge) handshake(conn net.Conn, client credential, source netip.AddrPo
 	}
 	if reply != [2]byte{1, 0} {
 		return errors.New("bridge credential rejected")
+	}
+	if address == nil {
+		return nil
 	}
 	if _, err := conn.Write(append([]byte{5, 1, 0}, address...)); err != nil {
 		return err

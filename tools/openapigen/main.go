@@ -35,6 +35,9 @@ func run(root, outDir string) error {
 				"Node",
 				"ClientReverse",
 				"Client",
+				"SSHClient",
+				"SSHTarget",
+				"SSHRemoteBind",
 				"ClientRecord",
 				"ClientInbound",
 				"InboundFallback",
@@ -50,6 +53,7 @@ func run(root, outDir string) error {
 				},
 				"ClientRecord": {
 					{Field: "Reverse", Kind: KindAny},
+					{Field: "SSHConfig", Kind: KindAny},
 				},
 				"InboundClientIps": {
 					{Field: "Ips", Kind: KindAny},

@@ -433,6 +433,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "reverse": null,
     "secret": "ee1234567890abcdef1234567890abcd7777772e636c6f7564666c6172652e636f6d",
     "security": "",
+    "ssh": null,
     "subId": "",
     "tgId": 0,
     "totalGB": 0,
@@ -523,6 +524,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "reverse": null,
     "secret": "",
     "security": "",
+    "ssh": null,
     "subId": "",
     "tgId": 0,
     "totalGB": 0,
@@ -1060,6 +1062,31 @@ export const EXAMPLES: Record<string, unknown> = {
     "tls13": true,
     "tlsVersion": "1.3",
     "x25519": true
+  },
+  "SSHClient": {
+    "publicKeys": [
+      ""
+    ],
+    "reverse": [
+      {
+        "address": "",
+        "port": 0
+      }
+    ],
+    "targets": [
+      {
+        "host": "",
+        "port": 0
+      }
+    ]
+  },
+  "SSHRemoteBind": {
+    "address": "",
+    "port": 0
+  },
+  "SSHTarget": {
+    "host": "",
+    "port": 0
   },
   "ServerSettings": {
     "contentPaddingAddition": "",

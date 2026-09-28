@@ -106,8 +106,9 @@ or recovery of traffic newer than a restored historical backup.
 
 ## Implemented SSH server boundary
 
-`internal/sshtunnel` is currently an internal backend, not a panel-enabled
-service. It uses public-key authentication, one stable policy ID per client
+`internal/sshtunnel` now has a production manager through existing panel
+Inbound/Client services and Runtime. Its UI/export vertical is still incomplete.
+It uses public-key authentication, one stable policy ID per client
 and a shared flow controller across SSH connections, channels and bindings.
 Authentication/SSH framing, encryption and internal bridge bytes are excluded
 from application-payload billing. The authenticated transport is tracked for
@@ -175,12 +176,13 @@ once, before bridge forwarding; bridge headers and protocol framing are excluded
 Inbound/outbound operational counters may still observe the hop and are not an
 additional billing source. Actual Xray tests verify these counter boundaries.
 
-Configuration generation and credential changes still require production
-Runtime ownership/reconciliation before exposing the service. Panel online/IP
+The production SSH manager now owns configuration and credential reconciliation;
+see design.md for its verified scope and remaining membership-change disruption.
+Panel online/IP
 limits must use the authenticated adapter's transport records; the bridge's
 online stats are deliberately disabled. -R has not gained a client-side target
 from this bridge. Balancer, DNS-refresh, routed throughput/quota stress, global
-nodes, credential rename reconciliation and production recovery remain open.
+nodes, disruption-free credential rename and complete production recovery remain open.
 The bridge builds on the documented [Xray SOCKS inbound](https://xtls.github.io/en/config/inbounds/socks.html)
 and pinned core source at `52a412d9e2f5` (`proxy/socks/server.go`, `infra/conf/socks.go`).
 
@@ -197,8 +199,8 @@ cannot be inferred from the durable cursor. Bulk rollback includes earlier
 clients, source closures, raw projections and group display baselines.
 
 The flow controller fences old TCP connections within its existing 1.25-second
-test bound. A reset does not automatically configure a fresh controller source;
-production reconciliation must do that before accepting subsequent flows.
+test bound. The SSH production manager automatically configures a fresh source
+after fencing; other adapters still need equivalent reconciliation.
 Reconfiguration still checks independent expiry and manual-disable restrictions.
 Bytes already admitted before the reset may remain in the documented bounded
 protocol/kernel buffers; resetting a counter does not retract delivered bytes.
@@ -220,3 +222,13 @@ account activation must coordinate with legacy lifecycle selection and writes,
 including outer reset/auto-enable decisions currently outside the serial
 writer. Those initial-activation races remain to resolve before exposing a
 public activation path.
+
+
+The current production SSH adapter uses the ledger default multiplier 1 and
+unlimited controller rates. Persisted public policy controls are still required;
+the internal backend's rate/multiplier tests do not imply those controls exist.
+Delayed expiry starts on authenticated transport establishment, including a
+transport that never opens a channel. Merely starting the listener does not start
+the clock. SSH host keys are persisted in administrator-only inbound settings;
+the generated Xray bridge credentials are written to the existing atomic 0600
+core configuration file. Backups must retain the host key to preserve client pins.

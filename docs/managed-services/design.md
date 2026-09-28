@@ -35,7 +35,8 @@ canonical `clients.policy_id`; `client_traffics.policy_id` prevents stale
 statistics from being adopted by a recreated label. One transaction writes
 raw/billed/remainder totals, the cumulative cursor and the existing raw traffic
 projection. A conditional projection write rejects concurrent legacy writers.
-This internal activation is not yet called by production traffic collectors.
+The managed SSH service now uses admission accounting in production. Existing
+native traffic collectors still need their observed-source integration.
 
 Each source registers a UUID for one counter lifetime. Registration retries
 are idempotent; a unique partial index prevents two active lifetimes for the
@@ -44,7 +45,8 @@ replays do not charge, conflicting sequences and regressed counters fail.
 A reset requires a new lifetime, not a guessed counter restart. Multiplier
 change/reset requires final snapshots from all active sources, closes them
 and advances the revision in one transaction. Reset preserves manual disable,
-expiry and quota configuration. Runtime freeze/drain/restart remains to build.
+expiry and quota configuration. Native observed-source freeze/drain/restart
+remains to build.
 
 Panel reset paths now use `ResetAdmitted` for accounts owned by admission
 sources. Canonical-row locks serialize snapshots with concurrent admissions;
@@ -83,8 +85,9 @@ operation stalls. Stream cancellation does not abandon an in-flight shared
 cursor transaction; an ambiguous transaction result instead protects the
 client until an explicit source takeover recovers the durable cursor.
 
-This is tested with real TCP sockets, SQLite and PostgreSQL. It is not yet
-called by existing production listeners, authentication adapters or Runtime.
+This is tested with real TCP sockets, SQLite and PostgreSQL. The dedicated SSH
+listener now calls it through the existing panel Runtime and service lifecycle.
+Native Xray and other protocol adapters remain unintegrated.
 Rates are currently supplied to the controller in memory; persistence and
 node distribution remain required before public controls can enable them.
 
@@ -173,3 +176,40 @@ overrides/fallbacks/notifications, and must be revisited per vertical slice.
 The final gate includes make verify/race, PostgreSQL, real clients, sustained
 throughput at two caps and unlimited baseline, concurrent same-IP clients,
 quota cutoff/restart, route egress/priority/block and failure recovery.
+
+## Managed SSH production integration (partial vertical)
+
+The existing Inbound and Client services accept `protocol: ssh` and typed client
+`ssh.publicKeys`, `ssh.targets` and optional `ssh.reverse` settings. Canonical
+`clients.ssh_config` survives client JSON, merge, migration and backups. Client
+email is the SSH login/routing label; the internal policy UUID owns accounting.
+A dedicated Ed25519 host key and loopback bridge port are generated once in the
+inbound settings. Neither uses the operator's Git key or host management sshd.
+
+Creation establishes durable account ownership inside the same serialized
+transaction as the new canonical client and traffic projection. For now, existing
+legacy clients and mixed native/remote attachments are refused: their coordinated
+accounting migration is still required, not declared inapplicable. All enabled
+local SSH listeners share one process-owned controller and runtime source.
+
+`GetXrayConfig` stages bridge credentials without rotating them on repeated reads;
+failed preparation leaves the previous authentication snapshot intact. The manager
+waits for the actual process configuration fingerprint and authenticates its
+private SOCKS listener before opening SSH. It checks process state every 250ms,
+retries occupied ports, deduplicates protected-state log messages and closes owned
+resources on stop. Public-key/permission edits use Runtime to revoke affected
+sessions immediately. New or renamed logins remain unavailable until the actual
+bridge binding matches their immutable policy ID and routing label. Retaining the private bridge binding for a disabled client
+avoids rebuilding the router for unrelated clients; SSH admission remains revoked.
+Reset fencing is followed by automatic source replacement, still subject to quota,
+manual enable and expiry checks. First successful signed authentication activates
+negative delayed expiry atomically across canonical, traffic and inbound settings;
+its database operation and queue wait have a 500ms deadline.
+
+This is an API/service backend increment, not the finished SSH feature. Public
+rate/multiplier controls, SSH upstream, UI, export/subscription, online/IP/device
+integration, node distribution and packaging remain open. Bridge membership or
+routing-label changes still require core configuration application and can restart
+other sessions. Per-client isolation for those operations, preview generation
+without runtime staging side effects, explicit status UI, capacity under many
+listeners/clients and complete failure rollback remain follow-up work.
