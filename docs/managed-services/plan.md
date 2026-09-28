@@ -161,6 +161,15 @@ Membership/rename isolation, UI, upstream SSH and multi-node wiring remain open.
 Standard -R does not reveal the client-side target to the server; listener ACLs
 do not claim to enforce that target. See semantics.md for the open constraint.
 
+The [SSH upstream connector increment](ssh-upstream-connector.md) now implements
+a bounded authenticated TCP backend with strict host-key selection, cancellation,
+half-close and active-operation deadlines. Real isolated OpenSSH tests observe
+payloads at IPv4/domain and IPv6 targets; wire-peer tests cover capacity,
+encrypted keys and failed/stalled transport cleanup. This package has no public
+runtime caller yet. The authenticated outbound bridge, routing selection,
+lifecycle rollback, UI/API/probes, backup/node/deployment integration and actual
+Xray-to-upstream policy acceptance remain required under this same Task 5.
+
 ## Task 6: mieru vertical integration
 
 Files: new `internal/mieru`, protocol registry/model/Runtime and existing UI.

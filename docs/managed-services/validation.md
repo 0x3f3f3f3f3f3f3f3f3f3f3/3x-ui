@@ -1347,3 +1347,93 @@ was not repeated and is not presented as a fresh result. No DB schema migration
 is required. Large export/import throughput, complete distributed restoration,
 other policy executors, SSH upstream and the remaining protocol/deployment/A–E
 requirements stay open. This increment is not whole-task completion.
+
+### SSH upstream connector backend (2026-09-28)
+
+This is a tested internal TCP connector, not a selectable public outbound yet.
+The private SOCKS bridge, Runtime configuration/rollback, editor/API/probes,
+backup/node/deployment integration and Xray-to-upstream policy acceptance remain
+open. No new database field, dependency version or production daemon was added.
+
+Environment: Linux arm64, Go 1.27.1, pinned `golang.org/x/crypto` v0.57.0;
+OpenSSH server `9.6p1 Ubuntu-3ubuntu13.19` with OpenSSL 3.0.13. The real-server
+fixture uses an independent process group, loopback ephemeral port and generated
+host/client keys under a private home-directory temporary folder. It retains
+StrictModes and permits only public-key TCP forwarding, with no sessions, PTY,
+agent or password access. It does not change the host management sshd or read
+its keys. `SSH_E2E_SERVER` must identify an installed sshd; the Linux fixture
+requires root privilege separation and an available IPv6 loopback. Without the
+server environment variable, those tests explicitly skip, not pass.
+
+The first real-server test failed against an unimplemented connector
+(`/tmp/3x-ui-ssh-upstream-connector-red.log`). The first fixture under `/tmp` was
+rejected by sshd's parent-directory permission check; moving its files into a
+private home-directory temporary folder fixed the fixture without disabling
+StrictModes. A later test caught double-closing raw and SSH transports, returning
+`use of closed network connection`; connection Close now closes the SSH client
+once and releases capacity once. Both failures remain in the local
+`connector-green` and `close-red` logs under the same prefix.
+
+Real OpenSSH forwarding now delivers exactly 43008 request bytes to an
+independent IPv4 target reached by hostname, and exactly 43008 echo bytes back,
+including TCP half-close. Wrong host pins and client keys open no target
+connection. A separate IPv6 target observes `IPv6 request` and returns
+`IPv6 response` through OpenSSH. No shell channel is used. Go SSH wire peers
+verify original mixed-case/trailing-dot domain, IPv4 and IPv6 target strings;
+canceling a stalled channel leaves an unrelated stream usable; closing the
+connector revokes pending and established transports. At 128 live connections
+the next is rejected, one close releases one slot, and repeated close cannot
+release a second slot. A 100ms caller deadline stops an upstream that never
+sends an SSH banner, with independent observation of TCP closure. Encrypted
+private keys authenticate, while a wrong passphrase returns a non-secret error.
+
+Three deadline regressions were reproduced before fixing them: a 4 MiB write
+blocked on the exhausted SSH channel window survived its 100ms write deadline;
+a timed-out read returned EOF; and an idle expired deadline irreversibly closed
+the underlying transport. Logs: `write-deadline-red` and `read-deadline-red`.
+The wrapper now tracks active application operations and closes only that
+stream's dedicated transport on timeout, returning `os.ErrDeadlineExceeded`.
+This wakes SSH window waiters as well as kernel I/O. Active timeouts are fatal
+to that stream; an idle expired deadline can be cleared. Updating a deadline
+during an observed ongoing write also interrupts it. Eight concurrent writers
+send 1048576 total bytes, with exactly 131072 bytes belonging to each writer;
+the wrapper serializes channel writes and half-close.
+
+A multi-key upstream reproduced a separate interoperability bug: the default
+SSH algorithm order selected a different host key from the administrator's pin.
+The new test failed with a host-key mismatch despite the correct key being
+available (`host-selection-red`). Negotiation now selects the pin's algorithm;
+RSA pins allow SHA-512/SHA-256 signatures and the test peer offers SHA-256 only.
+Host certificates and unsupported/insecure host-key algorithms are rejected.
+
+Eleven deliberate mutations each produced the intended behavioral failure:
+remove host-pin rejection; allow an extra connection; omit cancellation closure;
+omit shutdown closure; bypass configuration validation; remove network or target
+validation; replace the forwarded target; omit encrypted-key parsing; omit live
+deadline scheduling; and remove write serialization. The last produced an
+actual data race in the SSH packet buffer. Each temporary change was restored
+in `finally`, and no mutation remains. Logs are
+`/tmp/3x-ui-ssh-upstream-mutation-{pin,capacity,cancel,shutdown,config,network,target,preservation,encrypted,live-deadline,concurrent-write}.log`.
+
+Final command:
+`SSH_E2E_SERVER=/usr/sbin/sshd go test -race -shuffle=on ./internal/sshoutbound -count=1 -v`
+passed all 16 top-level tests and their subtests in 11.057s, with no skip or race
+report. Full output: `/tmp/3x-ui-ssh-upstream-race-final.log`.
+Whole-repository `golangci-lint run` passed with 0 issues after applying its
+De Morgan simplification to one timeout assertion; log:
+`/tmp/3x-ui-ssh-upstream-lint-final.log`.
+
+Cross-compilation of the package and portable tests also passed:
+`GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go test -c ./internal/sshoutbound -o /tmp/3x-ui-ssh-upstream-windows.test.exe`
+and `GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go test -c ./internal/sshoutbound -o /tmp/3x-ui-ssh-upstream-darwin.test`.
+Outputs are PE32+ x86-64 and Mach-O arm64 respectively. Logs use the same prefix
+with `windows-build.log` and `darwin-build.log`. These are compile checks only;
+no Windows/macOS runtime test or whole-panel cross-platform build is claimed.
+
+Only this new package and tracking documentation changed. Existing full Go,
+frontend, generated-contract and database results above were not rerun or
+counted as new results for this unconnected package. Its handshake-per-flow
+cost, 128-flow per-connector admission and fatal active-timeout behavior are
+specified in [the connector plan](ssh-upstream-connector.md). Aggregate
+throughput/RAM/CPU, global outbound resource bounds, actual route selection and
+single billing through the future bridge remain unverified requirements.

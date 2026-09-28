@@ -100,6 +100,7 @@ The following narrower scopes now have implementation and direct evidence:
 | Inbound creation and independent client credentials in existing forms | V | actual Chromium creates a local SSH listener and client, edits permission fields, and reaches real OpenSSH → Xray; form regressions preserve host/client identity and lifecycle values; bulk and other management surfaces remain open |
 | OpenSSH configuration and actual host-key export | V | SQLite/PostgreSQL public-key-only metadata; actual OpenSSH parser; browser downloads consumed by OpenSSH, mismatched host key refused; exported files contain no private key; initial application follows the existing 30-second configuration scheduler |
 | SSH generated API types and existing option endpoint | V | Go→Zod/types/OpenAPI regenerated; real authenticated browser reads the host public key; complete API/bulk/portable/export/deployment acceptance remains open |
+| Internal upstream TCP connector | V | Real OpenSSH 9.6p1: 43008-byte request/echo, half-close, wrong pin/key rejection, IPv6 target. Wire peers: 128-flow capacity/reuse, encrypted keys, pinned algorithm selection, deadlines/cancellation/shutdown and concurrent bytes under race detector. Public bridge, route selection, runtime/editor/API/probes and end-to-end policy billing remain N |
 
 ## Protocol-specific applicability
 
