@@ -28,10 +28,8 @@ type IPWithTimestamp struct {
 	Timestamp int64  `json:"timestamp"`
 }
 
-// CheckClientIpJob monitors client IP addresses and manages IP blocking based
-// on configured limits. The per-client IPs come from the core's online-stats
-// API; no access log is involved. On a core too old to expose that API the job
-// simply skips the run (the bundled core always supports it).
+// CheckClientIpJob records native and managed SSH source IPs.
+// Native IP limits use the existing fail2ban path; SSH observations are collection-only.
 type CheckClientIpJob struct {
 	bannedSeen  map[string]int64
 	xrayService service.XrayService
@@ -58,9 +56,7 @@ func (j *CheckClientIpJob) Run() {
 	j.pruneStaleIpRows()
 	observed, apiMode := j.collectFromOnlineAPI()
 	if !apiMode {
-		// xray is down or predates the online-stats API. There is no access-log
-		// fallback anymore, so there is nothing to do this run.
-		logger.Debug("[LimitIP] online-stats API unavailable this run; skipping")
+		logger.Debug("[LimitIP] no available online source this run; skipping")
 		return
 	}
 
@@ -93,15 +89,24 @@ func (j *CheckClientIpJob) resolveEnforce(hasLimit, f2bInstalled bool) bool {
 	return hasLimit
 }
 
-// collectFromOnlineAPI builds per-email IP observations (email -> ip ->
-// last-seen unix seconds) from the core's online-stats API. ok=false means the
-// API is unavailable — xray not running, an older core, or a transient gRPC
-// failure — and the caller skips the run (there is no access-log fallback).
+// collectFromOnlineAPI merges native online-stats and admitted SSH transports.
+// SSH collection remains available when the native online RPC is unsupported or fails.
 func (j *CheckClientIpJob) collectFromOnlineAPI() (map[string]map[string]int64, bool) {
 	onlineUsers, ok, err := j.xrayService.GetOnlineUsers()
 	if err != nil {
 		logger.Debug("[LimitIP] online-stats API unavailable this run:", err)
-		return nil, false
+		ok = false
+	}
+	if !ok {
+		onlineUsers = nil
+	}
+	sshUsers, _, sshErr := (&service.InboundService{}).GetLocalSSHOnlineUsers()
+	if sshErr != nil {
+		logger.Warning("[LimitIP] SSH source observations unavailable:", sshErr)
+	}
+	if len(sshUsers) > 0 {
+		onlineUsers = append(onlineUsers, sshUsers...)
+		ok = true
 	}
 	if !ok {
 		return nil, false
@@ -110,8 +115,7 @@ func (j *CheckClientIpJob) collectFromOnlineAPI() (map[string]map[string]int64, 
 	observed := make(map[string]map[string]int64, len(onlineUsers))
 	for _, user := range onlineUsers {
 		for _, entry := range user.IPs {
-			// No localhost guard needed here: the core's OnlineMap.AddIP drops
-			// 127.0.0.1/[::1] itself, so they never reach this list.
+			// SSH may legitimately authenticate a loopback peer; retain its actual address.
 			ts := entry.LastSeen
 			if ts <= 0 {
 				ts = now
@@ -360,7 +364,9 @@ func (j *CheckClientIpJob) processObserved(observed map[string]map[string]int64,
 			continue
 		}
 
-		candidates, keptLive := j.updateInboundClientIps(tx, clientIpsRecord, inbound, email, limitByEmail[email], ipsWithTime, enforce, observedAreLive)
+		// A host-wide IP ban cannot enforce independent SSH clients behind one address.
+		enforceClient := enforce && inbound.Protocol != model.SSH
+		candidates, keptLive := j.updateInboundClientIps(tx, clientIpsRecord, inbound, email, limitByEmail[email], ipsWithTime, enforceClient, observedAreLive)
 		bans = append(bans, pendingBan{inbound: inbound, email: email, candidates: candidates, keptLive: keptLive})
 	}
 

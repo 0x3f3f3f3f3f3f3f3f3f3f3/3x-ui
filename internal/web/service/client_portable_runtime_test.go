@@ -206,7 +206,9 @@ func portableSSHProbe(t *testing.T, keyPath, knownHosts, port string, allowed bo
 		}
 	} else {
 		var exitErr *exec.ExitError
-		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 255 || ctx.Err() != nil || len(output) != 0 || !strings.Contains(stderr.String(), "Authenticated to ") || !strings.Contains(stderr.String(), "closed by remote host") {
+		// OpenSSH may detect the denied transport while reading or sending its disconnect packet.
+		disconnected := strings.Contains(stderr.String(), "closed by remote host") || strings.Contains(stderr.String(), "client_loop: send disconnect: Broken pipe")
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 255 || ctx.Err() != nil || len(output) != 0 || !strings.Contains(stderr.String(), "Authenticated to ") || !disconnected {
 			t.Fatalf("restored quota did not close authenticated OpenSSH before forwarding: output=%q err=%v stderr=%s", output, err, stderr.String())
 		}
 	}

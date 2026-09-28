@@ -191,6 +191,7 @@ func (s *Server) handle(raw net.Conn) {
 		return
 	}
 	defer transport.Close()
+	s.admitSession(raw)
 	ctx, cancel := context.WithCancel(transport.Context())
 	var workers sync.WaitGroup
 	localSlots := make(chan struct{}, 64)

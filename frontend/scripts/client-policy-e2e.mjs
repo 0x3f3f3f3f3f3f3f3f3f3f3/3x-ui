@@ -32,6 +32,7 @@ const env = {
   XUI_BIN_FOLDER: path.join(temp, 'bin'),
   XUI_LOG_FOLDER: path.join(temp, 'log'),
   XUI_DEBUG: 'false',
+  XUI_ENABLE_FAIL2BAN: 'true',
 };
 const processes = [];
 let browser;
@@ -350,18 +351,27 @@ try {
   ssh.stderr.on('data', (chunk) => {
     sshError += chunk;
   });
-  await until(() => {
+  await until(async () => {
     if (ssh.exitCode !== null || ssh.signalCode !== null)
       throw new Error(`OpenSSH exited: ${sshError}`);
-    return new Promise((resolve) => {
-      const socket = net.connect(forwardPort, '127.0.0.1');
-      socket.once('connect', () => {
-        socket.destroy();
-        resolve(true);
-      });
-      socket.once('error', () => resolve(false));
-    });
-  }, 'OpenSSH forward');
+    const statuses = await api('/panel/api/inbounds/ssh/status');
+    return statuses.some(
+      (status) => status.inboundId === inbound.id && status.authenticatedConnections === 1,
+    );
+  }, 'OpenSSH authentication before opening any forwarding channel');
+  await until(async () => {
+    const online = await api('/panel/api/clients/onlines', {});
+    return (online ?? []).includes(email);
+  }, 'idle SSH client in the existing online list');
+  const idleUsage = await api(`/panel/api/clients/policy/${email}`);
+  assert.equal(idleUsage.usage.up, '0');
+  assert.equal(idleUsage.usage.down, '0');
+  await until(async () => {
+    const ips = await api(`/panel/api/clients/ips/${email}`, {});
+    return ips.length === 1 && ips[0].ip === '127.0.0.1' && ips[0].node === '';
+  }, 'actual idle SSH source IP in the existing client IP view');
+  const lastOnline = await api('/panel/api/clients/lastOnline', {});
+  assert(lastOnline[email] >= Date.now() - 15000, 'idle SSH last-online was not refreshed');
   const payload = Buffer.alloc(16384, 0x37);
   const echoed = await new Promise((resolve, reject) => {
     const socket = net.connect(forwardPort, '127.0.0.1');
@@ -401,6 +411,7 @@ try {
   const hydrated = await api(`/panel/api/clients/get/${email}`);
   assert.equal(hydrated.billing.billed, '49152');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('cell', { name: 'Online', exact: true }).waitFor({ timeout: 10000 });
   await page
     .getByRole('progressbar', { name: 'Billed usage: 49152 B / 104857600 B', exact: true })
     .waitFor({ timeout: 10000 });
@@ -526,9 +537,17 @@ try {
     .getByRole('status', { name: 'SSH runtime: Disabled', exact: true })
     .waitFor({ timeout: 10000 });
   assert.equal(await page.getByRole('switch').getAttribute('aria-checked'), 'false');
+  await until(
+    async () => {
+      const online = await api('/panel/api/clients/onlines', {});
+      return !(online ?? []).includes(email);
+    },
+    'disconnected SSH client leaves online list after the existing grace window',
+    30000,
+  );
   assert.deepEqual(pageErrors, []);
   console.log(
-    `PASS: browser-created SSH inbound and public-key client; idle/protected on owned port collision/recovery; actual authenticated SSH counts 1/2/1 in desktop/mobile list; offline browser clears cached running state and recovers after reconnection; UI disable clears runtime; downloaded OpenSSH config + actual host pin; mismatched host key refused; real browser -> authenticated panel API -> SQLite -> managed SSH -> pinned Xray -> loopback echo; 16384 B each direction, 49152 B billed at 1.5x; stale editor preserved and explicitly reloaded; list balance uses billed bytes; quota reduced below billed usage marks depleted and rejects real SSH. Initial scheduled application and collision recovery: ${startupWaitMs} ms. Meter initially ready: ${initiallyReady}; readiness wait: ${meterWaitMs} ms.`,
+    `PASS: browser-created SSH inbound and public-key client; idle SSH appears in existing online/IP/last-online APIs before payload, without billed traffic; actual Online UI and disconnect aging; idle/protected on owned port collision/recovery; actual authenticated SSH counts 1/2/1 in desktop/mobile list; offline browser clears cached running state and recovers after reconnection; UI disable clears runtime; downloaded OpenSSH config + actual host pin; mismatched host key refused; real browser -> authenticated panel API -> SQLite -> managed SSH -> pinned Xray -> loopback echo; 16384 B each direction, 49152 B billed at 1.5x; stale editor preserved and explicitly reloaded; list balance uses billed bytes; quota reduced below billed usage marks depleted and rejects real SSH. Initial scheduled application and collision recovery: ${startupWaitMs} ms. Meter initially ready: ${initiallyReady}; readiness wait: ${meterWaitMs} ms.`,
   );
 } catch (error) {
   if (page && !page.isClosed()) {

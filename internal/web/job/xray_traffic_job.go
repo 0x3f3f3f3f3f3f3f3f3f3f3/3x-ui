@@ -119,21 +119,29 @@ func (j *XrayTrafficJob) Run() {
 	// client moves no bytes between polls (the delta heuristic's blind spot),
 	// while a short-lived connection can close before this poll yet still show
 	// in the delta. Older cores fall back to deltas alone.
-	if onlineUsers, apiMode, ouErr := j.xrayService.GetOnlineUsers(); ouErr != nil {
+	onlineUsers, apiMode, ouErr := j.xrayService.GetOnlineUsers()
+	if ouErr != nil {
 		logger.Debug("get online users from xray api failed:", ouErr)
-	} else if apiMode {
-		idleOnline := make([]string, 0, len(onlineUsers))
-		for _, u := range onlineUsers {
-			if !deltaActive[u.Email] {
-				activeEmails = append(activeEmails, u.Email)
-				idleOnline = append(idleOnline, u.Email)
-			}
+	}
+	if !apiMode || ouErr != nil {
+		onlineUsers = nil
+	}
+	sshUsers, sshTags, sshErr := j.inboundService.GetLocalSSHOnlineUsers()
+	if sshErr != nil {
+		logger.Warning("get online SSH clients failed:", sshErr)
+	}
+	onlineUsers = append(onlineUsers, sshUsers...)
+	idleOnline := make([]string, 0, len(onlineUsers))
+	for _, u := range onlineUsers {
+		if !deltaActive[u.Email] {
+			activeEmails = append(activeEmails, u.Email)
+			idleOnline = append(idleOnline, u.Email)
+			deltaActive[u.Email] = true
 		}
-		// The traffic path only bumps last_online on a non-zero delta; keep the
-		// column fresh for clients kept online purely by a live connection.
-		if err := j.inboundService.BumpClientsLastOnline(idleOnline); err != nil {
-			logger.Warning("bump last online for connected clients failed:", err)
-		}
+	}
+	// Live transports keep last_online fresh even when they carry no payload.
+	if err := j.inboundService.BumpClientsLastOnline(idleOnline); err != nil {
+		logger.Warning("bump last online for connected clients failed:", err)
 	}
 	// Pair the email signal with the inbound tags that moved bytes this poll.
 	// Xray's user>>>email counter aggregates across every inbound a client is
@@ -146,6 +154,7 @@ func (j *XrayTrafficJob) Run() {
 			activeInboundTags = append(activeInboundTags, tr.Tag)
 		}
 	}
+	activeInboundTags = append(activeInboundTags, sshTags...)
 	j.inboundService.RefreshLocalOnlineClients(activeEmails, activeInboundTags)
 
 	if !websocket.HasClients() {

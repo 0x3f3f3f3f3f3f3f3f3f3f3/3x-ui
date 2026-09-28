@@ -53,6 +53,33 @@ refuse to run against the host network namespace.
 These are required implementation/validation tasks. No installation script or
 rollback guarantee for the new backends is claimed at this stage.
 
+## Local SSH client online and source IP observations
+
+The existing Clients online view, last-online timestamp, node attribution and
+IP view now include admitted local SSH transports, even when no forwarding
+channel carries payload. The traffic job samples online users every 5 seconds;
+its existing 20-second grace window still applies after disconnect. The IP job
+samples every 10 seconds and retains its existing pruning behavior. Setting
+`XUI_ENABLE_FAIL2BAN=false` disables IP recording, as for native observations.
+
+Source IP means the SSH transport peer seen by the server. It can be a NAT,
+proxy or loopback address; client-supplied forwarding origins and the internal
+bridge are not the source of this observation. Multiple connections/channels
+from one client/IP are deduplicated. Two clients behind one IP remain separate.
+These observations do not identify devices. An idle observation updates
+last-online without adding raw or billed bytes.
+
+SSH observations are read independently of the core's online-stats RPC and
+validated against the current local canonical client/inbound membership and
+database generation. Reads do not start a listener. The SSH runtime itself
+still requires its applied, running Xray router. The native traffic job's
+successful traffic poll remains a prerequisite for online-list refresh.
+
+SSH IP collection does not publish the native host-wide fail2ban bans. Those
+bans cannot isolate authenticated SSH users behind a shared address. SSH IP
+limit execution, device semantics and remote SSH execution remain incomplete;
+recorded IPs are not evidence of those capabilities.
+
 ## Local SSH runtime status API
 
 `GET /panel/api/inbounds/ssh/status` returns the authenticated user's SSH

@@ -266,7 +266,7 @@ func testClientPolicyProductionSSHSharedRates(t *testing.T, configure func(map[s
 		}
 	}
 	if err := svc.RestartXray(true); err != nil {
-		t.Fatal(err)
+		t.Fatalf("start policy Xray: %v; core result: %s", err, svc.GetXrayResult())
 	}
 	for _, inbound := range inbounds {
 		productionSSHWait(t, sshListenAddress(inbound))

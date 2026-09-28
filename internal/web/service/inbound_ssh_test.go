@@ -272,6 +272,7 @@ func testSSHInboundProductionXrayLifecycle(t *testing.T, configure func(map[stri
 		}
 	})
 	productionSSHWait(t, local)
+	productionSSHOnline(t, inbound, client.Email)
 	conn, err := net.Dial("tcp", local)
 	if err != nil {
 		t.Fatal(err)
@@ -314,6 +315,12 @@ func testSSHInboundProductionXrayLifecycle(t *testing.T, configure func(map[stri
 	t.Cleanup(func() { _ = unrelated.Close() })
 	productionSSHEcho(t, unrelated)
 	productionSSHStatus(t, inbound.Id, "running", 2, "")
+	productionSSHOnline(t, inbound, client.Email, otherClient.Email)
+	idleDuplicate := productionSSHDial(t, address, otherClient.Email, otherSigner, host.PublicKey())
+	productionSSHStatus(t, inbound.Id, "running", 3, "")
+	productionSSHOnline(t, inbound, client.Email, otherClient.Email)
+	_ = idleDuplicate.Close()
+	productionSSHStatus(t, inbound.Id, "running", 2, "")
 	// Model committed desired changes before their runtime notification arrives.
 	// Reads must retain the observed sessions without applying those changes.
 	if err := database.GetDB().Model(inbound).Update("enable", false).Error; err != nil {
@@ -332,6 +339,7 @@ func testSSHInboundProductionXrayLifecycle(t *testing.T, configure func(map[stri
 		t.Fatal(err)
 	}
 	productionSSHStatus(t, inbound.Id, "pending", 2, "awaiting client update")
+	productionSSHOnline(t, inbound)
 	productionSSHEcho(t, unrelated)
 	if err := database.GetDB().Create(&pendingLinks).Error; err != nil {
 		t.Fatal(err)
@@ -365,6 +373,7 @@ func testSSHInboundProductionXrayLifecycle(t *testing.T, configure func(map[stri
 	productionSSHClosed(t, conn)
 	productionSSHEcho(t, unrelated)
 	productionSSHStatus(t, inbound.Id, "running", 1, "")
+	productionSSHOnline(t, inbound, otherClient.Email)
 	signer, _ := ssh.NewSignerFromKey(rotatedKey)
 	live := productionSSHDial(t, address, client.Email, signer, host.PublicKey())
 	flow, err := live.Dial("tcp", "route.invalid:443")
@@ -478,6 +487,7 @@ func testSSHInboundProductionXrayLifecycle(t *testing.T, configure func(map[stri
 		t.Fatal(err)
 	}
 	productionSSHStatus(t, inbound.Id, "pending", 0, "awaiting configuration")
+	productionSSHOnline(t, inbound)
 	if err := svc.RestartXray(false); err != nil {
 		t.Fatal(err)
 	}
@@ -579,6 +589,7 @@ func testSSHInboundProductionXrayLifecycle(t *testing.T, configure func(map[stri
 		t.Fatal(err)
 	}
 	productionSSHStatus(t, inbound.Id, "pending", 0, "awaiting configuration")
+	productionSSHOnline(t, inbound)
 	sshRuntimeState.Lock()
 	readKeptManager := sshRuntimeState.manager == previousManager
 	sshRuntimeState.Unlock()
@@ -607,6 +618,7 @@ func testSSHInboundProductionXrayLifecycle(t *testing.T, configure func(map[stri
 		t.Fatal(err)
 	}
 	productionSSHStatus(t, replacement.Id, "idle", 0, "no enabled clients")
+	productionSSHOnline(t, replacement)
 	statuses, err := (&InboundService{}).GetSSHRuntimeStatuses(0)
 	if err != nil {
 		t.Fatal(err)

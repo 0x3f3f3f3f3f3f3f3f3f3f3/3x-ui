@@ -185,7 +185,12 @@ an owner-filtered, read-only API. Actual SQLite/PostgreSQL lifecycle and HTTP
 authorization tests cover the backend. The existing desktop/mobile inbound list
 now displays listener state and authenticated transport counts. Real browser
 acceptance covers owned-port collision/recovery, counts 1/2/1 and UI disable.
-Node, global policy, online/device-limit and deployment remain open.
+The [client presence increment](ssh-client-presence.md) connects admitted local
+SSH transports to existing online, last-online, active-inbound and source-IP
+views. Real idle OpenSSH, SQLite/PostgreSQL lifecycle and collector tests verify
+identity and cleanup; Chromium verifies Online before payload and real aging
+after disconnect. Node, global policy, IP/device-limit execution and deployment
+remain open. SSH source observation bypasses native host-wide fail2ban bans.
 
 ## Task 6: mieru vertical integration
 

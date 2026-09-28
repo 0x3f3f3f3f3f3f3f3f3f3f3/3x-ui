@@ -12,9 +12,11 @@ import (
 )
 
 type authenticatedSession struct {
-	client Client
-	key    string
-	cancel context.CancelFunc
+	client   Client
+	key      string
+	ctx      context.Context
+	cancel   context.CancelFunc
+	admitted bool
 }
 
 func ValidateClients(config []Client) error {
@@ -115,7 +117,7 @@ func (s *Server) registerSession(raw net.Conn, conn *ssh.ServerConn) (Client, co
 		return Client{}, nil, nil, false
 	}
 	ctx, cancel := context.WithCancel(s.ctx)
-	s.sessions[raw] = authenticatedSession{client: client, key: conn.Permissions.Extensions["auth-key"], cancel: cancel}
+	s.sessions[raw] = authenticatedSession{client: client, key: conn.Permissions.Extensions["auth-key"], ctx: ctx, cancel: cancel}
 	return client, ctx, func() {
 		cancel()
 		s.mu.Lock()

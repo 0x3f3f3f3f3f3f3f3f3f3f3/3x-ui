@@ -2060,3 +2060,126 @@ claim a root cause from that comparison alone. Final format check passed all
 The UI browser acceptance uses SQLite; the backend status service's PostgreSQL
 lifecycle evidence remains in the preceding API increment. No new full-Go or
 PostgreSQL browser run is claimed for this frontend-only change.
+
+## SSH client online and source IP observations (2026-09-28)
+
+Plan: [SSH client presence](ssh-client-presence.md), within unfinished Task 5.
+Initial tests failed for the missing server snapshot (compile, then an empty
+snapshot stub), the absent idle OpenSSH client in the service result, the empty
+existing online list, and missing IP observations when the native online RPC
+was marked unsupported. A separate reproduction wrote a real temporary ban log
+for two SSH sources. The implementation records those sources without passing
+SSH observations to native host-wide bans. IP/device enforcement remains open.
+
+Focused server test passed in 0.255s. The actual service lifecycle passed on
+SQLite and PostgreSQL in 10.877s total (SQLite 4.90s; PostgreSQL wrapper 5.82s,
+including its real data path 5.25s). It checks idle authenticated users, two
+clients behind one IP, duplicate transport deduplication, detached membership,
+revocation, router stop, DB handle replacement and deleted/reassigned inbound.
+The real collector and no-ban regressions passed in 0.869s. The collector drives
+actual Xray and SSH, marks only the core's online-RPC capability unsupported,
+and verifies the existing online list, active tag, last-online timestamp, zero
+raw counters, persisted local IP view and disconnect cleanup.
+
+The fresh panel build `/tmp/3x-ui-ssh-online-panel` passed the expanded real
+Chromium/OpenSSH acceptance. Before payload, the existing online/IP/last-online
+APIs show the idle SSH user and actual 127.0.0.1 peer with zero raw bytes. The
+existing client table displays Online. The original duplex echo still accounts
+for 16384 B each direction and 49152 B billed at 1.5x; quota reduction, refusal,
+offline browser recovery, transport counts and disable still pass. After
+termination the user leaves the online set within the unchanged grace window.
+Initial application/collision recovery took 24935ms; meter replacement 279ms.
+No browser JavaScript errors. Log: `/tmp/3x-ui-ssh-online-browser-final.log`.
+
+The first browser run reached final disconnect cleanup and then failed because
+its new assertion assumed the existing empty online response was `[]`; the API
+returns `null`. The fixture now handles that existing empty-set representation,
+without changing production API behavior or increasing its timeout. The initial
+race invocation was deliberately interrupted during compilation to serialize
+real-backend checks; it is not a completed passing run. A mistaken invocation
+of unavailable Prettier was canceled; the repository's installed oxfmt then
+formatted the fixture and `node --check` passed. Final regression results follow.
+
+Final focused race command:
+
+```sh
+XRAY_E2E_BINARY=/tmp/3x-ui-xray-pinned SSH_E2E_SERVER=/usr/sbin/sshd \
+XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' \
+go test -p 1 -race ./internal/sshtunnel ./internal/web/service ./internal/web/job \
+  -run '^(TestOnlineSessions.*|TestStatus.*|TestSSHOnlineColdReadDoesNotCreateRuntime|TestSSHInboundRunsThroughProductionXrayLifecycle|TestSSHInbound_Postgres|TestSSHCollectors.*|TestSSHSourceCollection.*)$' \
+  -count=1 -json
+```
+
+It passed all 9 top-level tests with zero skips/failures and no data-race report:
+SSH 1.668s, service 17.217s, jobs 3.286s. The final log is
+`/tmp/3x-ui-ssh-online-race-final.jsonl`. This is the affected concurrency suite,
+not a claim of whole-repository race coverage.
+
+The complete backend run used `go test -p 1 ./... -count=1 -shuffle=on -json`
+with the same three real-backend environment variables. It completed with
+50 test packages passing, one failing, and seven packages without tests.
+There were 29 conditional test skips, including scale/configuration-dependent
+PostgreSQL and golden-core cases; these are not counted as passed. Its sole
+failed leaf was `TestSSHUpstream_Postgres/rates`: Xray exited before readiness,
+before any rate window began. Its parent test also carries a failed event.
+Log: `/tmp/3x-ui-ssh-online-full-go.jsonl`.
+
+Only failure diagnostics were added to the existing rate fixture (the core's
+last result on startup failure); no assertion, limit or timeout changed. The
+same PostgreSQL rate subtest passed independently in 14.387s, including actual
+live rate edits and restart. Log: `/tmp/3x-ui-ssh-online-upstream-recheck.log`.
+The first run's startup failure has no established root cause. The full service
+package is rechecked with its original shuffle seed `1790632389394318245`;
+other packages already passed unchanged in the complete run. Results follow.
+
+The first full service replay (194.154s) passed the original PostgreSQL upstream
+rate case (13.87s), but exposed a different brittle assertion in
+`TestPortablePolicyRealSSHSurvivesRestoreAndRestart`. The actual client
+successfully authenticated, emitted no stdout and exited 255 without timeout;
+its final message was `client_loop: send disconnect: Broken pipe`. The fixture
+required the alternative read-side `closed by remote host` text. The rejected
+transport returns before the newly added admitted-session marker.
+
+The fixture now accepts either specific disconnect message. Authentication,
+exit code, timeout, empty payload, independent target connection/byte counters,
+typed exhausted-quota check, restart denial and successful recovery after credit
+remain unchanged. This is a diagnostic-text correction, not relaxed payload or
+quota acceptance. The replay is retained at
+`/tmp/3x-ui-ssh-online-service-recheck.jsonl`; the initial core-startup failure's
+root cause remains unestablished.
+
+After the disconnect-text correction, both real portable-restoration cases ran
+three times each: all six passed in 9.533s with no skips. They retained exact
+2/3-byte payload accounting, quota 8 refusal before/after restart, and recovery
+to 4/6 raw bytes and 15 billed bytes after credit. Log:
+`/tmp/3x-ui-ssh-online-portable-recheck.log`.
+
+A temporary panel binary omitted only the SSH-user append in the traffic job.
+The browser fixture rejected it at `idle SSH client in the existing online
+list`; original source bytes were restored immediately after the mutant build
+(SHA-256 `154465880f44f3227144ca65488cd82ee09a7d6fa13f17b663dc10b5e65463cd`).
+Log: `/tmp/3x-ui-ssh-online-browser-mutation.log`. The fixture's readiness wait
+was then tightened to read actual authenticated transport status instead of
+opening a probe connection to the local forward. Thus its idle assertions now
+precede even a probe forwarding channel, preventing a native transient-online
+signal from satisfying the intended idle check.
+
+The final browser run with authentication-only readiness passed all assertions:
+application/collision recovery 24895ms, meter replacement 409ms, no browser
+JavaScript errors. Log: `/tmp/3x-ui-ssh-online-browser-idle-final.log`.
+Affected Go lint reported `0 issues`; `make gen-check` passed with the existing
+186 paths/198 operations unchanged. No frontend product source, locale, API
+route or schema changed in this increment; the real browser used the existing
+frontend bundle embedded in the fresh panel build. No new full frontend-suite
+claim is made.
+
+The final complete service-package run passed in 198.305s at the original
+shuffle seed: 913 passing top-level tests and 13 top-level conditional skips
+(1894 passing test/subtest events and 18 skip events), with no failures. Both
+previously failing named cases passed. Log:
+`/tmp/3x-ui-ssh-online-service-final.jsonl`. Together with the other 50 unchanged
+packages from the original full run, all tested packages now have passing
+results; this does not relabel the first whole-repository invocation as green
+or establish a cause for its one-off startup exit. Other packages' skips and
+seven packages without tests remain as recorded above. Local documentation
+links and final diff whitespace checks passed.
