@@ -113,6 +113,9 @@ func migrateInboundExcludeFromSubColumn() error {
 }
 
 func initModels() error {
+	if err := migrateClientPolicyIdentityColumn(); err != nil {
+		return err
+	}
 	if err := migrateClientTrafficLastSubFetchColumn(); err != nil {
 		return err
 	}

@@ -918,6 +918,7 @@ type Client struct {
 
 type ClientRecord struct {
 	Id              int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	PolicyID        string `json:"-" gorm:"column:policy_id;size:36;not null;default:'';uniqueIndex:idx_clients_policy_id,where:policy_id <> '';<-:create"`
 	Email           string `json:"email" gorm:"uniqueIndex;not null"`
 	SubID           string `json:"subId" gorm:"index;column:sub_id"`
 	UUID            string `json:"uuid" gorm:"column:uuid"`

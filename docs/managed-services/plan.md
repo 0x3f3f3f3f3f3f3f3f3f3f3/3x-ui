@@ -46,7 +46,7 @@ Files: this directory; read existing models, Runtime, services, jobs, build/CI.
 - [x] Identify credential locally and verify SSH with pinned official host keys.
 - [ ] Complete baseline Go/frontend/build checks and record failures/skips.
 - [ ] Probe official backend binaries, licenses and isolated network capabilities.
-- [ ] Commit audit and push branch; verify remote SHA.
+- [x] Commit audit and push branch; verify remote SHA (3e226aea includes audit).
 
 ## Task 2: Exact accounting arithmetic
 
@@ -66,7 +66,7 @@ Consumes the fixed-point contract in semantics.md; no DB or clock dependency.
 - [x] Run `go test ./internal/clientpolicy` and observe missing behavior RED.
 - [x] Implement checked quotient/remainder operations without floating point.
 - [x] Run package test, race and fuzz/property boundary checks.
-- [ ] Push after approval review permits the external Git operation.
+- [x] Push after explicit approval; remote SHA matches 3e226aeaca84392dd3b534b1c341baa955cdbd0f.
 
 ## Task 3: Durable accounting and identity
 
@@ -74,6 +74,10 @@ Files: `internal/database/model/client_policy.go`, `database/db.go`,
 `database/migrate_data.go`, `web/service/client_policy.go` and their tests;
 extend model/model.go conversions, portable exports and API generator.
 Consumes Task 2; produces stable UUID policy identity and atomic ledger API.
+
+Identity substep implemented: internal create-only ClientRecord.PolicyID, legacy
+backfill, new-client generation; SQLite and PostgreSQL migration/backup checks
+pass. Billing ledger, node propagation and runtime binding remain open below.
 
 - [ ] Write SQLite/Postgres migration tests retaining old raw usage at 1×.
 - [ ] Implement transactional raw/billed/remainder/cursor/revision updates.

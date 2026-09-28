@@ -63,3 +63,64 @@ sampling, cutoff and overshoot bounds; none is claimed for unbuilt adapters.
   did not recognize authorization for external data transfer/remote branch
   creation. No push occurred. Explicit user approval requested; local work
   continues. No authentication secret was copied into the repository.
+
+## Push verification
+
+The user subsequently explicitly approved this task's feature-branch pushes.
+`git push -u origin feat/unified-client-policy-backends` succeeded, and
+`git ls-remote origin refs/heads/feat/unified-client-policy-backends` returned
+`3e226aeaca84392dd3b534b1c341baa955cdbd0f`, exactly matching local HEAD.
+This includes audit commit `4e2ff8c6` and arithmetic commit `3e226aea`.
+
+## Immutable local client identity milestone
+
+Implemented: create-only, internal UUID `ClientRecord.PolicyID`; existing rows
+are backfilled before index creation. Public JSON cannot choose that identity.
+Renaming/editing credentials preserves it; deletion and recreation generates
+a new identity. Raw counters/quota/manual disable are untouched by migration.
+This is local identity infrastructure, not yet node identity synchronization,
+persistent billed usage or authenticated backend enforcement.
+
+- `go test ./internal/database -run TestClientPolicyIdentity -count=1`:
+  RED before implementation (missing PolicyID), then PASS.
+- A 1,003-client nullable legacy fixture crosses the 500-row migration batch
+  boundary, retains existing UUIDs, and survives DumpSQLite/RestoreSQLite with
+  every identity preserved. Focused SQLite run passed in 10.919s.
+- An isolated PostgreSQL 16.15 instance was unpacked into `/tmp/3x-ui-pg-tools`
+  and run as `nobody`, listening only on 127.0.0.1:55432 with a private temp
+  socket/data directory. No system PostgreSQL service was installed or changed.
+- `XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' go test ./internal/database -run TestClientPolicyIdentityMigration_Postgres -count=1 -v`:
+  PASS, 4.370s; 1,003 legacy rows, UUID uniqueness, disable preservation,
+  reopen, duplicate rejection and actual SQLite→PostgreSQL migration.
+- `npm run gen`: PASS; no generated API diff because PolicyID is internal.
+- `npm run build`: PASS, Vite built the production bundles in 6.39s.
+- Full frontend baseline initially exited 1: Chromium could not load libatk.
+  Official Playwright runtime dependencies were then installed and the suite
+  rerun. That run has component test timeouts; final details are still pending.
+
+Additional checks for this milestone:
+
+- Temporarily removing the migration call produced a behavioral failure:
+  legacy policy identity was not a UUID. Restoring the call returned GREEN
+  (1.461s); this proves the test detects a missing migration, not just a type.
+- `go test -race -count=1 ./internal/database ./internal/database/model`:
+  PASS (159.473s and 1.648s); PostgreSQL-gated tests are not counted from this run.
+- `go test -shuffle=on -count=1 ./internal/database ./internal/database/model ./internal/web/service ./internal/web/controller ./internal/sub`:
+  PASS (47.443s, 0.256s, 128.656s, 13.025s, 35.013s).
+- `go build ./...`: exit 0 with real Vite bundles embedded.
+- `git diff --check`: clean.
+
+- `go vet ./internal/clientpolicy ./internal/database/...`: exit 0.
+- `golangci-lint run ./internal/clientpolicy/... ./internal/database/...`:
+  exit 0, 0 issues; formatter diff is empty with the Go toolchain on PATH.
+- Full frontend baseline: 169 test files passed, 5 failed; 1,735 tests passed,
+  7 timed out at the unchanged 5-second limit. An unhandled React scheduler
+  `window is not defined` occurred during happ-settings-presets cleanup.
+- The failed files were happ-routing-editor (3), client-bulk-calendar-renewal,
+  client-calendar-renewal, client-qr-modal-qr-capacity, calendar-expire-setting.
+  Isolated rerun of all five files passed (23 tests), without code or timeout
+  changes. The original full-suite failure remains recorded; cleanup needs
+  verification during the next complete frontend run.
+
+The complete request's unresolved requirements in plan.md and matrix.md have
+not been removed or reclassified as complete.
