@@ -96,6 +96,14 @@ also requires stopping/draining live producers and resuming the new revision.
 The ledger rejects incomplete boundaries and untracked legacy writes; that is
 a protection against incomplete integration, not a completed runtime adapter.
 
+Existing panel reset, bulk reset and automatic-renewal services now recognize
+admission-ledger ownership. They reset accounts and raw projections together,
+retire old sources, preserve operator disable/expiry and avoid raw-byte quota
+auto-disable for these accounts. An unsettled observed source rejects the
+whole reset transaction. This prerequisite was pulled forward from the SSH
+vertical because the old jobs would otherwise undo its policy semantics.
+Public activation and collection of native/remote usage remain open.
+
 ## Task 4: Shared live rate and quota data path
 
 Files: `internal/clientpolicy` engine/stream/datagram files and E2E tests;

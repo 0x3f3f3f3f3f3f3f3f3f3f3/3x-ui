@@ -132,14 +132,19 @@ func (l *ClientUsageLedger) apply(ctx context.Context, report ClientUsageReport,
 }
 
 func (l *ClientUsageLedger) ChangeMultiplier(ctx context.Context, policyID string, revision int64, multiplier clientpolicy.Multiplier, finals []ClientUsageReport) (model.ClientUsageAccount, error) {
-	return l.transition(ctx, policyID, revision, multiplier, finals, false)
+	return l.transition(ctx, policyID, revision, multiplier, finals, false, false)
 }
 
 func (l *ClientUsageLedger) Reset(ctx context.Context, policyID string, revision int64, finals []ClientUsageReport) (model.ClientUsageAccount, error) {
-	return l.transition(ctx, policyID, revision, 0, finals, true)
+	return l.transition(ctx, policyID, revision, 0, finals, true, false)
 }
 
-func (l *ClientUsageLedger) transition(ctx context.Context, policyID string, revision int64, multiplier clientpolicy.Multiplier, finals []ClientUsageReport, reset bool) (model.ClientUsageAccount, error) {
+// ResetAdmitted fences all prepaid sources atomically; observed sources still require final reports.
+func (l *ClientUsageLedger) ResetAdmitted(ctx context.Context, policyID string) (model.ClientUsageAccount, error) {
+	return l.transition(ctx, policyID, 0, 0, nil, true, true)
+}
+
+func (l *ClientUsageLedger) transition(ctx context.Context, policyID string, revision int64, multiplier clientpolicy.Multiplier, finals []ClientUsageReport, reset, admittedOnly bool) (model.ClientUsageAccount, error) {
 	var result model.ClientUsageAccount
 	if !reset {
 		if _, _, err := clientpolicy.Charge(0, multiplier, 0); err != nil {
@@ -147,16 +152,29 @@ func (l *ClientUsageLedger) transition(ctx context.Context, policyID string, rev
 		}
 	}
 	err := l.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if admittedOnly {
+			if err := requireAdmissionDurability(tx); err != nil {
+				return err
+			}
+		}
 		client, a, err := lockClientUsage(tx, policyID)
 		if err != nil {
 			return err
 		}
-		if a.Revision != revision {
+		if !admittedOnly && a.Revision != revision {
 			return ErrUsageBoundary
 		}
 		var active []model.ClientUsageMeter
 		if err := tx.Where("policy_id = ? AND closed = ?", policyID, false).Order("meter_id").Find(&active).Error; err != nil {
 			return err
+		}
+		if admittedOnly {
+			for _, meter := range active {
+				if !meter.AdmissionOnly {
+					return ErrUsageBoundary
+				}
+				finals = append(finals, ClientUsageReport{MeterID: meter.ID, Sequence: meter.Sequence, Up: meter.Up, Down: meter.Down})
+			}
 		}
 		if len(active) != len(finals) {
 			return ErrUsageBoundary

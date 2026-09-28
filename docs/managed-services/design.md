@@ -46,6 +46,20 @@ change/reset requires final snapshots from all active sources, closes them
 and advances the revision in one transaction. Reset preserves manual disable,
 expiry and quota configuration. Runtime freeze/drain/restart remains to build.
 
+Panel reset paths now use `ResetAdmitted` for accounts owned by admission
+sources. Canonical-row locks serialize snapshots with concurrent admissions;
+every byte granted by such sources is already durable, so their committed
+cursors form a complete reset boundary. Any active observed source instead
+rejects the reset until it supplies a final snapshot. Bulk resets wrap all
+clients, projections, source closures and group baselines in one transaction.
+Canonical locks follow sorted IDs; batch lookup preserves the existing efficient
+legacy reset path instead of querying ownership separately for every client.
+Automatic renewal uses the same boundary and updates the existing expiry
+fields without changing the operator's enable choice. Legacy raw-quota jobs
+exclude ledger-owned accounts; the policy controller enforces their billed
+quota and expiry. Initial production ownership activation must be coordinated
+with the serial traffic writer before enabling a backend.
+
 The internal Admit operation checks current enabled/expiry/quota state and
 commits exact billing before granting forwarding rights. Its source must have
 one exclusive, serialized owner: two independent senders cannot share a meter

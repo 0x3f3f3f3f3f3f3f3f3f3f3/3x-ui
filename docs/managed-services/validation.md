@@ -496,3 +496,80 @@ service or every routing capability. Balancer selection, routed sustained
 rate/quota and DNS-refresh scenarios, production credential/rename recovery,
 SSH upstream, and full management/node/deployment paths remain unverified or
 unimplemented as recorded in the plan and matrix.
+
+## Admission-account lifecycle in existing panel services
+
+This prerequisite covers the existing service-layer reset/renewal/traffic-tick
+entry points with real database state. The panel still has no public admission
+account activation path or production SSH manager. Tests create owned accounts
+explicitly; their VLESS attachment records do not start a native VLESS service.
+
+Behavioral RED cases before the service changes:
+
+- A traffic tick disabled a 0.5× client at raw 150 / billed 75 with quota 100.
+- Panel reset paths left the account at raw 150 / billed 225 / revision 2 while
+  zeroing its legacy projection. Automatic renewal had the same stale account.
+- The initial managed single-client branch sent no remote reset request and
+  omitted inbound reset timestamps. These regressions were reproduced and fixed.
+- Increasing quota from 100 to 1100 incorrectly enabled a manually disabled
+  account. The old raw-depletion auto-enable path now excludes owned accounts.
+
+Focused verification command, with the task toolchain on PATH:
+
+```sh
+XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' \
+  go test -race ./internal/database ./internal/web/service \
+  -run '^TestAdmissionReset|^TestManagedUsage|^TestResetTrafficOfDepletedClient|^TestAutoRenewClients' \
+  -count=1 -v
+```
+
+Observed after the batching fix: database PASS 1.774s; service PASS 39.912s.
+SQLite and PostgreSQL 16.15
+run real transactions; PostgreSQL cases use temporary per-test schemas in the
+isolated test instance. The seven service PostgreSQL cases were executed, not
+skipped. They cover restriction reasons, bulk rollback, expired reset, renewal,
+quota editing, live TCP reset and mixed legacy/managed batching. Existing legacy renewal/reset regression tests
+also pass with their original assertions.
+
+Seven panel reset paths clear raw/billed/carry together, preserve multiplier and
+manual disable, and retire old sources. Four concurrent admission sources race
+reset in each DB backend; no old source can commit into the new period. A bulk
+reset containing an unsettled observed source rolls back earlier clients,
+source closures, raw projections and group baselines. A reset leaves expired
+clients blocked; a scheduled renewal leaves manually disabled clients blocked.
+
+Real loopback TCP tests keep two clients connected through the actual policy
+controller while calling the panel reset service. The reset client's old flow
+closes in 501.7ms on SQLite and 541.5ms on PostgreSQL, below the predeclared
+1.25s bound; the unrelated client remains usable. Two inbound attachments still
+produce exactly one account revision increment. After explicit controller
+reconfiguration, seven new download bytes bill ten bytes plus 0.5 carry at 1.5×.
+
+The node case sends actual Runtime HTTP requests to a local test endpoint:
+two attachments on one node produce one reset request, and local timestamps/
+dirty markers persist. It verifies dispatch and local bookkeeping only, not
+remote ledger enforcement or distributed atomicity. A first run of the new
+bulk-rollback test used a nonexistent fixture column; that fixture error was
+corrected to the schema's `group_name` before the passing verification above.
+
+Deliberately removing the observed-source guard made its reset test fail.
+Removing source closure alone did not defeat the live-flow test: the unchanged
+revision guard still closed the connection. Removing both closure and revision
+fencing made the real TCP test fail at its original 1.25s deadline. All mutations
+were restored before regression validation; these checks did not relax bounds.
+
+The initial lifecycle implementation regressed legacy bulk-reset cost: resetting
+838 clients made 2,531 query/update callbacks. A test capped these at 100 before
+the fix. Sorted, chunked canonical-row locking and batched ownership lookup
+reduce the count to at most 25 on both SQLite and PostgreSQL, including the
+post-reset verification queries. Raw and billed totals still reset together.
+This is a bounded-query regression check, not a many-client throughput claim.
+
+Final `make test-go` passed after the batching change with both
+`XRAY_E2E_BINARY=/tmp/3x-ui-xray-pinned` and the isolated `XUI_TEST_PG_DSN` set.
+This includes actual OpenSSH/Xray regression paths; other externally gated tests
+remain subject to their documented prerequisites and are not counted as executed.
+`golangci-lint run ./internal/database/... ./internal/web/service/...` reports
+zero issues; `go build -o /tmp/3x-ui-panel-lifecycle .` succeeds. Formatter output
+and `git diff --check` are clean. This milestone changes no frontend source or
+public API schema; prior frontend results remain recorded above.

@@ -26,6 +26,16 @@ func (s *ClientService) ResetTrafficByEmail(inboundSvc *InboundService, email st
 	}
 
 	needRestart := false
+	managed, err := clientHasUsageAccount(database.GetDB(), email)
+	if err != nil {
+		return false, err
+	}
+	if managed {
+		if err := submitTrafficWrite(func() error { return resetManagedClientTraffic(inboundIds, email) }); err != nil {
+			return false, err
+		}
+		return false, s.propagateManagedClientReset(inboundSvc, inboundIds, email)
+	}
 	if len(inboundIds) == 0 {
 		if rErr := inboundSvc.ResetClientTrafficByEmail(email); rErr != nil {
 			return false, rErr
@@ -77,18 +87,11 @@ func (s *ClientService) BulkResetTraffic(inboundSvc *InboundService, emails []st
 	err = submitTrafficWrite(func() error {
 		db := database.GetDB()
 		return db.Transaction(func(tx *gorm.DB) error {
-			if err := adjustGroupBaselinesForRemovedTraffic(tx, cleanEmails); err != nil {
+			count, err := resetClientUsageTx(tx, cleanEmails)
+			if err != nil {
 				return err
 			}
-			for _, batch := range chunkStrings(cleanEmails, sqlInChunk) {
-				res := tx.Model(xray.ClientTraffic{}).
-					Where("email IN ?", batch).
-					Updates(map[string]any{"enable": true, "up": 0, "down": 0})
-				if res.Error != nil {
-					return res.Error
-				}
-				affected += int(res.RowsAffected)
-			}
+			affected = int(count)
 			if err := clearGlobalTraffic(tx, cleanEmails...); err != nil {
 				return err
 			}
@@ -108,6 +111,13 @@ func (s *ClientService) BulkResetTraffic(inboundSvc *InboundService, emails []st
 	for _, e := range cleanEmails {
 		rec := recordsByEmail[e]
 		if rec == nil || rec.Enable {
+			continue
+		}
+		managed, err := clientHasUsageAccount(database.GetDB(), e)
+		if err != nil {
+			return affected, err
+		}
+		if managed {
 			continue
 		}
 		updated := rec.ToClient()
@@ -155,16 +165,8 @@ func (s *ClientService) resetAllClientTrafficsLocked(id int) error {
 			return nil
 		}
 
-		if err := adjustGroupBaselinesForRemovedTraffic(tx, resetEmails); err != nil {
+		if _, err := resetClientUsageTx(tx, resetEmails); err != nil {
 			return err
-		}
-
-		result := tx.Model(xray.ClientTraffic{}).
-			Where("email IN ?", resetEmails).
-			Updates(map[string]any{"enable": true, "up": 0, "down": 0})
-
-		if result.Error != nil {
-			return result.Error
 		}
 
 		if err := clearGlobalTraffic(tx, resetEmails...); err != nil {
@@ -184,7 +186,7 @@ func (s *ClientService) resetAllClientTrafficsLocked(id int) error {
 			inboundWhereText += " = ?"
 		}
 
-		result = tx.Model(model.Inbound{}).
+		result := tx.Model(model.Inbound{}).
 			Where(inboundWhereText, id).
 			Update("last_traffic_reset_time", now)
 
@@ -199,13 +201,15 @@ func (s *ClientService) ResetAllTraffics() (bool, error) {
 	var affected int64
 	err := submitTrafficWrite(func() error {
 		return database.GetDB().Transaction(func(tx *gorm.DB) error {
-			res := tx.Model(&xray.ClientTraffic{}).
-				Where("1 = 1").
-				Updates(map[string]any{"enable": true, "up": 0, "down": 0})
-			if res.Error != nil {
-				return res.Error
+			var emails []string
+			if err := tx.Model(&xray.ClientTraffic{}).Pluck("email", &emails).Error; err != nil {
+				return err
 			}
-			affected = res.RowsAffected
+			var err error
+			affected, err = resetClientUsageTx(tx, emails)
+			if err != nil {
+				return err
+			}
 			if err := tx.Where("1 = 1").Delete(&model.ClientGlobalTraffic{}).Error; err != nil {
 				return err
 			}

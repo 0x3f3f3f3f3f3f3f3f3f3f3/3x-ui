@@ -334,10 +334,13 @@ func apiUserFromClient(client map[string]any, cipher string) map[string]any {
 // Candidates and renewals are not the same set: a skipped candidate keeps its
 // counters, so only the clients actually reset may lose their cross-panel rows.
 func (s *InboundService) autoRenewClients(tx *gorm.DB, mutationBatch *trafficMutationBatch) (bool, int64, error) {
+	managedRenewals, err := s.renewManagedClientsTx(tx, mutationBatch)
+	if err != nil {
+		return false, 0, err
+	}
 	// check for time expired
 	var traffics []*xray.ClientTraffic
 	now := time.Now().Unix() * 1000
-	var err error
 
 	// Filter to clients that have at least one local inbound. Using
 	// client_traffics.inbound_id is wrong: it goes stale after an inbound is
@@ -345,6 +348,7 @@ func (s *InboundService) autoRenewClients(tx *gorm.DB, mutationBatch *trafficMut
 	// attached to, so it could be a node inbound even when the client also has
 	// local inbounds. The email-based join through client_inbounds is authoritative.
 	err = tx.Model(xray.ClientTraffic{}).
+		Where(legacyUsageOnly).
 		Where("(reset > 0 or reset_day > 0 or reset_weekday > 0) and expiry_time > 0 and expiry_time <= ?", now).
 		// A prepaid plan stops itself: once as many renewals have fired as the
 		// operator allowed, the client is left to expire like any other.
@@ -360,7 +364,7 @@ func (s *InboundService) autoRenewClients(tx *gorm.DB, mutationBatch *trafficMut
 	}
 	// return if there is no client to renew
 	if len(traffics) == 0 {
-		return false, 0, nil
+		return false, managedRenewals, nil
 	}
 
 	renewLocation, locErr := (&SettingService{}).GetTimeLocation()
@@ -524,7 +528,7 @@ func (s *InboundService) autoRenewClients(tx *gorm.DB, mutationBatch *trafficMut
 			action: trafficAddUser, inbound: clientToAdd.inbound, client: clientToAdd.client,
 		})
 	}
-	return needRestart, int64(len(renewedEmails)), nil
+	return needRestart, managedRenewals + int64(len(renewedEmails)), nil
 }
 
 // AddClientStat inserts a per-client accounting row, or refreshes the
@@ -627,15 +631,10 @@ func (s *InboundService) delClientStatsByEmails(tx *gorm.DB, emails []string) er
 func (s *InboundService) ResetClientTrafficByEmail(clientEmail string) error {
 	err := submitTrafficWrite(func() error {
 		return database.GetDB().Transaction(func(tx *gorm.DB) error {
-			if err := adjustGroupBaselinesForRemovedTraffic(tx, []string{clientEmail}); err != nil {
+			if _, err := resetClientUsageTx(tx, []string{clientEmail}); err != nil {
 				return err
 			}
 			if err := clearGlobalTraffic(tx, clientEmail); err != nil {
-				return err
-			}
-			if err := tx.Model(xray.ClientTraffic{}).
-				Where("email = ?", clientEmail).
-				Updates(map[string]any{"enable": true, "up": 0, "down": 0}).Error; err != nil {
 				return err
 			}
 			return tx.Where("email = ?", clientEmail).Delete(&model.NodeClientTraffic{}).Error
@@ -675,6 +674,13 @@ func (s *InboundService) ResetClientTraffic(id int, clientEmail string) (needRes
 }
 
 func (s *InboundService) resetClientTrafficLocked(id int, clientEmail string) (bool, *model.Inbound, error) {
+	managed, err := clientHasUsageAccount(database.GetDB(), clientEmail)
+	if err != nil {
+		return false, nil, err
+	}
+	if managed {
+		return s.resetManagedClientTrafficLocked(id, clientEmail)
+	}
 	needRestart := false
 	var reenablePlan *trafficLocalApplyPlan
 	var reenableNodeID *int
@@ -724,10 +730,6 @@ func (s *InboundService) resetClientTrafficLocked(id int, clientEmail string) (b
 		}
 	}
 
-	traffic.Up = 0
-	traffic.Down = 0
-	traffic.Enable = true
-
 	db := database.GetDB()
 	now := time.Now().UnixMilli()
 	inbound, err := s.GetInbound(id)
@@ -735,11 +737,15 @@ func (s *InboundService) resetClientTrafficLocked(id int, clientEmail string) (b
 		return false, nil, err
 	}
 	if err := db.Transaction(func(tx *gorm.DB) error {
-		if err := adjustGroupBaselinesForRemovedTraffic(tx, []string{clientEmail}); err != nil {
+		if _, err := resetClientUsageTx(tx, []string{clientEmail}); err != nil {
 			return err
 		}
-		if err := tx.Save(traffic).Error; err != nil {
+		managed, err := clientHasUsageAccount(tx, clientEmail)
+		if err != nil {
 			return err
+		}
+		if managed {
+			reenablePlan = nil
 		}
 		if err := clearGlobalTraffic(tx, clientEmail); err != nil {
 			return err

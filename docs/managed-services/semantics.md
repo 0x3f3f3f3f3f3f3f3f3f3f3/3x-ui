@@ -183,3 +183,40 @@ from this bridge. Balancer, DNS-refresh, routed throughput/quota stress, global
 nodes, credential rename reconciliation and production recovery remain open.
 The bridge builds on the documented [Xray SOCKS inbound](https://xtls.github.io/en/config/inbounds/socks.html)
 and pinned core source at `52a412d9e2f5` (`proxy/socks/server.go`, `infra/conf/socks.go`).
+
+## Panel lifecycle for admission-owned accounts
+
+Existing single-client, inbound, all-client and bulk traffic reset operations
+use the durable account boundary when a client has a usage account. A reset
+closes every active admission source, clears raw upload/download, billed bytes
+and fractional carry, and advances the account revision once per client.
+It preserves multiplier, quota, expiry and operator enable state. The canonical
+client lock prevents racing grants from crossing the reset boundary. An active
+observed source causes an error and rollback because its unreported bytes
+cannot be inferred from the durable cursor. Bulk rollback includes earlier
+clients, source closures, raw projections and group display baselines.
+
+The flow controller fences old TCP connections within its existing 1.25-second
+test bound. A reset does not automatically configure a fresh controller source;
+production reconciliation must do that before accepting subsequent flows.
+Reconfiguration still checks independent expiry and manual-disable restrictions.
+Bytes already admitted before the reset may remain in the documented bounded
+protocol/kernel buffers; resetting a counter does not retract delivered bytes.
+
+Automatic renewal uses the existing interval/calendar/prepaid-cycle schedule,
+resets the account only when the renewed expiry is in the future, and updates
+canonical, traffic and attached settings expiry together. It never clears
+operator disable. Legacy traffic ticks no longer compare raw totals against
+billed quota for these accounts or encode their expiry/quota as manual disable.
+Increasing their quota also preserves operator disable and historical billing.
+
+A multi-attachment single-client reset creates one local boundary, retains
+inbound reset timestamps and node dirty markers, then dispatches one Runtime
+reset request per remote node. Remote failure is reported explicitly after the
+local commit. This preserves existing dispatch behavior; it is not a distributed
+atomic reset or proof of node credit/history deduplication. Durable distributed
+reset events, node leases and accounting migration remain open. Production
+account activation must coordinate with legacy lifecycle selection and writes,
+including outer reset/auto-enable decisions currently outside the serial
+writer. Those initial-activation races remain to resolve before exposing a
+public activation path.

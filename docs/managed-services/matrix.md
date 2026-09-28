@@ -110,3 +110,10 @@ they do not imply UI/API/routing/deployment or multi-node completion.
 | Internal Xray TCP route execution / no double billing | V | OpenSSH through real Xray: exact/regexp users, domain/IP/port/source, two exits, block priority, native-versus-bridge counters |
 | Production manager and panel integration | N | Concrete routed adapter exists; production Runtime/configuration wiring remains |
 | Enforcing a standard -R client's local target | N | Target absent from protocol; listener ACL is not target enforcement |
+
+Panel lifecycle prerequisites now recognize admission-owned accounts: single
+and bulk resets retire old sources and preserve other restrictions, renewal
+uses an atomic ledger reset, and legacy raw-quota jobs do not auto-disable
+those accounts. SQLite/PostgreSQL and real TCP tests cover these service paths.
+This does not change the integrated-service matrix: native collection, public
+activation, remote accounting and protocol management remain incomplete.

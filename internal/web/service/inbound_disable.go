@@ -84,6 +84,7 @@ func (s *InboundService) disableInvalidClients(tx *gorm.DB, mutationBatch *traff
 	var depletedRows []xray.ClientTraffic
 	err := tx.Model(xray.ClientTraffic{}).
 		Where(cond+" AND enable = ?", append(condArgs, true)...).
+		Where(legacyUsageOnly).
 		Find(&depletedRows).Error
 	if err != nil {
 		return false, 0, nil, err

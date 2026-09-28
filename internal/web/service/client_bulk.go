@@ -519,6 +519,7 @@ func (s *ClientService) BulkAdjust(inboundSvc *InboundService, emails []string, 
 		var rows []string
 		if err := db.Model(xray.ClientTraffic{}).
 			Where(cond+" AND enable = ? AND email IN ?", append(append([]any{}, condArgs...), false, batch)...).
+			Where(legacyUsageOnly).
 			Pluck("email", &rows).Error; err != nil {
 			return result, needRestart, err
 		}
