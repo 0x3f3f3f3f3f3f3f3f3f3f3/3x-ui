@@ -149,6 +149,9 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 	if payload == nil {
 		return false, common.NewError("empty payload")
 	}
+	if payload.Policy != nil {
+		return false, errPortablePolicyImportOnly
+	}
 	client := payload.Client
 	if strings.TrimSpace(client.Email) == "" {
 		return false, common.NewError("client email is required")

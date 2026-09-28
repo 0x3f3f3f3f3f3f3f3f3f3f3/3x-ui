@@ -249,8 +249,28 @@ The cost is per-client import transactions instead of inbound batch fanout.
 - [x] Import under sorted inbound locks, validate each item, check duplicate
   identity again inside the writer, restore usage/HWID/group baselines before
   commit, and retain attached-before-orphan duplicate precedence.
-- [ ] Restore managed policy and exact charged history with fresh identity and
+- [x] Restore managed policy and exact charged history with fresh identity and
   meter lifetimes; reject unsupported attachment combinations and malformed
   values. Export a consistent snapshot including SSH credentials and policy.
-- [ ] Verify SQLite/PostgreSQL, rollback/concurrency, real SSH quota admission,
-  generated API contracts, regression and static checks; document and push.
+- [x] Verify SQLite/PostgreSQL, rollback/concurrency, real SSH quota admission,
+  generated API contracts, regression and static checks; document results.
+
+Portable policy format decision: add optional `ClientPortablePolicy` as `policy`
+on the existing payload, with formatVersion=1, local up/down B/s, multiplier,
+exact billed bytes, remainder and traffic projection quota/enable/expiry.
+Client totalGB and traffic up/down serialize as decimal strings; import accepts
+the old integer form too. Missing policy keeps legacy 1x semantics. Snapshot
+restore is accepted only by the import API; ordinary create/bulk-create reject
+the field. Export runs in a read-only repeatable snapshot and rejects inconsistent
+owned ledgers instead of silently exporting contradictory counters.
+
+- [x] RED/GREEN: real segmented 0.5x→2x ledger round trip retains 7 billed bytes
+  and remainder 500 for raw 3/3; restored narrow quota still denies new bytes.
+- [x] RED/GREEN: browser-style JSON decode/re-encode preserves byte values above
+  2^53; unknown format, invalid rate/multiplier/carry/bytes and unsupported
+  attachments leave no client or binding. Existing identities remain untouched.
+- [x] RED/GREEN: import uses fresh policy/meter incarnations and preserves
+  manual disable, expiry and retained-traffic ownership. Verify a snapshot taken
+  during concurrent accounting is internally consistent on SQLite/PostgreSQL.
+- [x] Exercise actual SSH export/delete/import/denial and restart; generate API
+  contracts/docs and run regression/static/build gates.

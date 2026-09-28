@@ -1245,3 +1245,105 @@ and whole-repository `golangci-lint run` pass (0 issues). No schema migration
 is required: this change orders writes to existing client, traffic and ledger
 tables. The generated OpenAPI copy and MDX reference describe the new per-item
 rollback/skip behavior.
+
+
+### Portable policy format and exact history (2026-09-28)
+
+This increment extends the prior atomic importer with version-1 managed policy
+snapshots and decimal-string byte fields. Meaningful RED runs reproduced lost
+rates/multiplier/carry and traffic quota, browser rounding above 2^53, silent
+policy loss at ordinary create/bulk-create, and failure when importing over a
+deleted client's retained traffic. The large attached-client test then caught a
+second precision loss inside the inbound settings map decoder: quota
+9007199254741013 became 9007199254741012. `UseNumber` now preserves both incoming
+and existing settings while preparing client additions. Logs are
+`/tmp/3x-ui-portable-policy-red.log`, `/tmp/3x-ui-portable-create-red.log`,
+`/tmp/3x-ui-portable-large-attached-red.log` and
+`/tmp/3x-ui-portable-retained-red.log`. An API contract check also
+caught unattached `inboundIds: null`; export now emits the required empty array
+(`/tmp/3x-ui-portable-orphan-schema-red.log`).
+
+The concurrent export test holds the client read while actual quota and ledger
+writes commit, then requires every exported value to belong to the original
+snapshot. Removing the snapshot reproduced mixed states. SQLite's first
+read-transaction implementation blocked accounting for 20.06s with `database is
+locked`: the driver ignores `ReadOnly` and selects the writer DSN's immediate
+transaction. A dedicated deferred connection fixed locking; reusing its GORM
+query state exposed `no such column: client_id`, fixed by a fresh session. The
+final SQLite and PostgreSQL tests require the concurrent writes to commit while
+the reader remains open. No deadline was enlarged. Failed and passing logs use
+`/tmp/3x-ui-portable-policy-focused*.log`; the deliberate mutation log is
+`/tmp/3x-ui-portable-snapshot-mutation.log`.
+
+Thirteen invalid-snapshot cases check version, scope, rate, multiplier, billed
+bytes, carry, projection quota and required traffic/SSH fields with no partial
+client or binding. Temporarily bypassing policy validation made eleven cases
+fail (the two separate required-field guards still rejected their inputs), then
+the code was restored: `/tmp/3x-ui-portable-validation-mutation.log`. Independent
+manual/traffic disable and canonical/projection expiry survive restoration.
+Deleted-owner traffic is replaceable, but a report from its old meter fails and
+cannot charge the newly created policy identity.
+
+Actual OpenSSH 9.6p1 → panel-managed pinned Xray 26.9.9Custom → loopback target
+runs on both SQLite and PostgreSQL. The target independently observes 2 upload
+and 3 download bytes; 1.5x billing records 7 whole bytes plus carry 500. Export,
+delete with retained traffic and import preserve a traffic quota of 8. New SSH
+sessions establish signed public-key authentication but are closed before any
+forwarding, both after reconciliation and after backend stop/restart. The target
+retains exactly one connection and 2/3 bytes. A separate admission check reports
+`UsageQuotaError`. Adding 1000 bytes of quota permits the next exchange, yielding
+raw 4/6 and exactly 15 billed bytes with zero carry and a fresh policy identity.
+This test verifies restored rate fields, not a new throughput measurement; live
+aggregate shaping evidence remains the separately recorded real-client tests.
+
+The first new probe incorrectly required OpenSSH's authentication-rejection text.
+Source inspection confirmed policy admission follows signed authentication; the
+probe now requires successful authentication, exit 255, remote closure before
+its five-second deadline, zero response bytes and unchanged independent target
+counters. It does not accept a timeout or arbitrary connection failure as denial.
+A deliberate bypass of policy restoration then returned actual payload `xab`
+and made the probe fail, proving it detects quota bypass. Source was restored in
+`finally`; `/tmp/3x-ui-portable-real-ssh-mutation.log` records that expected failure.
+
+Focused command with actual PostgreSQL and Xray environment variables:
+`go test ./internal/web/service ./internal/web/controller -run '^Test(Portable|Import|ExportImport|BulkCreate|AddInboundClient)' -count=1 -v`
+passed: service 27.017s, controller 4.273s, no skipped tests in this run.
+`/tmp/3x-ui-portable-policy-focused-final.log` records both real-SSH cases and
+both portable PostgreSQL groups. Full regression/static/build evidence follows.
+
+
+Fresh full Go command for this increment:
+`GOFLAGS=-p=1 XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' XRAY_E2E_BINARY=/tmp/3x-ui-xray-pinned go test -json -shuffle=on ./... -count=1`
+exited 0: 50 packages passed, six packages had no tests (including the existing
+Go source directory under a frontend dependency). Database 48.355s, service
+124.364s, controller 5.561s. The 29 skipped test/subtest cases are recorded in
+`/tmp/3x-ui-portable-policy-full-go-skips.txt`, separately from passes. They need
+scale opt-in, the alternate global PostgreSQL test configuration, unavailable
+geosite fixtures, or a non-Linux platform. Both new real-SSH cases and the
+portable PostgreSQL groups ran. Complete output:
+`/tmp/3x-ui-portable-policy-full-go.jsonl`.
+
+
+Focused race command with the same live PostgreSQL DSN and pinned Xray binary:
+`go test -race -shuffle=on ./internal/web/service ./internal/web/controller -run '^Test(Portable|Import|ExportImport|BulkCreate|AddInboundClient)' -count=1`
+passed: service 77.830s, controller 7.629s, exit 0
+(`/tmp/3x-ui-portable-policy-race.log`).
+
+
+Final static/build checks all exit 0: whole-repository `golangci-lint run`
+(0 issues), `make gen-check` (65 schemas; 185 paths/197 operations), frontend
+`npm run typecheck`, `npm run lint`, `npm run format:check` (724 files) and
+`npm test -- src/test/generated-examples.test.ts src/test/openapi-runtime-contracts.test.ts src/test/openapi-request-bodies.test.ts`
+(3 files/75 tests passed). Frontend production build passed in 2.87s; docs
+`npm run typecheck` passed; `go build -o /tmp/3x-ui-portable-policy-panel .`
+produced the panel embedding that build. Generated frontend/docs OpenAPI files
+match. Logs use `/tmp/3x-ui-portable-policy-` followed by `go-lint`, `gen-check`,
+`frontend-types`, `frontend-lint`, `frontend-format`, `frontend-contracts`,
+`frontend-build`, `docs-types` or `go-build`, then `.log`.
+
+Only generated frontend contracts and API descriptions changed; no frontend
+interaction changed. The previously recorded 181-file/1769-test frontend suite
+was not repeated and is not presented as a fresh result. No DB schema migration
+is required. Large export/import throughput, complete distributed restoration,
+other policy executors, SSH upstream and the remaining protocol/deployment/A–E
+requirements stay open. This increment is not whole-task completion.

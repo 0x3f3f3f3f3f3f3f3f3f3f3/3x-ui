@@ -29,6 +29,7 @@ func TestImportLegacySSHTrafficKeepsLedgerReady(t *testing.T) {
 				t.Fatal(err)
 			}
 			item := exported[0]
+			item.Policy = nil
 			item.Client.TotalGB = 11
 			item.Traffic = &ClientPortableTraffic{Up: 5, Down: 6}
 			if orphan {

@@ -1387,15 +1387,15 @@ export const sections: readonly Section[] = [
         method: 'GET',
         path: '/panel/api/clients/export',
         summary:
-          'Return every client as a {client, inboundIds, traffic} array — the shape /import accepts — so the payload round-trips straight back through /import. traffic carries the usage counters (up, down, resetCount, lastOnline, lastSubFetch) and is omitted for a client with no traffic row; the quota itself stays in client.totalGB. Clients with no inbound attachment are included with an empty inboundIds list. The UI shows this in a CodeMirror viewer (copy / download); programmatic callers get the array in obj.',
-        response:
-          '{\n  "success": true,\n  "obj": [\n    {\n      "client": {\n        "email": "alice@example.com",\n        "id": "...",\n        "totalGB": 53687091200,\n        "expiryTime": 0,\n        "limitHwid": 2,\n        "enable": true,\n        "subId": "..."\n      },\n      "inboundIds": [7, 9],\n      "traffic": {\n        "up": 1048576,\n        "down": 2097152,\n        "resetCount": 0,\n        "lastOnline": 1735680000000\n      }\n    }\n  ]\n}',
+          'Export all clients, attachments and usage for portable restoration. Byte fields client.totalGB and traffic.up/down are exact decimal strings. Managed clients also carry policy formatVersion=1 with aggregate local B/s rates, current multiplier, historic billed bytes/remainder and traffic quota/enable/expiry. The export is one consistent database snapshot. Credentials and SSH target permissions are included; accounting identities and active meter IDs are never exported. Unattached clients have no inbound IDs.',
+        responseSchema: 'ClientPortableExport',
+        responseSchemaArray: true,
       },
       {
         method: 'POST',
         path: '/panel/api/clients/import',
         summary:
-          'Import clients from a JSON body { "data": "<json>" }, where data is a string-encoded array produced by /export ([{client, inboundIds, traffic}]). Each new client, all requested attachments and optional traffic counters are restored in one transaction before runtime apply. Empty inboundIds restores an unattached client. Existing emails are skipped even when subId matches. Failed restorations are returned in skipped without creating that client or partial attachments; earlier successful items remain committed. A runtime apply failure after commit can report success=false and retain the restart flag. Legacy SSH usage is initialized at multiplier 1 with a fresh accounting identity; this format does not yet preserve non-default policy or weighted billing history.',
+          'Restore a JSON array from /export in the string-valued data field. Each new client, all attachments, raw usage and optional policy snapshot commit atomically before runtime apply. Decimal-string byte values and legacy integer values are accepted; missing policy keeps legacy multiplier 1 accounting. FormatVersion=1 preserves historic billed bytes and remainder without repricing them at the current multiplier, and creates fresh accounting identities. Managed policy currently requires local SSH attachments or an unattached SSH client. Existing emails are skipped even when subId matches. Failed restorations leave no partial client or binding and are reported in skipped; earlier successful items remain committed. Post-commit runtime failures retain the restart flag. Policy snapshots must use this endpoint, not ordinary create or bulk-create.',
         body: '{\n  "data": "[{\\"client\\":{\\"email\\":\\"alice@example.com\\",\\"enable\\":true},\\"inboundIds\\":[7]}]"\n}',
         response:
           '{\n  "success": true,\n  "obj": {\n    "created": 2,\n    "skipped": [\n      { "email": "alice@example.com", "reason": "email already in use: alice@example.com" }\n    ]\n  }\n}',

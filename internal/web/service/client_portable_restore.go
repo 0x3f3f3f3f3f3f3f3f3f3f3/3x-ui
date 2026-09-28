@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"slices"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
+	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
 
 func (s *ClientService) importPortableClient(inboundSvc *InboundService, item ClientCreatePayload) (bool, bool, error) {
@@ -21,6 +23,20 @@ func (s *ClientService) importPortableClient(inboundSvc *InboundService, item Cl
 	client.Email = strings.TrimSpace(client.Email)
 	if client.Email == "" {
 		return false, false, fmt.Errorf("client email is required")
+	}
+	if client.TotalGB < 0 {
+		return false, false, fmt.Errorf("invalid portable quota")
+	}
+	if item.Policy != nil {
+		if client.SSH == nil {
+			return false, false, ErrClientPolicyUnsupported
+		}
+		if item.Traffic == nil {
+			return false, false, fmt.Errorf("portable policy requires a traffic snapshot")
+		}
+		if _, err := parsePortablePolicy(item.Policy); err != nil {
+			return false, false, err
+		}
 	}
 	if traffic := item.Traffic; traffic != nil && (traffic.Up < 0 || traffic.Down < 0 || traffic.Down > math.MaxInt64-traffic.Up || traffic.ResetCount < 0 || traffic.LastOnline < 0 || traffic.LastSubFetch < 0) {
 		return false, false, fmt.Errorf("invalid portable traffic")
@@ -104,6 +120,11 @@ func (s *ClientService) importPortableClient(inboundSvc *InboundService, item Cl
 		if taken > 0 {
 			return fmt.Errorf("subId already in use: %s", client.SubID)
 		}
+		if item.Traffic != nil {
+			if err := releaseRetainedPortableTrafficTx(tx, client.Email); err != nil {
+				return err
+			}
+		}
 		if len(ids) == 0 {
 			record := client.ToRecord()
 			if err := tx.Create(record).Error; err != nil {
@@ -133,6 +154,28 @@ func (s *ClientService) importPortableClient(inboundSvc *InboundService, item Cl
 	return true, needRestart, err
 }
 
+func releaseRetainedPortableTrafficTx(tx *gorm.DB, email string) error {
+	var traffic xray.ClientTraffic
+	err := tx.Where("email = ?", email).First(&traffic).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil || traffic.PolicyID == "" {
+		return err
+	}
+	// Explicit restoration can replace a deleted owner's projection, never a live owner.
+	result := tx.Model(&traffic).Where("policy_id = ?", traffic.PolicyID).
+		Where("NOT EXISTS (SELECT 1 FROM clients c WHERE c.policy_id = client_traffics.policy_id)").
+		UpdateColumn("policy_id", "")
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return database.ErrUsageConflict
+	}
+	return nil
+}
+
 // Only import's freshly created, uncommitted identity may initialize this ledger.
 func restorePortableTrafficTx(tx *gorm.DB, inboundSvc *InboundService, item ClientCreatePayload) error {
 	if item.Traffic != nil {
@@ -159,6 +202,11 @@ func restorePortableTrafficTx(tx *gorm.DB, inboundSvc *InboundService, item Clie
 		if item.Traffic != nil {
 			if err := tx.Model(&model.ClientUsageAccount{}).Where("policy_id = ?", record.PolicyID).
 				Updates(map[string]any{"up": item.Traffic.Up, "down": item.Traffic.Down, "billed": item.Traffic.Up + item.Traffic.Down}).Error; err != nil {
+				return err
+			}
+		}
+		if item.Policy != nil {
+			if err := restorePortablePolicyTx(tx, record, item.Policy); err != nil {
 				return err
 			}
 		}

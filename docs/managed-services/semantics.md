@@ -224,11 +224,21 @@ writer. Those initial-activation races remain to resolve before exposing a
 public activation path.
 
 
-The current production SSH adapter uses the ledger default multiplier 1 and
-unlimited controller rates. Persisted public policy controls are still required;
-the internal backend's rate/multiplier tests do not imply those controls exist.
+The production SSH adapter defaults to multiplier 1 and unlimited rates. The
+versioned policy API and existing-client editor persist and apply aggregate local
+rates and current multiplier; only all-local-SSH attachment sets are supported.
 Delayed expiry starts on authenticated transport establishment, including a
 transport that never opens a channel. Merely starting the listener does not start
 the clock. SSH host keys are persisted in administrator-only inbound settings;
 the generated Xray bridge credentials are written to the existing atomic 0600
 core configuration file. Backups must retain the host key to preserve client pins.
+
+
+Portable format version 1 preserves billed whole bytes and thousandth-byte carry
+as history, independent of the current multiplier and raw totals. For example,
+3 uploaded bytes at 0.5x followed by 3 downloaded bytes at 2x retain 7.5 billed
+bytes after export/import. A projection quota of 9 rejects the next raw byte at
+2x; increasing it to 10 permits that byte and produces 9.5 billed bytes. Import
+without `policy` retains the legacy 1x interpretation of historical raw usage.
+Fresh identity and meter lifetimes prevent old reports from extending restored
+history. This portable snapshot does not replay or merge live counter cursors.

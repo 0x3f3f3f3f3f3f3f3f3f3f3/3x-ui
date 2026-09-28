@@ -1,6 +1,8 @@
 package service
 
 import (
+	"database/sql"
+	"errors"
 	"strings"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
@@ -20,10 +22,38 @@ type ClientPortableTraffic struct {
 	LastSubFetch int64 `json:"lastSubFetch,omitempty"`
 }
 
-// ExportAll returns every client as {client, inboundIds[, traffic]} for round-trip
-// import; orphan clients keep empty inboundIds, and traffic preserves usage (#5858).
+// ExportAll snapshots clients, attachments, raw usage and optional managed policy.
+// Orphans retain an empty attachment array in the portable wire format.
 func (s *ClientService) ExportAll() ([]ClientCreatePayload, error) {
+	var out []ClientCreatePayload
+	read := func(tx *gorm.DB) error {
+		var err error
+		out, err = s.exportAllTx(tx)
+		return err
+	}
 	db := database.GetDB()
+	var err error
+	if db.Name() == "sqlite" {
+		// SQLite's driver ignores ReadOnly and uses the writer DSN's BEGIN IMMEDIATE.
+		// A deferred snapshot on one connection lets WAL accounting keep committing.
+		err = db.Connection(func(conn *gorm.DB) (err error) {
+			snapshot := conn.Session(&gorm.Session{NewDB: true})
+			if err = snapshot.Exec("BEGIN DEFERRED").Error; err != nil {
+				return err
+			}
+			defer func() { err = errors.Join(err, snapshot.Exec("ROLLBACK").Error) }()
+			return read(snapshot)
+		})
+	} else {
+		err = db.Transaction(read, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	}
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (s *ClientService) exportAllTx(db *gorm.DB) ([]ClientCreatePayload, error) {
 	var rows []model.ClientRecord
 	if err := db.Order("id ASC").Find(&rows).Error; err != nil {
 		return nil, err
@@ -53,7 +83,7 @@ func (s *ClientService) ExportAll() ([]ClientCreatePayload, error) {
 		}
 	}
 
-	trafficByEmail := make(map[string]*ClientPortableTraffic, len(emails))
+	trafficByEmail := make(map[string]*xray.ClientTraffic, len(emails))
 	for _, batch := range chunkStrings(emails, sqlInChunk) {
 		var traffics []xray.ClientTraffic
 		if err := db.Where("email IN ?", batch).Find(&traffics).Error; err != nil {
@@ -61,13 +91,7 @@ func (s *ClientService) ExportAll() ([]ClientCreatePayload, error) {
 		}
 		for i := range traffics {
 			t := traffics[i]
-			trafficByEmail[t.Email] = &ClientPortableTraffic{
-				Up:           t.Up,
-				Down:         t.Down,
-				ResetCount:   t.ResetCount,
-				LastOnline:   t.LastOnline,
-				LastSubFetch: t.LastSubFetch,
-			}
+			trafficByEmail[t.Email] = &t
 		}
 	}
 
@@ -78,11 +102,25 @@ func (s *ClientService) ExportAll() ([]ClientCreatePayload, error) {
 		if flow, err := s.EffectiveFlow(db, rows[i].Id); err == nil && flow != "" {
 			client.Flow = flow
 		}
+		traffic := trafficByEmail[rows[i].Email]
+		policy, err := portablePolicySnapshot(db, rows[i], traffic)
+		if err != nil {
+			return nil, err
+		}
+		var portableTraffic *ClientPortableTraffic
+		if traffic != nil {
+			portableTraffic = &ClientPortableTraffic{Up: traffic.Up, Down: traffic.Down, ResetCount: traffic.ResetCount, LastOnline: traffic.LastOnline, LastSubFetch: traffic.LastSubFetch}
+		}
+		inboundIDs := attachments[rows[i].Id]
+		if inboundIDs == nil {
+			inboundIDs = []int{}
+		}
 		out = append(out, ClientCreatePayload{
 			Client:     *client,
-			InboundIds: attachments[rows[i].Id],
+			InboundIds: inboundIDs,
 			LimitHwid:  rows[i].LimitHwid,
-			Traffic:    trafficByEmail[rows[i].Email],
+			Traffic:    portableTraffic,
+			Policy:     policy,
 		})
 	}
 	return out, nil

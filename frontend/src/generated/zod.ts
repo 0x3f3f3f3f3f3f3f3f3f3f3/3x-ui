@@ -525,6 +525,75 @@ export const ClientPolicyUsageSchema = z.object({
 });
 export type ClientPolicyUsage = z.infer<typeof ClientPolicyUsageSchema>;
 
+export const ClientPortableClientSchema = z.object({
+  adTag: z.string().optional(),
+  allowedIPs: z.array(z.string()).optional(),
+  allowedIPsByInbound: z.record(z.number().int(), z.array(z.string())).optional(),
+  auth: z.string().optional(),
+  comment: z.string(),
+  created_at: z.number().int().optional(),
+  email: z.string(),
+  enable: z.boolean(),
+  expiryTime: z.number().int(),
+  flow: z.string().optional(),
+  forwardedPorts: z.string().optional(),
+  group: z.string().optional(),
+  id: z.string().optional(),
+  keepAlive: z.number().int().nullable().optional(),
+  limitHwid: z.number().int(),
+  limitIp: z.number().int(),
+  password: z.string().optional(),
+  preSharedKey: z.string().optional(),
+  privateKey: z.string().optional(),
+  publicKey: z.string().optional(),
+  reset: z.number().int(),
+  resetDay: z.number().int(),
+  resetMax: z.number().int(),
+  resetWeekday: z.number().int(),
+  reverse: z.lazy(() => ClientReverseSchema).nullable().optional(),
+  secret: z.string().optional(),
+  security: z.string(),
+  ssh: z.lazy(() => SSHClientSchema).nullable().optional(),
+  subId: z.string(),
+  tgId: z.number().int(),
+  totalGB: z.string(),
+  trafficReset: z.enum(['never', 'hourly', 'daily', 'weekly', 'monthly']).optional(),
+  trafficResetDay: z.number().int().min(1).max(31).optional(),
+  updated_at: z.number().int().optional(),
+});
+export type ClientPortableClient = z.infer<typeof ClientPortableClientSchema>;
+
+export const ClientPortableExportSchema = z.object({
+  client: z.lazy(() => ClientPortableClientSchema),
+  inboundIds: z.array(z.number().int()),
+  policy: z.lazy(() => ClientPortablePolicySchema).nullable().optional(),
+  traffic: z.lazy(() => ClientPortableTrafficViewSchema).nullable().optional(),
+});
+export type ClientPortableExport = z.infer<typeof ClientPortableExportSchema>;
+
+export const ClientPortablePolicySchema = z.object({
+  billed: z.string(),
+  downloadBps: z.number().int(),
+  formatVersion: z.number().int(),
+  multiplier: z.string(),
+  remainder: z.number().int(),
+  scope: z.string(),
+  trafficEnable: z.boolean(),
+  trafficExpiry: z.number().int(),
+  trafficTotal: z.string(),
+  uploadBps: z.number().int(),
+});
+export type ClientPortablePolicy = z.infer<typeof ClientPortablePolicySchema>;
+
+export const ClientPortableTrafficViewSchema = z.object({
+  down: z.string(),
+  lastOnline: z.number().int().optional(),
+  lastSubFetch: z.number().int().optional(),
+  resetCount: z.number().int(),
+  up: z.string(),
+});
+export type ClientPortableTrafficView = z.infer<typeof ClientPortableTrafficViewSchema>;
+
 export const ClientRecordSchema = z.object({
   adTag: z.string(),
   allowedIPs: z.string(),

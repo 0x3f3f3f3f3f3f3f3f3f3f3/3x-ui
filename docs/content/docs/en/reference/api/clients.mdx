@@ -92,29 +92,30 @@ _openapi:
         Returns the deleted count. Cannot be undone.
       url: '#delete-every-client-that-is-not-attached-to-any-inbound-along-with-its-traffic-record-ip-log-hwid-devices-and-external-links-useful-for-clearing-clients-left-unattached-after-their-inbounds-were-removed-returns-the-deleted-count-cannot-be-undone'
     - depth: 2
-      title: Return every client as a {client, inboundIds, traffic} array — the shape
-        /import accepts — so the payload round-trips straight back through
-        /import. traffic carries the usage counters (up, down, resetCount,
-        lastOnline, lastSubFetch) and is omitted for a client with no traffic
-        row; the quota itself stays in client.totalGB. Clients with no inbound
-        attachment are included with an empty inboundIds list. The UI shows this
-        in a CodeMirror viewer (copy / download); programmatic callers get the
-        array in obj.
-      url: '#return-every-client-as-a-client-inboundids-traffic-array--the-shape-import-accepts--so-the-payload-round-trips-straight-back-through-import-traffic-carries-the-usage-counters-up-down-resetcount-lastonline-lastsubfetch-and-is-omitted-for-a-client-with-no-traffic-row-the-quota-itself-stays-in-clienttotalgb-clients-with-no-inbound-attachment-are-included-with-an-empty-inboundids-list-the-ui-shows-this-in-a-codemirror-viewer-copy--download-programmatic-callers-get-the-array-in-obj'
+      title: Export all clients, attachments and usage for portable restoration. Byte
+        fields client.totalGB and traffic.up/down are exact decimal strings.
+        Managed clients also carry policy formatVersion=1 with aggregate local
+        B/s rates, current multiplier, historic billed bytes/remainder and
+        traffic quota/enable/expiry. The export is one consistent database
+        snapshot. Credentials and SSH target permissions are included;
+        accounting identities and active meter IDs are never exported.
+        Unattached clients have no inbound IDs.
+      url: '#export-all-clients-attachments-and-usage-for-portable-restoration-byte-fields-clienttotalgb-and-trafficupdown-are-exact-decimal-strings-managed-clients-also-carry-policy-formatversion1-with-aggregate-local-bs-rates-current-multiplier-historic-billed-bytesremainder-and-traffic-quotaenableexpiry-the-export-is-one-consistent-database-snapshot-credentials-and-ssh-target-permissions-are-included-accounting-identities-and-active-meter-ids-are-never-exported-unattached-clients-have-no-inbound-ids'
     - depth: 2
-      title: 'Import clients from a JSON body { "data": "<json>" }, where data is a
-        string-encoded array produced by /export ([{client, inboundIds,
-        traffic}]). Each new client, all requested attachments and optional
-        traffic counters are restored in one transaction before runtime apply.
-        Empty inboundIds restores an unattached client. Existing emails are
-        skipped even when subId matches. Failed restorations are returned in
-        skipped without creating that client or partial attachments; earlier
-        successful items remain committed. A runtime apply failure after commit
-        can report success=false and retain the restart flag. Legacy SSH usage
-        is initialized at multiplier 1 with a fresh accounting identity; this
-        format does not yet preserve non-default policy or weighted billing
-        history.'
-      url: '#import-clients-from-a-json-body--data-json--where-data-is-a-string-encoded-array-produced-by-export-client-inboundids-traffic-each-new-client-all-requested-attachments-and-optional-traffic-counters-are-restored-in-one-transaction-before-runtime-apply-empty-inboundids-restores-an-unattached-client-existing-emails-are-skipped-even-when-subid-matches-failed-restorations-are-returned-in-skipped-without-creating-that-client-or-partial-attachments-earlier-successful-items-remain-committed-a-runtime-apply-failure-after-commit-can-report-successfalse-and-retain-the-restart-flag-legacy-ssh-usage-is-initialized-at-multiplier-1-with-a-fresh-accounting-identity-this-format-does-not-yet-preserve-non-default-policy-or-weighted-billing-history'
+      title: Restore a JSON array from /export in the string-valued data field. Each
+        new client, all attachments, raw usage and optional policy snapshot
+        commit atomically before runtime apply. Decimal-string byte values and
+        legacy integer values are accepted; missing policy keeps legacy
+        multiplier 1 accounting. FormatVersion=1 preserves historic billed bytes
+        and remainder without repricing them at the current multiplier, and
+        creates fresh accounting identities. Managed policy currently requires
+        local SSH attachments or an unattached SSH client. Existing emails are
+        skipped even when subId matches. Failed restorations leave no partial
+        client or binding and are reported in skipped; earlier successful items
+        remain committed. Post-commit runtime failures retain the restart flag.
+        Policy snapshots must use this endpoint, not ordinary create or
+        bulk-create.
+      url: '#restore-a-json-array-from-export-in-the-string-valued-data-field-each-new-client-all-attachments-raw-usage-and-optional-policy-snapshot-commit-atomically-before-runtime-apply-decimal-string-byte-values-and-legacy-integer-values-are-accepted-missing-policy-keeps-legacy-multiplier-1-accounting-formatversion1-preserves-historic-billed-bytes-and-remainder-without-repricing-them-at-the-current-multiplier-and-creates-fresh-accounting-identities-managed-policy-currently-requires-local-ssh-attachments-or-an-unattached-ssh-client-existing-emails-are-skipped-even-when-subid-matches-failed-restorations-leave-no-partial-client-or-binding-and-are-reported-in-skipped-earlier-successful-items-remain-committed-post-commit-runtime-failures-retain-the-restart-flag-policy-snapshots-must-use-this-endpoint-not-ordinary-create-or-bulk-create'
     - depth: 2
       title: 'Shift expiry and/or traffic quota for many clients in one call.
         addDays/addBytes may be negative. Clients with unlimited expiry
@@ -384,28 +385,29 @@ _openapi:
           clearing clients left unattached after their inbounds were removed.
           Returns the deleted count. Cannot be undone.
         id: delete-every-client-that-is-not-attached-to-any-inbound-along-with-its-traffic-record-ip-log-hwid-devices-and-external-links-useful-for-clearing-clients-left-unattached-after-their-inbounds-were-removed-returns-the-deleted-count-cannot-be-undone
-      - content: Return every client as a {client, inboundIds, traffic} array — the
-          shape /import accepts — so the payload round-trips straight back
-          through /import. traffic carries the usage counters (up, down,
-          resetCount, lastOnline, lastSubFetch) and is omitted for a client with
-          no traffic row; the quota itself stays in client.totalGB. Clients with
-          no inbound attachment are included with an empty inboundIds list. The
-          UI shows this in a CodeMirror viewer (copy / download); programmatic
-          callers get the array in obj.
-        id: return-every-client-as-a-client-inboundids-traffic-array--the-shape-import-accepts--so-the-payload-round-trips-straight-back-through-import-traffic-carries-the-usage-counters-up-down-resetcount-lastonline-lastsubfetch-and-is-omitted-for-a-client-with-no-traffic-row-the-quota-itself-stays-in-clienttotalgb-clients-with-no-inbound-attachment-are-included-with-an-empty-inboundids-list-the-ui-shows-this-in-a-codemirror-viewer-copy--download-programmatic-callers-get-the-array-in-obj
-      - content: 'Import clients from a JSON body { "data": "<json>" }, where data is a
-          string-encoded array produced by /export ([{client, inboundIds,
-          traffic}]). Each new client, all requested attachments and optional
-          traffic counters are restored in one transaction before runtime apply.
-          Empty inboundIds restores an unattached client. Existing emails are
-          skipped even when subId matches. Failed restorations are returned in
-          skipped without creating that client or partial attachments; earlier
-          successful items remain committed. A runtime apply failure after
-          commit can report success=false and retain the restart flag. Legacy
-          SSH usage is initialized at multiplier 1 with a fresh accounting
-          identity; this format does not yet preserve non-default policy or
-          weighted billing history.'
-        id: import-clients-from-a-json-body--data-json--where-data-is-a-string-encoded-array-produced-by-export-client-inboundids-traffic-each-new-client-all-requested-attachments-and-optional-traffic-counters-are-restored-in-one-transaction-before-runtime-apply-empty-inboundids-restores-an-unattached-client-existing-emails-are-skipped-even-when-subid-matches-failed-restorations-are-returned-in-skipped-without-creating-that-client-or-partial-attachments-earlier-successful-items-remain-committed-a-runtime-apply-failure-after-commit-can-report-successfalse-and-retain-the-restart-flag-legacy-ssh-usage-is-initialized-at-multiplier-1-with-a-fresh-accounting-identity-this-format-does-not-yet-preserve-non-default-policy-or-weighted-billing-history
+      - content: Export all clients, attachments and usage for portable restoration.
+          Byte fields client.totalGB and traffic.up/down are exact decimal
+          strings. Managed clients also carry policy formatVersion=1 with
+          aggregate local B/s rates, current multiplier, historic billed
+          bytes/remainder and traffic quota/enable/expiry. The export is one
+          consistent database snapshot. Credentials and SSH target permissions
+          are included; accounting identities and active meter IDs are never
+          exported. Unattached clients have no inbound IDs.
+        id: export-all-clients-attachments-and-usage-for-portable-restoration-byte-fields-clienttotalgb-and-trafficupdown-are-exact-decimal-strings-managed-clients-also-carry-policy-formatversion1-with-aggregate-local-bs-rates-current-multiplier-historic-billed-bytesremainder-and-traffic-quotaenableexpiry-the-export-is-one-consistent-database-snapshot-credentials-and-ssh-target-permissions-are-included-accounting-identities-and-active-meter-ids-are-never-exported-unattached-clients-have-no-inbound-ids
+      - content: Restore a JSON array from /export in the string-valued data field. Each
+          new client, all attachments, raw usage and optional policy snapshot
+          commit atomically before runtime apply. Decimal-string byte values and
+          legacy integer values are accepted; missing policy keeps legacy
+          multiplier 1 accounting. FormatVersion=1 preserves historic billed
+          bytes and remainder without repricing them at the current multiplier,
+          and creates fresh accounting identities. Managed policy currently
+          requires local SSH attachments or an unattached SSH client. Existing
+          emails are skipped even when subId matches. Failed restorations leave
+          no partial client or binding and are reported in skipped; earlier
+          successful items remain committed. Post-commit runtime failures retain
+          the restart flag. Policy snapshots must use this endpoint, not
+          ordinary create or bulk-create.
+        id: restore-a-json-array-from-export-in-the-string-valued-data-field-each-new-client-all-attachments-raw-usage-and-optional-policy-snapshot-commit-atomically-before-runtime-apply-decimal-string-byte-values-and-legacy-integer-values-are-accepted-missing-policy-keeps-legacy-multiplier-1-accounting-formatversion1-preserves-historic-billed-bytes-and-remainder-without-repricing-them-at-the-current-multiplier-and-creates-fresh-accounting-identities-managed-policy-currently-requires-local-ssh-attachments-or-an-unattached-ssh-client-existing-emails-are-skipped-even-when-subid-matches-failed-restorations-leave-no-partial-client-or-binding-and-are-reported-in-skipped-earlier-successful-items-remain-committed-post-commit-runtime-failures-retain-the-restart-flag-policy-snapshots-must-use-this-endpoint-not-ordinary-create-or-bulk-create
       - content: 'Shift expiry and/or traffic quota for many clients in one call.
           addDays/addBytes may be negative. Clients with unlimited expiry
           (expiryTime=0) or unlimited traffic (totalGB=0) are skipped for the

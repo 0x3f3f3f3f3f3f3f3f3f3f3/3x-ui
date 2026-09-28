@@ -71,8 +71,8 @@ before retrying. `supported` means backend capability, not process health.
 
 Database backups include `client_policy_settings`, accounting records, cursors
 and SSH credentials. SQLite restore and SQLite→PostgreSQL copy are tested.
-Portable client JSON import/export does not yet carry the new policy and must
-not substitute for a complete database backup during this development stage.
+Portable client JSON now carries the policy and historical charges, but does
+not include the complete database or deployment configuration described below.
 
 Usage `billed` and `remaining` are whole-byte accounting components. Preserve
 `remainder` (0–999 thousandths of a byte) when displaying the fractional balance:
@@ -90,7 +90,8 @@ as exact byte values, including thousandth-byte carry; it never rounds large
 integers through JavaScript Number. The inputs use raw B/s and decimal multiplier
 strings. **Apply traffic policy** saves this policy immediately, independently
 of the other tabs. Change quota/expiry in Basics and save those separately.
-Creation-time policy fields, bulk editing and portable policy export remain open.
+Creation-time policy fields and bulk editing remain open. Portable policy snapshots
+are supported through Export/Import as described below.
 
 The editor retains its loaded immutable identity and revision while usage refreshes
 in the background. A concurrent edit or any failed/ambiguous save disables further
@@ -177,7 +178,61 @@ raw-usage restoration before Runtime apply. Failed items are reported in
 `skipped` and leave no new client or partial binding; previously successful
 items remain committed. Existing email identities are skipped even if subId
 matches. The ordinary create/attach APIs keep their existing reuse behavior.
-Legacy SSH imports receive a fresh accounting identity with historical raw
-usage charged at the legacy default 1x, including unattached clients. This
-still does not preserve non-default policy or historically weighted charges;
-use the full database backup for those until the portable policy format lands.
+Legacy SSH imports without `policy` receive a fresh accounting identity with
+historical raw usage charged at the legacy default 1x, including unattached
+clients. New exports include a versioned policy snapshot for owned accounts.
+
+### Portable policy and usage snapshots
+
+Use **Clients → Export** and **Clients → Import**, or the existing administrator
+API pair `/panel/api/clients/export` and `/panel/api/clients/import`. Import sends
+the exported JSON array as the string-valued `data` field. Preserve SSH public
+keys, destination permissions and inbound IDs; referenced inbounds must already
+exist on the destination. Unattached clients export `inboundIds: []`.
+
+`client.totalGB`, `traffic.up` and `traffic.down` now export as decimal strings.
+Import also accepts the old integer JSON form. Keep the strings intact when
+editing or processing exports: conversion to JavaScript Number loses precision
+above 2^53. Decimal fractions, exponent notation, noncanonical strings, negative
+byte values and values outside signed 64-bit storage are rejected. A raw
+upload/download sum must also fit signed 64-bit storage.
+
+An owned account includes this additional object (example: 7.5 historical billed
+bytes, current multiplier 2, quota projection 9 bytes):
+
+```json
+"policy": {
+  "formatVersion": 1,
+  "uploadBps": 65536,
+  "downloadBps": 131072,
+  "scope": "local",
+  "multiplier": "2",
+  "billed": "7",
+  "remainder": 500,
+  "trafficTotal": "9",
+  "trafficEnable": true,
+  "trafficExpiry": 0
+}
+```
+
+The format preserves historical charges and thousandth-byte carry without
+repricing them at the current multiplier. Canonical and traffic-projection
+quota/enable/expiry remain independent; restoring or adding quota does not clear
+manual disable or expiry. Rates remain raw B/s, independent of the multiplier.
+The current managed-policy importer accepts only local SSH attachments or an
+unattached SSH client. A policy snapshot requires a raw traffic snapshot. Unknown
+versions and unsupported attachments are reported in `skipped`; ordinary create
+and bulk-create reject policy snapshots instead of silently discarding them.
+
+Export reads one database snapshot while accounting can continue to commit.
+Import creates a fresh immutable policy identity and fresh meter lifetimes; it
+never exports or reuses source cursor IDs. An explicit snapshot can replace
+retained traffic belonging to a deleted client. Late reports from the deleted
+identity cannot charge the restored client. Existing live clients are skipped.
+
+This is client-level portability, not a complete database or deployment backup:
+inbounds, host signing keys, external links, routing configuration and live meter
+cursors are not recreated by this file. Keep a complete database backup for
+upgrade/rollback; older binaries do not understand the new byte-string and
+policy format. No safe downgrade migration is established. Large-import/export
+performance and distributed policy restoration remain unverified.

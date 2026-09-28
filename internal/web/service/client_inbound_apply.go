@@ -352,7 +352,9 @@ func (s *ClientService) prepareInboundClientAdd(inboundSvc *InboundService, data
 	}
 
 	var settings map[string]any
-	err = json.Unmarshal([]byte(data.Settings), &settings)
+	decoder := json.NewDecoder(strings.NewReader(data.Settings))
+	decoder.UseNumber()
+	err = decoder.Decode(&settings)
 	if err != nil {
 		return nil, err
 	}
@@ -509,7 +511,9 @@ func (s *ClientService) prepareInboundClientAdd(inboundSvc *InboundService, data
 	}
 
 	var oldSettings map[string]any
-	err = json.Unmarshal([]byte(oldInbound.Settings), &oldSettings)
+	decoder = json.NewDecoder(strings.NewReader(oldInbound.Settings))
+	decoder.UseNumber()
+	err = decoder.Decode(&oldSettings)
 	if err != nil {
 		return nil, err
 	}

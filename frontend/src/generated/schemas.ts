@@ -2087,6 +2087,320 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "ClientPortableClient": {
+    "properties": {
+      "adTag": {
+        "example": "0123456789abcdef0123456789abcdef",
+        "type": "string"
+      },
+      "allowedIPs": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "allowedIPsByInbound": {
+        "additionalProperties": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "description": "AllowedIPsByInbound optionally overrides AllowedIPs on a per-inbound\nbasis, keyed by inbound id. Lets one identity attached to both\nWireGuard and AmneziaWG carry two genuinely different addresses in a\nsingle Create/Update call instead of the shared AllowedIPs field\nbeing broadcast to every attached tunnel inbound. Absent/unset for a\ngiven inbound id falls back to the shared AllowedIPs exactly as\nbefore -- fully backward compatible for callers that never set this.",
+        "type": "object"
+      },
+      "auth": {
+        "description": "Auth password (Hysteria)",
+        "type": "string"
+      },
+      "comment": {
+        "description": "Client comment",
+        "type": "string"
+      },
+      "created_at": {
+        "description": "Creation timestamp",
+        "format": "int64",
+        "type": "integer"
+      },
+      "email": {
+        "description": "Client email identifier",
+        "type": "string"
+      },
+      "enable": {
+        "description": "Whether the client is enabled",
+        "type": "boolean"
+      },
+      "expiryTime": {
+        "description": "Expiration timestamp",
+        "format": "int64",
+        "type": "integer"
+      },
+      "flow": {
+        "description": "Flow control (XTLS)",
+        "type": "string"
+      },
+      "forwardedPorts": {
+        "description": "AmneziaWG per-client port-forwarding spec, e.g. \"80,443,8000-8100\"",
+        "type": "string"
+      },
+      "group": {
+        "description": "Logical grouping label",
+        "type": "string"
+      },
+      "id": {
+        "description": "Unique client identifier",
+        "type": "string"
+      },
+      "keepAlive": {
+        "description": "Seconds between PersistentKeepalive packets; 0 sends none, omit to keep the stored value",
+        "nullable": true,
+        "type": "integer"
+      },
+      "limitHwid": {
+        "example": 0,
+        "type": "integer"
+      },
+      "limitIp": {
+        "description": "IP limit for this client",
+        "type": "integer"
+      },
+      "password": {
+        "description": "Client password",
+        "type": "string"
+      },
+      "preSharedKey": {
+        "type": "string"
+      },
+      "privateKey": {
+        "type": "string"
+      },
+      "publicKey": {
+        "type": "string"
+      },
+      "reset": {
+        "description": "Reset period in days",
+        "type": "integer"
+      },
+      "resetDay": {
+        "description": "Calendar renewal day 1-31, 0 disables monthly renewal",
+        "type": "integer"
+      },
+      "resetMax": {
+        "description": "Max auto-renew count, 0 = unlimited",
+        "type": "integer"
+      },
+      "resetWeekday": {
+        "description": "Calendar weekday 1-7 (Mon-Sun), 0 disables weekly renewal",
+        "type": "integer"
+      },
+      "reverse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ClientReverse"
+          }
+        ],
+        "description": "VLESS simple reverse proxy settings",
+        "nullable": true
+      },
+      "secret": {
+        "example": "ee1234567890abcdef1234567890abcd7777772e636c6f7564666c6172652e636f6d",
+        "type": "string"
+      },
+      "security": {
+        "description": "Security method (e.g., \"auto\", \"aes-128-gcm\")",
+        "type": "string"
+      },
+      "ssh": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SSHClient"
+          }
+        ],
+        "nullable": true
+      },
+      "subId": {
+        "description": "Subscription identifier",
+        "type": "string"
+      },
+      "tgId": {
+        "description": "Telegram user ID for notifications",
+        "format": "int64",
+        "type": "integer"
+      },
+      "totalGB": {
+        "example": "1073741824",
+        "type": "string"
+      },
+      "trafficReset": {
+        "description": "Per-client traffic reset cycle, independent of the inbound's own (#5497).",
+        "enum": [
+          "never",
+          "hourly",
+          "daily",
+          "weekly",
+          "monthly"
+        ],
+        "type": "string"
+      },
+      "trafficResetDay": {
+        "maximum": 31,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "updated_at": {
+        "description": "Last update timestamp",
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "comment",
+      "email",
+      "enable",
+      "expiryTime",
+      "limitHwid",
+      "limitIp",
+      "reset",
+      "resetDay",
+      "resetMax",
+      "resetWeekday",
+      "security",
+      "subId",
+      "tgId",
+      "totalGB"
+    ],
+    "type": "object"
+  },
+  "ClientPortableExport": {
+    "properties": {
+      "client": {
+        "$ref": "#/components/schemas/ClientPortableClient"
+      },
+      "inboundIds": {
+        "example": [
+          1
+        ],
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "policy": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ClientPortablePolicy"
+          }
+        ],
+        "nullable": true
+      },
+      "traffic": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ClientPortableTrafficView"
+          }
+        ],
+        "nullable": true
+      }
+    },
+    "required": [
+      "client",
+      "inboundIds"
+    ],
+    "type": "object"
+  },
+  "ClientPortablePolicy": {
+    "properties": {
+      "billed": {
+        "example": "5",
+        "type": "string"
+      },
+      "downloadBps": {
+        "example": 131072,
+        "format": "int64",
+        "type": "integer"
+      },
+      "formatVersion": {
+        "example": 1,
+        "type": "integer"
+      },
+      "multiplier": {
+        "example": "2",
+        "type": "string"
+      },
+      "remainder": {
+        "example": 500,
+        "format": "int64",
+        "type": "integer"
+      },
+      "scope": {
+        "example": "local",
+        "type": "string"
+      },
+      "trafficEnable": {
+        "example": true,
+        "type": "boolean"
+      },
+      "trafficExpiry": {
+        "example": 0,
+        "format": "int64",
+        "type": "integer"
+      },
+      "trafficTotal": {
+        "example": "1000",
+        "type": "string"
+      },
+      "uploadBps": {
+        "example": 65536,
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "billed",
+      "downloadBps",
+      "formatVersion",
+      "multiplier",
+      "remainder",
+      "scope",
+      "trafficEnable",
+      "trafficExpiry",
+      "trafficTotal",
+      "uploadBps"
+    ],
+    "type": "object"
+  },
+  "ClientPortableTrafficView": {
+    "properties": {
+      "down": {
+        "example": "3",
+        "type": "string"
+      },
+      "lastOnline": {
+        "example": 0,
+        "format": "int64",
+        "type": "integer"
+      },
+      "lastSubFetch": {
+        "example": 0,
+        "format": "int64",
+        "type": "integer"
+      },
+      "resetCount": {
+        "example": 0,
+        "type": "integer"
+      },
+      "up": {
+        "example": "3",
+        "type": "string"
+      }
+    },
+    "required": [
+      "down",
+      "resetCount",
+      "up"
+    ],
+    "type": "object"
+  },
   "ClientRecord": {
     "properties": {
       "adTag": {

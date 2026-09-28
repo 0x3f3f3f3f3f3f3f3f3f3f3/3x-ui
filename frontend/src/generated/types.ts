@@ -497,6 +497,71 @@ export interface ClientPolicyUsage {
   up: string;
 }
 
+export interface ClientPortableClient {
+  adTag?: string;
+  allowedIPs?: string[];
+  allowedIPsByInbound?: Record<number, string[]>;
+  auth?: string;
+  comment: string;
+  created_at?: number;
+  email: string;
+  enable: boolean;
+  expiryTime: number;
+  flow?: string;
+  forwardedPorts?: string;
+  group?: string;
+  id?: string;
+  keepAlive?: number | null;
+  limitHwid: number;
+  limitIp: number;
+  password?: string;
+  preSharedKey?: string;
+  privateKey?: string;
+  publicKey?: string;
+  reset: number;
+  resetDay: number;
+  resetMax: number;
+  resetWeekday: number;
+  reverse?: ClientReverse | null;
+  secret?: string;
+  security: string;
+  ssh?: SSHClient | null;
+  subId: string;
+  tgId: number;
+  totalGB: string;
+  trafficReset?: string;
+  trafficResetDay?: number;
+  updated_at?: number;
+}
+
+export interface ClientPortableExport {
+  client: ClientPortableClient;
+  inboundIds: number[];
+  policy?: ClientPortablePolicy | null;
+  traffic?: ClientPortableTrafficView | null;
+}
+
+export interface ClientPortablePolicy {
+  billed: string;
+  downloadBps: number;
+  formatVersion: number;
+  multiplier: string;
+  remainder: number;
+  scope: string;
+  trafficEnable: boolean;
+  trafficExpiry: number;
+  trafficTotal: string;
+  uploadBps: number;
+}
+
+export interface ClientPortableTrafficView {
+  down: string;
+  lastOnline?: number;
+  lastSubFetch?: number;
+  resetCount: number;
+  up: string;
+}
+
 export interface ClientRecord {
   adTag: string;
   allowedIPs: string;

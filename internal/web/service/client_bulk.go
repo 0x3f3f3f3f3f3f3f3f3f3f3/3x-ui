@@ -1303,6 +1303,10 @@ func (s *ClientService) bulkCreate(inboundSvc *InboundService, payloads []Client
 	for i := range payloads {
 		client := payloads[i].Client
 		email := strings.TrimSpace(client.Email)
+		if payloads[i].Policy != nil {
+			skip(email, errPortablePolicyImportOnly.Error())
+			continue
+		}
 		if email == "" {
 			skip("", "client email is required")
 			continue

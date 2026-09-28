@@ -208,8 +208,8 @@ its database operation and queue wait have a 500ms deadline.
 
 The existing-client policy tab, billed client list, SSH creation/credential forms
 and strict OpenSSH configuration export now have implementation and direct tests.
-SSH upstream, online/IP/device integration, remaining bulk/portable and inbound
-management surfaces, node distribution and packaging remain open. Standard proxy
+SSH upstream, online/IP/device integration, remaining bulk and inbound management
+surfaces, node distribution and packaging remain open. Standard proxy
 subscriptions do not fabricate SSH nodes; OpenSSH files use actual host public-key
 pins. Initial listener/membership application follows the existing 30-second core
 configuration scheduler; live rate/multiplier checks have separate two-second
@@ -218,3 +218,20 @@ routing-label changes still require core configuration application and can resta
 other sessions. Per-client isolation for those operations, preview generation
 without runtime staging side effects, explicit status UI, capacity under many
 listeners/clients and complete failure rollback remain follow-up work.
+
+
+Portable client export reads canonical records, attachments, traffic projections
+and owned policy/usage in one snapshot. PostgreSQL uses a read-only repeatable-read
+transaction. SQLite uses `BEGIN DEFERRED` on one dedicated connection: its driver
+ignores the read-only option and the normal writer DSN selects `BEGIN IMMEDIATE`,
+which would block accounting writers. The WAL read snapshot allows those writers
+to commit. A fresh GORM session prevents prior query state leaking between tables.
+
+Portable restore commits each client's complete state before Runtime admission.
+Rates, multiplier, historical whole billed bytes, fractional carry and independent
+projection restrictions are restored with a new immutable identity; source IDs
+and active cursor lifetimes stay local to the original database. Retained traffic
+may be reassigned only when its previous canonical owner no longer exists.
+No schema migration is needed for this wire-format change: it uses the existing
+policy, usage and traffic tables. Native/global policy executors and complete
+backup/deployment restoration remain separate required work.
