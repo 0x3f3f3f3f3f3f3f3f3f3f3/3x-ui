@@ -164,15 +164,20 @@ func RemoveIndex(s []any, index int) []any {
 
 // GetXrayConfig retrieves and builds the Xray configuration from settings and inbounds.
 func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
+	cfg, _, err := s.buildXrayConfig()
+	return cfg, err
+}
+
+func (s *XrayService) buildXrayConfig() (*xray.Config, *sshRuntimePlan, error) {
 	templateConfig, err := s.settingService.GetXrayConfigTemplate()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	xrayConfig := &xray.Config{}
 	err = json.Unmarshal([]byte(templateConfig), xrayConfig)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	xrayConfig.LogConfig = resolveXrayLogPaths(xrayConfig.LogConfig)
 	xrayConfig.API = ensureAPIServices(xrayConfig.API)
@@ -185,14 +190,14 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 	// Bridge amneziawg outbounds before anything else reads OutboundConfigs;
 	// the core has no amneziawg proxy and would reject the raw entry.
 	if err := transformAmneziaWGOutbounds(xrayConfig); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	_, _, _ = s.inboundService.AddTraffic(nil, nil)
 
 	inbounds, err := s.inboundService.GetAllInbounds()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, inbound := range inbounds {
 		if !inbound.Enable {
@@ -219,7 +224,7 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 
 		dbClients, listErr := s.inboundService.clientService.ListForInbound(nil, inbound.Id)
 		if listErr != nil {
-			return nil, listErr
+			return nil, nil, listErr
 		}
 
 		clientStats := inbound.ClientStats
@@ -310,7 +315,7 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 		if inboundCanHostFallbacks(inbound) {
 			fallbacks, fbErr := s.inboundService.fallbackService.BuildFallbacksJSON(nil, inbound.Id)
 			if fbErr != nil {
-				return nil, fbErr
+				return nil, nil, fbErr
 			}
 			if len(fallbacks) > 0 {
 				generic := make([]any, 0, len(fallbacks))
@@ -325,7 +330,7 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 		if mutated {
 			modifiedSettings, err := json.MarshalIndent(settings, "", "  ")
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			inbound.Settings = string(modifiedSettings)
 		}
@@ -374,7 +379,7 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 
 			newStream, err := json.MarshalIndent(stream, "", "  ")
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			inbound.StreamSettings = string(newStream)
 		}
@@ -448,10 +453,16 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 		injectNodeEgresses(xrayConfig, nodes)
 	}
 
-	if err := prepareManagedSSH(xrayConfig, inbounds); err != nil {
-		return nil, err
+	outbounds, err := renderSSHOutbounds(xrayConfig)
+	if err != nil {
+		return nil, nil, err
 	}
-	return xrayConfig, nil
+	plan, err := buildManagedSSH(xrayConfig, inbounds)
+	if err != nil {
+		return nil, nil, err
+	}
+	plan.outbounds = outbounds
+	return xrayConfig, plan, nil
 }
 
 // PanelEgressInboundTag is the tag of the loopback SOCKS inbound injected into
@@ -1378,18 +1389,51 @@ func (s *XrayService) RestartXray(isForce bool) error {
 	}
 	isManuallyStopped.Store(false)
 
-	xrayConfig, err := s.GetXrayConfig()
+	xrayConfig, sshPlan, err := s.buildXrayConfig()
 	if err != nil {
+		xrayState.holdBack(err.Error())
 		return err
+	}
+	stagedOutbounds, err := prepareManagedSSHOutbounds(sshPlan.outbounds)
+	if err != nil {
+		xrayState.holdBack(err.Error())
+		return err
+	}
+	if stagedOutbounds != nil {
+		defer stagedOutbounds.Rollback()
+	}
+	applySSH := func() {
+		if stagedOutbounds != nil {
+			stagedOutbounds.Commit()
+		}
+		sshPlan.apply(xrayConfig)
 	}
 
 	process := currentXrayProcess()
-	if process != nil && process.IsRunning() {
-		configUnchanged := process.GetConfig().Equals(xrayConfig)
-		if !isForce && configUnchanged && !isNeedXrayRestart.Load() {
-			logger.Debug("It does not need to restart Xray")
-			return nil
+	configUnchanged := process != nil && process.IsRunning() && process.GetConfig().Equals(xrayConfig)
+	if !isForce && configUnchanged && !isNeedXrayRestart.Load() {
+		applySSH()
+		xrayState.holdBack("")
+		logger.Debug("It does not need to restart Xray")
+		return nil
+	}
+	if stagedOutbounds != nil || len(sshPlan.entries) > 0 {
+		if err := xray.ValidateConfig(xrayConfig); err != nil {
+			xrayState.holdBack(err.Error())
+			return err
 		}
+	}
+	if stagedOutbounds != nil {
+		if _, err := sshCoreAPIAddress(xrayConfig); err != nil {
+			xrayState.holdBack(err.Error())
+			return err
+		}
+	}
+	var previousConfig *xray.Config
+	releaseSSH := stageSSHRuntime(xrayConfig)
+	defer releaseSSH()
+	if process != nil && process.IsRunning() {
+		previousConfig = process.GetConfig()
 		// A config the core cannot bind never replaces one that works: its failed
 		// start exits the core, and the watchdog would then loop on it forever.
 		if conflicts := bindConflicts(xrayConfig, process.GetConfig()); len(conflicts) > 0 {
@@ -1403,10 +1447,15 @@ func (s *XrayService) RestartXray(isForce bool) error {
 			return fmt.Errorf("xray %s", refused)
 		}
 		if !isForce && !configUnchanged && s.tryHotApply(process, xrayConfig) {
+			applySSH()
+			xrayState.holdBack("")
 			logger.Info("Xray config changes applied through the core API, no restart needed")
 			return nil
 		}
-		_ = process.Stop()
+		if err := process.Stop(); err != nil && process.IsRunning() {
+			xrayState.holdBack("xray stop failed; replacement was not applied")
+			return fmt.Errorf("xray stop failed: %w", err)
+		}
 	} else if conflicts := bindConflicts(xrayConfig, nil); len(conflicts) > 0 {
 		// Nothing is running to protect and the core is the authority on what it
 		// can bind: start it and let its own error name the port it lost.
@@ -1417,10 +1466,34 @@ func (s *XrayService) RestartXray(isForce bool) error {
 	xrayState.replace(process)
 	s.xrayAPI.StatsLastValues = nil
 	err = process.Start()
+	if err == nil && stagedOutbounds != nil {
+		err = waitSSHCoreReady(process)
+	}
 	if err != nil {
+		if stagedOutbounds != nil {
+			_ = process.Stop()
+			reason := "xray startup failed"
+			if previousConfig != nil {
+				restored := xray.NewProcess(previousConfig)
+				xrayState.replace(restored)
+				restoreErr := restored.Start()
+				if restoreErr == nil {
+					restoreErr = waitSSHCoreReady(restored)
+				}
+				if restoreErr != nil {
+					reason += "; previous configuration recovery failed"
+					err = errors.Join(err, restoreErr)
+				} else {
+					reason += "; previous configuration restored"
+				}
+			}
+			xrayState.holdBack(reason)
+			return fmt.Errorf("%s: %w", reason, err)
+		}
 		return err
 	}
 
+	applySSH()
 	return nil
 }
 
@@ -1580,6 +1653,7 @@ func (s *XrayService) StopXray() error {
 	lock.Lock()
 	defer lock.Unlock()
 	stopManagedSSH()
+	stopManagedSSHOutbounds()
 	isManuallyStopped.Store(true)
 	logger.Debug("Attempting to stop Xray...")
 	process := currentXrayProcess()

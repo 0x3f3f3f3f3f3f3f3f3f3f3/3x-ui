@@ -3,6 +3,11 @@
 Do not deploy this feature branch as a completed service integration. This
 work has not changed any production service, host firewall, qdisc or sshd.
 
+The SSH upstream backend increment has separate
+[configuration, capability and recovery instructions](ssh-upstream-runtime.md).
+Its dedicated editor, probes, node distribution and deployment acceptance remain
+unfinished; a configured core API is required for verified runtime activation.
+
 ## Development
 
 Use the versions in audit.md, a C compiler, and an isolated checkout:

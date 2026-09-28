@@ -22,13 +22,16 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/logger"
 	"github.com/mhsanaei/3x-ui/v3/internal/policyflow"
 	"github.com/mhsanaei/3x-ui/v3/internal/routedbridge"
+	"github.com/mhsanaei/3x-ui/v3/internal/sshoutbound"
 	"github.com/mhsanaei/3x-ui/v3/internal/sshtunnel"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
 
 var sshRuntimeState struct {
 	sync.Mutex
-	manager *sshRuntimeManager
+	manager    *sshRuntimeManager
+	compiledDB *gorm.DB
+	compiled   map[int]*sshRuntimeEntry
 }
 
 type sshRuntimeManager struct {
@@ -37,6 +40,7 @@ type sshRuntimeManager struct {
 	controller *policyflow.Controller
 	entries    map[int]*sshRuntimeEntry
 	expected   [32]byte
+	pending    [32]byte
 	cancel     context.CancelFunc
 	done       chan struct{}
 }
@@ -134,71 +138,128 @@ func sshRuntimeClients(db *gorm.DB, inboundID int) ([]sshtunnel.Client, []routed
 	return clients, bindings, nil
 }
 
-func prepareManagedSSH(cfg *xray.Config, inbounds []*model.Inbound) error {
-	var wanted []*model.Inbound
+type sshRuntimePlan struct {
+	entries   map[int]*sshRuntimeEntry
+	configs   map[int]sshtunnel.Config
+	outbounds []sshoutbound.Outbound
+}
+
+func buildManagedSSH(cfg *xray.Config, inbounds []*model.Inbound) (*sshRuntimePlan, error) {
+	db := database.GetDB()
+	plan := &sshRuntimePlan{entries: make(map[int]*sshRuntimeEntry), configs: make(map[int]sshtunnel.Config)}
 	for _, inbound := range inbounds {
-		if inbound.Protocol == model.SSH && inbound.Enable && inbound.NodeID == nil {
-			wanted = append(wanted, inbound)
+		if inbound.Protocol != model.SSH || !inbound.Enable || inbound.NodeID != nil {
+			continue
 		}
-	}
-	sshRuntimeState.Lock()
-	exists := sshRuntimeState.manager != nil
-	sshRuntimeState.Unlock()
-	if len(wanted) == 0 && !exists {
-		return nil
-	}
-	m := managedSSHRuntime()
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	next := make(map[int]*sshRuntimeEntry)
-	configs := make(map[int]sshtunnel.Config)
-	for _, inbound := range wanted {
 		var settings sshInboundSettings
 		if err := json.Unmarshal([]byte(inbound.Settings), &settings); err != nil {
-			return errors.New("invalid stored SSH settings")
+			return nil, errors.New("invalid stored SSH settings")
 		}
 		hostKey, err := ssh.ParsePrivateKey([]byte(settings.HostKey))
 		if err != nil {
-			return errors.New("invalid stored SSH host key")
+			return nil, errors.New("invalid stored SSH host key")
 		}
-		clients, bindings, err := sshRuntimeClients(m.db, inbound.Id)
+		clients, bindings, err := sshRuntimeClients(db, inbound.Id)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if len(clients) == 0 {
 			continue
 		}
-		fingerprint := sshConfigFingerprint([]any{inbound.Tag, sshListenAddress(inbound), settings.HostKey, settings.BridgePort, bindings})
-		entry := m.entries[inbound.Id]
-		if entry == nil || entry.fingerprint != fingerprint {
-			address, err := netip.ParseAddrPort(net.JoinHostPort("127.0.0.1", strconv.Itoa(settings.BridgePort)))
-			if err != nil {
-				return errors.New("invalid stored SSH bridge port")
-			}
-			bridge, err := routedbridge.New(inbound.Tag, address, bindings)
-			if err != nil {
-				return err
-			}
-			entry = &sshRuntimeEntry{inbound: inbound, fingerprint: fingerprint, bridge: bridge}
+		entry, err := compiledSSHEntry(db, inbound, settings, bindings)
+		if err != nil {
+			return nil, err
 		}
-		configs[inbound.Id] = sshtunnel.Config{InboundTag: inbound.Tag, HostKey: hostKey, Clients: clients, Authenticated: startManagedSSHClient}
 		if err := entry.bridge.Apply(cfg); err != nil {
-			return err
+			return nil, err
 		}
-		next[inbound.Id] = entry
+		plan.entries[inbound.Id] = entry
+		plan.configs[inbound.Id] = sshtunnel.Config{InboundTag: inbound.Tag, HostKey: hostKey, Clients: clients, Authenticated: startManagedSSHClient}
 	}
+	sshRuntimeState.Lock()
+	if sshRuntimeState.compiledDB == db {
+		for id := range sshRuntimeState.compiled {
+			if plan.entries[id] == nil {
+				delete(sshRuntimeState.compiled, id)
+			}
+		}
+	}
+	sshRuntimeState.Unlock()
+	return plan, nil
+}
+
+func compiledSSHEntry(db *gorm.DB, inbound *model.Inbound, settings sshInboundSettings, bindings []routedbridge.ClientBinding) (*sshRuntimeEntry, error) {
+	fingerprint := sshConfigFingerprint([]any{inbound.Tag, sshListenAddress(inbound), settings.HostKey, settings.BridgePort, bindings})
+	sshRuntimeState.Lock()
+	defer sshRuntimeState.Unlock()
+	if m := sshRuntimeState.manager; m != nil && m.db == db {
+		m.mu.Lock()
+		entry := m.entries[inbound.Id]
+		m.mu.Unlock()
+		if entry != nil && entry.fingerprint == fingerprint {
+			return entry, nil
+		}
+	}
+	if sshRuntimeState.compiledDB != db {
+		sshRuntimeState.compiledDB = db
+		sshRuntimeState.compiled = make(map[int]*sshRuntimeEntry)
+	}
+	if entry := sshRuntimeState.compiled[inbound.Id]; entry != nil && entry.fingerprint == fingerprint {
+		return entry, nil
+	}
+	address, err := netip.ParseAddrPort(net.JoinHostPort("127.0.0.1", strconv.Itoa(settings.BridgePort)))
+	if err != nil {
+		return nil, errors.New("invalid stored SSH bridge port")
+	}
+	bridge, err := routedbridge.New(inbound.Tag, address, bindings)
+	if err != nil {
+		return nil, err
+	}
+	entry := &sshRuntimeEntry{inbound: inbound, fingerprint: fingerprint, bridge: bridge}
+	sshRuntimeState.compiled[inbound.Id] = entry
+	return entry, nil
+}
+
+func stageSSHRuntime(cfg *xray.Config) func() {
+	sshRuntimeState.Lock()
+	m := sshRuntimeState.manager
+	sshRuntimeState.Unlock()
+	if m == nil {
+		return func() {}
+	}
+	fingerprint := sshConfigFingerprint(cfg)
+	m.mu.Lock()
+	m.pending = fingerprint
+	m.mu.Unlock()
+	return func() {
+		m.mu.Lock()
+		if m.pending == fingerprint {
+			m.pending = [32]byte{}
+		}
+		m.mu.Unlock()
+	}
+}
+
+func (plan *sshRuntimePlan) apply(cfg *xray.Config) {
+	if len(plan.entries) == 0 {
+		stopManagedSSH()
+		return
+	}
+	m := managedSSHRuntime()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	for id, entry := range m.entries {
-		if next[id] != entry {
+		if plan.entries[id] != entry {
 			entry.stop()
 		}
 	}
-	m.entries = next
-	for id, entry := range next {
-		entry.config = configs[id]
+	m.entries = plan.entries
+	for id, entry := range plan.entries {
+		entry.config = plan.configs[id]
 		entry.suspended = false
 	}
 	m.expected = sshConfigFingerprint(cfg)
-	return nil
+	m.pending = [32]byte{}
 }
 
 func (m *sshRuntimeManager) watch(ctx context.Context) {
@@ -219,7 +280,12 @@ func (m *sshRuntimeManager) reconcile(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	process := currentXrayProcess()
-	if process == nil || !process.IsRunning() || sshConfigFingerprint(process.GetConfig()) != m.expected {
+	matched := false
+	if process != nil && process.IsRunning() {
+		fingerprint := sshConfigFingerprint(process.GetConfig())
+		matched = fingerprint == m.expected || fingerprint == m.pending
+	}
+	if !matched {
 		for _, entry := range m.entries {
 			entry.stop()
 			entry.report("waiting for the applied Xray configuration")

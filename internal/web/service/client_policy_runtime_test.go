@@ -172,6 +172,10 @@ func (g *policyDuplex) start(t *testing.T, inbound *model.Inbound, email, keyPat
 }
 
 func TestClientPolicyProductionSSHSharedRatesChangeLive(t *testing.T) {
+	testClientPolicyProductionSSHSharedRates(t, nil)
+}
+
+func testClientPolicyProductionSSHSharedRates(t *testing.T, configure func(map[string]any)) {
 	binary := os.Getenv("XRAY_E2E_BINARY")
 	if binary == "" {
 		t.Skip("set XRAY_E2E_BINARY for real OpenSSH and panel-managed Xray")
@@ -188,15 +192,22 @@ func TestClientPolicyProductionSSHSharedRatesChangeLive(t *testing.T) {
 	apiAddress := productionSSHAddress(t)
 	_, apiPortText, _ := net.SplitHostPort(apiAddress)
 	apiPort, _ := strconv.Atoi(apiPortText)
-	template, _ := json.Marshal(map[string]any{
+	template := map[string]any{
 		"log":       map[string]any{"loglevel": "warning"},
 		"api":       map[string]any{"tag": "api", "services": []string{"HandlerService", "StatsService", "RoutingService"}},
 		"stats":     map[string]any{},
 		"inbounds":  []any{map[string]any{"tag": "api", "listen": "127.0.0.1", "port": apiPort, "protocol": "tunnel", "settings": map[string]any{"address": "127.0.0.1"}}},
 		"outbounds": []any{map[string]any{"tag": "blocked", "protocol": "blackhole"}, map[string]any{"tag": "a", "protocol": "freedom", "settings": map[string]any{"redirect": groups[0].target.Addr().String()}}, map[string]any{"tag": "b", "protocol": "freedom", "settings": map[string]any{"redirect": groups[1].target.Addr().String()}}},
 		"routing":   map[string]any{"rules": []any{map[string]any{"type": "field", "inboundTag": []string{"api"}, "outboundTag": "api"}, map[string]any{"type": "field", "domain": []string{"full:" + domains[0]}, "outboundTag": "a"}, map[string]any{"type": "field", "domain": []string{"full:" + domains[1]}, "outboundTag": "b"}}},
-	})
-	if err := (&SettingService{}).saveSetting("xrayTemplateConfig", string(template)); err != nil {
+	}
+	if configure != nil {
+		configure(template)
+	}
+	encodedTemplate, err := json.Marshal(template)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := (&SettingService{}).saveSetting("xrayTemplateConfig", string(encodedTemplate)); err != nil {
 		t.Fatal(err)
 	}
 	svc := &XrayService{}
@@ -288,7 +299,7 @@ func TestClientPolicyProductionSSHSharedRatesChangeLive(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	measure := func(label string) {
+	measure := func(label string) time.Time {
 		t.Helper()
 		before := [2][2]int64{}
 		for n, g := range groups {
@@ -296,7 +307,8 @@ func TestClientPolicyProductionSSHSharedRatesChangeLive(t *testing.T) {
 		}
 		start := time.Now()
 		time.Sleep(1500 * time.Millisecond)
-		elapsed := time.Since(start).Seconds()
+		finished := time.Now()
+		elapsed := finished.Sub(start).Seconds()
 		for n, g := range groups {
 			if ended := g.ended.Load(); ended != 0 {
 				t.Fatalf("rate edit closed %d existing client %d streams", ended, n)
@@ -313,6 +325,7 @@ func TestClientPolicyProductionSSHSharedRatesChangeLive(t *testing.T) {
 				t.Logf("%s client %d direction %d: %.0f raw B/s", label, n, direction, float64(count)/elapsed)
 			}
 		}
+		return finished
 	}
 	for n := range clients {
 		apply(n)
@@ -323,11 +336,13 @@ func TestClientPolicyProductionSSHSharedRatesChangeLive(t *testing.T) {
 		start := time.Now()
 		rates[0] = next
 		apply(0)
-		time.Sleep(350 * time.Millisecond)
-		measure("live")
-		if elapsed := time.Since(start); elapsed > 2*time.Second {
+		appliedAfter := time.Since(start)
+		time.Sleep(time.Until(start.Add(350 * time.Millisecond)))
+		finished := measure("live")
+		if elapsed := finished.Sub(start); elapsed > 2*time.Second {
 			t.Fatalf("live policy edit exceeded 2s: %v", elapsed)
 		}
+		t.Logf("live policy write completed in %v; unchanged 1.5s rate window confirmed by %v", appliedAfter, finished.Sub(start))
 	}
 	for n := range clients {
 		policy, err := policySvc.GetPolicy(ctx, clients[n].Email)

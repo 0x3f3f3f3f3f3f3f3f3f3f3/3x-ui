@@ -1502,3 +1502,160 @@ arm64 with `CGO_ENABLED=0 go test -c ./internal/sshoutbound`, producing PE32+ an
 Mach-O artifacts under `/tmp/3x-ui-ssh-bridge-{windows.test.exe,darwin.test}`.
 Logs `/tmp/3x-ui-ssh-bridge-{windows,darwin}-build.log` are empty on success.
 These are compile checks, not runtime or whole-panel platform acceptance.
+
+## SSH upstream settings, Runtime and double-SSH policy increment (2026-09-28)
+
+The existing settings service now accepts authored SSH outbounds and compiles
+only the core-facing representation to authenticated loopback SOCKS. Preview
+stays independent of applied SSH ingress/outbound listeners. This is backend
+integration; the dedicated editor/probes, node application and deployment
+acceptance remain open. See `ssh-upstream-runtime.md` for capability boundaries.
+
+Real service test `TestSSHOutboundRunsThroughProductionXray` uses the pinned
+Xray 26.9.9Custom binary and isolated OpenSSH 9.6p1 server. Two independently
+selected SSH tags and a native redirect reach observable targets; a higher
+priority block reaches neither. Wrong pins and a stopped upstream reach neither
+an upstream target nor a direct fallback. Pin edits revoke changed streams while
+unchanged SSH/native streams survive hot application. Bridge port collision,
+invalid core configuration, stop/restart and SIGKILL are exercised. A one-shot
+wrapper exits 42 only for the next real child start (preflight still invokes the
+actual core), proving startup failure restores the previous core/config and old
+SSH generation. The same fault while removing the last upstream must preserve
+its old generation. Previewing SSH then activating a native-only/API-less config
+must not create a bridge or impose the SSH readiness requirement.
+
+Named RED observations before their corresponding fixes:
+
+- Save rejected valid SSH as an unknown native core protocol; log
+  `/tmp/3x-ui-ssh-upstream-preview-red.log`.
+- Pure configuration preview closed an existing SSH flow with EOF. Separating
+  build/apply fixed it; `/tmp/3x-ui-ssh-preview-live-red.log`.
+- Runtime route selected an unstarted bridge and reset the first request;
+  `/tmp/3x-ui-ssh-upstream-runtime-red.log`.
+- Graceful bridge retirement let the core retain the client's upload half,
+  causing a one-second read timeout. Explicit retirement now resets private
+  sockets while ordinary completion retains half-close.
+- SIGKILL left the private listener bound until the watcher was added;
+  `/tmp/3x-ui-ssh-upstream-crash-red.log`.
+- An invalid replacement core and an immediately failed child start each returned
+  nil; installed-core preflight and API readiness/recovery fix those separate
+  cases (`ssh-upstream-invalid-core-red.log`, `ssh-upstream-startup-red.log`).
+- Removing the final upstream skipped readiness and committed deletion despite
+  failed child startup; `/tmp/3x-ui-ssh-upstream-remove-red.log`.
+- A core snapshot changed before ingress commit caused EOF; explicitly staged
+  fingerprint acceptance fixes the window without holding the ingress mutex over
+  slow core I/O (`/tmp/3x-ui-ssh-pending-generation-red.log`).
+- An invalid bridge-port environment value returned an error but omitted the
+  held-back status; `/tmp/3x-ui-ssh-build-heldback-red.log`.
+- The inherited restart path ignored a Stop timeout and proceeded with another
+  core. A real SIGKILL with a deliberately held crash callback reproduced the
+  unfinished lifecycle (`/tmp/3x-ui-ssh-core-stop-red.log`). Replacement is now
+  refused until that lifecycle finishes, with a held-back stop reason.
+
+Eight deliberate mutations produced the expected behavioral failures, then were
+restored: TCP-reset revocation, core preflight, startup readiness, previous-core
+recovery, crash cleanup, prepare/bind conflict, unused-preview capability
+isolation, and replacing the compiled SSH exit with direct freedom. The last
+mutation ran the real lifecycle/accounting test and failed because the independent
+sshd observed zero authenticated upstream connections. Script
+`/tmp/3x-ui-ssh-runtime-mutations.py`; logs
+`/tmp/3x-ui-ssh-runtime-mutation-{name}.log`. The initial end-to-end FIN mutation
+survived once due to close timing; a Linux idle-bridge ECONNRESET contract test
+now catches it directly. The successful run does not conceal that initial survivor.
+
+### Policy execution through an actual SSH upstream
+
+The existing real ingress fixtures are reused with a native freedom redirect
+chained through the SSH tag using `streamSettings.sockopt.dialerProxy`. The first
+attempt used `proxySettings`; the installed core rejected that removed feature
+before startup. The fixture was corrected to the pinned core's supported shape.
+
+Actual OpenSSH clients authenticate to the managed ingress, traverse Xray and
+another independent OpenSSH server, and reach independently counted targets.
+Two clients sharing loopback source IP each use two inbound listeners and four
+channels. The upstream observes exactly 8 authenticated transports before restart
+and 8 after restart. No rate test opens a direct target socket as its client path.
+
+The final focused race run used:
+
+```sh
+SSH_E2E_SERVER=/usr/sbin/sshd \
+XRAY_E2E_BINARY=/tmp/3x-ui-xray-pinned \
+XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' \
+go test -race -shuffle=on ./internal/web/service \
+  -run '^TestSSH(Upstream.*|Outbound.*|ConfigPreviewKeepsExistingFlow|PrepareFailureKeepsPriorAuthenticationState|InboundRunsThroughProductionXrayLifecycle)$' \
+  -count=1 -timeout=180s -v
+```
+
+It passed in 75.293s with no skipped tests or race report. Log
+`/tmp/3x-ui-ssh-runtime-bothdb-race-final.log`. SQLite unlimited baseline was
+1,471,828 upload / 1,349,175 download B/s; PostgreSQL 1,709,385 / 1,587,286 B/s.
+Targets were 32/64/128 KiB/s with the predeclared 80% floor and
+`rate × seconds × 1.06 + min(65536,max(1,rate/10))` ceiling. Same-channel live
+windows and restarted policies stayed within those unchanged bounds.
+
+The first race run passed PostgreSQL but reported 2.043788597s for one SQLite
+live-edit test despite all rates being within bounds. Its timing added a full
+350 ms sleep after UpdatePolicy returned to a 1.5 s measurement. The corrected test
+schedules the observation350 ms after edit invocation, keeps the same 1.5 s window,
+and checks its end against the unchanged 2 s deadline. It does not loosen a rate
+bound or the deadline. Final windows ended 1.8507–1.8519 s after invocation; writes
+completed in 7.6–13.4 ms. The initial failed run is preserved in
+`/tmp/3x-ui-ssh-runtime-bothdb-race.log`.
+
+The lifecycle fixture independently checks the original 16-byte request and echo:
+16 upload + 16 download = 32 billed bytes at 1x, then reset accounting, quota
+reduction, credentials, disable/enable and unrelated-client isolation. Its new
+upstream wrapper observes 9 real authenticated transports. At 2x, the duplex test
+checks persisted billed bytes equal twice the admitted raw upload+download while
+raw shaping rates remain unchanged. These are narrow real policy proofs, not
+completion of every whole-task A–E workload or every protocol executor.
+
+### Regression and build checks for this increment
+
+The full repository command used the same real binaries and isolated
+`XUI_TEST_PG_DSN`, plus `GOFLAGS=-p=1 go test -json ./... -count=1`. It exited 0:
+51 test packages passed, 7 packages had no test files, and 29 conditional tests
+were skipped. The service package took 187.394s. Skips are not passes: 16 opt-in
+scale tests, 7 older tests requiring global `XUI_DB_TYPE`/`XUI_DB_DSN`, 5 missing
+geodata cases, and 1 non-Linux update guard. New SSH upstream PostgreSQL cases
+use `XUI_TEST_PG_DSN` and ran. Complete output and classified skips are in
+`/tmp/3x-ui-ssh-runtime-all-go.jsonl` and `/tmp/3x-ui-ssh-runtime-go-skips.json`.
+
+After the full regression, the final removal/re-add case and build-error status
+were verified with the affected runtime tests under `-race`: SQLite and
+PostgreSQL passed, service 17.247s, bridge reset 1.068s, no skips/race report.
+`/tmp/3x-ui-ssh-runtime-final-cases.log` records that run. The real deletion case
+closes the removed SSH stream, releases the private bridge port, rejects the
+removed routing tag, and preserves an existing native stream across removal
+and re-addition.
+
+The first whole-repository lint run identified three `noctx` violations in the
+shared sshd test helper extracted from an `_test.go` file. Its listener, child
+process and readiness dial now use the test context. The final
+`golangci-lint run` reports 0 issues; `go build ./...` exits 0. Logs:
+`/tmp/3x-ui-ssh-runtime-lint-final.log` and `/tmp/3x-ui-ssh-runtime-build.log`.
+`golangci-lint fmt --diff` and local documentation link checks also pass.
+
+SSH package/test compilation with `CGO_ENABLED=0` succeeds for Windows/amd64 and
+Darwin/arm64. Logs `/tmp/3x-ui-ssh-runtime-{windows,darwin}-build.log` are empty
+on success. These are compile checks, not runtime tests or whole-panel cross
+builds. This increment changes no frontend source, public DTO, route registry or
+DB schema; it does not claim a fresh frontend suite, generated contract change
+or migration. Final shared-fixture verification follows below.
+
+After adding context ownership to the shared sshd fixture, the complete SSH
+upstream package passed `go test -race -shuffle=on ./internal/sshoutbound
+-count=1 -v`: 27 top-level tests plus subtests, 16.764s, no skipped tests or race
+report (`/tmp/3x-ui-ssh-runtime-bridge-race-final.log`). Final SQLite/PostgreSQL
+runtime race verification, including the additional unconfirmed-stop case,
+passed in 20.866s with no skips/race report
+(`/tmp/3x-ui-ssh-runtime-service-final.log`). The stop guard also touches the
+existing generic restart path, so a final complete service regression follows.
+
+The final complete service regression after the stop-error guard passed:
+`go test -shuffle=on ./internal/web/service -count=1 -timeout=10m`, with the same
+actual binaries and isolated PostgreSQL DSN, 184.581s
+(`/tmp/3x-ui-ssh-runtime-service-regression.log`). This supplements the earlier
+whole-repository run; no test tolerance was changed to accommodate a runtime
+failure. Final lint/build are refreshed against the stop guard before commit.

@@ -120,6 +120,10 @@ func productionSSHWait(t *testing.T, address string) {
 }
 
 func TestSSHInboundRunsThroughProductionXrayLifecycle(t *testing.T) {
+	testSSHInboundProductionXrayLifecycle(t, nil)
+}
+
+func testSSHInboundProductionXrayLifecycle(t *testing.T, configure func(map[string]any)) {
 	binary := os.Getenv("XRAY_E2E_BINARY")
 	if binary == "" {
 		t.Skip("unverified: set XRAY_E2E_BINARY for actual panel-managed Xray and OpenSSH")
@@ -148,15 +152,22 @@ func TestSSHInboundRunsThroughProductionXrayLifecycle(t *testing.T) {
 	apiAddress := productionSSHAddress(t)
 	_, apiPortText, _ := net.SplitHostPort(apiAddress)
 	apiPort, _ := strconv.Atoi(apiPortText)
-	template, _ := json.Marshal(map[string]any{
+	template := map[string]any{
 		"log":       map[string]any{"loglevel": "warning"},
 		"api":       map[string]any{"tag": "api", "services": []string{"HandlerService", "StatsService", "RoutingService"}},
 		"stats":     map[string]any{},
 		"inbounds":  []any{map[string]any{"tag": "api", "listen": "127.0.0.1", "port": apiPort, "protocol": "tunnel", "settings": map[string]any{"address": "127.0.0.1"}}},
 		"outbounds": []any{map[string]any{"tag": "blocked", "protocol": "blackhole"}, map[string]any{"tag": "echo", "protocol": "freedom", "settings": map[string]any{"redirect": echo.Addr().String()}}},
 		"routing":   map[string]any{"rules": []any{map[string]any{"type": "field", "inboundTag": []string{"api"}, "outboundTag": "api"}, map[string]any{"type": "field", "domain": []string{"full:route.invalid"}, "outboundTag": "echo"}}},
-	})
-	if err := (&SettingService{}).saveSetting("xrayTemplateConfig", string(template)); err != nil {
+	}
+	if configure != nil {
+		configure(template)
+	}
+	encodedTemplate, err := json.Marshal(template)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := (&SettingService{}).saveSetting("xrayTemplateConfig", string(encodedTemplate)); err != nil {
 		t.Fatal(err)
 	}
 	svc := &XrayService{}
@@ -662,9 +673,12 @@ func TestSSHPrepareFailureKeepsPriorAuthenticationState(t *testing.T) {
 		t.Fatal(err)
 	}
 	inbound.Enable = true
-	if err := prepareManagedSSH(&xray.Config{}, []*model.Inbound{inbound}); err != nil {
+	cfg := &xray.Config{}
+	plan, err := buildManagedSSH(cfg, []*model.Inbound{inbound})
+	if err != nil {
 		t.Fatal(err)
 	}
+	plan.apply(cfg)
 	m := managedSSHRuntime()
 	public, _, err = ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -676,7 +690,7 @@ func TestSSHPrepareFailureKeepsPriorAuthenticationState(t *testing.T) {
 		t.Fatal(err)
 	}
 	bad := &model.Inbound{Id: inbound.Id + 1, Protocol: model.SSH, Enable: true, Settings: "{"}
-	if err := prepareManagedSSH(&xray.Config{}, []*model.Inbound{inbound, bad}); err == nil {
+	if _, err := buildManagedSSH(&xray.Config{}, []*model.Inbound{inbound, bad}); err == nil {
 		t.Fatal("invalid later entry was accepted")
 	}
 	m.mu.Lock()

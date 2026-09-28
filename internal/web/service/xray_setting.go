@@ -10,6 +10,7 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v3/internal/amneziawg"
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
+	"github.com/mhsanaei/3x-ui/v3/internal/sshoutbound"
 	"github.com/mhsanaei/3x-ui/v3/internal/util/common"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
@@ -58,11 +59,21 @@ func (s *XraySettingService) CheckXrayConfig(XrayTemplateConfig string) error {
 		if err := json.Unmarshal(xrayConfig.OutboundConfigs, &outbounds); err != nil {
 			return common.NewError("xray template config invalid: outbounds is not an array:", err)
 		}
+		if _, err := sshoutbound.ParseOutbounds(outbounds); err != nil {
+			return err
+		}
 		coreVersion := "Unknown"
 		if process := currentXrayProcess(); process != nil {
 			coreVersion = process.GetXrayVersion()
 		}
 		for _, outbound := range outbounds {
+			var authored struct {
+				Protocol string `json:"protocol"`
+			}
+			_ = json.Unmarshal(outbound, &authored)
+			if authored.Protocol == "ssh" {
+				continue
+			}
 			// Panel pseudo-protocol: validated panel-side because the core's
 			// loader would reject it outright.
 			if amneziawg.IsAmneziaWGOutbound(outbound) {

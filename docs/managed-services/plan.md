@@ -157,7 +157,8 @@ tag, transport source and original destination into real Xray. Tests verify
 user/domain/IP/port/source routing, two observable exits, block priority and
 no duplicate billing. Runtime now handles canonical credentials, delayed expiry,
 selective revocation, reset recovery, listener failures and router process exit.
-Membership/rename isolation, UI, upstream SSH and multi-node wiring remain open.
+Membership/rename isolation, complete UI, upstream editor/probes and multi-node
+wiring remain open; narrower upstream Runtime evidence is recorded below.
 Standard -R does not reveal the client-side target to the server; listener ACLs
 do not claim to enforce that target. See semantics.md for the open constraint.
 
@@ -165,10 +166,13 @@ The [SSH upstream connector increment](ssh-upstream-connector.md) now implements
 a bounded authenticated TCP backend with strict host-key selection, cancellation,
 half-close and active-operation deadlines. Real isolated OpenSSH tests observe
 payloads at IPv4/domain and IPv6 targets; wire-peer tests cover capacity,
-encrypted keys and failed/stalled transport cleanup. This package has no public
-runtime caller yet. The authenticated outbound bridge, routing selection,
-lifecycle rollback, UI/API/probes, backup/node/deployment integration and actual
-Xray-to-upstream policy acceptance remain required under this same Task 5.
+encrypted keys and failed/stalled transport cleanup. The authenticated bridge
+now has a [configuration and Runtime caller](ssh-upstream-runtime.md), with
+installed-core validation, staged application, failure recovery and exit cleanup.
+Real double-SSH tests cover selected exits, blocking, no fallback, shared rates,
+quota mutations and single billing. The dedicated editor/probes, backup/node/
+deployment acceptance and remaining public health/status integration still belong
+to this same Task 5. API-less SSH upstream activation is explicitly unsupported.
 
 ## Task 6: mieru vertical integration
 

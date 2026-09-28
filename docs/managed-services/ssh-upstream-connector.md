@@ -101,16 +101,18 @@ host-key algorithms, concurrent writes and deadlines. See
 
 ## Required subsequent Task 5 work
 
-- Integrate a private authenticated SOCKS bridge with existing configuration,
-  Runtime lifecycle and routing tags. Validate before any runtime mutation;
-  preserve working state on rejected changes, close deleted/changed connectors,
-  handle core stop/restart, expose accurate applied/health state.
+- The private authenticated bridge now enters existing configuration and Runtime
+  services. See [runtime boundaries](ssh-upstream-runtime.md) for staged apply,
+  validation, selective revocation, rollback and core stop/exit behavior. Public
+  upstream health/probe presentation remains open; core readiness is not an SSH
+  reachability claim.
 - Existing Outbounds editor/API/probes and EN/ZH/fallbacks; no unsupported Xray
   transport options. Protect upstream private keys in administrative settings,
   logs and export surfaces. Carry configuration through backup/restore.
-- Actual Xray → managed bridge → OpenSSH sshd → independently observed targets:
-  selected egress, blocked route, wrong pin, dead upstream, no direct fallback,
-  target domain/IP, concurrent clients, ingress shaping/quota and single billing.
+- Actual Xray → bridge → OpenSSH → independent target tests now exercise selected
+  egress, block priority, wrong pins, no fallback, concurrent clients, ingress
+  shaping/quota and single billing. Full acceptance and unmeasured capacity costs
+  remain in the task ledger.
 - Node distribution, global policy execution, all other protocols and the full
   A–E task scope remain required; none is satisfied by this connector alone.
 

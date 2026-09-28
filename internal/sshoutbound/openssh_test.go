@@ -6,91 +6,20 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
+
+	"github.com/mhsanaei/3x-ui/v3/internal/testutil/sshdtest"
 )
 
 func testOpenSSH(t *testing.T) Config {
 	t.Helper()
-	binary := os.Getenv("SSH_E2E_SERVER")
-	if binary == "" {
-		t.Skip("set SSH_E2E_SERVER to an OpenSSH sshd binary for real upstream interoperability")
-	}
-	if os.Geteuid() != 0 {
-		t.Skip("the isolated OpenSSH fixture requires root for its privilege separation")
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir, err := os.MkdirTemp(home, ".3x-ui-ssh-upstream-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	hostPrivate, hostPublic := testKey(t)
-	clientPrivate, clientPublic := testKey(t)
-	for name, value := range map[string]string{"host-key": hostPrivate, "authorized_keys": clientPublic} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(value), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	reservation, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	port := reservation.Addr().(*net.TCPAddr).Port
-	_ = reservation.Close()
-	configuration := fmt.Sprintf("Port %d\nListenAddress 127.0.0.1\nHostKey %s\nAuthorizedKeysFile %s\nPidFile %s\nAllowUsers root\nPermitRootLogin prohibit-password\nAuthenticationMethods publickey\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nUsePAM yes\nAllowTcpForwarding local\nAllowAgentForwarding no\nX11Forwarding no\nPermitTTY no\nMaxSessions 0\nLogLevel VERBOSE\n", port, filepath.Join(dir, "host-key"), filepath.Join(dir, "authorized_keys"), filepath.Join(dir, "sshd.pid"))
-	configPath := filepath.Join(dir, "sshd_config")
-	if err := os.WriteFile(configPath, []byte(configuration), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	logPath := filepath.Join(dir, "sshd.log")
-	log, err := os.Create(logPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cmd := exec.Command(binary, "-D", "-e", "-f", configPath)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Stdout, cmd.Stderr = log, log
-	if err := cmd.Start(); err != nil {
-		_ = log.Close()
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		_ = cmd.Wait()
-		_ = log.Close()
-		if t.Failed() {
-			data, _ := os.ReadFile(logPath)
-			t.Logf("isolated sshd diagnostics: %s", data)
-		}
-	})
-	address := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
-	deadline := time.Now().Add(3 * time.Second)
-	for {
-		conn, err := net.DialTimeout("tcp", address, 50*time.Millisecond)
-		if err == nil {
-			_ = conn.Close()
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("isolated sshd did not listen: %v", err)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	return Config{Address: "127.0.0.1", Port: port, User: "root", PrivateKey: clientPrivate, HostKey: hostPublic}
+	endpoint := sshdtest.Start(t)
+	return Config{Address: endpoint.Address, Port: endpoint.Port, User: endpoint.User, PrivateKey: endpoint.PrivateKey, HostKey: endpoint.HostKey}
 }
 
 func TestConnectorOpenSSHForwardingAndStrictHostPin(t *testing.T) {

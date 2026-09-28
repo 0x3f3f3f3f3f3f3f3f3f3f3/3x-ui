@@ -150,6 +150,12 @@ func (m *Manager) Prepare(desired []Outbound) (*Prepared, error) {
 func (p *Prepared) Commit()   { p.once.Do(func() { p.finish(true) }) }
 func (p *Prepared) Rollback() { p.once.Do(func() { p.finish(false) }) }
 
+func (m *Manager) HasAppliedOutbounds() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.current) > 0
+}
+
 func (p *Prepared) finish(commit bool) {
 	m := p.manager
 	defer m.applyMu.Unlock()
@@ -170,7 +176,7 @@ func (p *Prepared) finish(commit bool) {
 		listener = m.listener
 		m.listener = nil
 		for client := range m.clients {
-			_ = client.Close()
+			abortBridgeClient(client)
 		}
 	}
 	m.mu.Unlock()
@@ -193,9 +199,18 @@ func (m *Manager) retireLocked(entries []*managedOutbound) {
 	}
 	for client, entry := range m.clients {
 		if retired[entry] {
-			_ = client.Close()
+			abortBridgeClient(client)
 		}
 	}
+}
+
+// Revocation aborts both directions; a graceful FIN lets Xray retain its
+// upload half until its idle timeout, delaying closure of the original client.
+func abortBridgeClient(client net.Conn) {
+	if tcp, ok := client.(*net.TCPConn); ok {
+		_ = tcp.SetLinger(0)
+	}
+	_ = client.Close()
 }
 
 func (m *Manager) Close() error {
@@ -208,7 +223,7 @@ func (m *Manager) Close() error {
 	m.current = make(map[string]*managedOutbound)
 	m.routes = make(map[string]*managedOutbound)
 	for client := range m.clients {
-		_ = client.Close()
+		abortBridgeClient(client)
 	}
 	m.mu.Unlock()
 	if listener != nil {

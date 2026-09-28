@@ -103,16 +103,22 @@ subscription merge. RestartXray stages/commits/rollbacks under its existing lock
 with previous-core restoration after failed replacement. All mutations remain
 behind Runtime. Add validated port override and operator docs.
 
-- [ ] Save/preview real typed SSH config, reject unsupported transport, duplicate
+- [x] Save/preview real typed SSH config, reject unsupported transport, duplicate
   tags, invalid pins/keys without leaked secrets or database/runtime changes.
-- [ ] Real Xray selects two observable exits and blocks by rule priority; bridge
+- [x] Real Xray selects two observable exits and blocks by rule priority; bridge
   stop, wrong pin and dead upstream fail closed. Confirm expected TCP payload,
   original target and actual upstream traversal. Prove preview does not start it.
-- [ ] Real running core/config rollback, port conflict, stop/restart and core crash;
+- [x] Real running core/config rollback, port conflict, stop/restart and core crash;
   verify unrelated existing flows across key edits and retained applied state.
-- [ ] Existing managed SSH ingress through upstream: exact raw/billed counts,
+- [x] Existing managed SSH ingress through upstream: exact raw/billed counts,
   quota rejection/restart and live aggregate shaping. Both database backends.
-- [ ] Appropriate service/runtime regression, static/build checks and commit.
+- [x] Appropriate service/runtime regression, static/build checks and commit.
+
+The runtime increment requires a configured core API for startup verification;
+it explicitly refuses API-less SSH activation/removal without enabling an API
+behind the administrator's back. Preview alone does not impose that capability on
+a later native-only configuration. See [runtime boundaries](ssh-upstream-runtime.md).
+Whole-task completion still requires Task 3 and all remaining protocol work.
 
 ## Task 3: Existing editor, probes and distribution
 
