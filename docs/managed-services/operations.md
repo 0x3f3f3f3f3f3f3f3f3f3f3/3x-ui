@@ -170,3 +170,14 @@ fixture allows one scheduled refresh plus five seconds of startup observation,
 then retains the existing two-second meter-replacement limit for a multiplier
 change. Dedicated applied-state reporting and faster isolated attachment
 application remain open work; waiting is not evidence that a failed apply worked.
+
+
+Portable client import now commits each new client's complete attachment and
+raw-usage restoration before Runtime apply. Failed items are reported in
+`skipped` and leave no new client or partial binding; previously successful
+items remain committed. Existing email identities are skipped even if subId
+matches. The ordinary create/attach APIs keep their existing reuse behavior.
+Legacy SSH imports receive a fresh accounting identity with historical raw
+usage charged at the legacy default 1x, including unattached clients. This
+still does not preserve non-default policy or historically weighted charges;
+use the full database backup for those until the portable policy format lands.

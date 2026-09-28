@@ -104,15 +104,17 @@ _openapi:
     - depth: 2
       title: 'Import clients from a JSON body { "data": "<json>" }, where data is a
         string-encoded array produced by /export ([{client, inboundIds,
-        traffic}]). Items with inboundIds are created and attached to those
-        inbounds; items with an empty inboundIds list are restored as unattached
-        client records. An optional traffic object restores the usage counters,
-        only for clients this import creates. Existing emails are never
-        overwritten — they are returned in skipped, and their live counters are
-        left untouched. Triggers a single Xray restart at the end if any target
-        inbound was running; a failure while restoring counters still reports
-        success=false after the clients were created.'
-      url: '#import-clients-from-a-json-body--data-json--where-data-is-a-string-encoded-array-produced-by-export-client-inboundids-traffic-items-with-inboundids-are-created-and-attached-to-those-inbounds-items-with-an-empty-inboundids-list-are-restored-as-unattached-client-records-an-optional-traffic-object-restores-the-usage-counters-only-for-clients-this-import-creates-existing-emails-are-never-overwritten--they-are-returned-in-skipped-and-their-live-counters-are-left-untouched-triggers-a-single-xray-restart-at-the-end-if-any-target-inbound-was-running-a-failure-while-restoring-counters-still-reports-successfalse-after-the-clients-were-created'
+        traffic}]). Each new client, all requested attachments and optional
+        traffic counters are restored in one transaction before runtime apply.
+        Empty inboundIds restores an unattached client. Existing emails are
+        skipped even when subId matches. Failed restorations are returned in
+        skipped without creating that client or partial attachments; earlier
+        successful items remain committed. A runtime apply failure after commit
+        can report success=false and retain the restart flag. Legacy SSH usage
+        is initialized at multiplier 1 with a fresh accounting identity; this
+        format does not yet preserve non-default policy or weighted billing
+        history.'
+      url: '#import-clients-from-a-json-body--data-json--where-data-is-a-string-encoded-array-produced-by-export-client-inboundids-traffic-each-new-client-all-requested-attachments-and-optional-traffic-counters-are-restored-in-one-transaction-before-runtime-apply-empty-inboundids-restores-an-unattached-client-existing-emails-are-skipped-even-when-subid-matches-failed-restorations-are-returned-in-skipped-without-creating-that-client-or-partial-attachments-earlier-successful-items-remain-committed-a-runtime-apply-failure-after-commit-can-report-successfalse-and-retain-the-restart-flag-legacy-ssh-usage-is-initialized-at-multiplier-1-with-a-fresh-accounting-identity-this-format-does-not-yet-preserve-non-default-policy-or-weighted-billing-history'
     - depth: 2
       title: 'Shift expiry and/or traffic quota for many clients in one call.
         addDays/addBytes may be negative. Clients with unlimited expiry
@@ -393,15 +395,17 @@ _openapi:
         id: return-every-client-as-a-client-inboundids-traffic-array--the-shape-import-accepts--so-the-payload-round-trips-straight-back-through-import-traffic-carries-the-usage-counters-up-down-resetcount-lastonline-lastsubfetch-and-is-omitted-for-a-client-with-no-traffic-row-the-quota-itself-stays-in-clienttotalgb-clients-with-no-inbound-attachment-are-included-with-an-empty-inboundids-list-the-ui-shows-this-in-a-codemirror-viewer-copy--download-programmatic-callers-get-the-array-in-obj
       - content: 'Import clients from a JSON body { "data": "<json>" }, where data is a
           string-encoded array produced by /export ([{client, inboundIds,
-          traffic}]). Items with inboundIds are created and attached to those
-          inbounds; items with an empty inboundIds list are restored as
-          unattached client records. An optional traffic object restores the
-          usage counters, only for clients this import creates. Existing emails
-          are never overwritten — they are returned in skipped, and their live
-          counters are left untouched. Triggers a single Xray restart at the end
-          if any target inbound was running; a failure while restoring counters
-          still reports success=false after the clients were created.'
-        id: import-clients-from-a-json-body--data-json--where-data-is-a-string-encoded-array-produced-by-export-client-inboundids-traffic-items-with-inboundids-are-created-and-attached-to-those-inbounds-items-with-an-empty-inboundids-list-are-restored-as-unattached-client-records-an-optional-traffic-object-restores-the-usage-counters-only-for-clients-this-import-creates-existing-emails-are-never-overwritten--they-are-returned-in-skipped-and-their-live-counters-are-left-untouched-triggers-a-single-xray-restart-at-the-end-if-any-target-inbound-was-running-a-failure-while-restoring-counters-still-reports-successfalse-after-the-clients-were-created
+          traffic}]). Each new client, all requested attachments and optional
+          traffic counters are restored in one transaction before runtime apply.
+          Empty inboundIds restores an unattached client. Existing emails are
+          skipped even when subId matches. Failed restorations are returned in
+          skipped without creating that client or partial attachments; earlier
+          successful items remain committed. A runtime apply failure after
+          commit can report success=false and retain the restart flag. Legacy
+          SSH usage is initialized at multiplier 1 with a fresh accounting
+          identity; this format does not yet preserve non-default policy or
+          weighted billing history.'
+        id: import-clients-from-a-json-body--data-json--where-data-is-a-string-encoded-array-produced-by-export-client-inboundids-traffic-each-new-client-all-requested-attachments-and-optional-traffic-counters-are-restored-in-one-transaction-before-runtime-apply-empty-inboundids-restores-an-unattached-client-existing-emails-are-skipped-even-when-subid-matches-failed-restorations-are-returned-in-skipped-without-creating-that-client-or-partial-attachments-earlier-successful-items-remain-committed-a-runtime-apply-failure-after-commit-can-report-successfalse-and-retain-the-restart-flag-legacy-ssh-usage-is-initialized-at-multiplier-1-with-a-fresh-accounting-identity-this-format-does-not-yet-preserve-non-default-policy-or-weighted-billing-history
       - content: 'Shift expiry and/or traffic quota for many clients in one call.
           addDays/addBytes may be negative. Clients with unlimited expiry
           (expiryTime=0) or unlimited traffic (totalGB=0) are skipped for the

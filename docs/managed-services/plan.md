@@ -230,3 +230,27 @@ creation follows the existing 30-second pending-config scheduler; the separate
 full regression and static validation are recorded in validation.md.
 This increment does not complete SSH upstream, online/IP/device enforcement,
 bulk/portable export, remote nodes, deployment or the other backend requirements.
+
+### Portable restore increment
+
+Ruling: restore each imported client and every requested attachment in one
+transaction, before any Runtime apply. Existing bulk-create intentionally reuses
+identities and commits separate inbound batches; it cannot provide import's
+documented skip-existing and restore-before-admission guarantees. Reuse its
+inbound preparation, persistence and runtime operations by separating those
+phases, rather than creating temporarily enabled or partially restored clients.
+The cost is per-client import transactions instead of inbound batch fanout.
+
+- [x] RED: injected traffic failure leaves no client, traffic or attachment;
+  failure on a later inbound rolls back earlier bindings; existing matching
+  email/subId is skipped without metadata changes; runtime sees restored usage.
+- [x] Split `AddInboundClient` into preparation, transactional persistence and
+  post-commit apply; preserve its ordinary add behavior and existing tests.
+- [x] Import under sorted inbound locks, validate each item, check duplicate
+  identity again inside the writer, restore usage/HWID/group baselines before
+  commit, and retain attached-before-orphan duplicate precedence.
+- [ ] Restore managed policy and exact charged history with fresh identity and
+  meter lifetimes; reject unsupported attachment combinations and malformed
+  values. Export a consistent snapshot including SSH credentials and policy.
+- [ ] Verify SQLite/PostgreSQL, rollback/concurrency, real SSH quota admission,
+  generated API contracts, regression and static checks; document and push.

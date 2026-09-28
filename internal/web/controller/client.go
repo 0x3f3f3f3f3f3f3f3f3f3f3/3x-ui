@@ -543,8 +543,7 @@ func (a *ClientController) importClients(c *gin.Context) {
 		return
 	}
 	result, needRestart, err := a.clientService.ImportClients(&a.inboundService, items)
-	// Flagged before the error check: a failed traffic restore still leaves the
-	// clients created before it committed, and those need the restart and refresh.
+	// Earlier items can commit even if a later runtime apply fails.
 	if needRestart {
 		a.xrayService.SetToNeedRestart()
 	}

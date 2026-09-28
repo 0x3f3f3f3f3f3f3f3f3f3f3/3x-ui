@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -122,9 +123,7 @@ func TestDeleteHandlerFlagsRestartOnPartialApply(t *testing.T) {
 	}
 }
 
-// TestImportHandlerFlagsRestartWhenTrafficRestoreFails: the traffic restore runs
-// after the clients are committed, so its failure must not discard their restart.
-func TestImportHandlerFlagsRestartWhenTrafficRestoreFails(t *testing.T) {
+func TestImportHandlerRestartsOnlyCommittedRestorations(t *testing.T) {
 	dbDir := t.TempDir()
 	t.Setenv("XUI_DB_FOLDER", dbDir)
 	dbtest.InitDB(t, filepath.Join(dbDir, "x-ui.db"))
@@ -145,6 +144,9 @@ func TestImportHandlerFlagsRestartWhenTrafficRestoreFails(t *testing.T) {
 
 	const email = "import-partial@example.com"
 	data, err := json.Marshal([]service.ClientCreatePayload{{
+		Client:     model.Client{Email: "import-healthy@example.com", SubID: "sub-import-healthy", Enable: true},
+		InboundIds: []int{ib.Id},
+	}, {
 		Client:     model.Client{Email: email, SubID: "sub-import-partial", Enable: true},
 		InboundIds: []int{ib.Id},
 		Traffic:    &service.ClientPortableTraffic{Up: 5, Down: 6},
@@ -157,16 +159,31 @@ func TestImportHandlerFlagsRestartWhenTrafficRestoreFails(t *testing.T) {
 	c, w := postCtx(t, "", importClientsRequest{Data: string(data)})
 	a.importClients(c)
 
-	assertPartialApply(t, w)
+	var response struct {
+		Success bool                     `json:"success"`
+		Obj     service.BulkCreateResult `json:"obj"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if !response.Success || response.Obj.Created != 1 || len(response.Obj.Skipped) != 1 || !strings.Contains(response.Obj.Skipped[0].Reason, "injected traffic restore failure") {
+		t.Fatalf("unexpected import result: %s", w.Body.String())
+	}
 	var created int64
 	if err := db.Model(&model.ClientRecord{}).Where("email = ?", email).Count(&created).Error; err != nil {
 		t.Fatalf("count imported client: %v", err)
 	}
+	if created != 0 {
+		t.Fatalf("failed import client count=%d, want complete rollback", created)
+	}
+	if err := db.Model(&model.ClientRecord{}).Where("email = ?", "import-healthy@example.com").Count(&created).Error; err != nil {
+		t.Fatal(err)
+	}
 	if created != 1 {
-		t.Fatalf("imported client count=%d, want 1 committed before the restore failed", created)
+		t.Fatalf("healthy import client count=%d, want 1", created)
 	}
 	if !a.xrayService.IsNeedRestartAndSetFalse() {
-		t.Fatal("a failed traffic restore left the imported clients' Xray restart unflagged")
+		t.Fatal("a skipped restoration discarded the successful client's restart")
 	}
 }
 

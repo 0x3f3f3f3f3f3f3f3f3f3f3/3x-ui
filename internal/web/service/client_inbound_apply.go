@@ -324,21 +324,37 @@ func (s *ClientService) checkEmailsExistForClients(inboundSvc *InboundService, c
 	return "", nil
 }
 
+type preparedInboundClientAdd struct {
+	persist func(*gorm.DB) error
+	apply   func() (bool, error)
+}
+
 func (s *ClientService) AddInboundClient(inboundSvc *InboundService, data *model.Inbound) (bool, error) {
 	defer lockInbound(data.Id).Unlock()
-
-	clients, err := inboundSvc.GetClients(data)
-	if err != nil {
+	add, err := s.prepareInboundClientAdd(inboundSvc, data)
+	if err != nil || add == nil {
 		return false, err
 	}
-	if err := validateClientsRenewal(clients); err != nil {
+	if err := runSerializedTx(add.persist); err != nil {
 		return false, err
+	}
+	return add.apply()
+}
+
+// The caller holds the inbound lock through preparation, commit and runtime apply.
+func (s *ClientService) prepareInboundClientAdd(inboundSvc *InboundService, data *model.Inbound) (*preparedInboundClientAdd, error) {
+	clients, err := inboundSvc.GetClients(data)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateClientsRenewal(clients); err != nil {
+		return nil, err
 	}
 
 	var settings map[string]any
 	err = json.Unmarshal([]byte(data.Settings), &settings)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
 	interfaceClients := settings["clients"].([]any)
@@ -358,20 +374,20 @@ func (s *ClientService) AddInboundClient(inboundSvc *InboundService, data *model
 	}
 	existEmail, err := s.checkEmailsExistForClients(inboundSvc, clients)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	if existEmail != "" {
-		return false, common.NewError("Duplicate email:", existEmail)
+		return nil, common.NewError("Duplicate email:", existEmail)
 	}
 
 	oldInbound, err := inboundSvc.GetInbound(data.Id)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
 	existingClients, err := inboundSvc.GetClients(oldInbound)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
 	// A client already on this inbound is skipped instead of appended again:
@@ -401,7 +417,7 @@ func (s *ClientService) AddInboundClient(inboundSvc *InboundService, data *model
 			}
 		}
 		if len(keptClients) == 0 {
-			return false, nil
+			return nil, nil
 		}
 		clients = keptClients
 		interfaceClients = keptWire
@@ -417,16 +433,16 @@ func (s *ClientService) AddInboundClient(inboundSvc *InboundService, data *model
 		}
 		crossUsed, cErr := s.otherTunnelAllowedIPs(database.GetDB(), inboundSvc, oldInbound.Id, selfEmails)
 		if cErr != nil {
-			return false, cErr
+			return nil, cErr
 		}
 		if oldInbound.Protocol == model.WireGuard {
 			if dErr := defaultWireguardClients(oldInbound.Settings, existingClients, clients, interfaceClients, crossUsed); dErr != nil {
-				return false, dErr
+				return nil, dErr
 			}
 		}
 		if oldInbound.Protocol == model.AmneziaWG {
 			if dErr := defaultAmneziaWGClients(oldInbound.Settings, existingClients, clients, interfaceClients, crossUsed); dErr != nil {
-				return false, dErr
+				return nil, dErr
 			}
 		}
 	}
@@ -435,59 +451,59 @@ func (s *ClientService) AddInboundClient(inboundSvc *InboundService, data *model
 	if oldInbound.Protocol == model.AmneziaWG {
 		portCtx, err = inboundSvc.loadPortConflictContext(database.GetDB())
 		if err != nil {
-			return false, err
+			return nil, err
 		}
 	}
 	for _, client := range clients {
 		if strings.TrimSpace(client.Email) == "" {
-			return false, common.NewError("client email is required")
+			return nil, common.NewError("client email is required")
 		}
 		switch oldInbound.Protocol {
 		case "trojan":
 			if client.Password == "" {
-				return false, common.NewError("empty client ID")
+				return nil, common.NewError("empty client ID")
 			}
 		case "shadowsocks":
 			if client.Email == "" {
-				return false, common.NewError("empty client ID")
+				return nil, common.NewError("empty client ID")
 			}
 		case "hysteria":
 			if client.Auth == "" {
-				return false, common.NewError("empty client ID")
+				return nil, common.NewError("empty client ID")
 			}
 		case "wireguard", "amneziawg":
 			if client.PublicKey == "" {
-				return false, common.NewError("wireguard client requires a key")
+				return nil, common.NewError("wireguard client requires a key")
 			}
 		case "mtproto":
 			if client.Secret == "" {
-				return false, common.NewError("mtproto client requires a secret")
+				return nil, common.NewError("mtproto client requires a secret")
 			}
 			if client.AdTag != "" && !model.ValidMtprotoAdTag(client.AdTag) {
-				return false, common.NewError("mtproto client ad tag must be 32 hex characters")
+				return nil, common.NewError("mtproto client ad tag must be 32 hex characters")
 			}
 		case "tuic":
 			if client.ID == "" {
-				return false, common.NewError("empty client ID")
+				return nil, common.NewError("empty client ID")
 			}
 			if client.Password == "" {
-				return false, common.NewError("tuic client requires a password")
+				return nil, common.NewError("tuic client requires a password")
 			}
 			if client.Email == "" {
-				return false, common.NewError("empty client email")
+				return nil, common.NewError("empty client email")
 			}
 		case "ssh":
 			if client.SSH == nil {
-				return false, common.NewError("SSH client requires public keys and target permissions")
+				return nil, common.NewError("SSH client requires public keys and target permissions")
 			}
 		default:
 			if client.ID == "" {
-				return false, common.NewError("empty client ID")
+				return nil, common.NewError("empty client ID")
 			}
 		}
 		if oldInbound.Protocol == model.AmneziaWG {
 			if hit := inboundSvc.checkForwardedPortsConflict(portCtx, client.ForwardedPorts); hit != "" {
-				return false, common.NewError("amneziawg: forwardedPorts collides with", hit)
+				return nil, common.NewError("amneziawg: forwardedPorts collides with", hit)
 			}
 		}
 	}
@@ -495,7 +511,7 @@ func (s *ClientService) AddInboundClient(inboundSvc *InboundService, data *model
 	var oldSettings map[string]any
 	err = json.Unmarshal([]byte(oldInbound.Settings), &oldSettings)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
 	if oldInbound.Protocol == model.Shadowsocks {
@@ -510,7 +526,7 @@ func (s *ClientService) AddInboundClient(inboundSvc *InboundService, data *model
 
 	newSettings, err := json.MarshalIndent(oldSettings, "", "  ")
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
 	prevSettings := oldInbound.Settings
@@ -520,19 +536,17 @@ func (s *ClientService) AddInboundClient(inboundSvc *InboundService, data *model
 	// subId are written onto interfaceClients above, after clients was parsed.
 	addedClients, err := settingsEntriesToClients(interfaceClients)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-
-	needRestart := false
 
 	rt, push, _, perr := inboundSvc.nodePushPlan(oldInbound)
 	if perr != nil {
-		return false, perr
+		return nil, perr
 	}
 
 	// Persist client stats + inbound atomically, serialized against the traffic
 	// poll to avoid the cross-transaction lock-order deadlock (runSerializedTx).
-	if txErr := runSerializedTx(func(tx *gorm.DB) error {
+	persist := func(tx *gorm.DB) error {
 		// lockInbound is per-inbound, so the pre-tx cross-inbound checks race
 		// concurrent writers on other inbounds — re-run them in here (#6225).
 		if oldInbound.Protocol == model.WireGuard || oldInbound.Protocol == model.AmneziaWG {
@@ -579,86 +593,88 @@ func (s *ClientService) AddInboundClient(inboundSvc *InboundService, data *model
 			return (&NodeService{}).MarkNodeDirtyTx(tx, *oldInbound.NodeID)
 		}
 		return nil
-	}); txErr != nil {
-		return false, txErr
 	}
 
-	// Apply to the running runtime after commit — outside the serialized writer
-	// so a slow node call can't stall traffic accounting.
-	if oldInbound.NodeID == nil {
-		if !push {
-			needRestart = true
-		} else if oldInbound.Protocol == model.MTProto {
-			inboundSvc.applyLocalMtproto(oldInbound.Id)
-		} else if oldInbound.Protocol == model.AmneziaWG {
-			inboundSvc.applyLocalAmneziaWG(oldInbound.Id)
-		} else if oldInbound.Protocol == model.TUIC {
-			inboundSvc.applyLocalTuic(oldInbound.Id)
-		} else {
-			for _, client := range clients {
-				if len(client.Email) == 0 {
-					needRestart = true
-					continue
-				}
-				if !client.Enable {
-					continue
-				}
-				cipher := ""
-				if oldInbound.Protocol == "shadowsocks" {
-					cipher, _ = oldSettings["method"].(string)
-				}
-				err1 := rt.AddUser(context.Background(), oldInbound, map[string]any{
-					"email":        client.Email,
-					"id":           client.ID,
-					"auth":         client.Auth,
-					"security":     client.Security,
-					"flow":         client.Flow,
-					"password":     client.Password,
-					"cipher":       cipher,
-					"publicKey":    client.PublicKey,
-					"allowedIPs":   client.AllowedIPs,
-					"preSharedKey": client.PreSharedKey,
-					"keepAlive":    keepAliveStr(client.KeepAliveSeconds()),
-					"reverse":      client.Reverse,
-				})
-				if err1 == nil {
-					logger.Debug("Client added on", rt.Name(), ":", client.Email)
-				} else {
-					logger.Debug("Error in adding client on", rt.Name(), ":", err1)
-					needRestart = true
+	apply := func() (bool, error) {
+		needRestart := false
+		// Apply to the running runtime after commit — outside the serialized writer
+		// so a slow node call can't stall traffic accounting.
+		if oldInbound.NodeID == nil {
+			if !push {
+				needRestart = true
+			} else if oldInbound.Protocol == model.MTProto {
+				inboundSvc.applyLocalMtproto(oldInbound.Id)
+			} else if oldInbound.Protocol == model.AmneziaWG {
+				inboundSvc.applyLocalAmneziaWG(oldInbound.Id)
+			} else if oldInbound.Protocol == model.TUIC {
+				inboundSvc.applyLocalTuic(oldInbound.Id)
+			} else {
+				for _, client := range clients {
+					if len(client.Email) == 0 {
+						needRestart = true
+						continue
+					}
+					if !client.Enable {
+						continue
+					}
+					cipher := ""
+					if oldInbound.Protocol == "shadowsocks" {
+						cipher, _ = oldSettings["method"].(string)
+					}
+					err1 := rt.AddUser(context.Background(), oldInbound, map[string]any{
+						"email":        client.Email,
+						"id":           client.ID,
+						"auth":         client.Auth,
+						"security":     client.Security,
+						"flow":         client.Flow,
+						"password":     client.Password,
+						"cipher":       cipher,
+						"publicKey":    client.PublicKey,
+						"allowedIPs":   client.AllowedIPs,
+						"preSharedKey": client.PreSharedKey,
+						"keepAlive":    keepAliveStr(client.KeepAliveSeconds()),
+						"reverse":      client.Reverse,
+					})
+					if err1 == nil {
+						logger.Debug("Client added on", rt.Name(), ":", client.Email)
+					} else {
+						logger.Debug("Error in adding client on", rt.Name(), ":", err1)
+						needRestart = true
+					}
 				}
 			}
-		}
-	} else {
-		// Large batches would be M sequential per-client RPCs; the inbound's saved
-		// settings already hold the final set, so mark dirty and let one reconcile
-		// push converge the node instead.
-		if push && len(clients) > nodeBulkPushThreshold {
-			push = false
-		}
-		for _, client := range clients {
-			// /clients/add on the node historically coerced enable=true; skip live
-			// push for disabled clients and leave dirty so reconcile converges.
-			if !client.Enable {
+		} else {
+			// Large batches would be M sequential per-client RPCs; the inbound's saved
+			// settings already hold the final set, so mark dirty and let one reconcile
+			// push converge the node instead.
+			if push && len(clients) > nodeBulkPushThreshold {
 				push = false
-				continue
+			}
+			for _, client := range clients {
+				// /clients/add on the node historically coerced enable=true; skip live
+				// push for disabled clients and leave dirty so reconcile converges.
+				if !client.Enable {
+					push = false
+					continue
+				}
+				if push {
+					ctx, cancel := nodePushContext()
+					err1 := rt.AddClient(ctx, oldInbound, client)
+					cancel()
+					if err1 != nil {
+						logger.Warning("Error in adding client on", rt.Name(), ":", err1)
+						push = false
+					}
+				}
 			}
 			if push {
-				ctx, cancel := nodePushContext()
-				err1 := rt.AddClient(ctx, oldInbound, client)
-				cancel()
-				if err1 != nil {
-					logger.Warning("Error in adding client on", rt.Name(), ":", err1)
-					push = false
-				}
+				advancePushedInbound(rt, prevSettings, string(newSettings), oldInbound)
 			}
 		}
-		if push {
-			advancePushedInbound(rt, prevSettings, string(newSettings), oldInbound)
-		}
-	}
 
-	return needRestart, nil
+		return needRestart, nil
+	}
+	return &preparedInboundClientAdd{persist: persist, apply: apply}, nil
 }
 
 func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *model.Inbound, oldEmail string) (bool, error) {

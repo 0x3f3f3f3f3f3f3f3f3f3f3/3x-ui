@@ -2,9 +2,6 @@ package service
 
 import (
 	"strings"
-	"time"
-
-	"github.com/google/uuid"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
@@ -91,163 +88,33 @@ func (s *ClientService) ExportAll() ([]ClientCreatePayload, error) {
 	return out, nil
 }
 
-// ImportClients recreates exported clients; existing emails are Skipped.
-// Traffic is applied only for newly created emails so live counters stay intact (#5858).
+// ImportClients skips existing identities and commits each complete restoration
+// before applying it to Runtime. Attached items retain precedence over orphans.
 func (s *ClientService) ImportClients(inboundSvc *InboundService, items []ClientCreatePayload) (BulkCreateResult, bool, error) {
 	result := BulkCreateResult{}
-	if len(items) == 0 {
-		return result, false, nil
-	}
-
-	attached := make([]ClientCreatePayload, 0, len(items))
-	attachedSrc := make([]int, 0, len(items))
-	orphans := make([]ClientCreatePayload, 0)
-	orphanSrc := make([]int, 0)
-	for i := range items {
-		if len(items[i].InboundIds) > 0 {
-			attached = append(attached, items[i])
-			attachedSrc = append(attachedSrc, i)
-		} else {
-			orphans = append(orphans, items[i])
-			orphanSrc = append(orphanSrc, i)
-		}
-	}
-	inserted := make([]int, 0, len(items))
-
-	skip := func(email, reason string) {
-		if strings.TrimSpace(email) == "" {
-			email = "(missing email)"
-		}
-		result.Skipped = append(result.Skipped, BulkCreateReport{Email: email, Reason: reason})
-	}
-
 	needRestart := false
-	if len(attached) > 0 {
-		sub, subInserted, nr, err := s.bulkCreate(inboundSvc, attached)
-		if err != nil {
-			return result, needRestart, err
-		}
-		needRestart = needRestart || nr
-		result.Created += sub.Created
-		result.Skipped = append(result.Skipped, sub.Skipped...)
-		for _, j := range subInserted {
-			inserted = append(inserted, attachedSrc[j])
-		}
-	}
-
-	db := database.GetDB()
-	for i := range orphans {
-		client := orphans[i].Client
-		email := strings.TrimSpace(client.Email)
-		if email == "" {
-			skip("", "client email is required")
-			continue
-		}
-		if verr := validateClientEmail(email); verr != nil {
-			skip(email, verr.Error())
-			continue
-		}
-		if verr := validateClientSubID(client.SubID); verr != nil {
-			skip(email, verr.Error())
-			continue
-		}
-		if verr := validateClientRenewal(client); verr != nil {
-			skip(email, verr.Error())
-			continue
-		}
-		if verr := validateClientResetMax(client.ResetMax); verr != nil {
-			skip(email, verr.Error())
-			continue
-		}
-		if verr := validateClientTrafficReset(client.TrafficReset, client.TrafficResetDay); verr != nil {
-			skip(email, verr.Error())
-			continue
-		}
-
-		// An existing record (in the DB or just created from the attached set
-		// above) always wins — import never clobbers a live client.
-		var taken int64
-		if err := db.Model(&model.ClientRecord{}).Where("email = ?", email).Count(&taken).Error; err != nil {
-			return result, needRestart, err
-		}
-		if taken > 0 {
-			skip(email, "email already in use: "+email)
-			continue
-		}
-
-		client.Email = email
-		if client.SubID == "" {
-			client.SubID = uuid.NewString()
-		}
-		if client.SubID != "" {
-			var subTaken int64
-			if err := db.Model(&model.ClientRecord{}).
-				Where("sub_id = ? AND email <> ?", client.SubID, email).
-				Count(&subTaken).Error; err != nil {
-				return result, needRestart, err
-			}
-			if subTaken > 0 {
-				skip(email, "subId already in use: "+client.SubID)
+	for _, attached := range []bool{true, false} {
+		for _, item := range items {
+			if (len(item.InboundIds) > 0) != attached {
 				continue
 			}
-		}
-		// Preserve exported enable so a disabled orphan stays disabled (#6478).
-		now := time.Now().UnixMilli()
-		if client.CreatedAt == 0 {
-			client.CreatedAt = now
-		}
-		client.UpdatedAt = now
-
-		rec := client.ToRecord()
-		rec.LimitHwid = orphans[i].LimitHwid
-		if err := db.Create(rec).Error; err != nil {
-			skip(email, err.Error())
-			continue
-		}
-		// gorm default:true drops enable=false on Create — restate (#6478).
-		if !client.Enable {
-			if err := db.Model(&model.ClientRecord{}).Where("id = ?", rec.Id).
-				UpdateColumn("enable", false).Error; err != nil {
-				return result, needRestart, err
-			}
-		}
-		result.Created++
-		inserted = append(inserted, orphanSrc[i])
-	}
-
-	if err := applyPortableTraffics(inboundSvc, items, inserted); err != nil {
-		return result, needRestart, err
-	}
-
-	return result, needRestart, nil
-}
-
-// applyPortableTraffics restores counters only for items that inserted a record,
-// in batched serialized transactions rather than one writer round-trip per client.
-func applyPortableTraffics(inboundSvc *InboundService, items []ClientCreatePayload, inserted []int) error {
-	const batchSize = 400
-	withTraffic := make([]int, 0, len(inserted))
-	for _, i := range inserted {
-		if items[i].Traffic != nil {
-			withTraffic = append(withTraffic, i)
-		}
-	}
-	for start := 0; start < len(withTraffic); start += batchSize {
-		batch := withTraffic[start:min(start+batchSize, len(withTraffic))]
-		if err := runSerializedTx(func(tx *gorm.DB) error {
-			emails := make([]string, 0, len(batch))
-			for _, i := range batch {
-				if err := applyPortableTraffic(tx, inboundSvc, items[i]); err != nil {
-					return err
+			committed, restart, err := s.importPortableClient(inboundSvc, item)
+			needRestart = needRestart || restart
+			if committed {
+				result.Created++
+				if err != nil {
+					return result, needRestart, err
 				}
-				emails = append(emails, strings.TrimSpace(items[i].Client.Email))
+			} else if err != nil {
+				email := strings.TrimSpace(item.Client.Email)
+				if email == "" {
+					email = "(missing email)"
+				}
+				result.Skipped = append(result.Skipped, BulkCreateReport{Email: email, Reason: err.Error()})
 			}
-			return adjustGroupBaselinesForRestoredTraffic(tx, emails)
-		}); err != nil {
-			return err
 		}
 	}
-	return nil
+	return result, needRestart, nil
 }
 
 // applyPortableTraffic writes the exported counters. Attached clients got their row

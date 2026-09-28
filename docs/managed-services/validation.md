@@ -1170,3 +1170,78 @@ Further final checks passed:
   produced the embedded panel used by the passing final browser fixture.
 - Docs `npm run typecheck` passed, including MDX generation, Next route types
   and TypeScript (`/tmp/3x-ui-ssh-ui-docs-types.log`).
+
+
+### Portable restoration transaction (2026-09-28)
+
+The old importer activated attached clients before restoring counters, left
+created clients behind after a failed restore, and reused matching email/subId
+identities despite the documented skip-existing behavior. New regression tests
+first reproduced all three failures, plus a partially committed first attachment
+when the second attachment failed. The node Runtime boundary observed 0/0 rather
+than the fixture's 17/23 bytes before the change. After the change it observes
+17/23 with resetCount=2 from the already committed restoration.
+
+A separate RED test found the SSH ledger remained at 0/0 after restoring raw
+5/6, and an orphan SSH import had no ledger. Both now restore 11 billed bytes at
+legacy default multiplier 1 with a fresh policy identity; a quota of 11 rejects
+admission. Negative upload/download, overflowing raw sum and negative reset
+counts are rejected without creating a client. These tests exercise the actual
+DB/service/admission ledger, not an SSH network connection; they do not prove
+complete portable policy support or remote-node quota synchronization.
+
+Commands so far:
+
+- `go test ./internal/web/service -run '^Test(Import|ExportImport|BulkCreate|AddInboundClient)' -count=1`:
+  PASS, 2.319s.
+- `XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' go test ./internal/web/service -run '^TestPortableRestoration_Postgres$' -count=1 -v`:
+  PASS, 6.321s, all six groups ran; no PostgreSQL skip.
+- `go test ./internal/web/controller -run TestImportHandlerRestartsOnlyCommittedRestorations -count=1`:
+  PASS, 0.477s; a failed item's DB state rolls back while an earlier successful
+  item retains its restart flag and is counted once.
+- `golangci-lint run ./internal/web/service/... ./internal/web/controller/...`:
+  0 issues.
+
+The initial SSH fixture run inside the network sandbox failed to allocate its
+loopback routing bridge. The authorized isolated-network rerun reached the
+intended ledger assertion failures before implementation; this environment
+failure is not counted as a functional RED. A first test compile used pointer
+dereferences on value records and was corrected before the meaningful RED run.
+
+The operation now holds sorted inbound locks, prepares every attachment, checks
+identity inside the serialized writer and commits all attachments, counters,
+HWID and group baselines together. Runtime dispatch follows commit and stays
+outside the database writer. Normal AddInboundClient reuses the same separated
+preparation/persistence/apply phases. Per-client transactions replace the old
+inbound batch import; large-import performance has not yet been measured.
+Portable policy rates, non-1x charged history, exact-string payloads and a
+consistent export snapshot remain the next increment.
+
+
+Full Go regression for the atomic-restore increment:
+`XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' XRAY_E2E_BINARY=/tmp/3x-ui-xray-pinned go test ./... -count=1`
+exited 0: 50 packages passed, six packages had no tests. Database package
+58.621s, service package 109.401s, controller package 6.083s. This includes the
+existing real SSH/Xray paths; a new real-client portable-policy round trip has
+not yet been added. Optional tests gated by other environment variables (such
+as scale and externally configured database commit-failure tests) remain
+conditional; package success does not convert their skips into executed tests.
+
+
+Focused race regression with the same PostgreSQL DSN:
+`go test -race ./internal/web/service ./internal/web/controller -run '^Test(PortableRestoration_Postgres|Import|ExportImport|BulkCreate|AddInboundClient)' -count=1`
+PASS, service 34.584s and controller 7.606s. `make gen-check` passes after
+regenerating the API description; frontend and docs OpenAPI files match.
+
+
+Frontend API-description validation: `npm run typecheck`, `npm run lint`,
+`npm run format:check` (724 files) and `npm run build` all pass; Vite 2.67s.
+No frontend behavior or schema changed in this increment. The full frontend
+suite's prior 181-file/1769-test result is recorded above, not rerun or counted
+as a fresh result for this documentation-only frontend edit.
+
+`npm --prefix docs run typecheck`, `go build -o /tmp/3x-ui-portable-panel .`
+and whole-repository `golangci-lint run` pass (0 issues). No schema migration
+is required: this change orders writes to existing client, traffic and ledger
+tables. The generated OpenAPI copy and MDX reference describe the new per-item
+rollback/skip behavior.
