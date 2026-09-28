@@ -66,6 +66,14 @@ func TestProductionHTTPServersUseServeHTTPWrapper(t *testing.T) {
 			if entry.Name() == ".git" || entry.Name() == "vendor" || entry.Name() == "node_modules" {
 				return filepath.SkipDir
 			}
+			// Separate Go modules cannot import the panel's internal HTTP wrapper.
+			if path != repoRoot {
+				if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
+					return filepath.SkipDir
+				} else if !os.IsNotExist(err) {
+					return err
+				}
+			}
 			return nil
 		}
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || path == currentFile || path == filepath.Join(filepath.Dir(currentFile), "serve.go") {
