@@ -1,0 +1,57 @@
+# Protocol × feature × direction × test status
+
+This is the initial source-audit matrix, not a support announcement. `E/U` = existing code, runtime unverified here; `N` = requested but not implemented; `NA` = not applicable with reason. New implementation uses `I/U` until matching tests pass (`I/V`). Scope is the entire original request.
+
+## Current protocol coverage
+
+| Protocol/path | Inbound/outbound baseline | Client lifecycle / export | Unified stable ID/rate/billing/quota/live close | Required evidence |
+| --- | --- | --- | --- | --- |
+| VLESS | E/U both | E/U | N | authenticated rotation, TCP/UDP/mux/Vision, real client regression |
+| VMess | E/U both | E/U | N | TCP/UDP/mux and account lifecycle |
+| Trojan | E/U both | E/U | N | TCP/UDP/fallback and account lifecycle |
+| Shadowsocks/2022 | E/U both | E/U | N | cipher variants, TCP/UDP/relay, identity |
+| Mixed/SOCKS | E/U both (outbound socks) | E/U | N | authenticated user versus anonymous listener, UDP |
+| HTTP | E/U both | E/U | N | auth, CONNECT, normal request path, raw-copy |
+| Hysteria2 | E/U both | E/U | N | QUIC/mux/UDP and auth updates |
+| WireGuard | E/U both | E/U | N | per-peer identity, IP/payload accounting distinction |
+| TUN | E/U inbound | no account auth; resource identity required | N | packet semantics, route and owner mapping |
+| Tunnel/dokodemo-door | E/U inbound; NA outbound (listener adapter) | forwarding client lifecycle N | N | TCP/UDP, all routing modes, owner lifecycle, shared policy |
+| Snell v4 | N both | N | N | official Surge interoperability + independent outbound test |
+| Snell v5 | N both | N | N | v4-like paths separately, QUIC Proxy Mode mandatory |
+| Snell v6 beta | N both | N | N | fixed beta client/server, shaping modes, TCP/UDP/reuse |
+| mieru | N both | N | N | official client/server, TCP/UDP/mux, deleted active users |
+| SSH | N both | N | N | OpenSSH -L/-D/authorized -R, strict upstream host key |
+| MTProto | E/U external mtg-multi; migration N | E/U secrets/ad-tags | N | preserve features, move execution into core |
+| TUIC v5 | E/U external tuic-server; migration N | E/U | N | preserve QUIC/UDP, remove panel relay after parity |
+| AmneziaWG | E/U panel-side runtime; migration N | E/U peers/forwarding | N | preserve obfuscation/IPv6/per-peer data, direct dispatcher |
+| Freedom/direct, block, DNS, loopback | E/U outbound | NA account service | managed-flow traversal N | route correctness, no fallback or loop/bypass |
+
+## Feature cross-product checklist
+
+Each applicable row above must cover **both directions separately** and every feature below. Until protocol-specific evidence replaces this default, original features are E/U and custom integration is N; no implicit checked cells.
+
+| Feature group | Existing source anchors | Custom integration / tests |
+| --- | --- | --- |
+| Service create/edit/delete/enable, hot apply | `internal/web/service/inbound*`, `internal/xray/hot_diff.go` | N |
+| Client create/edit/delete, rename/credential rotation, disable, bulk/groups | `client_crud.go`, `client_bulk.go`, `client_inbound_apply.go` | N |
+| Upload/download rate, quota/multiplier/reset/renew/expiry | `inbound_traffic.go`, `traffic_writer.go`, ClientTraffic/ClientRecord | N |
+| Counters, online IP, connections, logs, restriction reasons | xray API, traffic jobs, websocket | N |
+| IP/HWID/concurrency restrictions | Fail2ban and subscription HWID paths | N; source IP is not a trusted device ID |
+| Routing, DNS, outbounds, block, balancing and chains | core Dispatcher/Router and panel xray forms | N |
+| Share/QR/subscription/config export | `internal/sub`, `frontend/src/lib/xray`, `docs/lib/xray` | N |
+| API, permission checks and notifications | controller/runtime, Telegram/Discord/email/eventbus | N |
+| SQLite/PostgreSQL migrations, backup/restore/import/export | `internal/database`, server service | N |
+| Install/upgrade/Docker/platform matrix | install/update, DockerInit, CI/release workflows | N |
+| Node sync and global budgets/rates, outage/replay | runtime Local/Remote, node and global traffic models | N |
+| LDAP sync, external subscription links, hosts, renewal schedules | existing services/jobs and DB relationships | N; preserve current behavior |
+| Performance, faults, fuzz, leak/security and clean build | existing tests plus requirements §15 | N |
+
+## Explicit inapplicability
+
+- Standard SSH -L/-D/-R are TCP, not arbitrary UDP tunnels; do not fabricate UDP support.
+- Snell v6 has no v5 QUIC Proxy Mode per official Surge documentation; its own UDP forwarding remains required.
+- A forwarding listener has no business credential handshake: its server-owned exclusive resource is the trusted identity source.
+- A client format with no representation of a protocol cannot receive a fabricated subscription entry; provide its actual config/instructions.
+- Encrypted/opaque payloads do not guarantee sniffable domains, nor do ordinary proxy accounts provide trusted device IDs.
+
+Lack of an upstream API, platform test machine or commercial client is **not** inapplicability. It is development or verification work still outstanding.

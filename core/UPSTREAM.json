@@ -1,0 +1,11 @@
+{
+  "upstream": "https://github.com/XTLS/Xray-core",
+  "tag": "v26.9.9",
+  "commit": "52a412d9e2f5c2a5142b1b4e2ab3771dacb8b120",
+  "prerelease": true,
+  "source_files": 1039,
+  "license": "MPL-2.0; retain file-specific licenses",
+  "panel_base": "17d7dd46b512d0a9c22921a6094f30c672e436c9",
+  "import_method": "git archive of immutable upstream commit; complete tracked tree",
+  "archive_sha256": "a02b8fb5dab6438a5754351562163deea659018eb0a4eb8c282c463d4ae4fdbf"
+}
