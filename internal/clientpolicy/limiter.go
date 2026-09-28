@@ -22,7 +22,10 @@ var (
 	ErrShaperBusy   = errors.New("client rate queue is full")
 )
 
-type rateWaiter struct{ requested int }
+type rateWaiter struct {
+	requested int
+	datagram  bool
+}
 
 // One Limiter belongs to one client's direction, shared by every connection and listener.
 type Limiter struct {
@@ -58,6 +61,18 @@ func (l *Limiter) SetRate(rate int64) error {
 
 // Acquire returns a bounded grant; callers forward at most that many bytes before requesting more.
 func (l *Limiter) Acquire(ctx context.Context, requested int) (int, error) {
+	return l.acquire(ctx, requested, false)
+}
+
+// AcquireDatagram keeps packet boundaries while sharing bounded token debt with streams.
+func (l *Limiter) AcquireDatagram(ctx context.Context, requested int) (int, error) {
+	if requested > MaxGrant {
+		return 0, ErrInvalidGrant
+	}
+	return l.acquire(ctx, requested, true)
+}
+
+func (l *Limiter) acquire(ctx context.Context, requested int, datagram bool) (int, error) {
 	if requested <= 0 {
 		return 0, ErrInvalidGrant
 	}
@@ -69,7 +84,7 @@ func (l *Limiter) Acquire(ctx context.Context, requested int) (int, error) {
 	if len(l.waiters) >= maxWaiters {
 		return 0, ErrShaperBusy
 	}
-	w := &rateWaiter{requested: min(requested, MaxGrant)}
+	w := &rateWaiter{requested: min(requested, MaxGrant), datagram: datagram}
 	l.waiters = append(l.waiters, w)
 	for {
 		if err := ctx.Err(); err != nil {
@@ -83,6 +98,9 @@ func (l *Limiter) Acquire(ctx context.Context, requested int) (int, error) {
 		if l.waiters[0] == w {
 			grant := min(w.requested, l.burst)
 			if l.rate == 0 || l.tokens >= float64(grant) {
+				if w.datagram {
+					grant = w.requested
+				}
 				if l.rate > 0 {
 					l.tokens -= float64(grant)
 				}

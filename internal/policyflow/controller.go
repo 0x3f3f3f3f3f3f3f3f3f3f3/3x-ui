@@ -1,4 +1,4 @@
-// Package policyflow owns authenticated clients' shared stream budgets and active connections.
+// Package policyflow owns authenticated clients' shared payload budgets and active connections.
 package policyflow
 
 import (
@@ -233,7 +233,7 @@ func (s *clientState) closeFlows(cause error) {
 	}
 }
 
-func (s *clientState) admit(ctx context.Context, direction Direction, requested int) (int, error) {
+func (s *clientState) admit(ctx context.Context, direction Direction, requested int, partial bool) (int, error) {
 	s.opMu.Lock()
 	defer s.opMu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -265,7 +265,7 @@ func (s *clientState) admit(ctx context.Context, direction Direction, requested 
 			return requested, nil
 		}
 		var quota *database.UsageQuotaError
-		if errors.As(err, &quota) && quota.RawAllowance > 0 && quota.RawAllowance < int64(requested) {
+		if partial && errors.As(err, &quota) && quota.RawAllowance > 0 && quota.RawAllowance < int64(requested) {
 			requested = int(quota.RawAllowance)
 			continue
 		}
@@ -343,7 +343,7 @@ func (w *flowWriter) Write(p []byte) (int, error) {
 		if err != nil {
 			return written, err
 		}
-		grant, err = s.admit(w.flow.ctx, w.direction, grant)
+		grant, err = s.admit(w.flow.ctx, w.direction, grant, true)
 		if err != nil {
 			if w.flow.ctx.Err() == nil || s.fault.Load() != nil {
 				s.closeFlows(err)
