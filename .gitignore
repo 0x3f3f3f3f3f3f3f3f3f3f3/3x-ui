@@ -23,7 +23,7 @@ release/
 node_modules/
 
 # Ignore compiled binaries
-main
+/main
 3x-ui
 
 # Ignore OS specific files
@@ -43,3 +43,6 @@ docker-compose.override.yml
 
 # Ignore .env (Environment Variables) file
 .env
+
+# Custom core build artifacts
+/build/
