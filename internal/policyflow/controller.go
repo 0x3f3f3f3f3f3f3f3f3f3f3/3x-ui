@@ -367,6 +367,15 @@ func (w *flowWriter) Write(p []byte) (int, error) {
 }
 
 func (c *Controller) Proxy(ctx context.Context, policyID string, client io.ReadWriteCloser, dial func(context.Context) (io.ReadWriteCloser, error)) error {
+	return c.proxy(ctx, policyID, client, dial, false)
+}
+
+// ProxyToClient checks admission before opening a reverse tunnel's client-side channel.
+func (c *Controller) ProxyToClient(ctx context.Context, policyID string, endpoint io.ReadWriteCloser, openClient func(context.Context) (io.ReadWriteCloser, error)) error {
+	return c.proxy(ctx, policyID, endpoint, openClient, true)
+}
+
+func (c *Controller) proxy(ctx context.Context, policyID string, client io.ReadWriteCloser, dial func(context.Context) (io.ReadWriteCloser, error), reverse bool) error {
 	f, err := c.Open(ctx, policyID, client)
 	if err != nil {
 		_ = client.Close()
@@ -379,6 +388,9 @@ func (c *Controller) Proxy(ctx context.Context, policyID string, client io.ReadW
 	}
 	if err := f.bind(upstream); err != nil {
 		return err
+	}
+	if reverse {
+		client, upstream = upstream, client
 	}
 	results := make(chan error, 2)
 	copyStream := func(dst io.ReadWriteCloser, src io.Reader, direction Direction) {

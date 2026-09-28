@@ -123,11 +123,20 @@ integration, public controls, UDP and distributed enforcement remain open.
 Files: new `internal/sshtunnel`, existing protocol model/Runtime/service,
 frontend protocol schemas/forms, translations, sub/export, deployment.
 
-- [ ] Real OpenSSH -L/-D/-R tests first; independent keys and channels.
-- [ ] Dedicated server; deny shell/exec/PTY/SFTP/agent and default -R.
+- [x] Real OpenSSH -L/-D/-R tests first; independent keys and channels.
+- [x] Dedicated server; deny shell/exec/PTY/SFTP/agent and default -R.
 - [ ] Target/listener restrictions; strict SSH upstream host key verification.
 - [ ] Unified routed outbound bridge, counters/policy/live cutoff/health.
 - [ ] Complete UI/API/backup/node/export/install; test faults; commit/push.
+
+The internal SSH server now implements authenticated TCP forwarding, bounded
+authorized reverse listeners, live key revocation and shared policy flows.
+Real OpenSSH verifies duplex shaping, quota at four multipliers and server/
+controller restart. It has no production manager or panel creation path yet.
+The required dial adapter carries immutable identity, inbound tag and original
+destination; the current tests supply real TCP dialers, not an Xray router.
+Standard -R does not reveal the client-side target to the server; listener ACLs
+do not claim to enforce that target. See semantics.md for the open constraint.
 
 ## Task 6: mieru vertical integration
 

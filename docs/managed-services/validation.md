@@ -328,3 +328,97 @@ Production adapters, immutable auth bindings, rate persistence/API/UI,
 first-use activation, separate restriction reasons, UDP, multi-node leases,
 historical-backup reconciliation and the complete A–E protocol matrix remain
 open. This controller milestone is not completion of Tasks 3–9.
+
+## SSH forwarding server milestone (management/routing integration pending)
+
+The internal SSH server was tested with **OpenSSH_9.6p1
+Ubuntu-3ubuntu13.19**, OpenSSL 3.0.13, and the repository's pinned
+`golang.org/x/crypto v0.57.0`. Each fixture generates separate Ed25519 host/user
+keys and a strict known_hosts file in temporary directories. The tests do not
+read the Git credential, modify host sshd, or create non-loopback listeners.
+The reusable server is not yet exposed by the panel/Runtime.
+
+Reproduce with OpenSSH client `ssh` available in PATH and loopback sockets:
+
+```sh
+go test ./internal/sshtunnel -count=1 -v
+go test -race ./internal/sshtunnel ./internal/policyflow -count=1 -v
+golangci-lint run ./internal/sshtunnel/... ./internal/policyflow/...
+```
+
+- Real -L/-D processes deliver four simultaneous payload channels through two
+  authenticated SSH connections. Raw upload/download and 2× billing match.
+  The required dial adapter receives immutable client ID, inbound tag and the
+  original `localhost` destination. The tests use TCP dialers; they do **not**
+  prove Xray rule evaluation or production route integration.
+- Real -R delivers asymmetric payloads: client upload 1,408 bytes, download
+  9,216 bytes, billed 21,248 at 2×. In the final race run, disabling the client
+  terminated SSH and released the reverse listener in 366ms (bound 1.25s).
+- Authenticated requests verify default -R denial, exact bind address/port
+  permissions, 16-listener capacity, cancellation/rebinding and returned
+  capacity. Another test initially reached a reverse target before checking
+  depleted quota; ProxyToClient now checks first, and that reproduction passes.
+- Session, agent, X11 and client-originated forwarded-tcpip requests are denied;
+  target allowlists and the 64-channel limit are exercised over real SSH. The
+  channel-cap test first failed when a 65th channel was accepted, then passed.
+- OpenSSH rejects an unauthorized client key and an unexpected server host key.
+  Adding a new key preserves old authorized sessions; removing the old key
+  closes only those sessions, keeping the new key and another client alive.
+  A signed handshake paused across key removal is rejected before target dial.
+  Removing its post-handshake recheck made that real target reachable; restoring
+  the check returned GREEN.
+
+The quota test uses a 1 MiB billed allowance, four long TCP channels and two
+real OpenSSH processes. Independent target reads match every admitted byte in
+the final race run. Its bound was fixed beforehand: target bytes must not exceed
+the raw allowance and may fall short by at most four 32 KiB grants. Removing the
+quota gate at 2× admitted 557,056 rather than 524,288 bytes and failed the test;
+the gate was restored before final verification.
+
+| Multiplier | Raw admitted / target bytes | Billed bytes |
+|---|---:|---:|
+| 0.5× | 2,097,152 / 2,097,152 | 1,048,576 |
+| 1× | 1,048,576 / 1,048,576 | 1,048,576 |
+| 1.5× | 699,050 / 699,050 | 1,048,575 |
+| 2× | 524,288 / 524,288 | 1,048,576 |
+
+At 1.5× the remaining billed byte cannot pay for another whole raw byte. Every
+case terminates the existing transfers and rejects a new OpenSSH transport
+after replacing both the SSH server and controller against the same database.
+This is in-process instance restart coverage, not panel-process kill or machine
+power-loss recovery. Separate download/reverse quota stress remains to add.
+
+The duplex rate test uses two same-IP clients, two OpenSSH processes/four
+channels each. A bills at 2×, B at 1×; rates depend only on raw payload. Its
+limits match the previously fixed controller test: 300ms warmup; 1.8s initial
+window; 250ms settling plus 1.5s live windows; upper rate × time × 1.06 + burst,
+lower rate × time × 0.80. Each change window finishes within two seconds.
+
+Initial runs failed the download floor. Diagnostics found 144,166 bytes admitted
+but only 104,848 observed for the measured client: a startup connection probe
+had opened real forwarding channels and consumed download credit outside the
+observed group. Startup now uses `ssh -S <private-control-socket> -O check`, which
+opens no target channel. No duration, rate or acceptance tolerance was loosened.
+Ignoring Configure changes made real SSH exceed its rate bound and fail.
+
+| Final race run | A upload / download B/s | B upload / download B/s |
+|---|---:|---:|
+| Initial A=64/128, B=128/64 KiB/s | 65,520 / 131,039 | 127,399 / 61,880 |
+| A changed to 32/64 KiB/s | 32,737 / 64,127 | 135,347 / 65,489 |
+| A changed to 128/128 KiB/s | 131,079 / 126,976 | 135,440 / 65,530 |
+
+Unlimited SSH baseline was 2.51/2.47 MB/s under race instrumentation (5.12/5.13
+MB/s without it), above the required eight times the largest cap. High-rate
+capacity work noted in the controller milestone remains open.
+
+- `make test-go`: exit 0 across the full Go suite after server/rotation changes.
+  Added quota/rate fixtures then passed the complete SSH/controller race run.
+- Final race: SSH PASS 14.987s; shared flow controller PASS 14.339s.
+- Final package lint: exit 0, zero issues; diff whitespace check clean.
+- All mutation changes were reverted. No skipped tests are counted here.
+
+Pending: actual Xray routing/egress/block tests, strict-host-key SSH upstream,
+production supervision and capability reports, CRUD/API/UI, persistent policy
+controls, first-use/reason lifecycle, logs/online/IP limits, export, node sync,
+deployment and complete backup/recovery acceptance. Standard -R client-side
+target enforcement remains constrained by unavailable protocol metadata.

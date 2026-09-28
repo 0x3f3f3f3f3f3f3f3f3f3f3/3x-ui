@@ -92,3 +92,20 @@ invalid fields, never common management features.
 No common management feature is marked not applicable because of backend
 difficulty or missing runtime support. Snell IP-only egress domain visibility,
 MTProto egress identity and TUIC attribution remain unresolved requirements.
+
+## Internal SSH backend evidence
+
+The new-service matrix above covers integrated panel services and remains N
+until those paths exist. These narrower backend results are verified separately;
+they do not imply UI/API/routing/deployment or multi-node completion.
+
+| Internal SSH capability | Status | Evidence |
+|---|---|---|
+| Public-key TCP -L/-D and authorized -R | V | Real OpenSSH 9.6p1 requests and exact payload checks |
+| Identity/destination passed to dial adapter | V | Stable policy ID, inbound tag and original domain/port |
+| Default privilege denial and listener/channel bounds | V | Authenticated SSH requests, capacity rejection and listener reuse |
+| Live credential revocation | V | Existing-key removal, other-user isolation and an in-flight signed handshake |
+| Aggregate duplex rate / live update | V | Two same-IP clients, two SSH processes/four channels each, independent socket counts |
+| Quota / multiplier / restart denial | V | OpenSSH long transfers at 0.5/1/1.5/2×; server/controller restart |
+| Xray route execution, production manager and panel integration | N | Required destination-aware adapter exists; production wiring remains |
+| Enforcing a standard -R client's local target | N | Target absent from protocol; listener ACL is not target enforcement |

@@ -103,3 +103,46 @@ and [PostgreSQL WAL contract](https://www.postgresql.org/docs/16/runtime-config-
 They depend on the underlying storage honoring sync operations. Tests cover
 settings and process/controller persistence, not physical power interruption
 or recovery of traffic newer than a restored historical backup.
+
+## Implemented SSH server boundary
+
+`internal/sshtunnel` is currently an internal backend, not a panel-enabled
+service. It uses public-key authentication, one stable policy ID per client
+and a shared flow controller across SSH connections, channels and bindings.
+Authentication/SSH framing, encryption and internal bridge bytes are excluded
+from application-payload billing. The authenticated transport is tracked for
+revocation but its encrypted stream is not counted a second time.
+
+Direct TCP channels (-L/-D) preserve the requested host and port in the required
+dial adapter, alongside policy ID and inbound tag. Empty target rules deny all;
+explicit `*` host or zero target port permits any value in that dimension.
+Only direct-tcpip channels are accepted from clients. Session channels, hence
+shell/exec/PTY/SFTP, plus agent/X11 and client-originated forwarded-tcpip are
+rejected. No native UDP capability is implemented or advertised.
+
+Reverse forwarding is disabled unless the client has explicit Reverse rules.
+Each rule allows an exact literal bind IP and port; reverse port zero permits
+only a request for an OS-allocated port, not arbitrary client-selected ports.
+IPv4/IPv6 listeners use their explicit address family. A transport may own at
+most 16 reverse listeners; the server at most 256. Cancellation closes only the
+owned listener. Disconnect, disable, expiry, quota and ACL/key revocation clean
+up all that transport's listeners. Existing accepted channels are separately
+tracked by the shared controller. A reverse target channel opens only after
+policy admission, and its directions remain relative to the SSH client:
+server-listener → client is download; client → server-listener is upload.
+
+The SSH connection protocol's forwarded-tcpip message contains the bound
+listener and originator, but not the client's local target. Therefore these
+server-side listener permissions cannot prove a client-side -R destination
+allowlist. That requirement remains unresolved; the UI/export must disclose
+the limitation and must not offer uncontrolled public listeners by default.
+See [RFC 4254 §7.2](https://www.rfc-editor.org/rfc/rfc4254.html#section-7.2).
+
+The server limits authentication to 10 seconds/3 attempts, 256 transport sockets,
+64 forwarding channels per transport and 256 forwarding channels per server.
+SSH/channel and kernel buffers are additional to the controller's copy buffers.
+Adding a key keeps valid existing sessions. Removing a key cancels sessions
+authenticated by that key; changes to target/reverse ACLs cancel affected
+sessions so stale grants cannot persist. Authentication is revalidated after
+the signed handshake to catch revocations during authentication. Rate changes
+go through the shared controller and preserve healthy existing connections.
