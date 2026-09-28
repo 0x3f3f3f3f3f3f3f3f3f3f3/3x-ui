@@ -17,16 +17,36 @@ type Manager interface {
 
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(_ context.Context, raw interface{}) (interface{}, error) {
-		e := NewEngine()
-		for _, p := range raw.(*Config).Policies {
-			if err := e.Apply(Policy{ClientID: p.ClientId, Version: p.Version, Enabled: p.Enabled, Multiplier: p.MultiplierMicros, QuotaBytes: p.QuotaBytes, UploadRate: p.UploadBytesPerSecond, DownloadRate: p.DownloadBytesPerSecond, BurstBytes: p.BurstBytes, ExpiresAt: p.ExpiresAt}); err != nil {
-				e.Close()
-				return nil, err
-			}
+		config := raw.(*Config)
+		e, err := OpenPersistentEngine(config.StateFile, config.InstanceId)
+		if err != nil {
+			return nil, err
 		}
+		policies := make([]Policy, 0, len(config.Policies))
+		for _, p := range config.Policies {
+			if p == nil {
+				e.Close()
+				return nil, ErrInvalidPolicy
+			}
+			policies = append(policies, Policy{ClientID: p.ClientId, Version: p.Version, Enabled: p.Enabled, Multiplier: p.MultiplierMicros, QuotaBytes: p.QuotaBytes, UploadRate: p.UploadBytesPerSecond, DownloadRate: p.DownloadBytesPerSecond, BurstBytes: p.BurstBytes, ExpiresAt: p.ExpiresAt})
+		}
+		if err := e.applyBatch(policies, false); err != nil {
+			e.Close()
+			return nil, err
+		}
+		e.initial = policies
+		e.ready.Store(false)
 		return e, nil
 	}))
 }
 
 func (*Engine) Type() interface{} { return (*Manager)(nil) }
-func (*Engine) Start() error      { return nil }
+func (e *Engine) Start() error {
+	e.startOnce.Do(func() {
+		e.startErr = e.ApplyBatch(e.initial)
+		if e.startErr == nil {
+			e.ready.Store(true)
+		}
+	})
+	return e.startErr
+}

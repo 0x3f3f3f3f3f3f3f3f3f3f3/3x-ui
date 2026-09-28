@@ -132,6 +132,8 @@ func (x *PolicyConfig) GetExpiresAt() int64 {
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Policies      []*PolicyConfig        `protobuf:"bytes,1,rep,name=policies,proto3" json:"policies,omitempty"`
+	StateFile     string                 `protobuf:"bytes,2,opt,name=state_file,json=stateFile,proto3" json:"state_file,omitempty"`
+	InstanceId    string                 `protobuf:"bytes,3,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -173,6 +175,20 @@ func (x *Config) GetPolicies() []*PolicyConfig {
 	return nil
 }
 
+func (x *Config) GetStateFile() string {
+	if x != nil {
+		return x.StateFile
+	}
+	return ""
+}
+
+func (x *Config) GetInstanceId() string {
+	if x != nil {
+		return x.InstanceId
+	}
+	return ""
+}
+
 var File_app_clientpolicy_config_proto protoreflect.FileDescriptor
 
 const file_app_clientpolicy_config_proto_rawDesc = "" +
@@ -190,9 +206,13 @@ const file_app_clientpolicy_config_proto_rawDesc = "" +
 	"\vburst_bytes\x18\b \x01(\x04R\n" +
 	"burstBytes\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\t \x01(\x03R\texpiresAt\"I\n" +
+	"expires_at\x18\t \x01(\x03R\texpiresAt\"\x89\x01\n" +
 	"\x06Config\x12?\n" +
-	"\bpolicies\x18\x01 \x03(\v2#.xray.app.clientpolicy.PolicyConfigR\bpoliciesB,Z*github.com/xtls/xray-core/app/clientpolicyb\x06proto3"
+	"\bpolicies\x18\x01 \x03(\v2#.xray.app.clientpolicy.PolicyConfigR\bpolicies\x12\x1d\n" +
+	"\n" +
+	"state_file\x18\x02 \x01(\tR\tstateFile\x12\x1f\n" +
+	"\vinstance_id\x18\x03 \x01(\tR\n" +
+	"instanceIdB,Z*github.com/xtls/xray-core/app/clientpolicyb\x06proto3"
 
 var (
 	file_app_clientpolicy_config_proto_rawDescOnce sync.Once

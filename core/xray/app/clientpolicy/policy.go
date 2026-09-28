@@ -7,14 +7,15 @@ import (
 )
 
 var (
-	ErrUnknownClient  = errors.New("unknown managed client")
-	ErrPolicyVersion  = errors.New("stale or conflicting client policy version")
-	ErrRestricted     = errors.New("client traffic restricted")
-	ErrRevoked        = errors.New("client identity revoked")
-	ErrSessionClosed  = errors.New("client session closed")
-	ErrEngineClosed   = errors.New("client policy engine closed")
-	ErrQueueFull      = errors.New("client admission queue full")
-	ErrPacketTooLarge = errors.New("payload exceeds client burst")
+	ErrEngineNotStarted = errors.New("client policy engine not started")
+	ErrUnknownClient    = errors.New("unknown managed client")
+	ErrPolicyVersion    = errors.New("stale or conflicting client policy version")
+	ErrRestricted       = errors.New("client traffic restricted")
+	ErrRevoked          = errors.New("client identity revoked")
+	ErrSessionClosed    = errors.New("client session closed")
+	ErrEngineClosed     = errors.New("client policy engine closed")
+	ErrQueueFull        = errors.New("client admission queue full")
+	ErrPacketTooLarge   = errors.New("payload exceeds client burst")
 )
 
 type Policy struct {
@@ -46,6 +47,7 @@ const (
 	ReasonExpired
 	ReasonQuota
 	ReasonRevoked
+	ReasonStorage
 )
 
 func (p Policy) reasons(u Usage, revoked bool, now time.Time) Reason {
@@ -78,6 +80,10 @@ type Metadata struct {
 }
 
 type Snapshot struct {
+	InstanceID     string `json:"instanceId"`
+	Epoch          uint64 `json:"epoch"`
+	Sequence       uint64 `json:"sequence"`
+	UncertainBytes uint64 `json:"uncertainBytes"`
 	Usage          Usage  `json:"usage"`
 	PolicyVersion  uint64 `json:"policyVersion"`
 	Reasons        Reason `json:"reasons"`

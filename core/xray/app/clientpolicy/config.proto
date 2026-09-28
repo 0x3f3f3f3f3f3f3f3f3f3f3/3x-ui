@@ -17,4 +17,6 @@ message PolicyConfig {
 
 message Config {
   repeated PolicyConfig policies = 1;
+  string state_file = 2;
+  string instance_id = 3;
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -191,8 +192,23 @@ func port(t *testing.T) int {
 
 func start(t *testing.T, config string) *core.Instance {
 	t.Helper()
+	var raw map[string]interface{}
+	if err := json.Unmarshal([]byte(config), &raw); err != nil {
+		t.Fatal(err)
+	}
+	if policy, ok := raw["clientPolicy"].(map[string]interface{}); ok && policy["stateFile"] == nil {
+		path := filepath.Join(t.TempDir(), "policy.db")
+		if err := clientpolicy.CreateStore(path, "test-node"); err != nil {
+			t.Fatal(err)
+		}
+		policy["stateFile"], policy["instanceId"] = path, "test-node"
+	}
+	data, err := json.Marshal(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var c conf.Config
-	if err := json.Unmarshal([]byte(config), &c); err != nil {
+	if err := json.Unmarshal(data, &c); err != nil {
 		t.Fatal(err)
 	}
 	pb, err := c.Build()
@@ -304,5 +320,80 @@ func TestTunnelTCPAndUDPOwnersShareLivePolicyThroughDispatcher(t *testing.T) {
 	snap, _ = e.Snapshot("stable-owner")
 	if snap.ActiveSessions != 0 || snap.Usage.BilledBytes != 8192 {
 		t.Fatalf("disabled traffic changed accounting: %+v", snap)
+	}
+}
+
+func TestTunnelRestartKeepsConsumedQuota(t *testing.T) {
+	echo := tcpEcho(t)
+	state := filepath.Join(t.TempDir(), "restart.db")
+	if err := clientpolicy.CreateStore(state, "restart-node"); err != nil {
+		t.Fatal(err)
+	}
+	listen := port(t)
+	config := fmt.Sprintf(`{"log":{"loglevel":"error"},"clientPolicy":{"stateFile":%q,"instanceId":"restart-node","policies":[{"clientId":"persisted","version":1,"enabled":true,"multiplierMicros":2000000,"quotaBytes":16384,"burstBytes":65536}]},"inbounds":[{"listen":"127.0.0.1","port":%d,"protocol":"tunnel","settings":{"network":"tcp","address":"127.0.0.1","port":%d,"clientId":"persisted"}}],"outbounds":[{"protocol":"freedom","settings":{"finalRules":[{"action":"allow","ip":["127.0.0.1"]}]}}]}`, state, listen, echo.Addr().(*net.TCPAddr).Port)
+	for epoch := uint64(1); epoch <= 3; epoch++ {
+		instance := start(t, config)
+		engine := instance.GetFeature((*clientpolicy.Manager)(nil)).(*clientpolicy.Engine)
+		c, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", listen))
+		if err != nil {
+			t.Fatal(err)
+		}
+		exchange(t, c, bytes.Repeat([]byte{9}, 1024))
+		c.Close()
+		snap, err := engine.Snapshot("persisted")
+		if err != nil || snap.Usage != (clientpolicy.Usage{RawUpload: epoch * 1024, RawDownload: epoch * 1024, BilledBytes: epoch * 4096}) || snap.UncertainBytes != 0 || snap.Epoch != epoch {
+			t.Fatalf("restart reset quota: %+v %v", snap, err)
+		}
+		if err := instance.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	recovered, err := clientpolicy.OpenPersistentEngine(state, "restart-node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer recovered.Close()
+	snap, _ := recovered.Snapshot("persisted")
+	if snap.Usage.BilledBytes != 12288 || snap.Epoch != 4 || snap.UncertainBytes != 0 {
+		t.Fatalf("final recovery: %+v", snap)
+	}
+}
+
+func TestInvalidCoreConfigReleasesStoreAndPreservesAppliedPolicy(t *testing.T) {
+	state := filepath.Join(t.TempDir(), "rejected.db")
+	if err := clientpolicy.CreateStore(state, "config-node"); err != nil {
+		t.Fatal(err)
+	}
+	e, err := clientpolicy.OpenPersistentEngine(state, "config-node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Apply(clientpolicy.Policy{ClientID: "existing", Version: 1, Enabled: true, Multiplier: 1000000, BurstBytes: 65536}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var config conf.Config
+	if err := json.Unmarshal([]byte(fmt.Sprintf(`{"clientPolicy":{"stateFile":%q,"instanceId":"config-node","policies":[{"clientId":"existing","version":2,"enabled":false,"multiplierMicros":2000000,"burstBytes":65536}]},"outbounds":[{"protocol":"freedom"}]}`, state)), &config); err != nil {
+		t.Fatal(err)
+	}
+	pb, err := config.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pb.Outbound[0].ProxySettings.Type = "invalid.test.Configuration"
+	if instance, err := core.New(pb); err == nil {
+		instance.Close()
+		t.Fatal("accepted invalid outbound configuration")
+	}
+	reopened, err := clientpolicy.OpenPersistentEngine(state, "config-node")
+	if err != nil {
+		t.Fatalf("failed config leaked durable store lock: %v", err)
+	}
+	defer reopened.Close()
+	snap, _ := reopened.Snapshot("existing")
+	if snap.PolicyVersion != 1 || snap.Reasons != 0 {
+		t.Fatalf("rejected core configuration changed active policy: %+v", snap)
 	}
 }

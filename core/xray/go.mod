@@ -23,6 +23,7 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/vishvananda/netlink v1.3.1
 	github.com/xtls/reality v0.0.0-20260908062103-8cdf7bf9c7f0
+	go.etcd.io/bbolt v1.5.0
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
 	golang.org/x/crypto v0.55.0
 	golang.org/x/exp v0.0.0-20240506185415-9bf2ced13842

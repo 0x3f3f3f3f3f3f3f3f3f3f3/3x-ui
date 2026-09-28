@@ -3,11 +3,16 @@ package conf
 import "github.com/xtls/xray-core/app/clientpolicy"
 
 type ClientPolicyConfig struct {
-	Policies []clientpolicy.Policy `json:"policies"`
+	StateFile  string                `json:"stateFile"`
+	InstanceID string                `json:"instanceId"`
+	Policies   []clientpolicy.Policy `json:"policies"`
 }
 
 func (c *ClientPolicyConfig) Build() (*clientpolicy.Config, error) {
-	out := new(clientpolicy.Config)
+	if c.StateFile == "" || c.InstanceID == "" {
+		return nil, clientpolicy.ErrInvalidPolicy
+	}
+	out := &clientpolicy.Config{StateFile: c.StateFile, InstanceId: c.InstanceID}
 	seen := make(map[string]bool)
 	for _, p := range c.Policies {
 		if err := p.Validate(); err != nil {

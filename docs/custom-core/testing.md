@@ -14,10 +14,10 @@ Environment: Linux arm64, 2 CPUs, isolated checkout from fork main `17d7dd46`; G
 | Go dependencies | `go mod download` | passed with network permission |
 | Panel with managed core | `make test-go` | passed; initial restricted-socket failures rerun with authorization; nested-module AST guard corrected after reproduced failure |
 | Frontend dependencies/build | Node 26 `npm ci`, `npm run build` | passed; npm audit reported 0 vulnerabilities |
-| Frontend full tests | `npm test` | failed: 16 timeouts in 10 files, 1726 tests passed, 2 teardown errors; concurrent load present; isolated rerun pending |
+| Frontend full tests | `npm test` | initial concurrent run failed with 16 timeouts and 2 teardown errors; isolated `npm test -- --maxWorkers=1` passed all 174 files / 1742 tests in 426.18 s, unchanged timeouts |
 | Panel build | `go build -o build/x-ui .` | passed |
 | Custom core build | `bash tools/build-custom-core.sh` | passed; distinctive Custom Xray-core 26.9.9-custom.1 version and source stamp, SHA256 output |
-| Core full suite | `go test -shuffle=on -count=1 ./...` | failed in testing/scenarios: WireGuard nil MemoryStreamConfig panic, then timeout; upstream reproduction still pending |
+| Core full suite | `go test -shuffle=on -count=1 ./...` | failed in testing/scenarios: WireGuard nil MemoryStreamConfig panic, then timeout; same nil MemoryStreamConfig panic independently reproduced at immutable upstream `52a412d9e2f5`, with an isolated core.New reproducer; fix/full rerun pending |
 | Targeted static checks | `go vet ./app/clientpolicy ./app/dispatcher ./proxy/dokodemo` | passed |
 
 No full-suite pass, PostgreSQL validation, clean-clone build, platform matrix or absence of skipped upstream tests is claimed.
@@ -44,7 +44,7 @@ In the 100 MiB test, the sender wrote 26,214,400 bytes and receiver read 26,206,
 
 ## Independent binary rate measurements
 
-`python3 tools/test-custom-tunnel-rates.py build/custom-xray` passed all six cases. Each starts a separate actual core process and two TCP connections sharing one client. Upload and download are measured separately at the receiving endpoint; exact machine-readable observations are [tunnel-rates.jsonl](evidence/tunnel-rates.jsonl).
+`python3 tools/test-custom-tunnel-rates.py --binary build/custom-xray` passed all six cases. Each starts a separate actual core process and two TCP connections sharing one client. Upload and download are measured separately at the receiving endpoint; exact machine-readable observations are [tunnel-rates.jsonl](evidence/tunnel-rates.jsonl).
 
 | Direction | Aggregate configured rate | Measured bytes/s | Measurement window |
 | --- | --- | --- | --- |
@@ -60,3 +60,21 @@ Limited cases warm up for 2 s and have a 65,536-byte shared directional burst. A
 These are local TCP Tunnel measurements. They do not establish UDP, every protocol, many-client fairness, cross-node rates, persistence overhead, or hot updates on real sockets. Those acceptance tests remain open.
 
 Keep credentials out of logs and reports. Restricted socket failures require authorized reruns, never skipped tests or weakened expectations. A baseline failure is not classified as pre-existing until isolated upstream comparison proves it.
+
+## Durable local execution state — 2026-09-28
+
+The next implementation requires an explicitly initialized private state file and matching instance ID whenever `clientPolicy` is configured. The in-memory engine constructor remains for isolated primitive tests; configured core traffic uses durable state. `policy-init` refuses existing files. Missing, corrupt, wrong-identity or concurrently locked files cause startup failure.
+
+New tests cover exact graceful restart (raw directions, fractional multiplier history, versions, revocation), a child process calling `os.Exit(23)` without shutdown, before/after-commit injected failure, a 131,073-operation one-byte stream using three reservation commits, rejected batch atomicity, and malformed state. Targeted race results are recorded with the commit checkpoint below. These fault injections are distinct from a physical power-loss/filesystem durability test, which has not run.
+
+The abrupt-exit input consumes 65,544 raw bytes at multiplier 2. Recovery retains 65,536 confirmed raw upload bytes / 131,072 billed bytes, and freezes a further 131,072 uncertain billed bytes. It does not fabricate raw counters for the last 8 bytes. The remaining budget can be spent once; reconnect fails when confirmed plus frozen usage reaches quota. Normal checkpoint/shutdown preserves exact admitted usage and releases unused reservation, with no uncertainty charge.
+
+Real Tunnel restarts: three full core instances sequentially reopen the same store; each echoes 1024 bytes in both directions at multiplier 2. Totals progress 4096 → 8192 → 12288 billed bytes; reopening again retains 12288 and epoch 4, with no uncertain usage. Rejected configuration testing first reproduced a leaked file lock; cleanup and deferred initial policy application now preserve the existing policy and release the lock.
+
+The same six independent-process rate cases were repeated with durable reservations. [tunnel-rates-persistent.jsonl](evidence/tunnel-rates-persistent.jsonl) contains the raw observations. Upload rates measured 263,780 / 1,037,099 B/s; download 262,347 / 1,048,157 B/s. All original rate/burst/healthy-throughput assertions passed. Unlimited controls were 29,070,308 B/s upload and 34,310,353 B/s download. This is a substantial local throughput cost versus the earlier in-memory controls; no general high-throughput acceptance claim is made.
+
+Remaining durability work: committed-event export and protected control APIs, panel DB idempotent settlement, restore/rollback fencing, multi-node budget leases, full configuration-start rollback, disk/power-loss tests and further throughput work. Runtime Snapshot combines current live usage with a durable sequence marker; it is **not** an atomic committed ledger event and must not be used as one by the panel.
+
+Additional checks found two further baseline issues: adding the upstream `core` package to race testing failed in `testing/servers/udp/udp.go` (shared `Server.accepting` flag assignment/close); broader `go vet ./infra/conf` reports unreachable legacy reverse configuration code after its removal error. These are failures, not skipped/passed checks. Targeted `app/clientpolicy` and `testing/policy` tests in that run passed; baseline fixes and exact reruns remain separate work.
+
+Persistence checkpoint validation: focused race tests across clientpolicy/dispatcher/protocol/conf/Tunnel passed; `go vet` of clientpolicy/dispatcher/core/testing-policy passed; full panel `make test-go` with the persistence dependency passed. These do not erase the separately recorded full-core/scenario/race/vet baseline failures.

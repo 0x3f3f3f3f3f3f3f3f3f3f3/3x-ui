@@ -169,6 +169,9 @@ func New(config *Config) (*Instance, error) {
 
 	done, err := initInstanceWithConfig(config, server)
 	if done {
+		if closeErr := server.Close(); closeErr != nil {
+			err = errors.New("failed to clean up rejected core: ", closeErr).Base(err)
+		}
 		return nil, err
 	}
 
@@ -180,6 +183,9 @@ func NewWithContext(ctx context.Context, config *Config) (*Instance, error) {
 
 	done, err := initInstanceWithConfig(config, server)
 	if done {
+		if closeErr := server.Close(); closeErr != nil {
+			err = errors.New("failed to clean up rejected core: ", closeErr).Base(err)
+		}
 		return nil, err
 	}
 

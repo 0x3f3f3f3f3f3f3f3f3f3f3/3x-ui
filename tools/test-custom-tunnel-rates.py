@@ -92,6 +92,9 @@ def measure(binary, direction, rate, warmup, duration):
     }
     with tempfile.TemporaryDirectory(prefix="custom-xray-rates-") as directory:
         path = pathlib.Path(directory)
+        state = str(path / "policy.db")
+        subprocess.run([binary, "policy-init", "-file", state, "-instance", "rate-test-node"], check=True)
+        config["clientPolicy"].update(stateFile=state, instanceId="rate-test-node")
         (path / "config.json").write_text(json.dumps(config))
         with (path / "core.log").open("w+") as log:
             process = subprocess.Popen([binary, "run", "-c", str(path / "config.json")], stdout=log, stderr=log)

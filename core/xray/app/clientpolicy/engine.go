@@ -2,6 +2,7 @@ package clientpolicy
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -10,25 +11,45 @@ import (
 const maxClientSessions = 4096
 
 type Engine struct {
-	mu      sync.Mutex
-	clients map[string]*clientState
-	closed  bool
-	nextID  atomic.Uint64
+	ready      atomic.Bool
+	initial    []Policy
+	startOnce  sync.Once
+	startErr   error
+	store      stateStore
+	instanceID string
+	epoch      uint64
+	failed     atomic.Bool
+	mu         sync.Mutex
+	clients    map[string]*clientState
+	closed     bool
+	nextID     atomic.Uint64
 }
 
 type clientState struct {
-	mu       sync.Mutex
-	policy   Policy
-	usage    Usage
-	revoked  bool
-	closed   bool
-	changed  chan struct{}
-	buckets  [2]bucket
-	sessions map[uint64]*Session
-	expiry   *time.Timer
+	engine          *Engine
+	uncertain       uint64
+	sequence        uint64
+	reservationLeft uint64
+	mu              sync.Mutex
+	policy          Policy
+	usage           Usage
+	revoked         bool
+	closed          bool
+	changed         chan struct{}
+	buckets         [2]bucket
+	sessions        map[uint64]*Session
+	expiry          *time.Timer
 }
 
-func NewEngine() *Engine { return &Engine{clients: make(map[string]*clientState)} }
+func newClientState(e *Engine) *clientState {
+	return &clientState{engine: e, changed: make(chan struct{}), sessions: make(map[uint64]*Session)}
+}
+
+func NewEngine() *Engine {
+	e := &Engine{clients: make(map[string]*clientState)}
+	e.ready.Store(true)
+	return e
+}
 
 func (e *Engine) state(id string) (*clientState, error) {
 	e.mu.Lock()
@@ -43,57 +64,7 @@ func (e *Engine) state(id string) (*clientState, error) {
 	return c, nil
 }
 
-func (e *Engine) Apply(p Policy) error {
-	if err := p.Validate(); err != nil {
-		return err
-	}
-	e.mu.Lock()
-	if e.closed {
-		e.mu.Unlock()
-		return ErrEngineClosed
-	}
-	c := e.clients[p.ClientID]
-	if c == nil {
-		c = &clientState{changed: make(chan struct{}), sessions: make(map[uint64]*Session)}
-		e.clients[p.ClientID] = c
-	}
-	e.mu.Unlock()
-	c.mu.Lock()
-	if c.closed {
-		c.mu.Unlock()
-		return ErrEngineClosed
-	}
-	if c.revoked {
-		c.mu.Unlock()
-		return ErrRevoked
-	}
-	if p.Version < c.policy.Version || p.Version == c.policy.Version && p != c.policy {
-		c.mu.Unlock()
-		return ErrPolicyVersion
-	}
-	if p == c.policy {
-		c.mu.Unlock()
-		return nil
-	}
-	now := time.Now()
-	c.buckets[Upload].update(p.UploadRate, p.BurstBytes, now)
-	c.buckets[Download].update(p.DownloadRate, p.BurstBytes, now)
-	c.policy = p
-	c.notifyLocked()
-	if c.expiry != nil {
-		c.expiry.Stop()
-	}
-	if p.ExpiresAt != 0 {
-		c.expiry = time.AfterFunc(time.Until(time.UnixMilli(p.ExpiresAt)), c.expire)
-	}
-	var closeList []*Session
-	if p.reasons(c.usage, false, now) != 0 {
-		closeList = c.sessionsLocked()
-	}
-	c.mu.Unlock()
-	closeSessions(closeList)
-	return nil
-}
+func (e *Engine) Apply(p Policy) error { return e.ApplyBatch([]Policy{p}) }
 
 func (c *clientState) notifyLocked() { close(c.changed); c.changed = make(chan struct{}) }
 
@@ -114,7 +85,7 @@ func closeSessions(sessions []*Session) {
 func (c *clientState) expire() {
 	c.mu.Lock()
 	var sessions []*Session
-	if c.policy.reasons(c.usage, c.revoked, time.Now()) != 0 {
+	if c.reasonsLocked(time.Now()) != 0 {
 		sessions = c.sessionsLocked()
 		c.notifyLocked()
 	}
@@ -129,7 +100,7 @@ func (e *Engine) Snapshot(id string) (Snapshot, error) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return Snapshot{Usage: c.usage, PolicyVersion: c.policy.Version, Reasons: c.policy.reasons(c.usage, c.revoked, time.Now()), ActiveSessions: len(c.sessions)}, nil
+	return Snapshot{InstanceID: e.instanceID, Epoch: e.epoch, Sequence: c.sequence, UncertainBytes: c.uncertain, Usage: c.usage, PolicyVersion: c.policy.Version, Reasons: c.reasonsLocked(time.Now()), ActiveSessions: len(c.sessions)}, nil
 }
 
 func (e *Engine) Remove(id string) error {
@@ -138,6 +109,18 @@ func (e *Engine) Remove(id string) error {
 		return err
 	}
 	c.mu.Lock()
+	if e.failed.Load() {
+		c.mu.Unlock()
+		return ErrStorage
+	}
+	if c.closed {
+		c.mu.Unlock()
+		return ErrEngineClosed
+	}
+	if err := c.persistLocked(c.policy, true, 0); err != nil {
+		c.mu.Unlock()
+		return e.storageFailed(err)
+	}
 	c.revoked = true
 	c.notifyLocked()
 	if c.expiry != nil {
@@ -161,9 +144,16 @@ func (e *Engine) Close() error {
 		clients = append(clients, c)
 	}
 	e.mu.Unlock()
+	var result error
 	for _, c := range clients {
 		c.mu.Lock()
 		c.closed = true
+		if !e.failed.Load() {
+			if err := c.persistLocked(c.policy, c.revoked, 0); err != nil {
+				e.failed.Store(true)
+				result = err
+			}
+		}
 		c.notifyLocked()
 		if c.expiry != nil {
 			c.expiry.Stop()
@@ -172,7 +162,13 @@ func (e *Engine) Close() error {
 		c.mu.Unlock()
 		closeSessions(sessions)
 	}
-	return nil
+	if e.store != nil {
+		result = errors.Join(result, e.store.close())
+	}
+	if e.failed.Load() {
+		result = errors.Join(result, ErrStorage)
+	}
+	return result
 }
 
 type Session struct {
@@ -187,6 +183,9 @@ type Session struct {
 }
 
 func (e *Engine) Open(ctx context.Context, metadata Metadata, closeFn func()) (*Session, error) {
+	if !e.ready.Load() {
+		return nil, ErrEngineNotStarted
+	}
 	c, err := e.state(metadata.ClientID)
 	if err != nil {
 		return nil, err
@@ -199,7 +198,7 @@ func (e *Engine) Open(ctx context.Context, metadata Metadata, closeFn func()) (*
 		c.mu.Unlock()
 		return nil, ErrEngineClosed
 	}
-	if c.policy.reasons(c.usage, c.revoked, time.Now()) != 0 {
+	if c.reasonsLocked(time.Now()) != 0 {
 		c.mu.Unlock()
 		return nil, ErrRestricted
 	}
@@ -278,7 +277,7 @@ func (s *Session) Admit(direction Direction, n uint64) error {
 			return ErrSessionClosed
 		}
 		now := time.Now()
-		if c.policy.reasons(c.usage, c.revoked, now) != 0 {
+		if c.reasonsLocked(now) != 0 {
 			sessions := c.sessionsLocked()
 			c.mu.Unlock()
 			closeSessions(sessions)
@@ -289,7 +288,7 @@ func (s *Session) Admit(direction Direction, n uint64) error {
 			c.mu.Unlock()
 			return err
 		}
-		if q := c.policy.QuotaBytes; q != 0 && (next.BilledBytes > q || next.BilledBytes == q && next.Remainder != 0) {
+		if exceedsQuota(next, c.uncertain, c.policy.QuotaBytes) {
 			c.mu.Unlock()
 			return ErrRestricted
 		}
@@ -299,12 +298,22 @@ func (s *Session) Admit(direction Direction, n uint64) error {
 			return err
 		}
 		if delay == 0 {
+			if err := c.reserveLocked(n); err != nil {
+				c.mu.Unlock()
+				if errors.Is(err, ErrStorage) {
+					return c.engine.storageFailed(err)
+				}
+				return err
+			}
+			if c.engine.store != nil {
+				c.reservationLeft -= n
+			}
 			if b.rate != 0 {
 				b.tokens -= float64(n)
 			}
 			c.usage = next
 			var sessions []*Session
-			if c.policy.reasons(c.usage, c.revoked, now) != 0 {
+			if c.reasonsLocked(now) != 0 {
 				sessions = c.sessionsLocked()
 				c.notifyLocked()
 			}

@@ -9,3 +9,14 @@ Upgrade must validate custom capability v1 and new config before applying it, pe
 Backup must include SQLite/PostgreSQL data, policy/identity mappings, ledger/cursors, node allocations, separate business SSH host keys and recoverable core budget state. Keep all credentials protected. Restore requires an epoch/lease fence so a restored snapshot cannot issue quota already granted to a live or disconnected node.
 
 Rollback after schema/ledger migration uses a coordinated pre-upgrade backup and matching panel/core binaries; never promise safe in-place DB downgrade. Revoke/fence outstanding node allocations before restoring. Exact tested commands will be added when packaging and recovery are implemented.
+
+
+## Development initialization (not a completed installer)
+
+Build with `bash tools/build-custom-core.sh`. For a **new** panel-assigned instance, initialize a private persistent path once:
+
+```sh
+build/custom-xray policy-init -file /private/path/policy.db -instance panel-assigned-instance-id
+```
+
+Set `clientPolicy.stateFile` to that path and `clientPolicy.instanceId` to the same ID, alongside `policies`. Existing, missing, corrupt, mismatched or locked state must not be deleted/reinitialized to bypass an error. Lost state requires authoritative ledger reconciliation; that workflow is not implemented yet. Keep the state on durable local storage; installer/Docker volume setup and backup fencing remain open.

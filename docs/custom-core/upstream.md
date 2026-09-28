@@ -38,3 +38,8 @@ OpenSnell commit `3100984f` contains public v4/v5 code, but `SNELL_V6.md` explic
 At mieru `b961978c`, `apis/server.Accept` returns a connection plus a parsed request and requires `UserContext`; server configuration rejects its own egress settings. This is an appropriate dispatcher integration boundary. `apis/server/interface.go` explicitly states Stop leaves established connections alive; the core adapter must track and terminate them itself. These are source findings, not interoperability results.
 
 Protobuf generation used official protoc 36.2 (download SHA-256 `8b8f18bd2b30346efbc698dd5a73dd7c805f3ef8380f6dfc95c768f3f1852f6a`) and protoc-gen-go v1.36.12. Existing protobuf field numbers remain unchanged. Node archive SHA-256: `7a6353f63eb3d04765004b4adf172616243e4522434635cb1d26288658b04ab5`.
+
+
+## Durable-store dependency
+
+bbolt v1.5.0, commit `e7a8b2dd498494a3766ba24dd94d3509e5588485`, module `go.etcd.io/bbolt`, checksum `h1:S7GAl7Fxv12yohbwFfIbQCGDWbQbtDGPET4P/bD4lxU=`. MIT license inspected in downloaded source; attribution retained in [third-party notice](../../core/THIRD_PARTY_NOTICES.md). Primary release evidence: [bbolt 1.5 changelog](https://github.com/etcd-io/bbolt/blob/v1.5.0/CHANGELOG/CHANGELOG-1.5.md) and pinned source. The store is embedded in the same core process, with fsync enabled; it is execution state, not another configuration authority.
