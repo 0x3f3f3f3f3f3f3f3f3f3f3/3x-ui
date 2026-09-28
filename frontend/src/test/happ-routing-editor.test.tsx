@@ -1,19 +1,16 @@
 import { useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { EditorView } from 'codemirror';
-import { message } from 'antd';
 
 import { AllSetting } from '@/models/setting';
 import HappSettingsContent from '@/pages/settings/HappSettingsContent';
 import { toBase64Utf8 } from '@/pages/settings/happPresets';
 
 import { renderWithProviders } from './test-utils';
+import { setupStaticMessageCleanup } from './antd-message-cleanup';
 
-// AntD's static messages own a React root and timers outside RTL's render cleanup.
-afterEach(async () => {
-  await act(async () => message.destroy());
-});
+setupStaticMessageCleanup();
 
 const profile = {
   Name: '当前草稿',

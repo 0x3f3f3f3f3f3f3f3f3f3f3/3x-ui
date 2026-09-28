@@ -6,6 +6,9 @@ import { AllSetting } from '@/models/setting';
 import HappSettingsContent from '@/pages/settings/HappSettingsContent';
 
 import { renderWithProviders } from './test-utils';
+import { setupStaticMessageCleanup } from './antd-message-cleanup';
+
+setupStaticMessageCleanup();
 
 const chinaProfile = {
   Name: 'Bypass-CN',
