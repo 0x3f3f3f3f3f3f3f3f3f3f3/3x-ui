@@ -1012,3 +1012,161 @@ transaction boundaries, not a new protocol data path or distributed node
 atomicity. Runtime failures still use the existing reconciliation mechanism;
 the complete protocol, deployment and other usage-consumer requirements remain
 open.
+
+## SSH creation forms and strict OpenSSH export (2026-09-28)
+
+Scope: existing inbound form, existing client create/edit form, and the client
+information/QR export dialogs. The server endpoint adds only the actual host
+public key, derived from its stored signing key. SQLite and PostgreSQL tests
+check exact public-key identity, no private-key disclosure, and omission after
+an invalid stored key. No new migration or endpoint is introduced.
+
+Frontend form tests drive real React Hook Form/AntD controls. They verify empty
+SSH listener creation without Xray transport/TLS/sniffing, lifecycle and host
+identity preservation on editing, public-key client creation with explicit
+permissions, default-off reverse forwarding, and rejection of empty/private-key
+input. They also prevent presenting unimplemented SSH IP/device restrictions as
+effective controls. Temporarily removing public-key validation made the private-
+key case fail; the mutation was restored before subsequent checks.
+
+`ssh-export.test.ts` invokes actual OpenSSH `ssh -G` on generated files and checks
+an IPv6 endpoint, username/port, explicit trust source and restricted identity /
+session settings. It also exercises missing pins and directive injection. This
+requires the OpenSSH client executable; absence is a test failure, not a mock or
+silently counted skip. In this sandbox the child invocation needs elevated exec.
+The real browser test consumes the files to authenticate, which additionally
+checks known_hosts path resolution and cryptographic host-key enforcement.
+
+`frontend/scripts/client-policy-e2e.mjs` now creates the inbound and client in
+Chromium, downloads the two files from Client Information, and compares the pin
+with the authenticated options endpoint. A deliberately different host key must
+produce `Host key verification failed` and no bytes. Restoring the downloaded
+pin permits the real OpenSSH → managed SSH → pinned Xray → echo path. Independent
+socket observations remain 16384 raw bytes each direction and 49152 billed bytes
+at 1.5x. Reducing quota to 32769 bytes still marks one depleted client, shows 0 B
+remaining and rejects a new OpenSSH request with no bytes.
+
+The clean run in `/tmp/3x-ui-ssh-browser-diagnostic.log` exited 0. Initial listener
+application took 21434ms through the pre-existing 30-second pending-configuration
+job. The later multiplier-boundary meter was initially unavailable and became
+ready in 670ms, within the unchanged 2s live-policy bound. Startup now waits for
+an actual SSH banner (one scheduler cycle plus 5s observation), separately from
+that live-policy check. No explicit restart API is used to bypass creation.
+The final screenshot `/tmp/3x-ui-ssh-browser-diagnostic.png` was inspected.
+
+Failed attempts are retained and do not count as successful acceptance:
+
+- Previous embedded panel: no SSH protocol in the real creation form (expected
+  RED, `/tmp/3x-ui-ssh-browser-red.log`).
+- Component test harness: virtualized last dropdown option and generated port
+  input ID were initially selected incorrectly; scoped non-virtual test rendering
+  and accessible labels fixed those selectors. The actual browser still tests
+  the original virtualized dropdown.
+- Client component harness: AntD's plus icon contributes to button naming, and
+  this project does not install the `toHaveValue` matcher. Correct selectors and
+  direct input-value assertions replaced those harness assumptions.
+- First export implementation rejected bracketed IPv6 and allowed the generic
+  share-host helper to replace an invalid custom address. Tests caught both;
+  export now strips valid IPv6 brackets and rejects invalid custom input.
+- Default sandbox denied `ssh -G` process launch with EPERM; the same real parser
+  tests passed with the required exec permission.
+- First browser run used an exact add-target name without its icon; corrected
+  the selector. The next run applied policy before the initial 30s configuration
+  job; it failed the 2s meter check. Readiness observations now distinguish initial
+  deployment from a live policy update instead of changing the policy bound.
+- One run reached correct API/socket billing but timed out waiting 10s for the
+  list progress bar. A diagnostic rerun passed with unchanged UI assertions and
+  timeouts; this intermittent refresh failure remains recorded, not hidden.
+- Initial typecheck found test-only matcher options/incomplete HTTP fixture
+  fields; initial lint found a redundant effect dependency and a control-regex
+  rule violation. These were corrected before the passing checks.
+
+Focused backend export tests passed SQLite and PostgreSQL (1.045s). Frontend
+creation/credential tests passed before broad regression (2 + 3 cases), and
+actual OpenSSH export tests passed (2 cases). Generated contracts, frontend
+TypeScript, lint and Vite build passed; the rebuilt embedded panel was used for
+the browser run. Full-suite and final static results follow below once terminal.
+
+SSH upstream, online/IP/device enforcement, bulk/portable client policy export,
+inbound-specific client actions, full applied-state health, remote nodes and
+installation remain open. This is a verified creation/export slice, not full SSH
+or whole-request completion.
+
+The first full frontend run exited 1: 180 files, 1765 passing assertions, two
+5s timeouts (`ssh-client-form` creation and the existing `inbound-form-modal`
+Reality validation case), and one uncaught React `window is not defined` during
+`happ-settings-presets` teardown. That preset test also calls AntD static messages;
+an initial fixture change added awaited `act(message.destroy())`, following the
+editor test's earlier cleanup. That attempt was insufficient, as the serial run
+below demonstrated. No production Happ code or assertions changed.
+`/tmp/3x-ui-ssh-full-frontend.log` records the first full failure.
+
+An additional compatibility regression reproduced `clients: null` from an empty
+Go SSH settings slice being rejected by the new form schema. The schema now
+normalizes null/absent clients to an empty array, preserving host key and bridge
+port. RED is `/tmp/3x-ui-ssh-empty-inbound-red.log`. Focused SSH creation/edit,
+credential and Happ preset tests then passed all 15 cases across three files in
+22.59s (`/tmp/3x-ui-ssh-forms-presets-focused.log`). A full serial frontend rerun
+retains the original 5s per-test deadlines and every assertion; no timeout or
+numeric acceptance limit was widened.
+
+The serial rerun passed all 180 files / 1768 cases in 429.03s but still exited 1
+with the same preset teardown exception
+(`/tmp/3x-ui-ssh-full-frontend-serial.log`). Inspecting the installed AntD and
+rc-component implementation showed that `message.destroy()` closes notices but
+retains the independently created React root. Both Happ fixture files now track
+their document fragments, await real root unmount through rc-component's utility,
+and reset AntD's test-only holder reference. The components and assertions remain
+real; no exception suppression or message mocks were added. Focused presets,
+editor and SSH inbound tests passed all 30 cases in 22.03s
+(`/tmp/3x-ui-happ-root-unmount-focused.log`). Full regression then passed all
+180 files / 1768 cases in 431.56s, exit 0 with no unhandled errors
+(`/tmp/3x-ui-ssh-full-frontend-root-cleanup.log`). This test-only fix was committed
+separately as `5f51dccb` and pushed; an independent remote query matched the full
+local SHA. Frontend typecheck, lint and formatting (724 files) also passed.
+
+The earlier browser list-refresh timeout now has a reproduced cause. Xray's
+five-second `client_stats` events patch the query cache; TanStack Query resets
+its five-second observer polling timer on each patch. The new
+`clients-billing-refresh.test.tsx` drives the actual hook/cache with repeated raw
+statistics and a controlled HTTP boundary. Old code retained billed usage `0`
+instead of the independently expected `49152`
+(`/tmp/3x-ui-billing-refresh-red.log`). An independent five-second poll now keeps
+REST-owned billing/sorting/summary updates from being postponed by those patches,
+preserving focus gating and unmount cleanup. Nine focused cases passed in 3.89s
+(`/tmp/3x-ui-billing-refresh-green-final.log`). An intermediate test run confirmed
+the balance fix but read the last raw-stat update before QueryClient's scheduled
+notification; draining that zero-delay notification retained the exact raw-value
+assertion. The rebuilt real browser path then passed unchanged in
+`/tmp/3x-ui-ssh-ui-browser-final.log`: 21934ms for initial scheduled deployment,
+409ms for the later meter replacement, exact duplex/billed bytes, wrong-host-key
+refusal, live list refresh and exhausted-client denial. Screenshot
+`/tmp/3x-ui-ssh-ui-final.png` was inspected. Full regression after the polling
+change passed all 181 files / 1769 cases in 431.17s, exit 0 without unhandled
+errors (`npm test -- --maxWorkers=1`,
+`/tmp/3x-ui-ssh-ui-full-frontend-final.log`). Existing Node deprecation and
+Vitest plugin-hook notices remain visible; no errors were filtered.
+The polling fix was committed separately as `6d879640`, pushed to the approved
+feature branch, and independently verified against the remote SHA.
+
+Full Go regression with `GOFLAGS=-p=1`, the pinned actual Xray binary and the
+isolated PostgreSQL DSN passed: 50 packages with tests, 5 without test files,
+exit 0 (`/tmp/3x-ui-ssh-ui-full-go.log`). Database tests took 48.606s and service
+tests 99.633s. Opt-in scale jobs were not enabled; package success does not count
+skipped opt-in cases as executed acceptance.
+
+Further final checks passed:
+
+- `go test -race -shuffle=on -count=1 ./internal/web/service
+  -run '^TestSSHInboundOptionsExportOnlyActualHostPublicKey'` with the same actual
+  PostgreSQL DSN: 4.399s (`/tmp/3x-ui-ssh-ui-options-race.log`).
+- `make lint-go`: 0 issues; `go build ./...`: exit 0; `make gen-check`: fresh
+  generated contracts matched the staged artifacts. Logs use the prefix
+  `/tmp/3x-ui-ssh-ui-` and suffixes `go-lint.log`, `go-build.log`, `gen-check.log`.
+- Final frontend `npm run typecheck`, `npm run lint`, `npm run format:check`
+  (724 files), MSW worker equality and frontend/docs OpenAPI equality passed.
+  `npm run build-storybook` passed in 7.22s with an advisory chunk-size warning.
+- Vite production build passed in 2.70s; `go build -o /tmp/3x-ui-ssh-ui-panel .`
+  produced the embedded panel used by the passing final browser fixture.
+- Docs `npm run typecheck` passed, including MDX generation, Next route types
+  and TypeScript (`/tmp/3x-ui-ssh-ui-docs-types.log`).

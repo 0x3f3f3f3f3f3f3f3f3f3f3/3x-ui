@@ -210,3 +210,23 @@ port_conflict.go, Runtime, routing bridge; TUIC/MTProto/WG/AWG adapters.
 - [ ] Requirement-by-requirement completion audit; final remote SHA verification.
 - [ ] Final report with versions, complete/incomplete/inapplicable/unverified,
   commits, measured results, operations and remaining risks.
+
+### SSH creation/export increment
+
+The existing inbound form now accepts SSH, and the existing client form edits
+independent public keys, explicit target permissions and default-off reverse
+listeners. Local SSH-only attachment selection follows the current enforcing
+backend capability. Non-applicable transport/credential fields and unavailable
+SSH IP/device-limit controls are hidden, with the missing limits stated.
+Information and QR/export dialogs produce OpenSSH configuration plus actual
+server public-key known_hosts data. EN/ZH text and all other locale fallbacks,
+generated API contracts and documentation schemas accompany the change.
+
+The browser fixture now creates the inbound and client through their real
+forms, downloads both export files and consumes them with actual OpenSSH. It
+also tests host-key mismatch, billed quota reduction and strict denial. Initial
+creation follows the existing 30-second pending-config scheduler; the separate
+2-second live multiplier meter check is retained. The real browser path has passed;
+full regression and static validation are recorded in validation.md.
+This increment does not complete SSH upstream, online/IP/device enforcement,
+bulk/portable export, remote nodes, deployment or the other backend requirements.

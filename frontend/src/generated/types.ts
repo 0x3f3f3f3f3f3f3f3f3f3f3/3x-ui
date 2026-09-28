@@ -808,6 +808,7 @@ export interface InboundOption {
   shareAddr?: string;
   shareAddrStrategy?: string;
   ssMethod: string;
+  sshHostKey?: string;
   tag: string;
   tlsFlowCapable: boolean;
   tuicServer?: TuicServerSettings | null;

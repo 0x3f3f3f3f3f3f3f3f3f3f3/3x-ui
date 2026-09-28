@@ -75,13 +75,9 @@ export function canEnableStream(values: { protocol: string }): boolean {
   return STREAM_PROTOCOLS.includes(values.protocol);
 }
 
-// mtproto and amneziawg are served by an external process/interface, not
-// Xray, so the Xray sniffing block does not apply to either. Every other
-// inbound supports sniffing.
+// These managed protocols do not consume the inbound's Xray sniffing settings.
 export function canEnableSniffing(values: { protocol: string }): boolean {
-  return (
-    values.protocol !== 'mtproto' && values.protocol !== 'amneziawg' && values.protocol !== 'tuic'
-  );
+  return !['mtproto', 'amneziawg', 'tuic', 'ssh'].includes(values.protocol);
 }
 
 // Vision seed applies only when XTLS Vision (TCP/TLS) flow is selected

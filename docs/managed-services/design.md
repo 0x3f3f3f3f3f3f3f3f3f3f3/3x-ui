@@ -206,9 +206,14 @@ manual enable and expiry checks. First successful signed authentication activate
 negative delayed expiry atomically across canonical, traffic and inbound settings;
 its database operation and queue wait have a 500ms deadline.
 
-This is an API/service backend increment, not the finished SSH feature. Public
-rate/multiplier controls, SSH upstream, UI, export/subscription, online/IP/device
-integration, node distribution and packaging remain open. Bridge membership or
+The existing-client policy tab, billed client list, SSH creation/credential forms
+and strict OpenSSH configuration export now have implementation and direct tests.
+SSH upstream, online/IP/device integration, remaining bulk/portable and inbound
+management surfaces, node distribution and packaging remain open. Standard proxy
+subscriptions do not fabricate SSH nodes; OpenSSH files use actual host public-key
+pins. Initial listener/membership application follows the existing 30-second core
+configuration scheduler; live rate/multiplier checks have separate two-second
+bounds. This remains a partial SSH vertical. Bridge membership or
 routing-label changes still require core configuration application and can restart
 other sessions. Per-client isolation for those operations, preview generation
 without runtime staging side effects, explicit status UI, capacity under many

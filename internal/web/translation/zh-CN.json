@@ -992,6 +992,33 @@
         "loadFailed": "无法载入流量策略。成功载入前暂不可编辑。",
         "invalidRate": "请输入 0 至 1099511627776 B/s 范围内的整数。",
         "invalidMultiplier": "请输入 0.001 至 1000 范围内的倍率，最多 3 位小数。"
+      },
+      "ssh": {
+        "publicKeys": "SSH 公钥",
+        "publicKeysHelp": "每行一个公钥，最多 16 个。对应私钥仅保留在客户端设备上。",
+        "identityHelp": "客户端邮箱字段即 SSH 用户名。公钥认证仅授予 TCP 转发权限；不开放 shell、命令执行、SFTP 或 agent 转发。",
+        "publicKeyRequired": "请至少添加一个 SSH 公钥。",
+        "invalidPublicKey": "请输入 SSH 公钥，不支持 authorized_keys 选项或证书。",
+        "invalidTarget": "请输入 IP 地址、域名，或使用 * 允许所有主机。",
+        "invalidReverseAddress": "远程监听地址必须为 IPv4 或 IPv6 地址。",
+        "targets": "-L / -D 允许访问的目标",
+        "targetsHelp": "空列表拒绝所有目标。每条规则允许一个 IP 或域名；* 表示所有主机，端口 0 表示任意目标端口。仍受路由规则约束。",
+        "targetHost": "目标主机",
+        "targetPort": "目标端口",
+        "addTarget": "添加目标",
+        "removeTarget": "删除目标",
+        "reverse": "-R 远程监听",
+        "reverseHelp": "列表为空时禁用反向转发。添加规则即授权该服务端地址和端口；端口 0 仅允许系统分配端口。除非需要公网访问，否则请使用回环地址。SSH 服务端无法限制 -R 的客户端侧目标。",
+        "reverseAddress": "远程监听地址",
+        "reversePort": "远程监听端口",
+        "addReverse": "授权远程监听",
+        "removeReverse": "撤销远程监听",
+        "localOnly": "SSH 客户端目前只能绑定本机 SSH 入站。",
+        "exportTitle": "OpenSSH 配置",
+        "exportUnavailable": "无法导出 SSH：主机公钥、地址、端口或用户名缺失或无效，请检查入站和客户端设置。",
+        "exportHelp": "将两个文件下载到同一目录，并从该目录运行 SSH。known_hosts 文件固定信任此服务端的真实公钥；主动更换主机密钥后需重新下载。",
+        "runHelp": "将私钥路径替换为与已登记公钥对应的客户端私钥。示例仅在回环地址开放 TCP SOCKS。可使用 -L 访问已许可目标，或使用 -R 创建已明确授权的远程监听。SSH 节点不包含在代理订阅格式中。",
+        "limitsUnavailable": "SSH 连接的 IP 和设备数量限制尚未实现，目前只能在此配置流量额度、到期与流量策略。"
       }
     },
     "groups": {

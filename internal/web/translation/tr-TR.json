@@ -992,6 +992,33 @@
         "loadFailed": "Unable to load the traffic policy. Editing is unavailable until it can be loaded.",
         "invalidRate": "Enter a whole number from 0 to 1099511627776 B/s.",
         "invalidMultiplier": "Enter a multiplier from 0.001 to 1000 with at most 3 decimal places."
+      },
+      "ssh": {
+        "publicKeys": "SSH public keys",
+        "publicKeysHelp": "One public key per line, up to 16. Keep each matching private key on the client device.",
+        "identityHelp": "The client email is the SSH username. Public-key authentication grants TCP forwarding only; shell, commands, SFTP and agent forwarding are disabled.",
+        "publicKeyRequired": "Add at least one SSH public key.",
+        "invalidPublicKey": "Enter an SSH public key, without authorized_keys options or certificates.",
+        "invalidTarget": "Enter an IP address, a domain name, or * for all hosts.",
+        "invalidReverseAddress": "Enter a literal IPv4 or IPv6 address for the remote listener.",
+        "targets": "Allowed targets for -L / -D",
+        "targetsHelp": "An empty list denies all targets. Each rule allows one IP or domain; * allows all hosts and port 0 allows any target port. Routing rules still apply.",
+        "targetHost": "Target host",
+        "targetPort": "Target port",
+        "addTarget": "Add target",
+        "removeTarget": "Remove target",
+        "reverse": "Remote listeners for -R",
+        "reverseHelp": "Disabled while this list is empty. Adding a rule authorizes that server address and port; port 0 permits an OS-assigned port only. Use loopback addresses unless public access is intended. The SSH server cannot restrict the client-side destination of -R.",
+        "reverseAddress": "Remote listen address",
+        "reversePort": "Remote listen port",
+        "addReverse": "Authorize remote listener",
+        "removeReverse": "Revoke remote listener",
+        "localOnly": "SSH clients currently require local SSH inbounds only.",
+        "exportTitle": "OpenSSH configuration",
+        "exportUnavailable": "Cannot export SSH: the host public key, address, port or username is missing or invalid. Check the inbound and client settings.",
+        "exportHelp": "Download both files into one folder and run SSH from that folder. The known_hosts file pins this server’s actual public key; download it again after an intentional host-key change.",
+        "runHelp": "Replace the private-key path with your own matching client key. This example opens TCP SOCKS on loopback only. Use -L for a permitted target, or -R for an explicitly authorized remote listener. SSH nodes are not included in proxy subscription formats.",
+        "limitsUnavailable": "SSH connection IP and device-count limits are not yet implemented. Traffic quota, expiry and traffic policies are available."
       }
     },
     "groups": {

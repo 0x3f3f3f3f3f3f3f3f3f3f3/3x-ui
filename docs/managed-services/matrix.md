@@ -92,11 +92,13 @@ The following narrower scopes now have implementation and direct evidence:
 | Versioned policy API, fixed-point multiplier boundary, precise usage strings | V | real HTTP admin/scope checks; SQLite/PostgreSQL transactions, stale/recreated identity rejection, historical carry and reset persistence |
 | Public aggregate rate changes across two SSH inbounds | V | actual OpenSSH → panel-managed Xray, two same-IP clients/four channels each, raw duplex counters, unlimited baseline, 32/64/128 KiB/s, live changes within 2s; browser policy save and exact SSH billing also verified |
 | Client-list billed balances, SQL filters/order/counts, info modal and depleted cleanup | V | exact strings/carry; SQLite/PostgreSQL scoped cleanup, concurrent reset/quota/identity recheck and rollback; 177-file/1760-test frontend run and real Chromium→SSH→Xray billing/quota reduction; other usage consumers remain N |
-| Existing-client policy tab, precise billing, validation and conflict reload | V | 176-file frontend suite; real Chromium → HTTP → SQLite → strict-host-key OpenSSH → Xray echo with 1.5x accounting; creation/bulk and other statistics views remain N |
+| Existing-client policy tab, precise billing, validation and conflict reload | V | 176-file frontend suite; real Chromium → HTTP → SQLite → strict-host-key OpenSSH → Xray echo with 1.5x accounting; bulk and other statistics views remain N |
 | Policy backup and cross-dialect migration | V | raw rate fields and edit version survive SQLite dump/restore and SQLite→PostgreSQL migration; client portable import/export remains N |
 | Port collision logging/retry, core exit protection, core stop/restart | V | actual occupied listener and actual Xray process; capacity/complete fault rollback remain N |
 | Credential and permission persistence | V | canonical JSON/merge, old SQLite/PostgreSQL migration, SQLite backup restore and cross-dialect migration |
-| SSH settings generated API types | U | generated schemas/typecheck; complete HTTP/controller, UI and export acceptance remains open |
+| Inbound creation and independent client credentials in existing forms | V | actual Chromium creates a local SSH listener and client, edits permission fields, and reaches real OpenSSH → Xray; form regressions preserve host/client identity and lifecycle values; bulk and other management surfaces remain open |
+| OpenSSH configuration and actual host-key export | V | SQLite/PostgreSQL public-key-only metadata; actual OpenSSH parser; browser downloads consumed by OpenSSH, mismatched host key refused; exported files contain no private key; initial application follows the existing 30-second configuration scheduler |
+| SSH generated API types and existing option endpoint | V | Go→Zod/types/OpenAPI regenerated; real authenticated browser reads the host public key; complete API/bulk/portable/export/deployment acceptance remains open |
 
 ## Protocol-specific applicability
 

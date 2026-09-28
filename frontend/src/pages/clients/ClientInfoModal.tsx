@@ -21,6 +21,7 @@ import { LinkTags, linkMetaText, parseLinkParts } from '@/lib/xray/link-label';
 import { QrPanel } from '@/pages/inbounds/qr';
 import ClientHwidListModal from '@/components/clients/ClientHwidList';
 import ConfigBlock from '@/components/clients/ConfigBlock';
+import SSHConfigExport from './SSHConfigExport';
 import {
   buildWireguardClientConfig,
   findWireguardInbounds,
@@ -810,6 +811,23 @@ export default function ClientInfoModal({
                 })}
               </>
             )}
+
+            {client?.inboundIds
+              ?.map((id) => inboundsById[id])
+              .filter((ib) => ib?.protocol === 'ssh')
+              .map((inbound) => (
+                <div key={`ssh-${inbound.id}`}>
+                  <Divider>
+                    {t('pages.clients.ssh.exportTitle')} —{' '}
+                    {inbound.remark || inbound.tag || inbound.id}
+                  </Divider>
+                  <SSHConfigExport
+                    client={client}
+                    inbound={inbound}
+                    publicHost={subSettings.publicHost}
+                  />
+                </div>
+              ))}
 
             {wgConfigs.length > 0 && client && (
               <>

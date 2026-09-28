@@ -9,6 +9,7 @@ import {
   HysteriaClientSchema,
   MtprotoClientSchema,
   ShadowsocksClientSchema,
+  SSHManagedClientSchema,
   TrojanClientSchema,
   TuicClientSchema,
   VlessClientSchema,
@@ -279,6 +280,8 @@ function clientSchemaForProtocol(protocol: string): z.ZodType | null {
       return AmneziawgClientSchema;
     case 'tuic':
       return TuicClientSchema;
+    case 'ssh':
+      return SSHManagedClientSchema;
     default:
       return null;
   }
@@ -358,9 +361,10 @@ export function formValuesToWirePayload(values: InboundFormValues): WireInboundP
   if (Array.isArray(settingsPruned.clients)) {
     settingsPruned.clients = normalizeClients(values.protocol, settingsPruned.clients);
   }
-  let streamPruned = values.streamSettings
-    ? ((pruneEmpty(values.streamSettings) ?? {}) as Record<string, unknown>)
-    : undefined;
+  let streamPruned =
+    values.protocol !== 'ssh' && values.streamSettings
+      ? ((pruneEmpty(values.streamSettings) ?? {}) as Record<string, unknown>)
+      : undefined;
   if (streamPruned) {
     streamPruned = normalizeStreamSettingsForWire(streamPruned, { side: 'inbound' });
     stripTlsCertUseFile(streamPruned);

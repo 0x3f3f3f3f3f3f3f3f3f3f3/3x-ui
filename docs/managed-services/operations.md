@@ -118,10 +118,55 @@ a separate flag. Historical billed usage is never recalculated on reads.
 Both depleted-client cleanup entry points now select managed accounts using
 billed usage, and preserve clients with interval, monthly or weekly renewal.
 Inbound-scoped cleanup retains traffic still referenced by a sibling inbound.
-This corrects candidate selection; the existing client bulk-delete fanout is
-not yet one atomic transaction with candidate selection. A concurrent reset or
-quota edit between selection and deletion is an unresolved lifecycle race.
+Both paths recheck immutable identity and depletion under canonical/traffic row
+locks, then atomically remove membership and related data before Runtime dispatch.
+Concurrent reset/quota edits, identity recreation and late rollback are tested
+on SQLite and PostgreSQL. This does not extend the same transaction guarantee
+to ordinary explicit bulk-delete operations.
 
 This does not complete node dashboard counts, inbound-specific traffic widgets,
 notifications, subscription usage or distributed billing. Global raw overlays
 cannot replace this local owned ledger; global ownership remains separate work.
+
+### SSH creation, credentials and OpenSSH export
+
+Create an inbound with protocol `ssh`, a literal listen IP and a dedicated TCP
+port. The panel generates a separate host key and private routing bridge; this
+form does not offer Xray transport, TLS or sniffing settings. Add a client in the
+existing Clients page, select local SSH inbounds and enter independent public
+keys under Credentials. The email field is the SSH username. Keep each matching
+private key on the client device; never reuse the repository deployment key.
+
+Each target rule authorizes an IP/domain and port for `-L`/`-D`. An empty list
+rejects all destinations. Host `*` means any host and target port `0` means any
+port. Reverse forwarding stays off until an explicit address/port is added.
+Reverse port `0` authorizes only an OS-allocated port; it is not a wildcard for
+fixed ports. Prefer a loopback reverse address. The server cannot observe or
+restrict the client-side target of standard `-R`; listener permission does not
+claim that restriction. SSH wire IP/device-count limits remain unimplemented
+and are not offered as effective controls in this form.
+
+Client Information and the QR/export dialog offer two actual files:
+`xui-ssh-<inbound-id>.conf` and `xui-ssh-<inbound-id>.known_hosts`. Download both
+into an individual directory for that client/inbound, change to that directory
+and run the displayed command with the matching client private-key path.
+Use `-D 127.0.0.1:1080`, `-L` with a permitted destination, or an authorized `-R`
+argument. These standard modes carry TCP; no SSH UDP or proxy subscription node
+is fabricated. A missing or invalid host public key/address prevents export.
+
+The exported configuration requires strict host-key checking against the
+listener's actual public key and disables global/DNS/command-based trust
+alternatives. `IdentityFile none` avoids trying default private-key files; the
+user supplies their independent key with `-i`. Session, PTY, agent and X11
+requests are disabled. After an intentional host-key replacement, obtain a new
+known_hosts file through the authenticated panel. This follows the documented
+[OpenSSH client configuration](https://man.openbsd.org/ssh_config) and
+[forwarding options](https://man.openbsd.org/ssh).
+
+New listeners and attachment changes currently wait for the existing 30-second
+Xray configuration refresh while the core is running. Initial readiness must be
+measured separately from live rate/multiplier updates. The browser acceptance
+fixture allows one scheduled refresh plus five seconds of startup observation,
+then retains the existing two-second meter-replacement limit for a multiplier
+change. Dedicated applied-state reporting and faster isolated attachment
+application remain open work; waiting is not evidence that a failed apply worked.

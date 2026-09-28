@@ -342,6 +342,7 @@ type InboundOption struct {
 	WgMtu          int    `json:"wgMtu,omitempty"`
 	WgDns          string `json:"wgDns,omitempty"`
 	MtprotoDomain  string `json:"mtprotoDomain,omitempty"`
+	SSHHostKey     string `json:"sshHostKey,omitempty"`
 	// AwgServer carries the full AmneziaWG server block (keys, subnet,
 	// obfuscation params) so the clients page can render a downloadable
 	// per-client .conf without a second round trip.
@@ -412,6 +413,7 @@ func (s *InboundService) GetInboundOptions(userId int) ([]InboundOption, error) 
 			WgMtu:             wgMtu,
 			WgDns:             wgDns,
 			MtprotoDomain:     inboundMtprotoDomain(r.Protocol, r.Settings),
+			SSHHostKey:        inboundSSHHostPublicKey(r.Protocol, r.Settings),
 			AwgServer:         inboundAmneziaWGServer(r.Protocol, r.Settings),
 			TuicServer:        inboundTuicServer(r.Protocol, r.Settings),
 			NodeId:            r.NodeId,

@@ -35,6 +35,8 @@ const env = {
 };
 const processes = [];
 let browser;
+let page;
+let lastListing;
 let target;
 let panelLog;
 
@@ -127,7 +129,18 @@ try {
     }
   }, 'panel startup');
   browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  page.on('response', async (response) => {
+    if (!response.url().includes('/panel/api/clients/list/paged')) return;
+    try {
+      const body = await response.json();
+      lastListing = {
+        status: response.status(),
+        success: body.success,
+        billing: body.obj?.items?.map((item) => item.billing),
+      };
+    } catch {}
+  });
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.goto(origin);
@@ -157,31 +170,84 @@ try {
   await once(target, 'listening');
   const targetPort = target.address().port;
   const email = 'policy-browser';
-  const inbound = await api('/panel/api/inbounds/add', {
-    enable: true,
-    listen: '127.0.0.1',
-    port: sshPort,
-    protocol: 'ssh',
-    remark: 'isolated policy browser test',
-    settings: JSON.stringify({
-      clients: [
-        {
-          email,
-          enable: true,
-          totalGB: 104857600,
-          ssh: {
-            publicKeys: [readFileSync(key + '.pub', 'utf8')],
-            targets: [{ host: '127.0.0.1', port: targetPort }],
-          },
-        },
-      ],
-    }),
-    streamSettings: '{}',
-    sniffing: '{}',
-  });
-  await api('/panel/api/server/restartXrayService', {});
+  await page.goto(origin + '/panel/inbounds');
+  await page.getByRole('button', { name: 'Add Inbound', exact: true }).click();
+  const inboundDialog = page.getByRole('dialog');
+  await inboundDialog.locator('#protocol').click();
+  const sshOption = page.locator('.ant-select-item-option[title="ssh"]');
+  for (let attempt = 0; attempt < 20 && !(await sshOption.count()); attempt++)
+    await inboundDialog.locator('#protocol').press('ArrowDown');
+  assert.equal(await sshOption.count(), 1, 'SSH must be selectable in the actual inbound form');
+  await sshOption.click();
+  await inboundDialog.getByLabel('Address', { exact: true }).fill('127.0.0.1');
+  await inboundDialog.getByLabel('Port', { exact: true }).fill(String(sshPort));
+  await inboundDialog.getByLabel('Remark', { exact: true }).fill('isolated policy browser test');
+  const inboundResponse = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/panel/api/inbounds/add') && response.request().method() === 'POST',
+  );
+  await inboundDialog.getByRole('button', { name: 'Create', exact: true }).click();
+  const createdInbound = await (await inboundResponse).json();
+  assert.equal(createdInbound.success, true, createdInbound.msg);
+  const inbound = createdInbound.obj;
+  await inboundDialog.waitFor({ state: 'hidden' });
   await page.goto(origin + '/panel/clients');
+  await page.getByRole('button', { name: 'Add Clients', exact: true }).click();
+  const clientDialog = page.getByRole('dialog');
+  await clientDialog.getByPlaceholder('Email', { exact: true }).fill(email);
+  await clientDialog.getByLabel('Traffic Limit (GB)', { exact: true }).fill('0.09765625');
+  await clientDialog.getByRole('button', { name: 'Select all', exact: true }).click();
+  await clientDialog.getByRole('tab', { name: 'Credentials', exact: true }).click();
+  await clientDialog
+    .getByLabel('SSH public keys', { exact: true })
+    .fill(readFileSync(key + '.pub', 'utf8').trim());
+  await clientDialog.getByRole('button', { name: /Add target/ }).click();
+  await clientDialog.getByLabel('Target host', { exact: true }).fill('127.0.0.1');
+  await clientDialog.getByLabel('Target port', { exact: true }).fill(String(targetPort));
+  await clientDialog.getByRole('button', { name: 'Create', exact: true }).click();
+  await clientDialog.waitFor({ state: 'hidden' });
   await page.getByText(email, { exact: true }).first().waitFor();
+  const startupStarted = Date.now();
+  await until(
+    () =>
+      new Promise((resolve) => {
+        const socket = net.connect(sshPort, '127.0.0.1');
+        socket.setTimeout(1000, () => {
+          socket.destroy();
+          resolve(false);
+        });
+        socket.once('error', () => resolve(false));
+        socket.once('data', (data) => {
+          socket.destroy();
+          resolve(data.toString().startsWith('SSH-'));
+        });
+      }),
+    'initial scheduled SSH configuration application',
+    35000,
+  );
+  const startupWaitMs = Date.now() - startupStarted;
+  await page.getByRole('button', { name: 'Client Information', exact: true }).click();
+  const infoDialog = page.getByRole('dialog');
+  const alias = `xui-ssh-${inbound.id}`;
+  const configName = `${alias}.conf`;
+  const knownHostsName = `${alias}.known_hosts`;
+  for (const fileName of [configName, knownHostsName]) {
+    const exportPanel = infoDialog
+      .locator('.qr-panel')
+      .filter({ has: page.getByText(fileName, { exact: true }) });
+    const download = page.waitForEvent('download');
+    await exportPanel.getByRole('button', { name: 'Download', exact: true }).click();
+    const artifact = await download;
+    assert.equal(artifact.suggestedFilename(), fileName);
+    await artifact.saveAs(path.join(temp, fileName));
+  }
+  const knownHosts = path.join(temp, knownHostsName);
+  const exportedPin = readFileSync(knownHosts, 'utf8');
+  const options = await api('/panel/api/inbounds/options');
+  const actualHostKey = options.find((row) => row.id === inbound.id)?.sshHostKey;
+  assert.equal(exportedPin, `[127.0.0.1]:${sshPort} ${actualHostKey}\n`);
+  assert(!readFileSync(path.join(temp, configName), 'utf8').includes('PRIVATE KEY'));
+  await infoDialog.getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   await page.getByRole('tab', { name: 'Traffic policy' }).click();
   await page.getByLabel('Upload limit (B/s)', { exact: true }).fill('32768');
@@ -219,43 +285,43 @@ try {
   const meterWaitMs = Date.now() - meterWaitStarted;
   assert(meterWaitMs <= 2000, `Meter replacement took ${meterWaitMs} ms`);
 
-  const hostFile = path.join(temp, 'host-key');
-  writeFileSync(hostFile, inbound.settings.hostKey, { mode: 0o600 });
-  const publicHost = execFileSync('ssh-keygen', ['-y', '-f', hostFile], {
-    encoding: 'utf8',
-  }).trim();
-  const knownHosts = path.join(temp, 'known_hosts');
-  writeFileSync(knownHosts, `[127.0.0.1]:${sshPort} ${publicHost}\n`, { mode: 0o600 });
   const sshIdentityArgs = [
     '-F',
-    '/dev/null',
+    path.join(temp, configName),
+    '-i',
+    key,
     '-o',
     'BatchMode=yes',
     '-o',
-    'IdentitiesOnly=yes',
-    '-o',
-    'StrictHostKeyChecking=yes',
-    '-o',
-    `UserKnownHostsFile=${knownHosts}`,
-    '-o',
-    'ExitOnForwardFailure=yes',
-    '-o',
     'ConnectTimeout=3',
-    '-i',
-    key,
-    '-p',
-    String(sshPort),
   ];
+  const wrongKey = path.join(temp, 'wrong-host');
+  execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', wrongKey]);
+  writeFileSync(knownHosts, `[127.0.0.1]:${sshPort} ${readFileSync(wrongKey + '.pub', 'utf8')}`);
+  let wrongHost;
+  try {
+    execFileSync('ssh', [...sshIdentityArgs, '-W', `127.0.0.1:${targetPort}`, alias], {
+      cwd: temp,
+      input: 'must-not-arrive',
+      encoding: 'utf8',
+      timeout: 5000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch (error) {
+    wrongHost = error;
+  } finally {
+    writeFileSync(knownHosts, exportedPin);
+  }
+  assert(
+    wrongHost && wrongHost.status !== null && wrongHost.status !== 0,
+    'Mismatched host key must fail',
+  );
+  assert.equal(wrongHost.stdout, '');
+  assert.match(wrongHost.stderr, /Host key verification failed/);
   const ssh = spawn(
     'ssh',
-    [
-      ...sshIdentityArgs,
-      '-N',
-      '-L',
-      `127.0.0.1:${forwardPort}:127.0.0.1:${targetPort}`,
-      `${email}@127.0.0.1`,
-    ],
-    { stdio: ['ignore', 'ignore', 'pipe'] },
+    [...sshIdentityArgs, '-N', '-L', `127.0.0.1:${forwardPort}:127.0.0.1:${targetPort}`, alias],
+    { cwd: temp, stdio: ['ignore', 'ignore', 'pipe'] },
   );
   processes.push(ssh);
   let sshError = '';
@@ -360,16 +426,13 @@ try {
   await page.getByRole('cell', { name: '0 B', exact: true }).waitFor();
   let denial;
   try {
-    execFileSync(
-      'ssh',
-      [...sshIdentityArgs, '-W', `127.0.0.1:${targetPort}`, `${email}@127.0.0.1`],
-      {
-        input: 'quota-probe',
-        encoding: 'utf8',
-        timeout: 5000,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      },
-    );
+    execFileSync('ssh', [...sshIdentityArgs, '-W', `127.0.0.1:${targetPort}`, alias], {
+      cwd: temp,
+      input: 'quota-probe',
+      encoding: 'utf8',
+      timeout: 5000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
   } catch (error) {
     denial = error;
   }
@@ -386,9 +449,23 @@ try {
   if (process.env.XUI_E2E_SCREENSHOT)
     await page.screenshot({ path: process.env.XUI_E2E_SCREENSHOT });
   console.log(
-    `PASS: real browser -> authenticated panel API -> SQLite -> managed SSH -> pinned Xray -> loopback echo; 16384 B each direction, 49152 B billed at 1.5x; stale editor preserved and explicitly reloaded; list balance uses billed bytes; quota reduced below billed usage marks depleted and rejects real SSH. Meter initially ready: ${initiallyReady}; readiness wait: ${meterWaitMs} ms.`,
+    `PASS: browser-created SSH inbound and public-key client; downloaded OpenSSH config + actual host pin; mismatched host key refused; real browser -> authenticated panel API -> SQLite -> managed SSH -> pinned Xray -> loopback echo; 16384 B each direction, 49152 B billed at 1.5x; stale editor preserved and explicitly reloaded; list balance uses billed bytes; quota reduced below billed usage marks depleted and rejects real SSH. Initial scheduled application: ${startupWaitMs} ms. Meter initially ready: ${initiallyReady}; readiness wait: ${meterWaitMs} ms.`,
   );
 } catch (error) {
+  if (page && !page.isClosed()) {
+    console.error(
+      'UI billing diagnostics:',
+      JSON.stringify({
+        lastListing,
+        labels: await page
+          .locator('[role="progressbar"]')
+          .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label'))),
+        visibility: await page.evaluate(() => document.visibilityState),
+      }),
+    );
+    if (process.env.XUI_E2E_SCREENSHOT)
+      await page.screenshot({ path: process.env.XUI_E2E_SCREENSHOT });
+  }
   const diagnostics = (
     panelLog === undefined ? '' : readFileSync(path.join(temp, 'panel.log'), 'utf8')
   )

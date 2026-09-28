@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ClientBillingSchema } from './client-policy';
+import { SSHClientSchema } from './ssh';
 
 const nullableStringArray = z
   .array(z.string())
@@ -58,6 +59,7 @@ export const ClientRecordSchema = z
     forwardedPorts: z.string().optional(),
     secret: z.string().optional(),
     adTag: z.string().optional(),
+    ssh: SSHClientSchema.nullable().optional(),
     createdAt: z.number().optional(),
     updatedAt: z.number().optional(),
   })
@@ -138,6 +140,7 @@ export const InboundOptionSchema = z
     awgServer: AwgServerOptionSchema.nullable().optional(),
     tuicServer: TuicServerOptionSchema.nullable().optional(),
     mtprotoDomain: z.string().optional(),
+    sshHostKey: z.string().optional(),
     // Hosting node id; absent/null for this panel's own inbounds (#4997).
     nodeId: z.number().nullable().optional(),
     // Share-host resolution inputs, mirroring the backend resolveInboundAddress so
@@ -343,6 +346,7 @@ export const ClientFormSchema = z.object({
   comment: z.string(),
   enable: z.boolean(),
   inboundIds: z.array(z.number()),
+  ssh: SSHClientSchema.optional(),
 });
 
 export const ClientCreateFormSchema = ClientFormSchema.extend({

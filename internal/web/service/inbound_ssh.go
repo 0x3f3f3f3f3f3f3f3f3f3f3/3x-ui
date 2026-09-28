@@ -24,6 +24,21 @@ type sshInboundSettings struct {
 	Clients    []model.Client `json:"clients"`
 }
 
+func inboundSSHHostPublicKey(protocol, settings string) string {
+	if protocol != string(model.SSH) {
+		return ""
+	}
+	var parsed sshInboundSettings
+	if err := json.Unmarshal([]byte(settings), &parsed); err != nil {
+		return ""
+	}
+	signer, err := ssh.ParsePrivateKey([]byte(parsed.HostKey))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(signer.PublicKey())))
+}
+
 func normalizeSSHInbound(inbound *model.Inbound, previous string) error {
 	if inbound.Protocol != model.SSH {
 		return nil

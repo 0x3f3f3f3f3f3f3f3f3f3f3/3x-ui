@@ -3503,6 +3503,9 @@ export const SCHEMAS: Record<string, unknown> = {
       "ssMethod": {
         "type": "string"
       },
+      "sshHostKey": {
+        "type": "string"
+      },
       "tag": {
         "example": "in-443-tcp",
         "type": "string"

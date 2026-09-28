@@ -3529,6 +3529,9 @@
           "ssMethod": {
             "type": "string"
           },
+          "sshHostKey": {
+            "type": "string"
+          },
           "tag": {
             "example": "in-443-tcp",
             "type": "string"
@@ -5563,6 +5566,7 @@
                       "shareAddr": "",
                       "shareAddrStrategy": "",
                       "ssMethod": "",
+                      "sshHostKey": "",
                       "tag": "in-443-tcp",
                       "tlsFlowCapable": true,
                       "tuicServer": null,

@@ -22,6 +22,7 @@ import {
   isAmneziaWGClient,
 } from './amneziawgConfig';
 import { buildTuicClientConfig, findTuicInbound, isTuicClient } from './tuicConfig';
+import SSHConfigExport from './SSHConfigExport';
 
 interface SubSettings {
   enable: boolean;
@@ -373,7 +374,15 @@ function ClientQrModalContent({
     );
   }, [client, tuicInbound, subSettings.publicHost]);
 
+  const sshInbounds = useMemo(
+    () =>
+      (client?.inboundIds || [])
+        .map((id) => inboundsById[id])
+        .filter((ib) => ib?.protocol === 'ssh'),
+    [client, inboundsById],
+  );
   const hasAnything =
+    sshInbounds.length > 0 ||
     !!subLink ||
     !!subJsonLink ||
     wgConfigs.length > 0 ||
@@ -418,6 +427,20 @@ function ClientQrModalContent({
 
   const items = useMemo(() => {
     const out: { key: string; label: React.ReactNode; children: React.ReactNode }[] = [];
+    if (client)
+      sshInbounds.forEach((inbound) =>
+        out.push({
+          key: `ssh-config-${inbound.id}`,
+          label: `${t('pages.clients.ssh.exportTitle')} — ${inbound.remark || inbound.tag || inbound.id}`,
+          children: (
+            <SSHConfigExport
+              client={client}
+              inbound={inbound}
+              publicHost={subSettings.publicHost}
+            />
+          ),
+        }),
+      );
     if (subLink) {
       out.push({
         key: 'sub',
@@ -529,11 +552,13 @@ function ClientQrModalContent({
     wgConfigs,
     awgConfigs,
     links,
-    client?.email,
     selectVariant,
     regenerateHappLink,
     openHappSettings,
     tuicConfigText,
+    sshInbounds,
+    client,
+    subSettings.publicHost,
     t,
   ]);
 
@@ -555,7 +580,7 @@ function ClientQrModalContent({
       onCancel={() => onOpenChange(false)}
     >
       <Spin spinning={loading}>
-        {!client?.subId && !loading && (
+        {!client?.subId && !hasAnything && !loading && (
           <div style={{ padding: 24, textAlign: 'center', opacity: 0.6 }}>
             {t('pages.clients.noSubId')}
           </div>

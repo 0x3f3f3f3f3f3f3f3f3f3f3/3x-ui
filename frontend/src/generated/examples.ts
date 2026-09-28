@@ -901,6 +901,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "shareAddr": "",
     "shareAddrStrategy": "",
     "ssMethod": "",
+    "sshHostKey": "",
     "tag": "in-443-tcp",
     "tlsFlowCapable": true,
     "tuicServer": null,

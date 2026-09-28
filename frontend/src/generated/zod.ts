@@ -858,6 +858,7 @@ export const InboundOptionSchema = z.object({
   shareAddr: z.string().optional(),
   shareAddrStrategy: z.string().optional(),
   ssMethod: z.string(),
+  sshHostKey: z.string().optional(),
   tag: z.string(),
   tlsFlowCapable: z.boolean(),
   tuicServer: z.lazy(() => TuicServerSettingsSchema).nullable().optional(),

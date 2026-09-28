@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Alert,
   AutoComplete,
   Button,
   Col,
@@ -50,6 +51,8 @@ import type {
 import { useFail2banStatusQuery, getLimitIpNotice } from '@/api/queries/useFail2banStatusQuery';
 import ClientRenewalFields from './ClientRenewalFields';
 import ClientPolicyEditor from './ClientPolicyEditor';
+import SSHClientFields from './SSHClientFields';
+import { SSHClientSchema } from '@/schemas/ssh';
 import { ClientFormSchema, ClientCreateFormSchema, type ClientFormValues } from '@/schemas/client';
 import './ClientFormModal.css';
 
@@ -66,6 +69,7 @@ const MULTI_CLIENT_PROTOCOLS = new Set([
   'mtproto',
   'amneziawg',
   'tuic',
+  'ssh',
 ]);
 
 const CLIENT_FORM_MODAL_Z_INDEX = 1000;
@@ -393,6 +397,7 @@ export default function ClientFormModal({
         wgKeepAlive: client.keepAlive ?? 0,
         secret: client.secret || '',
         adTag: client.adTag || '',
+        ssh: client.ssh ?? undefined,
       };
       if (et < 0) {
         seed.delayedStart = true;
@@ -467,6 +472,24 @@ export default function ClientFormModal({
     () => (inboundIds || []).some((id) => tuicIds.has(id)),
     [inboundIds, tuicIds],
   );
+
+  const hasSSH =
+    !!client?.ssh ||
+    (inboundIds || []).some((id) => inbounds.some((ib) => ib.id === id && ib.protocol === 'ssh'));
+  const hasOtherProtocol = (inboundIds || []).some((id) =>
+    inbounds.some((ib) => ib.id === id && ib.protocol !== 'ssh'),
+  );
+  const canSelectAll =
+    hasSSH ||
+    hasOtherProtocol ||
+    !inbounds.some((ib) => ib.protocol === 'ssh') ||
+    !inbounds.some((ib) => MULTI_CLIENT_PROTOCOLS.has(ib.protocol || '') && ib.protocol !== 'ssh');
+
+  useEffect(() => {
+    if (hasSSH && !methods.getValues('ssh')) {
+      methods.setValue('ssh', { publicKeys: [], targets: [], reverse: [] });
+    }
+  }, [hasSSH, methods]);
 
   const mtprotoDomain = useMemo(() => {
     for (const id of inboundIds || []) {
@@ -574,12 +597,17 @@ export default function ClientFormModal({
       (inbounds || [])
         .filter((ib) => MULTI_CLIENT_PROTOCOLS.has(ib.protocol || ''))
         .filter((ib) => ib.enable || (inboundIds || []).includes(ib.id))
+        .filter(
+          (ib) =>
+            (inboundIds || []).includes(ib.id) ||
+            (ib.protocol === 'ssh' ? !hasOtherProtocol && !ib.nodeId : !hasSSH),
+        )
         .map((ib) => ({
           label: formatInboundLabel(ib.tag, ib.remark),
           value: ib.id,
           title: formatInboundLabel(ib.tag, ib.remark),
         })),
-    [inbounds, inboundIds],
+    [inbounds, inboundIds, hasSSH, hasOtherProtocol],
   );
 
   const expiryDayjs = useMemo<Dayjs | null>(
@@ -655,6 +683,20 @@ export default function ClientFormModal({
 
   async function onSubmit() {
     const values = methods.getValues();
+    if (
+      hasSSH &&
+      (hasOtherProtocol ||
+        values.inboundIds.some((id) => inbounds.some((ib) => ib.id === id && !!ib.nodeId)))
+    ) {
+      messageApi.error(t('pages.clients.ssh.localOnly'));
+      return;
+    }
+    const ssh = hasSSH ? SSHClientSchema.safeParse(values.ssh) : null;
+    if (ssh && !ssh.success) {
+      setActiveTab('config');
+      messageApi.error(t(ssh.error.issues[0]?.message ?? 'pages.clients.ssh.publicKeyRequired'));
+      return;
+    }
     const schema = isEdit ? ClientFormSchema : ClientCreateFormSchema;
     const validated = schema.safeParse({
       email: values.email,
@@ -681,6 +723,7 @@ export default function ClientFormModal({
       comment: values.comment,
       enable: values.enable,
       inboundIds: values.inboundIds,
+      ssh: ssh?.success ? ssh.data : undefined,
     });
     if (!validated.success) {
       const issue = validated.error.issues[0];
@@ -715,6 +758,7 @@ export default function ClientFormModal({
       comment: values.comment,
       enable: !!values.enable,
     };
+    if (ssh?.success) clientPayload.ssh = ssh.data;
     const reverseTagValue = showReverseTag ? (values.reverseTag || '').trim() : '';
     if (reverseTagValue) {
       clientPayload.reverse = { tag: reverseTagValue };
@@ -915,68 +959,74 @@ export default function ClientFormModal({
                             <InputNumber min={0} step={1} style={{ width: '100%' }} />
                           </FormField>
                         </Col>
-                        <Col xs={24} md={12}>
-                          <Form.Item
-                            label={t('pages.clients.limitIp')}
-                            tooltip={t('pages.clients.limitIpDesc')}
-                          >
-                            <Tooltip title={limitIpNotice || undefined}>
-                              <span style={{ display: 'flex', width: '100%' }}>
-                                <Space.Compact style={{ display: 'flex', flex: 1 }}>
+                        {!hasSSH && (
+                          <>
+                            <Col xs={24} md={12}>
+                              <Form.Item
+                                label={t('pages.clients.limitIp')}
+                                tooltip={t('pages.clients.limitIpDesc')}
+                              >
+                                <Tooltip title={limitIpNotice || undefined}>
+                                  <span style={{ display: 'flex', width: '100%' }}>
+                                    <Space.Compact style={{ display: 'flex', flex: 1 }}>
+                                      <InputNumber
+                                        value={limitIp}
+                                        min={0}
+                                        disabled={limitIpDisabled}
+                                        style={{
+                                          flex: 1,
+                                          ...(limitIpDisabled ? { pointerEvents: 'none' } : null),
+                                        }}
+                                        onChange={(v) =>
+                                          methods.setValue('limitIp', Number(v) || 0)
+                                        }
+                                      />
+                                      {isEdit && (
+                                        <Tooltip title={t('pages.clients.ipLog')}>
+                                          <Button
+                                            aria-label={t('pages.clients.ipLog')}
+                                            icon={<EyeOutlined />}
+                                            loading={ipsLoading}
+                                            onClick={openIpsModal}
+                                          >
+                                            {clientIps.length > 0 ? clientIps.length : ''}
+                                          </Button>
+                                        </Tooltip>
+                                      )}
+                                    </Space.Compact>
+                                  </span>
+                                </Tooltip>
+                              </Form.Item>
+                            </Col>
+                            <Col xs={24} md={12}>
+                              <Form.Item
+                                label={t('pages.clients.limitHwid')}
+                                tooltip={t('pages.clients.limitHwidDesc')}
+                              >
+                                <Space.Compact style={{ display: 'flex' }}>
                                   <InputNumber
-                                    value={limitIp}
+                                    value={limitHwid}
                                     min={0}
-                                    disabled={limitIpDisabled}
-                                    style={{
-                                      flex: 1,
-                                      ...(limitIpDisabled ? { pointerEvents: 'none' } : null),
-                                    }}
-                                    onChange={(v) => methods.setValue('limitIp', Number(v) || 0)}
+                                    style={{ flex: 1 }}
+                                    onChange={(v) => methods.setValue('limitHwid', Number(v) || 0)}
                                   />
                                   {isEdit && (
-                                    <Tooltip title={t('pages.clients.ipLog')}>
+                                    <Tooltip title={t('pages.clients.hwidLog')}>
                                       <Button
-                                        aria-label={t('pages.clients.ipLog')}
+                                        aria-label={t('pages.clients.hwidLog')}
                                         icon={<EyeOutlined />}
-                                        loading={ipsLoading}
-                                        onClick={openIpsModal}
+                                        loading={hwidsLoading}
+                                        onClick={openHwidsModal}
                                       >
-                                        {clientIps.length > 0 ? clientIps.length : ''}
+                                        {clientHwids.length > 0 ? clientHwids.length : ''}
                                       </Button>
                                     </Tooltip>
                                   )}
                                 </Space.Compact>
-                              </span>
-                            </Tooltip>
-                          </Form.Item>
-                        </Col>
-                        <Col xs={24} md={12}>
-                          <Form.Item
-                            label={t('pages.clients.limitHwid')}
-                            tooltip={t('pages.clients.limitHwidDesc')}
-                          >
-                            <Space.Compact style={{ display: 'flex' }}>
-                              <InputNumber
-                                value={limitHwid}
-                                min={0}
-                                style={{ flex: 1 }}
-                                onChange={(v) => methods.setValue('limitHwid', Number(v) || 0)}
-                              />
-                              {isEdit && (
-                                <Tooltip title={t('pages.clients.hwidLog')}>
-                                  <Button
-                                    aria-label={t('pages.clients.hwidLog')}
-                                    icon={<EyeOutlined />}
-                                    loading={hwidsLoading}
-                                    onClick={openHwidsModal}
-                                  >
-                                    {clientHwids.length > 0 ? clientHwids.length : ''}
-                                  </Button>
-                                </Tooltip>
-                              )}
-                            </Space.Compact>
-                          </Form.Item>
-                        </Col>
+                              </Form.Item>
+                            </Col>
+                          </>
+                        )}
                       </Row>
 
                       <Row gutter={16}>
@@ -1100,13 +1150,25 @@ export default function ClientFormModal({
                         </Row>
                       )}
 
-                      <Form.Item label={t('pages.clients.attachedInbounds')} required={!isEdit}>
-                        <SelectAllClearButtons
-                          options={inboundOptions}
-                          value={inboundIds}
-                          onChange={(v) => methods.setValue('inboundIds', v)}
+                      {hasSSH && (
+                        <Alert
+                          type="info"
+                          showIcon
+                          title={t('pages.clients.ssh.limitsUnavailable')}
+                          style={{ marginBottom: 16 }}
                         />
+                      )}
+
+                      <Form.Item label={t('pages.clients.attachedInbounds')} required={!isEdit}>
+                        {canSelectAll && (
+                          <SelectAllClearButtons
+                            options={inboundOptions}
+                            value={inboundIds}
+                            onChange={(v) => methods.setValue('inboundIds', v)}
+                          />
+                        )}
                         <Select
+                          aria-label={t('pages.clients.attachedInbounds')}
                           mode="multiple"
                           value={inboundIds}
                           onChange={(v) => methods.setValue('inboundIds', v)}
@@ -1140,38 +1202,43 @@ export default function ClientFormModal({
                   label: t('pages.clients.tabCredentials'),
                   children: (
                     <>
-                      <Form.Item label={t('pages.clients.uuid')}>
-                        <Space.Compact style={{ display: 'flex' }}>
-                          <Input
-                            value={uuid}
-                            style={{ flex: 1 }}
-                            onChange={(e) => methods.setValue('uuid', e.target.value)}
-                          />
-                          <Button
-                            aria-label={t('regenerate')}
-                            icon={<ReloadOutlined />}
-                            onClick={() => methods.setValue('uuid', RandomUtil.randomUUID())}
-                          />
-                        </Space.Compact>
-                      </Form.Item>
+                      {hasSSH && <SSHClientFields />}
+                      {!hasSSH && (
+                        <Form.Item label={t('pages.clients.uuid')}>
+                          <Space.Compact style={{ display: 'flex' }}>
+                            <Input
+                              value={uuid}
+                              style={{ flex: 1 }}
+                              onChange={(e) => methods.setValue('uuid', e.target.value)}
+                            />
+                            <Button
+                              aria-label={t('regenerate')}
+                              icon={<ReloadOutlined />}
+                              onClick={() => methods.setValue('uuid', RandomUtil.randomUUID())}
+                            />
+                          </Space.Compact>
+                        </Form.Item>
+                      )}
 
-                      <Form.Item
-                        label={t('pages.clients.password')}
-                        tooltip={t('pages.clients.passwordDesc')}
-                      >
-                        <Space.Compact style={{ display: 'flex' }}>
-                          <Input
-                            value={password}
-                            style={{ flex: 1 }}
-                            onChange={(e) => methods.setValue('password', e.target.value)}
-                          />
-                          <Button
-                            aria-label={t('regenerate')}
-                            icon={<ReloadOutlined />}
-                            onClick={regeneratePassword}
-                          />
-                        </Space.Compact>
-                      </Form.Item>
+                      {!hasSSH && (
+                        <Form.Item
+                          label={t('pages.clients.password')}
+                          tooltip={t('pages.clients.passwordDesc')}
+                        >
+                          <Space.Compact style={{ display: 'flex' }}>
+                            <Input
+                              value={password}
+                              style={{ flex: 1 }}
+                              onChange={(e) => methods.setValue('password', e.target.value)}
+                            />
+                            <Button
+                              aria-label={t('regenerate')}
+                              icon={<ReloadOutlined />}
+                              onClick={regeneratePassword}
+                            />
+                          </Space.Compact>
+                        </Form.Item>
+                      )}
 
                       <Form.Item
                         label={t('pages.clients.subId')}
@@ -1193,25 +1260,27 @@ export default function ClientFormModal({
                         </Space.Compact>
                       </Form.Item>
 
-                      <Form.Item
-                        label={t('pages.clients.hysteriaAuth')}
-                        tooltip={t('pages.clients.hysteriaAuthDesc')}
-                      >
-                        <Space.Compact style={{ display: 'flex' }}>
-                          <Input
-                            value={auth}
-                            style={{ flex: 1 }}
-                            onChange={(e) => methods.setValue('auth', e.target.value)}
-                          />
-                          <Button
-                            aria-label={t('regenerate')}
-                            icon={<ReloadOutlined />}
-                            onClick={() =>
-                              methods.setValue('auth', RandomUtil.randomLowerAndNum(16))
-                            }
-                          />
-                        </Space.Compact>
-                      </Form.Item>
+                      {!hasSSH && (
+                        <Form.Item
+                          label={t('pages.clients.hysteriaAuth')}
+                          tooltip={t('pages.clients.hysteriaAuthDesc')}
+                        >
+                          <Space.Compact style={{ display: 'flex' }}>
+                            <Input
+                              value={auth}
+                              style={{ flex: 1 }}
+                              onChange={(e) => methods.setValue('auth', e.target.value)}
+                            />
+                            <Button
+                              aria-label={t('regenerate')}
+                              icon={<ReloadOutlined />}
+                              onClick={() =>
+                                methods.setValue('auth', RandomUtil.randomLowerAndNum(16))
+                              }
+                            />
+                          </Space.Compact>
+                        </Form.Item>
+                      )}
 
                       {showFlow && (
                         <FormField name="flow" label={t('pages.clients.flow')}>

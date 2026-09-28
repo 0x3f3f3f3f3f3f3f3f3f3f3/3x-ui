@@ -12,6 +12,7 @@ import type {
 } from '@/schemas/protocols/inbound/shadowsocks';
 import type { TrojanClient, TrojanInboundSettings } from '@/schemas/protocols/inbound/trojan';
 import type { TuicClient, TuicInboundSettings } from '@/schemas/protocols/inbound/tuic';
+import type { SSHInboundSettings } from '@/schemas/protocols/inbound/ssh';
 import type { TunInboundSettings } from '@/schemas/protocols/inbound/tun';
 import type { TunnelInboundSettings } from '@/schemas/protocols/inbound/tunnel';
 import type { VlessClient, VlessInboundSettings } from '@/schemas/protocols/inbound/vless';
@@ -375,7 +376,8 @@ export type AnyInboundSettings =
   | WireguardInboundSettings
   | MtprotoInboundSettings
   | AmneziawgInboundSettings
-  | TuicInboundSettings;
+  | TuicInboundSettings
+  | SSHInboundSettings;
 
 export function createDefaultInboundSettings(protocol: string): AnyInboundSettings | null {
   switch (protocol) {
@@ -405,6 +407,8 @@ export function createDefaultInboundSettings(protocol: string): AnyInboundSettin
       return createDefaultAmneziawgInboundSettings();
     case 'tuic':
       return createDefaultTuicInboundSettings();
+    case 'ssh':
+      return { clients: [] };
     default:
       return null;
   }

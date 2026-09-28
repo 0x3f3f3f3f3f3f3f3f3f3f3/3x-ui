@@ -542,6 +542,8 @@ export default function InboundFormModal({
             ],
           },
         });
+      } else if (next === Protocols.SSH) {
+        setV('streamSettings', undefined);
       } else if (next === Protocols.WIREGUARD || next === Protocols.TUNNEL) {
         setV('streamSettings', { security: 'none' });
       } else {
