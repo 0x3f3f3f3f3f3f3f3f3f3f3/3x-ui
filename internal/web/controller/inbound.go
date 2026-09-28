@@ -73,6 +73,7 @@ func (a *InboundController) initRouter(g *gin.RouterGroup) {
 	g.GET("/list", a.getInbounds)
 	g.GET("/list/slim", a.getInboundsSlim)
 	g.GET("/options", a.getInboundOptions)
+	g.GET("/ssh/status", a.getSSHRuntimeStatuses)
 	g.GET("/allLinks", a.getAllInboundLinks)
 	g.GET("/get/:id", a.getInbound)
 	g.GET("/:id/fallbacks", a.getFallbacks)
@@ -112,6 +113,16 @@ func (a *InboundController) getInboundsSlim(c *gin.Context) {
 		return
 	}
 	jsonObj(c, inbounds, nil)
+}
+
+func (a *InboundController) getSSHRuntimeStatuses(c *gin.Context) {
+	user := session.GetLoginUser(c)
+	statuses, err := a.inboundService.GetSSHRuntimeStatuses(user.Id)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.obtain"), err)
+		return
+	}
+	jsonObj(c, statuses, nil)
 }
 
 // getAllInboundLinks returns every inbound's share links across all clients,

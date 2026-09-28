@@ -1235,6 +1235,12 @@ export const EXAMPLES: Record<string, unknown> = {
     "address": "",
     "port": 0
   },
+  "SSHRuntimeStatus": {
+    "authenticatedConnections": 2,
+    "inboundId": 1,
+    "reason": "",
+    "state": "running"
+  },
   "SSHTarget": {
     "host": "",
     "port": 0

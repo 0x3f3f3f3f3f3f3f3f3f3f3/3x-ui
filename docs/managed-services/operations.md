@@ -53,6 +53,31 @@ refuse to run against the host network namespace.
 These are required implementation/validation tasks. No installation script or
 rollback guarantee for the new backends is claimed at this stage.
 
+## Local SSH runtime status API
+
+`GET /panel/api/inbounds/ssh/status` returns the authenticated user's SSH
+inbounds through the existing success/object envelope. Admin tokens and panel
+sessions are allowed; monitor and node-sync tokens are denied. The read does
+not start a listener, apply pending changes, or parse stored private keys.
+An owner without SSH inbounds receives `[]`; a database failure is an error,
+not an empty successful result.
+
+Each entry contains `inboundId`, `state`, `reason` and
+`authenticatedConnections`. States are `disabled`, `idle` (no enabled canonical
+clients), `pending`, `running`, `protected` and `unsupported` (remote SSH).
+`running` means the listener serves against the applied Xray configuration;
+it does not prove target reachability or override client quota/expiry checks.
+Connection counts are authenticated SSH transports. An unsigned handshake
+does not count, and two channels on one transport still count as one connection.
+This is not a per-client online, unique-user or device count.
+
+If a desired disable/client change has not yet reached a live listener, the
+API reports `pending` with the actual connection count. Protected reasons are
+sanitized; credentials, client identities, targets and internal bridge settings
+are not included. A replaced database handle cannot inherit old runtime counts.
+The inbound-list display is the next increment; remote runtime observation and
+distributed policy execution remain unfinished.
+
 ## Local client policy API
 
 `GET /panel/api/clients/policy/:email` returns the client identity, edit version,

@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/ssh"
 
+	"github.com/mhsanaei/3x-ui/v3/internal/config"
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/logger"
@@ -227,8 +228,10 @@ func testSSHInboundProductionXrayLifecycle(t *testing.T, configure func(map[stri
 	if got := countWarnings() - beforeWarnings; got != 1 {
 		t.Fatalf("listener failure was silent or logged repeatedly: %d warnings", got)
 	}
+	productionSSHStatus(t, inbound.Id, "protected", 0, "listener unavailable")
 	_ = occupied.Close()
 	productionSSHWait(t, address)
+	productionSSHStatus(t, inbound.Id, "running", 0, "")
 	if lookupClientRecord(t, client.Email).ExpiryTime >= 0 {
 		t.Fatal("starting the service consumed an unused client's delayed expiry")
 	}
@@ -283,6 +286,7 @@ func testSSHInboundProductionXrayLifecycle(t *testing.T, configure func(map[stri
 	if _, err := io.ReadFull(conn, reply); err != nil || !bytes.Equal(reply, payload) {
 		t.Fatalf("service-created SSH did not traverse real Xray: %v", err)
 	}
+	productionSSHStatus(t, inbound.Id, "running", 1, "")
 	record := lookupClientRecord(t, client.Email)
 	var projection xray.ClientTraffic
 	if err := database.GetDB().Where("email = ?", client.Email).First(&projection).Error; err != nil {
@@ -309,6 +313,30 @@ func testSSHInboundProductionXrayLifecycle(t *testing.T, configure func(map[stri
 	}
 	t.Cleanup(func() { _ = unrelated.Close() })
 	productionSSHEcho(t, unrelated)
+	productionSSHStatus(t, inbound.Id, "running", 2, "")
+	// Model committed desired changes before their runtime notification arrives.
+	// Reads must retain the observed sessions without applying those changes.
+	if err := database.GetDB().Model(inbound).Update("enable", false).Error; err != nil {
+		t.Fatal(err)
+	}
+	productionSSHStatus(t, inbound.Id, "pending", 2, "awaiting disable")
+	productionSSHEcho(t, unrelated)
+	if err := database.GetDB().Model(inbound).Update("enable", true).Error; err != nil {
+		t.Fatal(err)
+	}
+	var pendingLinks []model.ClientInbound
+	if err := database.GetDB().Where("inbound_id = ?", inbound.Id).Find(&pendingLinks).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.GetDB().Where("inbound_id = ?", inbound.Id).Delete(&model.ClientInbound{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	productionSSHStatus(t, inbound.Id, "pending", 2, "awaiting client update")
+	productionSSHEcho(t, unrelated)
+	if err := database.GetDB().Create(&pendingLinks).Error; err != nil {
+		t.Fatal(err)
+	}
+	productionSSHStatus(t, inbound.Id, "running", 2, "")
 	updated := *record.ToClient()
 	updated.SSH = nil
 	updated.Comment = "metadata must preserve credentials"
@@ -336,6 +364,7 @@ func testSSHInboundProductionXrayLifecycle(t *testing.T, configure func(map[stri
 	}
 	productionSSHClosed(t, conn)
 	productionSSHEcho(t, unrelated)
+	productionSSHStatus(t, inbound.Id, "running", 1, "")
 	signer, _ := ssh.NewSignerFromKey(rotatedKey)
 	live := productionSSHDial(t, address, client.Email, signer, host.PublicKey())
 	flow, err := live.Dial("tcp", "route.invalid:443")
@@ -443,10 +472,12 @@ func testSSHInboundProductionXrayLifecycle(t *testing.T, configure func(map[stri
 		_ = probe.Close()
 		t.Fatal("reconciliation resurrected a disabled SSH listener before the core config update")
 	}
+	productionSSHStatus(t, inbound.Id, "disabled", 0, "")
 	fresh.Enable = true
 	if _, _, err := (&InboundService{}).UpdateInbound(fresh); err != nil {
 		t.Fatal(err)
 	}
+	productionSSHStatus(t, inbound.Id, "pending", 0, "awaiting configuration")
 	if err := svc.RestartXray(false); err != nil {
 		t.Fatal(err)
 	}
@@ -484,6 +515,7 @@ func testSSHInboundProductionXrayLifecycle(t *testing.T, configure func(map[stri
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Logf("router process exit protected the SSH listener in %s", time.Since(crashedAt))
+	productionSSHStatus(t, inbound.Id, "protected", 0, "waiting for the applied Xray configuration")
 	if err := svc.RestartXray(false); err != nil {
 		t.Fatal(err)
 	}
@@ -511,6 +543,7 @@ func testSSHInboundProductionXrayLifecycle(t *testing.T, configure func(map[stri
 		_ = probe.Close()
 		t.Fatal("native listener survived conversion to an empty protected SSH service")
 	}
+	productionSSHStatus(t, native.Id, "idle", 0, "no enabled clients")
 	stoppedAt := time.Now()
 	if err := svc.StopXray(); err != nil {
 		t.Fatal(err)
@@ -526,6 +559,63 @@ func testSSHInboundProductionXrayLifecycle(t *testing.T, configure func(map[stri
 		t.Fatal("managed SSH flow survived router shutdown beyond 1.25s")
 	}
 	t.Logf("real service-created OpenSSH/Xray path billed %d payload bytes; router shutdown retired its flow in %s", account.Billed, time.Since(stoppedAt))
+	productionSSHStatus(t, inbound.Id, "pending", 0, "awaiting configuration")
+	if err := svc.RestartXray(true); err != nil {
+		t.Fatal(err)
+	}
+	productionSSHWait(t, address)
+	beforeRestore := productionSSHDial(t, address, client.Email, signer, host.PublicKey())
+	beforeRestoreFlow, err := beforeRestore.Dial("tcp", "route.invalid:443")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer beforeRestoreFlow.Close()
+	productionSSHEcho(t, beforeRestoreFlow)
+	productionSSHStatus(t, inbound.Id, "running", 1, "")
+	sshRuntimeState.Lock()
+	previousManager := sshRuntimeState.manager
+	sshRuntimeState.Unlock()
+	if err := database.InitDB(config.GetDBPath()); err != nil {
+		t.Fatal(err)
+	}
+	productionSSHStatus(t, inbound.Id, "pending", 0, "awaiting configuration")
+	sshRuntimeState.Lock()
+	readKeptManager := sshRuntimeState.manager == previousManager
+	sshRuntimeState.Unlock()
+	if !readKeptManager {
+		t.Fatal("status read replaced the manager after database restoration")
+	}
+	if err := svc.RestartXray(false); err != nil {
+		t.Fatal(err)
+	}
+	productionSSHWait(t, address)
+	productionSSHStatus(t, inbound.Id, "running", 0, "")
+	afterRestore := productionSSHDial(t, address, client.Email, signer, host.PublicKey())
+	afterRestoreFlow, err := afterRestore.Dial("tcp", "route.invalid:443")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer afterRestoreFlow.Close()
+	productionSSHEcho(t, afterRestoreFlow)
+	productionSSHStatus(t, inbound.Id, "running", 1, "")
+	if _, err := (&InboundService{}).DelInbound(inbound.Id); err != nil {
+		t.Fatal(err)
+	}
+	productionSSHClosed(t, afterRestoreFlow)
+	replacement := &model.Inbound{Protocol: model.SSH, Enable: true, Listen: "127.0.0.1", Port: port, Settings: `{"clients":[]}`}
+	if _, _, err := (&InboundService{}).AddInbound(replacement); err != nil {
+		t.Fatal(err)
+	}
+	productionSSHStatus(t, replacement.Id, "idle", 0, "no enabled clients")
+	statuses, err := (&InboundService{}).GetSSHRuntimeStatuses(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, status := range statuses {
+		if status.InboundID == inbound.Id {
+			t.Fatal("deleted inbound still appears in runtime status after port reassignment")
+		}
+	}
 }
 
 func productionSSHDial(t *testing.T, address, user string, signer ssh.Signer, host ssh.PublicKey) *ssh.Client {

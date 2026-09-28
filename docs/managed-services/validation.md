@@ -1867,3 +1867,110 @@ catalog check found zero fixture databases, proving failure cleanup as well
 (`/tmp/3x-ui-ssh-outbound-pg-cleanup-failure.log`). Script syntax/format and
 `git diff --check` pass. This test/documentation extension changes no production
 code and does not claim another full frontend/Go/race run.
+
+## Local SSH runtime observation API (after 5dcb0987)
+
+The server snapshot reports actual Serve lifetime and authenticated SSH
+transports under its mutex. The service joins a pure manager snapshot to the
+requesting owner's SSH metadata. It does not reconcile or instantiate a manager.
+The existing inbound controller exposes `/panel/api/inbounds/ssh/status`, with
+admin/session access and owner filtering; monitor and node-sync are denied.
+
+Server tests use an owned listener and real SSH handshakes. An unsigned socket
+counts zero; two authenticated transports for one client count two; opening two
+real echo channels on one transport still counts two. Closing a transport,
+revoking credentials, closing the server, and unexpected listener termination
+clear the appropriate counts/readiness. The missing interface and then zero-value
+stub failed before implementation. Full `internal/sshtunnel` race/shuffle passed
+13 top-level cases, no skips/races (14.538s). Both temporary mutations (count raw
+connections; use the single-start flag as readiness) failed and were restored.
+Logs: `/tmp/3x-ui-ssh-status-*.log`.
+
+The cold service test initially rejected an empty implementation; real lifecycle
+status initially reported pending for an occupied port and failed its protected
+assertion. The implemented service checks enabled canonical attachments and
+filters owners even for user ID zero. Cold reads leave the configured port
+unbound and the manager absent. A missing database table returns an error.
+
+The extended real OpenSSH/Xray fixture on SQLite and PostgreSQL now verifies:
+
+- Occupied listener → protected; release/reconciliation → running.
+- Actual authenticated connections → one/two; key rotation removes only the
+  revoked transport while another client's echo remains alive.
+- Desired disable and removed attachments, committed before runtime notification,
+  remain pending with the actual two transports; a read does not apply changes.
+- Applied disable → disabled/zero; full-edit suspension → pending/zero; router
+  exit → protected/zero; no enabled clients → idle/zero.
+- Full Stop → pending/zero without restart. Explicit start restores service.
+- Reopening the owned database replaces its handle. Status does not reuse old
+  counts/reasons or replace the manager; explicit application restores a fresh
+  listener and real echo. Deletion closes the actual flow; a new empty inbound
+  on that port is idle with no inherited count, and the old ID is absent.
+
+The first extension run failed because the fixture used automatic restart after
+an explicit Stop; the existing manual-stop guard intentionally refuses that.
+The fixture now invokes explicit restart, leaving runtime behavior unchanged.
+Both database paths passed in 10.624s, no skips (`ssh-status-transitions2.log`).
+The earlier focused both-database race run passed in 17.399s before these added
+transitions; final regression results are recorded below.
+
+The HTTP test first failed with route 404. It now exercises actual token auth,
+signed session cookies for a different owner, owner/native exclusion, the exact
+four-field safe payload, and failure envelopes on database errors. Both valid
+restricted tokens reach their allowed server-status endpoint before receiving
+403 here. The test initially used inbound-list as the monitor control, which is
+intentionally forbidden; the corrected control uses server-status. API test
+passed in 0.523s (`ssh-status-api-green2.log`).
+
+Generated DTO schemas, examples and endpoint documentation follow the existing
+Go→Zod/OpenAPI pipeline. This API increment does not claim inbound-list rendering,
+per-client online state, remote runtime execution, or the whole SSH vertical as
+complete.
+
+Six service mutations were rejected by behavioral assertions and restored:
+remove owner filtering, count disabled canonical clients, swallow database errors,
+ignore the database generation, report idle while detached clients still have
+live transports, and report disabled before the listener stops. The generation
+mutation exposed the old manager's `client rate policy unavailable` reason;
+the correct read reports pending without leaking that old state. Logs:
+`/tmp/3x-ui-ssh-status-mutations.log` and `ssh-status-mutation-*.log`.
+
+`npm run gen` generated 66 schemas and 198 operations. The OpenAPI copy was
+regenerated into the docs with `npm run gen:api` (same package script; `pnpm`
+was absent from this shell's PATH). Typecheck, endpoint lint/format and the
+68 generated-example checks passed (Vitest 0.810s). Local documentation links
+and `git diff --check` passed. No new translation keys or UI behavior are part
+of this backend/API increment.
+
+Reproduce the backend checks with the pinned Xray binary, isolated OpenSSH server
+and disposable PostgreSQL DSN from the preceding sections available:
+
+```sh
+export XRAY_E2E_BINARY=/tmp/3x-ui-xray-pinned
+export SSH_E2E_SERVER=/usr/sbin/sshd
+# Set XUI_TEST_PG_DSN to the owned PostgreSQL test server.
+GOFLAGS=-p=1 go test -shuffle=on -count=1 -json ./...
+GOFLAGS=-p=1 go test -race -shuffle=on ./internal/web/service ./internal/web/controller \
+  -run '^TestSSHRuntimeStatus|^TestSSHInboundRunsThroughProductionXrayLifecycle$|^TestSSHInbound_Postgres$' \
+  -count=1 -v
+```
+
+Final whole-Go regression: 51 test packages passed, 7 packages had no tests,
+29 conditional test cases skipped, no failed packages/cases. Service passed
+in 193.923s, controller in 5.651s, SSH tunnel in 13.160s, and web/route contracts
+in 0.652s. The new PostgreSQL status wrapper and both real lifecycle paths
+actually ran. Log: `/tmp/3x-ui-ssh-status-full-go.jsonl`.
+
+Final focused race/shuffle after all transition assertions and restored mutations:
+service 19.440s, controller 2.980s, 6 top-level tests total, no skips/race reports.
+PostgreSQL real-data-path ran in 7.11s; SQLite real-data-path ran in 5.51s.
+Log: `/tmp/3x-ui-ssh-status-final-race.log`. The complete frontend suite and
+real status-list browser acceptance belong to the next UI increment; they are
+not claimed by the API-only change.
+
+Final static/build checks: whole-repository `golangci-lint run` reported
+0 issues; frontend `npm run typecheck` and `npm run lint` returned zero;
+`npm run build` completed in 4.82s, followed by a successful `go build ./...`
+against the fresh embedded assets. Endpoint formatting, identical panel/docs
+OpenAPI copies and `git diff --check` passed. Logs:
+`/tmp/3x-ui-ssh-status-{go-lint,typecheck-final,fe-lint,fe-build,go-build}.log`.

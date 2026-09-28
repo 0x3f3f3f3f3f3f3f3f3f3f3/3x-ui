@@ -4866,6 +4866,32 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "SSHRuntimeStatus": {
+    "properties": {
+      "authenticatedConnections": {
+        "example": 2,
+        "type": "integer"
+      },
+      "inboundId": {
+        "example": 1,
+        "type": "integer"
+      },
+      "reason": {
+        "type": "string"
+      },
+      "state": {
+        "example": "running",
+        "type": "string"
+      }
+    },
+    "required": [
+      "authenticatedConnections",
+      "inboundId",
+      "reason",
+      "state"
+    ],
+    "type": "object"
+  },
   "SSHTarget": {
     "properties": {
       "host": {

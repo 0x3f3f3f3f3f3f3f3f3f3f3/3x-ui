@@ -179,6 +179,12 @@ after panel restart. Node distribution, deployment acceptance and remaining publ
 health/status integration still belong to this same Task 5. API-less SSH upstream
 activation is explicitly unsupported.
 
+The [runtime observability increment](ssh-runtime-observability.md) now exposes
+local SSH listener/protected state and authenticated transport counts through
+an owner-filtered, read-only API. Actual SQLite/PostgreSQL lifecycle and HTTP
+authorization tests cover the backend. Inbound-list display/browser acceptance
+is next; node, global policy, online/device-limit and deployment remain open.
+
 ## Task 6: mieru vertical integration
 
 Files: new `internal/mieru`, protocol registry/model/Runtime and existing UI.

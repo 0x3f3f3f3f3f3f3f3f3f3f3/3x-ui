@@ -73,6 +73,7 @@ type Server struct {
 	mu            sync.Mutex
 	listener      net.Listener
 	started       bool
+	serving       bool
 	conns         map[net.Conn]struct{}
 	slots         chan struct{}
 	listeners     chan struct{}
@@ -117,10 +118,15 @@ func (s *Server) Serve(listener net.Listener) error {
 		s.mu.Unlock()
 		return ErrClosed
 	}
-	s.started, s.listener = true, listener
+	s.started, s.serving, s.listener = true, true, listener
 	s.workers.Add(1)
 	s.mu.Unlock()
 	defer s.workers.Done()
+	defer func() {
+		s.mu.Lock()
+		s.serving = false
+		s.mu.Unlock()
+	}()
 	for {
 		conn, err := listener.Accept()
 		if err != nil {

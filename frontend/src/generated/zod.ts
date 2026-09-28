@@ -1173,6 +1173,14 @@ export const SSHRemoteBindSchema = z.object({
 });
 export type SSHRemoteBind = z.infer<typeof SSHRemoteBindSchema>;
 
+export const SSHRuntimeStatusSchema = z.object({
+  authenticatedConnections: z.number().int(),
+  inboundId: z.number().int(),
+  reason: z.string(),
+  state: z.string(),
+});
+export type SSHRuntimeStatus = z.infer<typeof SSHRuntimeStatusSchema>;
+
 export const SSHTargetSchema = z.object({
   host: z.string(),
   port: z.number().int(),

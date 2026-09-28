@@ -1102,6 +1102,13 @@ export interface SSHRemoteBind {
   port: number;
 }
 
+export interface SSHRuntimeStatus {
+  authenticatedConnections: number;
+  inboundId: number;
+  reason: string;
+  state: string;
+}
+
 export interface SSHTarget {
   host: string;
   port: number;

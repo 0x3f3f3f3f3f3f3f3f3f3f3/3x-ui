@@ -285,6 +285,15 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'GET',
+        path: '/panel/api/inbounds/ssh/status',
+        summary: 'Read the authenticated user’s SSH inbound runtime states.',
+        description:
+          'Does not apply configuration. Admin token or panel session required; monitor and node-sync tokens are denied. States: disabled, idle (no enabled clients), pending, running, protected, unsupported (remote SSH). Running means the listener serves against the applied router; it does not establish target reachability or client quota eligibility. authenticatedConnections counts SSH transports, excluding unsigned handshakes; channels are not separate connections. reason contains a sanitized diagnostic. Returns [] when no SSH inbounds belong to the user.',
+        responseSchema: 'SSHRuntimeStatus',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'GET',
         path: '/panel/api/inbounds/allLinks',
         responseObjectSchema: { type: 'array', nullable: true, items: { type: 'string' } },
         summary:

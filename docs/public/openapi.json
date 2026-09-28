@@ -4892,6 +4892,32 @@
         ],
         "type": "object"
       },
+      "SSHRuntimeStatus": {
+        "properties": {
+          "authenticatedConnections": {
+            "example": 2,
+            "type": "integer"
+          },
+          "inboundId": {
+            "example": 1,
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "state": {
+            "example": "running",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authenticatedConnections",
+          "inboundId",
+          "reason",
+          "state"
+        ],
+        "type": "object"
+      },
       "SSHTarget": {
         "properties": {
           "host": {
@@ -5887,6 +5913,53 @@
                       "wgDns": "",
                       "wgMtu": 0,
                       "wgPublicKey": ""
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/inbounds/ssh/status": {
+      "get": {
+        "tags": [
+          "Inbounds"
+        ],
+        "summary": "Read the authenticated user’s SSH inbound runtime states.",
+        "operationId": "get_panel_api_inbounds_ssh_status",
+        "description": "Does not apply configuration. Admin token or panel session required; monitor and node-sync tokens are denied. States: disabled, idle (no enabled clients), pending, running, protected, unsupported (remote SSH). Running means the listener serves against the applied router; it does not establish target reachability or client quota eligibility. authenticatedConnections counts SSH transports, excluding unsigned handshakes; channels are not separate connections. reason contains a sanitized diagnostic. Returns [] when no SSH inbounds belong to the user.",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SSHRuntimeStatus"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": [
+                    {
+                      "authenticatedConnections": 2,
+                      "inboundId": 1,
+                      "reason": "",
+                      "state": "running"
                     }
                   ]
                 }
