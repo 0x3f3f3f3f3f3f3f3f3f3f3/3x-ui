@@ -142,7 +142,9 @@ authorized reverse listeners, live key revocation and shared policy flows.
 Real OpenSSH verifies duplex shaping, quota at four multipliers and server/
 controller restart. Existing panel creation/edit/reset services now drive a
 production manager; real OpenSSH → panel-managed Xray tests run on SQLite and
-PostgreSQL. Public policy controls and the rest of the vertical remain open.
+PostgreSQL. Public policy API, persisted runtime controls and the existing-client policy tab
+are verified. Creation/bulk policy, list/dashboard billing summaries and the rest
+of the vertical remain open.
 The concrete private SOCKS bridge now carries authenticated identity, inbound
 tag, transport source and original destination into real Xray. Tests verify
 user/domain/IP/port/source routing, two observable exits, block priority and

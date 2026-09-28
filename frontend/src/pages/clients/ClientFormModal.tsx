@@ -49,6 +49,7 @@ import type {
 } from '@/hooks/useClients';
 import { useFail2banStatusQuery, getLimitIpNotice } from '@/api/queries/useFail2banStatusQuery';
 import ClientRenewalFields from './ClientRenewalFields';
+import ClientPolicyEditor from './ClientPolicyEditor';
 import { ClientFormSchema, ClientCreateFormSchema, type ClientFormValues } from '@/schemas/client';
 import './ClientFormModal.css';
 
@@ -283,6 +284,7 @@ export default function ClientFormModal({
   } = useFieldArray({ control: methods.control, name: 'externalLinks' });
 
   const [submitting, setSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState('basic');
   const [resetting, setResetting] = useState(false);
   const [clientIps, setClientIps] = useState<ClientIpInfo[]>([]);
   const [ipsLoading, setIpsLoading] = useState(false);
@@ -341,6 +343,7 @@ export default function ClientFormModal({
 
   useEffect(() => {
     if (!open) return;
+    setActiveTab('basic');
     setIpsModalOpen(false);
     setHwidsModalOpen(false);
 
@@ -841,9 +844,11 @@ export default function ClientFormModal({
             )}
             <div style={{ marginInlineStart: 'auto', display: 'flex', gap: 8 }}>
               <Button onClick={close}>{t('cancel')}</Button>
-              <Button type="primary" loading={submitting} onClick={onSubmit}>
-                {isEdit ? t('save') : t('create')}
-              </Button>
+              {activeTab !== 'policy' && (
+                <Button type="primary" loading={submitting} onClick={onSubmit}>
+                  {isEdit ? t('save') : t('create')}
+                </Button>
+              )}
             </div>
           </div>
         }
@@ -851,8 +856,24 @@ export default function ClientFormModal({
         <FormProvider {...methods}>
           <Form layout="vertical">
             <Tabs
-              defaultActiveKey="basic"
+              activeKey={activeTab}
+              onChange={setActiveTab}
               items={[
+                ...(isEdit && client
+                  ? [
+                      {
+                        key: 'policy',
+                        label: t('pages.clients.policy.title'),
+                        children: (
+                          <ClientPolicyEditor
+                            key={client.email}
+                            email={client.email}
+                            active={open && activeTab === 'policy'}
+                          />
+                        ),
+                      },
+                    ]
+                  : []),
                 {
                   key: 'basic',
                   label: t('pages.clients.tabBasics'),

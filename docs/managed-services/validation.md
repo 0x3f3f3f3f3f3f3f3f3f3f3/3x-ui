@@ -739,3 +739,75 @@ all generated API pages. Full logs are `/tmp/3x-ui-policy-full-go.log`,
 and `/tmp/3x-ui-policy-docs-typecheck.log`. No full-frontend suite, complete UI
 workflow, kernel adapter, packaging/deployment or whole-goal claim follows from
 this increment's focused frontend/API checks.
+
+## Existing-client policy editor and real browser path (2026-09-28)
+
+This increment adds the Traffic policy tab to the existing client editor. Six
+component tests first failed because that tab was absent. They now exercise the
+real modal, schema, query cache and forms (only HTTP responses are test doubles):
+exact `9007199254740993 B`, fractional `9007199254740995.501 B` billing and
+`999.499 B` remaining, version/identity submission, invalid rate/multiplier,
+background refresh retaining dirty inputs, ambiguous post-commit failure and
+unsupported attachments. A malformed usage fixture also reproduced a BigInt
+conversion exception; validation now rejects it before conversion.
+
+The standalone browser fixture uses a freshly built panel binary, temporary
+SQLite database, independent generated client and host keys, Chromium, system
+OpenSSH and the pinned real Xray. It creates a managed SSH inbound through the
+real authenticated HTTP endpoint, opens Clients → Edit → Traffic policy, saves
+32768/65536 B/s and multiplier 1.5, then checks the returned policy. A real
+16384-byte echo over strict-host-key OpenSSH → managed policy flow → Xray →
+loopback target produces exactly 16384 B raw upload, 16384 B raw download and
+49152 B billed. The browser displays those bytes. An independent API update
+changes the version; the dirty browser draft remains intact and cannot submit
+until an explicit reload restores the saved rates. The browser reports no
+uncaught page errors. This is connectivity/accounting/UI evidence; the larger
+rate windows and live-flow bounds remain those of the preceding runtime tests.
+
+The first browser attempt had a login-label capitalization mismatch. The next
+attempt found a real defect: the inbound HTTP validator's `oneof` omitted `ssh`.
+`TestManagedSSHInboundRequestValidation` reproduced that rejection before the
+model validation tag and generated API contracts were fixed (`724c41ff`). A
+later attempt selected a card-view menu on the default table; the fixture now
+uses the actual accessible Edit button. None of those failed runs count as
+acceptance passes.
+
+Reproduction (Linux with Node 26, Python 3, OpenSSH, installed Playwright Chromium
+and the pinned Xray binary; no Docker or host network changes):
+
+```sh
+cd frontend
+npm run build
+cd ..
+go build -o /tmp/3x-ui-policy-ui-panel .
+XUI_E2E_PANEL=/tmp/3x-ui-policy-ui-panel \
+XRAY_E2E_BINARY=/path/to/pinned/xray \
+node frontend/scripts/client-policy-e2e.mjs
+```
+
+The script binds only loopback listeners, disables its temporary subscription
+server, installs no system service, changes no firewall rules and removes its
+own processes, keys and database in `finally`. `XUI_E2E_SCREENSHOT` optionally
+captures the test client editor before cleanup. The test does not use Git keys.
+
+Executed results:
+
+- `npm test -- --maxWorkers=1`: **176 files / 1756 tests passed**, including
+  headless Chromium Storybook; 450.77 s. No skipped test counted as a pass.
+- Targeted component/schema/dead-i18n tests: **3 files / 10 tests passed**.
+- `npm run typecheck`, `npm run lint`, `npm run build`: passed.
+- `go test ./internal/web/middleware ./internal/database/model`: passed.
+- Focused `golangci-lint run` for those Go packages: **0 issues**.
+- `go build -o /tmp/3x-ui-policy-ui-panel .`, `make gen-check` and API website
+  regeneration: passed.
+- Standalone browser → real API → real SSH/Xray test: passed, process exit 0.
+
+Logs: `/tmp/3x-ui-policy-ui-full-frontend.log`,
+`/tmp/3x-ui-policy-ui-green.log`, `/tmp/3x-ui-policy-ui-browser.log`,
+`/tmp/3x-ui-ssh-http-validation-red.log`,
+`/tmp/3x-ui-ssh-http-validation-green.log`, `/tmp/3x-ui-policy-ui-build.log`.
+
+The full vertical is still incomplete: creation/bulk policy, SSH credential and
+inbound UI/export, legacy client-list/dashboard quota summaries (which still
+use raw traffic), other backend executors and distributed limits remain open.
+The verified exact billing display here is specifically the policy tab.

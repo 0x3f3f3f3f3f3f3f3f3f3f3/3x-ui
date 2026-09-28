@@ -967,7 +967,32 @@
       "renewOnDayDesc": "每个自然月的这一天午夜（按面板时区）续期，而不是每 N 天续期一次。若当月没有该日期，则在当月最后一天续期。填 0 保持按天间隔模式。",
       "renewsUsed": "已用续期次数",
       "tuicTotalGBDesc": "TUIC does not support per-client traffic limits; set traffic limit on the inbound instead.",
-      "bulkAdTagHint": "输入 32 位十六进制标签以设置，或输入 'none' 清除 MTProto 赞助频道。"
+      "bulkAdTagHint": "输入 32 位十六进制标签以设置，或输入 'none' 清除 MTProto 赞助频道。",
+      "policy": {
+        "title": "流量策略",
+        "localScope": "本节点限制：此客户在所有关联服务上的连接合计执行限速，不是跨节点的全局上限。",
+        "unsupported": "所有关联服务都必须支持此策略。目前仅限全部关联到本地受管 SSH 服务的客户应用此策略。",
+        "reloadRequired": "再次应用前请重新载入已保存的策略。重新载入会替换尚未保存的策略修改。",
+        "applied": "流量策略已应用。",
+        "rawUp": "原始上传",
+        "rawDown": "原始下载",
+        "billed": "计费用量",
+        "quota": "额度",
+        "remaining": "剩余额度",
+        "currentMultiplier": "当前倍率",
+        "byteUnits": "精确字节数（B），包含计费的小数字节。1 GB = 1000000000 B；1 GiB = 1073741824 B。",
+        "upload": "上传限速（B/s）",
+        "download": "下载限速（B/s）",
+        "rateUnits": "方向以客户端视角定义，0 表示不限速。速率按原始字节每秒计算：1 MB/s = 1000000 B/s = 8 Mbps。",
+        "multiplier": "计费倍率",
+        "multiplierHelp": "范围 0.001–1000，最多 3 位小数。仅对新增的原始上传与下载之和计费，不重算历史费用，也不改变带宽上限。 修改倍率会关闭已有连接，客户端需重新连接。",
+        "applyHelp": "“应用流量策略”会立即保存限速和倍率。其他标签页的修改需要另行保存；额度和到期时间在“基本信息”中编辑。",
+        "apply": "应用流量策略",
+        "reload": "重新载入已保存策略",
+        "loadFailed": "无法载入流量策略。成功载入前暂不可编辑。",
+        "invalidRate": "请输入 0 至 1099511627776 B/s 范围内的整数。",
+        "invalidMultiplier": "请输入 0.001 至 1000 范围内的倍率，最多 3 位小数。"
+      }
     },
     "groups": {
       "name": "名称",

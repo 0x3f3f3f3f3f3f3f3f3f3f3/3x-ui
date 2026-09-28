@@ -967,7 +967,32 @@
       "renewOnDayDesc": "Renueva este día de cada mes natural, a medianoche en la zona horaria del panel, en lugar de cada N días. Si el mes es demasiado corto para el día elegido, renueva su último día. 0 mantiene el modo de intervalo en días.",
       "renewsUsed": "Renovaciones usadas",
       "tuicTotalGBDesc": "TUIC does not support per-client traffic limits; set traffic limit on the inbound instead.",
-      "bulkAdTagHint": "Introduce una etiqueta hexadecimal de 32 caracteres para asignar, o 'none' para borrarla en MTProto."
+      "bulkAdTagHint": "Introduce una etiqueta hexadecimal de 32 caracteres para asignar, o 'none' para borrarla en MTProto.",
+      "policy": {
+        "title": "Traffic policy",
+        "localScope": "Local node: limits apply to this client’s combined connections across all attached services. They are not a global limit across nodes.",
+        "unsupported": "Every attachment must support this policy. Currently, only clients attached exclusively to local managed SSH services can apply it.",
+        "reloadRequired": "Reload the saved policy before applying again. Reload replaces your unsaved policy edits.",
+        "applied": "Traffic policy applied.",
+        "rawUp": "Raw upload",
+        "rawDown": "Raw download",
+        "billed": "Billed usage",
+        "quota": "Quota",
+        "remaining": "Remaining quota",
+        "currentMultiplier": "Current multiplier",
+        "byteUnits": "Exact bytes (B), including fractional billed bytes. 1 GB = 1000000000 B; 1 GiB = 1073741824 B.",
+        "upload": "Upload limit (B/s)",
+        "download": "Download limit (B/s)",
+        "rateUnits": "Directions are from the client’s perspective. 0 means unlimited. Rates use raw bytes per second: 1 MB/s = 1000000 B/s = 8 Mbps.",
+        "multiplier": "Billing multiplier",
+        "multiplierHelp": "0.001–1000, up to 3 decimal places. Applies to new raw upload + download; past charges stay unchanged. It does not change the bandwidth limit. Changing the multiplier closes existing flows; clients must reconnect.",
+        "applyHelp": "Apply traffic policy saves these limits and multiplier immediately. Save changes in the other tabs separately. Quota and expiry are edited in Basics.",
+        "apply": "Apply traffic policy",
+        "reload": "Reload saved policy",
+        "loadFailed": "Unable to load the traffic policy. Editing is unavailable until it can be loaded.",
+        "invalidRate": "Enter a whole number from 0 to 1099511627776 B/s.",
+        "invalidMultiplier": "Enter a multiplier from 0.001 to 1000 with at most 3 decimal places."
+      }
     },
     "groups": {
       "name": "Nombre",

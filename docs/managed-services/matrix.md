@@ -88,9 +88,10 @@ The following narrower scopes now have implementation and direct evidence:
 |---|---|---|
 | Existing service create/edit, key-only client creation, disabled listener protection | V | `TestSSHInboundPreservesCanonicalCredentials`, real managed lifecycle test |
 | Public-key rotation, manual disable, metadata edit: unrelated existing client stays connected | V | actual two-client SSH → Xray path on SQLite and PostgreSQL |
-| Raw/billed payload, delayed expiry, reset source replacement, quota reduction | V | real service mutations and TCP payload; policy API now exposes exact billing; UI remains N |
+| Raw/billed payload, delayed expiry, reset source replacement, quota reduction | V | real service mutations and TCP payload; policy API and existing-client policy tab expose exact billing; list/dashboard summaries remain N |
 | Versioned policy API, fixed-point multiplier boundary, precise usage strings | V | real HTTP admin/scope checks; SQLite/PostgreSQL transactions, stale/recreated identity rejection, historical carry and reset persistence |
-| Public aggregate rate changes across two SSH inbounds | V | actual OpenSSH → panel-managed Xray, two same-IP clients/four channels each, raw duplex counters, unlimited baseline, 32/64/128 KiB/s, live changes within 2s; UI remains N |
+| Public aggregate rate changes across two SSH inbounds | V | actual OpenSSH → panel-managed Xray, two same-IP clients/four channels each, raw duplex counters, unlimited baseline, 32/64/128 KiB/s, live changes within 2s; browser policy save and exact SSH billing also verified |
+| Existing-client policy tab, precise billing, validation and conflict reload | V | 176-file frontend suite; real Chromium → HTTP → SQLite → strict-host-key OpenSSH → Xray echo with 1.5x accounting; creation/bulk and other statistics views remain N |
 | Policy backup and cross-dialect migration | V | raw rate fields and edit version survive SQLite dump/restore and SQLite→PostgreSQL migration; client portable import/export remains N |
 | Port collision logging/retry, core exit protection, core stop/restart | V | actual occupied listener and actual Xray process; capacity/complete fault rollback remain N |
 | Credential and permission persistence | V | canonical JSON/merge, old SQLite/PostgreSQL migration, SQLite backup restore and cross-dialect migration |

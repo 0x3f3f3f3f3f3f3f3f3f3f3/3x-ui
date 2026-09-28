@@ -33,6 +33,7 @@ import {
 } from '@/schemas/client';
 import { DefaultsPayloadSchema } from '@/schemas/defaults';
 import { TRAFFIC_POLL_INTERVAL_S } from '@/lib/traffic/poll-interval';
+import { ClientPolicySchema, type ClientPolicyUpdate } from '@/schemas/client-policy';
 
 // One row sent to POST /clients/:email/externalLinks.
 export type ExternalLinkInput = {
@@ -47,6 +48,34 @@ export type ExternalLinkInput = {
 export type { ClientRecord, ClientTraffic, ClientsSummary, InboundOption, ExternalLink };
 
 const JSON_HEADERS = { headers: { 'Content-Type': 'application/json' } } as const;
+
+export function useClientPolicy(email: string, enabled: boolean) {
+  const queryClient = useQueryClient();
+  const url = `/panel/api/clients/policy/${encodeURIComponent(email)}`;
+  const query = useQuery({
+    queryKey: keys.clients.policy(email),
+    enabled,
+    refetchInterval: enabled ? 5000 : false,
+    queryFn: async ({ signal }) => {
+      const msg = await HttpUtil.get(url, undefined, { silent: true, signal });
+      if (!msg.success || !msg.obj) throw new Error(msg.msg || 'Failed to load client policy');
+      return ClientPolicySchema.parse(msg.obj);
+    },
+  });
+  const mutation = useMutation({
+    mutationFn: async (policy: ClientPolicyUpdate) => {
+      const msg = await HttpUtil.post(url, policy, { ...JSON_HEADERS, silent: true });
+      if (!msg.success || !msg.obj) throw new Error(msg.msg || 'Failed to save client policy');
+      return ClientPolicySchema.parse(msg.obj);
+    },
+    onSuccess: (policy) => {
+      markLocalInvalidate();
+      queryClient.setQueryData(keys.clients.policy(email), policy);
+      void queryClient.invalidateQueries({ queryKey: keys.clients.root() });
+    },
+  });
+  return { query, mutation };
+}
 
 interface SubSettings {
   enable: boolean;

@@ -81,3 +81,19 @@ exact remaining bytes = remaining − remainder/1000. For example, billed `5`,
 remaining `995`, remainder `500` represents 5.5 billed bytes and 994.5 remaining
 bytes. Use integer/decimal arithmetic for display; never convert large byte
 strings to JavaScript Number.
+
+### Client policy editor
+
+Open **Clients → Edit → Traffic policy** for an existing client. The tab displays
+raw upload/download, billed usage, quota, remaining quota and the saved multiplier
+as exact byte values, including thousandth-byte carry; it never rounds large
+integers through JavaScript Number. The inputs use raw B/s and decimal multiplier
+strings. **Apply traffic policy** saves this policy immediately, independently
+of the other tabs. Change quota/expiry in Basics and save those separately.
+Creation-time policy fields, bulk editing and portable policy export remain open.
+
+The editor retains its loaded immutable identity and revision while usage refreshes
+in the background. A concurrent edit or any failed/ambiguous save disables further
+application until **Reload saved policy** succeeds. Reload deliberately replaces
+unsaved policy edits. Unsupported attachments show a capability warning and disabled
+controls; this does not indicate that the underlying process is healthy.
