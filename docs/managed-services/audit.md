@@ -25,7 +25,7 @@ Makefile, Dockerfile, DockerInit.sh and the model/migration/traffic sources.
 | Existing TUIC | `tuic-server-1.0.0` in DockerInit.sh |
 | Existing MTProto | DockerInit.sh resolves mtg-multi latest dynamically; needs pinning |
 | Existing AmneziaWG Go | `v3.1.20260828` in go.mod |
-| New mieru candidate | Official stable v3.38.0, published 2026-09-24 |
+| Native mieru adapter | Official stable v3.38.0, published 2026-09-24; embedded Go module pinned, public panel integration pending |
 | Snell compatibility targets | Protocol v4 / server 4.1.1; v5 / server 5.0.1; v6 / server 6.0.0rc2 (beta) |
 | SSH implementation | Proposed Go x/crypto/ssh from existing v0.57.0 dependency |
 

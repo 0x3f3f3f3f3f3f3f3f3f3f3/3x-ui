@@ -1,0 +1,131 @@
+# mieru authenticated data path implementation plan
+
+> Execute inline with `superpowers:executing-plans` under the existing authorized
+> main plan. Ordinary engineering decisions are autonomous; remaining SSH and
+> other protocol requirements are not removed by this sequencing decision.
+
+**Goal:** Carry actual official mieru clients' TCP and UDP payload through
+stable client identity, shared shaping, fixed-point billing and quota admission.
+
+**Architecture:** Embed the pinned official Go protocol multiplexer, retaining
+its authenticated user context and wire format. Own accepted sessions and SOCKS
+request parsing so every failure path closes its connection. Dispatch through
+explicit policy-aware TCP/UDP connectors; never silently default to direct.
+
+**Stack:** Existing Go/SQLite/PostgreSQL policy ledger and limiter;
+`github.com/enfein/mieru/v3 v3.38.0`, official client API for real wire tests.
+
+**Spec:** [Full requirements](requirements.zh-CN.md), sections III, V–VII and X;
+[main plan](plan.md), Task 6; [architecture](design.md).
+
+## Fixed source and design decisions
+
+- Official release v3.38.0 was rechecked on 2026-09-28. Commit
+  `b961978c3be9dd26b94158487c760858e19d1db2`; module checksum
+  `h1:+DuixHFoCGEYEopoEg8fHmDJ5Ak30PuXuf1GIh2Xpu0=`; go.mod checksum
+  `h1:zJBUCsi5rxyvHM8fjFf+GLaEl4OEjjBXr1s5F6Qd3hM=`.
+- Source: [official release](https://github.com/enfein/mieru/releases/tag/v3.38.0),
+  [`apis/server`](https://github.com/enfein/mieru/tree/v3.38.0/apis/server),
+  [`protocol.Mux`](https://github.com/enfein/mieru/blob/v3.38.0/pkg/protocol/mux.go).
+  Preserve GPL-3.0-or-later notices and dependency/source attribution.
+- Native `UserContext.UserName()` supplies authenticated identity. TCP/UDP
+  underlay selection is distinct from TCP/UDP destination payload; test all four
+  combinations. Native rolling `User.Quotas` stay empty; panel accounting is the
+  sole billing authority. Diagnostic native counters are not charged again.
+- The public server API parses requests inside `Accept` and does not return the
+  accepted connection on parsing error. Use official `protocol.Mux` directly
+  with an owned bounded request handler, retaining the actual wire engine.
+- Native `Accept` may run before its segment worker publishes `UserName`.
+  Read the bounded SOCKS handshake first, then require the authenticated user
+  mapping before opening any target. Actual client tests exposed this ordering.
+  Native `Read` clears its deadline after each call, so partial request reads
+  explicitly retain the same five-second absolute handshake deadline.
+- Native session `Close` can wait behind a backpressured TCP send lock. Retain
+  ownership of the accepted TCP socket and close asynchronously; after 100ms,
+  abort that exact TCP underlay if close is still pending. An underlay belongs
+  to one authenticated native user; this can also retire that user's other
+  multiplexed sessions on the same stalled transport. Never abort the shared
+  UDP listener for one user's policy change. Closing sessions still consume
+  the adapter's session slots until native cleanup finishes.
+- Full shutdown closes owned TCP listeners/sockets first, retires sessions,
+  lets native UDP close messages finish, and finally closes UDP listeners and
+  the multiplexer. Accepted handlers and close workers are joined. Partial
+  startup releases every successfully acquired owned listener.
+  Native cancellation and adapter cleanup can call `Close` concurrently;
+  owned transports wait for the first close operation to complete before
+  returning, so an error return cannot precede actual listener release.
+- UDP payload is accounted as complete datagrams, excluding mieru/SOCKS framing.
+  Reject a packet that cannot fit remaining quota without sending or charging a
+  prefix; a smaller packet can still consume the valid remaining allowance.
+  Maximum ordinary UDP payload is 65507 bytes; zero-length datagrams still pass
+  policy admission and preserve their packet boundary without invented bytes.
+- Packet shaping shares the existing per-client/direction FIFO with streams.
+  A whole packet may consume bounded token debt when larger than the configured
+  burst; later packets/streams repay it before sending. This bounds rate excess
+  by the configured burst plus one maximum datagram, rather than accumulating
+  independent per-flow packet credits. Live rate changes wake existing waiters.
+- Retain default unlimited rates, positive fixed-point multipliers, existing
+  freshness/cutoff bounds and durable pre-admission. Failed sends may retain
+  admitted payload charges as already specified for streams; no refund race.
+- Bound the adapter to 256 TCP underlays and 256 accepted/closing sessions,
+  the controller to 128 flows per client, and each UDP association to 16 target
+  sockets with one bounded receive buffer per target. UDP target inactivity
+  is 30 seconds, refreshed by uploads as well as downloads. Limits do not
+  establish a complete peak-memory bound for native pre-accept queues; that
+  resource stress acceptance remains open before public runtime integration.
+- The existing SOCKS bridge is TCP-only and cannot be assumed to preserve UDP
+  client identity. Add and actually verify an authenticated packet-capable
+  bridge before claiming unified UDP routing. Full UI/API/runtime/deployment,
+  nodes, backup and remaining acceptance remain in main Task 6.
+
+## Review focus
+
+Oversized datagrams must never be split. A short quota remainder must remain
+usable by smaller traffic. Mixed stream/packet connections cannot each gain a
+separate rate allowance. A zero-byte packet cannot bypass disable/expiry/quota.
+Malformed authenticated sessions, shutdown and revoked identities must release
+all backend resources without granting unmetered direct access.
+
+## Task 1: Shared datagram shaping and durable admission
+
+Files: `internal/clientpolicy/limiter.go`, new limiter datagram tests;
+`internal/policyflow/datagram.go`, `controller.go`, new actual UDP tests.
+
+Interfaces: `Limiter.AcquireDatagram(ctx context.Context, requested int)
+(int,error)`; `Flow.DatagramWriter(direction Direction, destination io.Writer)
+io.Writer`. Existing stream `Acquire` and `Writer` semantics stay intact.
+
+- [x] RED: packet larger than burst receives one complete grant; subsequent
+  stream/packet cannot bypass its bounded debt; cancellation/rate edits wake it.
+- [x] RED: actual UDP echo preserves packet length and empty datagrams; exact
+  bidirectional fixed-point usage; insufficient allowance sends/bills nothing,
+  smaller packet still works; independent same-IP client remains usable.
+- [x] Implement exact packet admission without the stream partial-grant retry,
+  preserve shared limiter/meter identity and cancel exhausted active flows.
+- [x] Focused and package race/regression tests; record measured bounds.
+
+## Task 2: Official mieru authenticated listener
+
+Files: `internal/mieru/server.go`, framing/config helpers and actual wire tests;
+`go.mod`, `go.sum` fixed dependency.
+
+Interfaces: a validated server config with explicit local listener transports,
+independent username/password to policy-ID bindings, shared policy controller,
+and a required destination dial callback carrying network, original host/port,
+authenticated policy ID, inbound tag and actual underlay source.
+
+- [x] RED: official client API reaches actual loopback TCP/UDP echoes over each
+  underlay; two clients behind one IP retain independent counters and quota.
+- [x] Implement bounded accepted-session handlers, request/reply and datagram
+  framing, policy before target dispatch, empty native quotas, owned shutdown.
+- [x] Verify malformed requests, bad credentials, policy revocation, existing
+  UDP cutoff and same-client concurrent streams/packets with actual clients.
+- [x] Run focused/race checks and record precise implemented/remaining scope.
+
+## Task 3: Unified routing and vertical management
+
+Continue main Task 6 with a real authenticated UDP-capable core bridge, routing
+priority/user/domain/IP/network/egress tests, then existing model/Runtime/API/UI,
+client export, backup, node and deployment flows. This plan does not declare
+mieru complete after a loopback echo or a library test. Publish logical verified
+milestones only to the already approved feature branch and verify remote SHA.

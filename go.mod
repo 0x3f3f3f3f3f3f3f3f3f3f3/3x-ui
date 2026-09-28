@@ -4,6 +4,7 @@ go 1.27.1
 
 require (
 	github.com/amnezia-vpn/amneziawg-go/v3 v3.1.20260828
+	github.com/enfein/mieru/v3 v3.38.0
 	github.com/gin-contrib/gzip v1.2.8
 	github.com/gin-contrib/sessions v1.1.2
 	github.com/gin-gonic/gin v1.12.0

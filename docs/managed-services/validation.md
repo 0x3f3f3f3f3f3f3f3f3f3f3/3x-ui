@@ -2183,3 +2183,135 @@ results; this does not relabel the first whole-repository invocation as green
 or establish a cause for its one-off startup exit. Other packages' skips and
 seven packages without tests remain as recorded above. Local documentation
 links and final diff whitespace checks passed.
+
+## Native mieru data-path increment (2026-09-28)
+
+The official Go module is pinned to v3.38.0 with the commit/checksums in
+[the data-path plan](mieru-data-path.md). Tests run the official client API and
+actual encrypted TCP/UDP wire engine against owned loopback listeners and the
+panel's durable SQLite ledger. They do not replace protocol transport with a
+mock. This increment does not launch the standalone client CLI or expose a
+public mieru service in the panel.
+
+The test path is: official client → native authenticated multiplexer → shared
+policy controller → explicit test dial callback → actual TCP/UDP endpoint.
+The callback preserves policy ID, inbound tag, original domain/port, network
+and real source address. It is deliberately a test connector; real Xray UDP
+routing, Runtime/API/UI/export/deployment/node integration remain open.
+
+Verified behaviors and original failure evidence:
+
+- Stream reuse initially granted only 1000 of a 6000-byte packet, forwarded a
+  four-byte quota prefix, and lost empty UDP packets. Whole-packet admission
+  fixes all three actual UDP cases; limiter/flow race suites passed.
+- All four native underlay/payload combinations passed five repeats. Each
+  same-IP user transfers 8192 bytes in each direction: 24576 billed bytes at
+  1.5x and 8192 at 0.5x. Native framing and native diagnostic counters do not
+  enter the ledger a second time. Native rolling quotas are left empty.
+- At quota 15 and multiplier 1.5x, a six-byte upload consumes nine billed
+  bytes; its six-byte reply is rejected whole. A subsequent two-byte upload
+  and reply consumes the remaining six billed bytes. Existing TCP and UDP
+  sessions close, new sessions and a restarted server remain denied, and the
+  other user's real UDP request still works. A download-bypass mutation
+  delivered the forbidden reply and was rejected by this test.
+- Manual disable, malformed UDP fragments, bad passwords, explicit route
+  denial and a partially occupied listen configuration are exercised over
+  actual network connections. No direct fallback is provided. The bad-password
+  case can consume the official API's ten-second handshake timeout.
+- A native `Accept` can precede publication of its authenticated username.
+  Initial real requests failed until identity lookup moved after the request
+  read. A separate one-byte authenticated request showed that native `Read`
+  resets its deadline; the fixed absolute handshake deadline closed it in
+  5.47s, without payload billing (RED: still open at the seven-second client
+  deadline).
+- Backpressure exposed native `Session.Close` waiting on a blocked send lock.
+  Owned TCP transport cancellation and joined asynchronous session cleanup
+  fix shutdown and disable without holding the policy controller's cleanup
+  loop. A deliberately synchronous-close mutation prevented target closure
+  and failed the 1.25s cutoff assertion. UDP close notifications finish before
+  the shared UDP listener is stopped.
+- A 31-second upload-only UDP test initially changed source port after 30s:
+  the target's idle deadline ignored uploads. Both traffic directions now
+  refresh activity, and the test retains one target mapping with exact
+  upload-only accounting.
+- Concurrent native/adapter listener closes reproduced `EADDRINUSE` on
+  immediate rebind: the second close returned before the first released its
+  descriptor. Owned listener, packet and stream close operations now wait
+  for their first completion. The collision/rate tests passed three race
+  repetitions in 56.423s after the listener fix.
+
+The mixed-rate test uses two same-IP clients, two listener transports, and four
+real TCP/UDP combinations per client. The unrestricted baseline must exceed
+524288 B/s in each direction (eight times the highest tested 65536 B/s cap).
+Restricted traffic permits only one 4096-byte payload awaiting independent
+receipt per path. The observation bound therefore includes exactly 16384 bytes
+of in-flight payload per direction, in addition to the configured burst, one
+4096-byte datagram debt and the predeclared 6% timing allowance:
+
+`0.80 * R * elapsed <= observed <= 1.06 * R * elapsed + floor(R/10) + 4096 + 16384`
+
+Initial windows last 1.8s; live-change windows start after 250ms and last 1.5s,
+with the entire change check required to finish within two seconds. The two
+nonzero rates are 32768 and 65536 raw B/s, independently for upload/download;
+the other client keeps its existing rates. Multiplier 2x changes billing only.
+Unrestricted baseline producers stop before the restricted measurements.
+
+Earlier fixtures omitted native queued payload from their observation bound
+and had both a low-window failure and a 70452-byte observation over a 69944-byte
+bound. Those runs remain failures. The replacement workload bounds flight
+explicitly rather than retaining unbounded queues and enlarging a percentage.
+Pacing the unrestricted baseline was also rejected: it reached only
+358–409 kB/s, below the required baseline. The final unrestricted baseline
+remains unpaced. The corrected restricted fixture still rejects bypassed UDP
+shaping: 17915904 observed bytes against an 86278-byte upper bound in 1.8s.
+
+Reproduction commands (owned sockets and disposable databases required):
+
+```sh
+go test -race -shuffle=on -count=1 ./internal/clientpolicy ./internal/policyflow
+go test -race -shuffle=1790635997657768933 -count=1 ./internal/mieru
+go test -p 1 -json -shuffle=on -count=1 ./...
+golangci-lint run ./internal/clientpolicy/... ./internal/policyflow/... ./internal/mieru/...
+make gen-check
+```
+
+Run the native throughput package separately from other heavy tests. The full
+Go command uses the pinned `XRAY_E2E_BINARY`, isolated `SSH_E2E_SERVER`, and
+owned `XUI_TEST_PG_DSN` described earlier. Native adapter tests currently use
+SQLite; PostgreSQL ledger/service regression is separate evidence.
+
+Local logs are under `/tmp/3x-ui-mieru-*` and `/tmp/3x-ui-datagram-*`.
+The first combined-package race run failed; the initial native-only replay
+passed in 43.796s, and the next run found the listener/observation issues above.
+These are not relabeled as a single clean run. Final checks are recorded below.
+
+The complete Go regression passed with 52 tested packages, seven packages with
+no test files, 2494 passing top-level tests and 18 skipped top-level tests
+(4968 passing and 29 skipped test/subtest events). There were no failing tests.
+It ran from 23:07:57 to 23:16:10 UTC; database 48.655s, native mieru 61.907s,
+real SSH 12.521s and the full service package 194.528s. The three PostgreSQL
+migration cases gated by `XUI_DB_TYPE`/`XUI_DB_DSN`, opt-in scale cases, platform
+and fixture/transaction-specific skips remain skipped, not passed. This broad
+run began before the final partial-handshake fix; a fresh complete native
+race run follows it to verify that last code change.
+
+`golangci-lint` reported zero issues and `make gen-check` passed with the existing
+186 API paths/198 operations unchanged before that last parser edit. No API,
+model migration, frontend product source or locale changed in this increment;
+no new full frontend-suite claim is made. The shared datagram foundation was
+committed separately as `c8e3988c378713e2618d1b9b255524fb2767a004` and pushed to
+the approved fork feature branch; an independent `git ls-remote` matched it.
+
+The final native race suite passed in 76.198s: nine top-level tests, 15
+test/subtest events, no skips, failures or detected races. Log:
+`/tmp/3x-ui-mieru-native-final.jsonl`. This run includes the final partial-read
+deadline and synchronized transport-close changes. Its unrestricted baseline
+was 735989 B/s upload and 572436 B/s download. Live-window rates were
+32748–32764 B/s for the 32768 B/s cap and 65496–65528 B/s for 65536 B/s.
+Existing TCP/UDP quota cutoff took 346.8/359.2ms; the stalled-read client's
+target closed 52.0ms after disable. These are measured results within the
+declared bounds, not new universal timing guarantees.
+
+After those final source changes, affected Go lint again reported `0 issues`,
+`go build ./...` succeeded, and `make gen-check` again preserved 186 paths and
+198 operations. Documentation's local links and `git diff --check` passed.

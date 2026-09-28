@@ -148,3 +148,20 @@ uses an atomic ledger reset, and legacy raw-quota jobs do not auto-disable
 those accounts. SQLite/PostgreSQL and real TCP tests cover these service paths.
 This does not change the integrated-service matrix: native collection, public
 activation, remote accounting and protocol management remain incomplete.
+
+## Internal mieru backend evidence
+
+The integrated-service mieru columns remain N. These scopes concern the native
+adapter and shared controller on SQLite, before public Runtime integration.
+
+| Internal mieru capability | Status | Evidence / limit |
+|---|---|---|
+| Official v3.38.0 authenticated TCP and UDP | V | Official client API, all four TCP/UDP underlay and target combinations, two independent same-IP users |
+| Stable identity, domain, target and original source in dispatch | V | Actual native sessions preserve policy ID, inbound tag, original localhost name, port, network and underlay source; required callback has no automatic direct fallback |
+| Whole-datagram fixed-point quota and bidirectional payload billing | V | 1.5x/0.5x exact counters; rejected reply sends/charges no prefix, smaller remaining packet succeeds; native rolling quota fields are empty |
+| Shared live duplex shaping across native listeners | V | Actual mixed streams/packets, two same-IP clients and two listeners, 32/64 KiB/s, unlimited baseline and live changes; receiver-observed packet flight is explicitly bounded in the test |
+| Quota, disable and owned shutdown | V | Existing TCP/UDP cutoff and server restart denial; malformed UDP cleanup, TCP backpressure, unrelated-user continuity and partial-start listener release |
+| Continuous one-way UDP target lifetime | V | Actual 31-second upload-only traffic retains one target source port and exact upload-only billing |
+| Authenticated Xray UDP routing / policy-aware bridge | N | Current SOCKS bridge is TCP-only; packet-capable identity-preserving bridge still required |
+| Public model/Runtime/API/UI/export/node/deployment integration | N | No public mieru service option or manager is claimed by this increment |
+| Native pre-accept resource stress, credential rotation, PostgreSQL adapter acceptance | N | Native queue peak-memory bounds, live credential generation handling and the adapter's second-dialect vertical remain open |

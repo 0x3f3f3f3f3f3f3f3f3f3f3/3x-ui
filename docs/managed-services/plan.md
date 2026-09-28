@@ -196,11 +196,19 @@ remain open. SSH source observation bypasses native host-wide fail2ban bans.
 
 Files: new `internal/mieru`, protocol registry/model/Runtime and existing UI.
 
-- [ ] Pin v3.38.0 API/config and official client/server; test TCP and UDP.
+- [x] Pin v3.38.0 API/config and official client/server; test TCP and UDP.
 - [ ] Native multiuser identity preserved into policy-aware dispatch/routing.
 - [ ] Disable conflicting rolling native quotas; single panel billing owner.
 - [ ] Complete CRUD/API/UI/export/lifecycle/logs/deployment/node/recovery paths.
 - [ ] Run real-client route/rate/quota/auth/failure matrix; commit/push.
+
+The [native data-path increment](mieru-data-path.md) embeds the official wire
+engine and carries authenticated TCP/UDP into the existing shared policy
+controller. Actual official-client tests exercise all four underlay/payload
+combinations, same-IP identities, fixed-point charging, quota cutoff, rates,
+partial startup and backpressure cleanup. These are internal adapter results.
+The required dial callback preserves routing context; its test direct connector
+is not evidence of the future Xray UDP bridge or public Runtime integration.
 
 ## Task 7: Snell v4/v5/v6 vertical integration
 

@@ -11,6 +11,7 @@ It is not a declaration that the protocols or policy enforcement are ready.
 - [SSH upstream bridge and runtime plan](ssh-upstream-integration.md)
 - [SSH upstream configuration and runtime boundaries](ssh-upstream-runtime.md)
 - [SSH client online and source IP integration](ssh-client-presence.md)
+- [mieru authenticated TCP/UDP data path](mieru-data-path.md)
 - [Accounting and enforcement semantics](semantics.md)
 - [Verification evidence](validation.md)
 - [Installation, recovery and rollback](operations.md)

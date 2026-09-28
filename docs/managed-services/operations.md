@@ -9,6 +9,13 @@ Its dedicated editor, actual route probes and SQLite/PostgreSQL backup restorati
 are verified. Node distribution and deployment acceptance remain unfinished;
 a configured core API is required for verified runtime activation.
 
+The [mieru native data-path increment](mieru-data-path.md) uses the pinned
+official v3.38.0 Go dependency; its tests need no separately installed mita
+binary. Public mieru service creation and deployment are still unavailable.
+The next integration steps are an authenticated UDP-capable routing bridge,
+Runtime and existing management/export paths, followed by node and packaging
+acceptance. No new production listener is enabled by adding this dependency.
+
 ## Development
 
 Use the versions in audit.md, a C compiler, and an isolated checkout:

@@ -64,9 +64,32 @@ The scheduler uses transient floating-point time credit, independently of the
 exact integer billing ledger. It retains no payload buffers. ShapedWriter
 splits stream writes into bounded grants and propagates partial-write errors.
 An owning adapter must cancel blocked I/O by closing its connection; canceling
-the scheduler context interrupts queued waits only. Datagram admission,
-protocol authentication adapters and distributed rate-share allocation remain
-pending.
+the scheduler context interrupts queued waits only. Distributed rate-share
+allocation remains pending; protocol integration is tracked separately below.
+
+## Implemented datagram scheduler and admission
+
+`AcquireDatagram` uses the same FIFO and direction bucket as stream grants.
+A packet larger than the current burst waits for one burst of credit, then
+receives its complete bounded grant. The resulting negative credit must be
+repaid before another stream or packet can pass. The rate excess is bounded
+by the configured burst plus one maximum packet, independently of connection
+count. A rate edit preserves debt; selecting unlimited releases pending work.
+
+`Flow.DatagramWriter` accepts payloads up to 65507 bytes, excluding protocol
+framing. It commits the whole packet before one destination write. A packet
+that exceeds remaining quota is neither sent nor charged; a smaller packet
+can still consume the remainder. Actual exhaustion, disable and expiry retire
+the client's flows. Empty UDP datagrams are transmitted after a policy check
+and add no invented bytes. Failed writes retain already admitted charges.
+
+This shares the existing durable meter with TCP and introduces no new billing
+source or database schema. Packet writers hold at most one admitted packet
+each; adapters must bound their concurrent writers and close their transports.
+The native mieru adapter's per-association target limit is 16, giving at most
+one upload and 16 download writers per association. Native protocol and kernel
+buffers are additional; this is not a claim of zero buffered or undelivered
+traffic. See [mieru data path](mieru-data-path.md) for integration boundaries.
 
 ## Implemented shared TCP flow controller
 
