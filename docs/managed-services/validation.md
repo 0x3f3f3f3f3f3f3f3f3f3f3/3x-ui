@@ -1659,3 +1659,97 @@ actual binaries and isolated PostgreSQL DSN, 184.581s
 (`/tmp/3x-ui-ssh-runtime-service-regression.log`). This supplements the earlier
 whole-repository run; no test tolerance was changed to accommodate a runtime
 failure. Final lint/build are refreshed against the stop guard before commit.
+
+
+## SSH upstream probe service increment (after 3785fbfd)
+
+The existing outbound testing service now owns a temporary SSH bridge per batch,
+compiles SSH outbounds before starting the temporary core, and runs actual HTTP
+requests through that route. It does not borrow the applied runtime manager or
+modify saved settings. This is service/data-path acceptance; browser/API
+authorization, editor, backup/node and deployment acceptance remain outstanding.
+
+### Reproduced failures and behavior changes
+
+- `TestSSHProbeUsesRealCoreAndOpenSSH` initially failed with the installed Xray
+  reporting unknown protocol `ssh`; TCP mode returned no testable endpoint.
+  After compilation through the independent bridge, real/http/tcp modes reach an
+  HTTP target through an independently logged OpenSSH authentication. Real mode
+  sends one request; http/tcp send a cold and warm request on one SSH transport.
+- A wrong requested pin with a valid older context entry initially returned
+  success and reached the target. Requested settings now override same-tag
+  context; the wrong pin returns failure without a target request. An invalid
+  sibling initially poisoned every isolated retry. Configuration selection now
+  keeps only requested roots and transitive proxy-chain dependencies, preserving
+  duplicate entries for normal validation. A valid sibling succeeds while the
+  malformed one reports a generic error without its private-key sentinel.
+- Case variants `SSH` and `Ssh` initially bypassed the panel adapter and failed
+  in the native core loader, both in save/preview and in real probes. The shared
+  SSH parser and settings validator now match protocol IDs case-insensitively;
+  strict settings validation and canonical compiled SOCKS output remain intact.
+- A real native SOCKS proxy, an intermediate freedom dialer and the SSH dependency
+  form a three-outbound chain. A separate actual Xray hosts the native SOCKS
+  endpoint; one independent OpenSSH authentication and one HTTP target request
+  prove that the chain was retained and traversed. Unrelated invalid context is
+  excluded. An initial test cleanup assertion incorrectly included that external
+  fixture's live listener; it now checks only the probe-owned inbounds and SSH
+  bridge. No production cleanup rule was weakened.
+- Missing core executable, rejected core configuration and stopped upstream all
+  fail without target access. Captured temporary core configs contain no upstream
+  private keys; owned probe listeners can be rebound after success/failure and
+  temporary JSON files are removed. The normal core writer supplies mode 0600.
+- The existing real runtime test invokes a wrong-pin probe while two SSH flows
+  and a native flow are open. Target counters remain unchanged, the applied core
+  pointer remains the same and all three existing flows still exchange payloads.
+
+RED and intermediate logs: `/tmp/3x-ui-ssh-probe-red.log`,
+`/tmp/3x-ui-ssh-probe-context-red.log`, `/tmp/3x-ui-ssh-probe-case-red.log`,
+`/tmp/3x-ui-ssh-settings-case-red.log` and `ssh-probe-package.log`. The first
+combined case run also found a test variable-name collision at compile time;
+that was fixed and the settings case was rerun to observe its behavioral RED.
+The complete outbound package then passed in 1.543s before the added case checks.
+
+Four temporary mutations were restored and each was rejected by an actual
+behavioral test: omit bridge cleanup (owned port remains bound), replace SSH with
+freedom (no upstream authentication), retain stale context (wrong pin reaches the
+target), and omit chain dependencies (real native proxy chain fails). Script:
+`/tmp/3x-ui-ssh-probe-mutations.py`; logs:
+`/tmp/3x-ui-ssh-probe-mutation-{cleanup,direct-bypass,stale-pin,chain}.log`.
+
+The initial focused race run passed the probe cases in 3.144s and SQLite runtime
+plus save/preview cases in 11.637s. Its combined `-run` expression did not select
+the PostgreSQL subtest or SSH package tests; the latter explicitly reported
+`[no tests to run]`. Neither is counted as executed coverage in that run.
+Subsequent full regression and correctly selected race commands are recorded below.
+
+
+### Final regression for the probe increment
+
+With `XRAY_E2E_BINARY=/tmp/3x-ui-xray-pinned`,
+`SSH_E2E_SERVER=/usr/sbin/sshd` and the isolated `XUI_TEST_PG_DSN`,
+`GOFLAGS=-p=1 go test -json ./... -count=1` exited 0: 51 test packages passed,
+7 packages had no tests, and 29 conditional test cases skipped. The service
+package passed in 192.451s. The PostgreSQL SSH subtests ran: runtime 8.40s,
+rates 13.55s and quota 9.37s. Skips remain 16 opt-in scale cases, 7 older global
+PostgreSQL-environment cases, 5 missing-geodata cases and one non-Linux update
+guard. They are not counted as passed tests. Output and exact skip records:
+`/tmp/3x-ui-ssh-probe-all-go.jsonl`, `/tmp/3x-ui-ssh-probe-go-skips.json`.
+
+
+With the same actual binaries, `GOFLAGS=-p=1 go test -race
+./internal/web/service/outbound ./internal/sshoutbound -count=1 -shuffle=on -v`
+passed: outbound 3.094s, SSH bridge 16.551s, no race report. The outbound package's
+older `TestAddTrafficReturnsDeferredCommitFailure` skipped because its separate
+global PostgreSQL environment was absent; every new SSH probe case ran. Log:
+`/tmp/3x-ui-ssh-probe-package-race.log`.
+
+The correctly selected PostgreSQL check, `go test -race ./internal/web/service
+-run '^TestSSHUpstream_Postgres$/^runtime$' -count=1 -v`, passed in 10.149s,
+including the actual runtime subtest (8.92s), with no skip/race report.
+`/tmp/3x-ui-ssh-probe-postgres-race.log` records the explicit parent/subtest names.
+Whole-repository `golangci-lint run` reports 0 issues
+(`/tmp/3x-ui-ssh-probe-lint.log`). No frontend source, public DTO, new route or
+DB schema changed, so this increment does not claim fresh frontend/browser,
+contract generation or migration checks.
+
+`go build ./...` also exited 0 (`/tmp/3x-ui-ssh-probe-build.log`). Changed Go files pass `golangci-lint fmt --diff`; local documentation links and `git diff --check` pass.

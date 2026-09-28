@@ -155,7 +155,7 @@ func mustJSON(t *testing.T, v any) string {
 func TestBuildBatchTestConfig(t *testing.T) {
 	items := []*httpBatchItem{
 		{tag: "wg-sub", outbound: map[string]any{"tag": "wg-sub", "protocol": "wireguard"}},
-		{tag: "proxy-a", outbound: map[string]any{"tag": "proxy-a", "protocol": "vless"}},
+		{tag: "proxy-a", outbound: map[string]any{"tag": "proxy-a", "protocol": "vless", "streamSettings": map[string]any{"sockopt": map[string]any{"dialerProxy": "direct"}}}},
 	}
 	allOutbounds := []any{
 		map[string]any{"tag": "direct", "protocol": "freedom", "settings": map[string]any{}},

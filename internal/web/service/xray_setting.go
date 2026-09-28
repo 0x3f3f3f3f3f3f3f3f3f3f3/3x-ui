@@ -71,7 +71,7 @@ func (s *XraySettingService) CheckXrayConfig(XrayTemplateConfig string) error {
 				Protocol string `json:"protocol"`
 			}
 			_ = json.Unmarshal(outbound, &authored)
-			if authored.Protocol == "ssh" {
+			if strings.EqualFold(authored.Protocol, "ssh") {
 				continue
 			}
 			// Panel pseudo-protocol: validated panel-side because the core's

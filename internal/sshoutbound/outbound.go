@@ -34,7 +34,7 @@ func ParseOutbounds(raws []json.RawMessage) ([]Outbound, error) {
 			return nil, fmt.Errorf("%w: unreadable outbound", ErrConfig)
 		}
 		tags[meta.Tag]++
-		if meta.Protocol != "ssh" {
+		if !strings.EqualFold(meta.Protocol, "ssh") {
 			continue
 		}
 		var authored struct {

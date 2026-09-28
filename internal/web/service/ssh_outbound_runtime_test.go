@@ -35,6 +35,13 @@ func sshOutboundTestConfig(t *testing.T) sshoutbound.Config {
 }
 
 func TestSSHOutboundSaveAndPreviewArePure(t *testing.T) {
+	for _, protocol := range []string{"ssh", "SSH", "Ssh"} {
+		t.Run(protocol, func(t *testing.T) { sshOutboundSaveAndPreview(t, protocol) })
+	}
+}
+
+func sshOutboundSaveAndPreview(t *testing.T, protocol string) {
+	t.Helper()
 	setupSettingTestDB(t)
 	address := productionSSHAddress(t)
 	_, port, _ := net.SplitHostPort(address)
@@ -48,7 +55,7 @@ func TestSSHOutboundSaveAndPreviewArePure(t *testing.T) {
 		xrayState.holdBack("")
 	})
 	settings := sshOutboundTestConfig(t)
-	authored := map[string]any{"tag": "upstream", "protocol": "ssh", "settings": settings}
+	authored := map[string]any{"tag": "upstream", "protocol": protocol, "settings": settings}
 	template, err := json.Marshal(map[string]any{"inbounds": []any{}, "outbounds": []any{authored}})
 	if err != nil {
 		t.Fatal(err)

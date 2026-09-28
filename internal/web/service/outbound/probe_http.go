@@ -103,11 +103,8 @@ func probeModeLabel(mode string) string {
 	}
 }
 
-// TestOutbound probes a single outbound; legacy single-test API kept for the
-// /testOutbound endpoint. Dispatch matches TestOutbounds: mode "tcp" dials
-// the outbound's endpoints directly, anything else routes a real HTTP request
-// through a temp xray instance (UDP-transport outbounds are always forced to
-// the HTTP probe — a raw dial can't measure them).
+// TestOutbound shares the batch tester's mode dispatch. SSH and UDP proxies
+// always use a routed HTTP request, including when TCP mode is requested.
 func (s *OutboundService) TestOutbound(outboundJSON string, testURL string, allOutboundsJSON string, mode string) (*TestOutboundResult, error) {
 	var ob map[string]any
 	if err := json.Unmarshal([]byte(outboundJSON), &ob); err != nil {
@@ -165,11 +162,10 @@ func (s *OutboundService) testOutboundsParsed(items []map[string]any, testURL st
 			results[i] = &TestOutboundResult{Mode: modeLabel, Success: false, Error: "Invalid outbound JSON"}
 			continue
 		}
-		// A bare TCP dial only proves reachability for TCP-based proxies.
-		// UDP protocols (wireguard, hysteria, kcp/quic transports) ignore
-		// unauthenticated packets, so a raw dial can't tell "reachable" from
-		// "dead" — route them through the real xray probe.
-		if mode == "tcp" && !outboundTransportIsUDP(ob) {
+		// UDP reachability and SSH pin/authentication need a real routed request;
+		// neither can be established by opening the upstream's TCP port.
+		protocol, _ := ob["protocol"].(string)
+		if mode == "tcp" && !outboundTransportIsUDP(ob) && !strings.EqualFold(protocol, "ssh") {
 			tcpLane = append(tcpLane, tcpEntry{idx: i, ob: ob})
 			continue
 		}
@@ -177,7 +173,6 @@ func (s *OutboundService) testOutboundsParsed(items []map[string]any, testURL st
 		tag, _ := ob["tag"].(string)
 		r := &TestOutboundResult{Tag: tag, Mode: probeLabel}
 		results[i] = r
-		protocol, _ := ob["protocol"].(string)
 		// The core lowercases the id before it resolves the handler.
 		protocol = strings.ToLower(protocol)
 		switch {
@@ -285,6 +280,11 @@ func runHTTPProbeBatch(items []*httpBatchItem, allOutbounds []any, testURL strin
 	defer release()
 
 	cfg := buildBatchTestConfig(items, allOutbounds, ports)
+	closeSSH, err := prepareSSHProbe(cfg)
+	if err != nil {
+		return true, err
+	}
+	defer closeSSH()
 
 	configPath, err := createTestConfigPath()
 	if err != nil {
@@ -371,22 +371,10 @@ func waitForPortsReady(proc batchProcess, ports []int, timeout time.Duration) *p
 	return nil
 }
 
-// buildBatchTestConfig assembles the temp instance config: one loopback SOCKS
-// inbound per tested outbound, a routing rule binding each inbound to its
-// outbound tag, and the full outbound context so dialerProxy chains resolve.
+// buildBatchTestConfig binds each test inbound to its requested outbound,
+// including only the context needed to resolve its proxy chain.
 func buildBatchTestConfig(items []*httpBatchItem, allOutbounds []any, ports []int) *xray.Config {
-	// allOutbounds is the template's outbound list; subscription outbounds
-	// are injected at runtime and aren't part of it, so append any tested
-	// outbound whose tag is missing. When a tested outbound's tag collides
-	// with a template outbound, the template version wins — same semantics
-	// as the pre-batch tester.
-	outbounds := make([]any, 0, len(allOutbounds)+len(items))
-	outbounds = append(outbounds, allOutbounds...)
-	for _, it := range items {
-		if !outboundsContainTag(outbounds, it.tag) {
-			outbounds = append(outbounds, it.outbound)
-		}
-	}
+	outbounds := selectProbeOutbounds(items, allOutbounds)
 	// Bridge amneziawg entries like GetXrayConfig does -- one raw entry fails
 	// the whole temp config; drop unbridgeable ones, not unrelated items.
 	bridged := make([]any, 0, len(outbounds))

@@ -22,6 +22,7 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v3/internal/sshoutbound"
 	"github.com/mhsanaei/3x-ui/v3/internal/testutil/sshdtest"
+	"github.com/mhsanaei/3x-ui/v3/internal/web/service/outbound"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
 
@@ -227,6 +228,19 @@ func TestSSHOutboundRunsThroughProductionXray(t *testing.T) {
 	template["api"] = api
 	bad := cfg
 	bad.HostKey = sshOutboundTestConfig(t).HostKey
+	probeJSON, _ := json.Marshal(map[string]any{"tag": "upstream-one", "protocol": "ssh", "settings": bad})
+	probeContext, _ := json.Marshal(template["outbounds"])
+	applied := currentXrayProcess()
+	healthProbe, err := (&outbound.OutboundService{}).TestOutbound(string(probeJSON), "http://"+target, string(probeContext), "real")
+	if err != nil || healthProbe.Success || healthProbe.Error == "" || sshCalls.Load() != 2 || directCalls.Load() != 1 {
+		t.Fatalf("wrong-pin probe reused the applied pin or fell back: result=%+v err=%v", healthProbe, err)
+	}
+	if currentXrayProcess() != applied || !applied.IsRunning() {
+		t.Fatal("isolated probe replaced the applied core")
+	}
+	sshExitExchange(t, active, "ssh:")
+	sshExitExchange(t, stable, "ssh:")
+	sshExitExchange(t, native, "native:")
 	one["settings"] = bad
 	template["inbounds"] = append(inbounds, map[string]any{"tag": "invalid", "listen": "127.0.0.1", "port": 1, "protocol": "unknown-protocol"})
 	save()

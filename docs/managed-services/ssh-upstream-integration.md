@@ -131,8 +131,10 @@ node capability rejection must be explicit until its runtime supports the bridge
 
 - [ ] Browser creates/edits SSH outbound, saves/loads it, routes an actual request;
   meaningful schema/form tests ensure unsupported controls cannot be emitted.
-- [ ] Actual HTTP route probe via SSH, wrong pin rejection, secrets protected in
-  logs and non-admin surfaces; backup/restore and supported node application.
+- [x] Existing outbound probe service uses actual Xray/SSH HTTP routes; wrong pin
+  rejection, isolated resources, proxy-chain dependencies and live-flow isolation.
+- [ ] Browser/API authorization acceptance, secrets protected in non-admin
+  surfaces, backup/restore and supported node application.
 - [ ] Regenerate contracts/docs when interfaces change; frontend suite/build,
   backend affected suites, race and packaging checks; update matrix/operations,
   commit/push and independently verify remote SHA.

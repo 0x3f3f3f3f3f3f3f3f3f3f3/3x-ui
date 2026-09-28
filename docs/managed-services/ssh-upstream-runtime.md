@@ -1,8 +1,9 @@
 # SSH upstream runtime integration
 
 This is an implemented backend increment of the full task. The dedicated
-Outbounds form, route probes, node distribution and packaging acceptance are
-still pending. Do not treat the complete SSH vertical as delivered.
+Outbounds form, node distribution and packaging acceptance are still pending.
+The existing outbound probe service now runs real SSH routes as described below.
+Do not treat the complete SSH vertical as delivered.
 
 The existing administrator Xray settings service accepts an authored outbound:
 
@@ -92,8 +93,39 @@ fingerprint is temporarily accepted alongside the applied fingerprint.
 
 Core readiness does not prove SSH upstream reachability. A syntactically valid
 wrong pin replaces the old pin and refuses new traffic; it never keeps access
-through a superseded pin or falls back directly. Dedicated public probe/health
-integration remains pending.
+through a superseded pin or falls back directly. The existing outbound test
+service can verify a submitted route; continuous upstream health/status and
+browser acceptance remain pending.
+
+## Isolated route probes
+
+The existing `testOutbound` and `testOutbounds` service paths compile SSH through
+a separate authenticated bridge and temporary Xray process. Modes `http` and
+`real` issue actual HTTP requests through the pinned SSH transport; mode `tcp`
+also uses HTTP for SSH and reports `mode: "http"`. A listening SSH TCP port alone
+does not prove authentication, host-key validity or target access. Protocol IDs
+are matched case-insensitively, consistent with other outbound readers.
+
+The requested outbound wins over an older context entry with the same tag.
+Only requested outbounds and their transitive proxy-chain dependencies enter the
+temporary core configuration. This prevents an unrelated malformed entry from
+poisoning an isolated retry. Invalid pins, dead upstreams and failed core starts
+return failed results without connecting directly to the target. These are
+point-in-time checks of submitted settings, not claims about saved/applied health.
+
+Each batch owns a separate manager and an ephemeral loopback port. The existing
+port reservation is released immediately before binding; a lost allocation race
+fails visibly. Neither the runtime's fixed bridge port nor its applied connector
+generations are reused. Temporary core files are 0600 and contain bridge
+credentials, never upstream private keys; completion and failure remove the
+files, listeners and owned connections. The existing one-batch semaphore,
+50-item limit, 16 HTTP workers, ten-second request timeout and bridge limits apply.
+Probes need no core API because the actual HTTP response verifies this temporary
+path. The API prerequisite for applied runtime activation remains unchanged.
+
+Administrative authorization and the controller's configured, sanitized public
+test URL are unchanged. Real route tests use isolated local targets by calling
+the service directly; full browser/API authorization acceptance remains pending.
 
 See [verification evidence](validation.md) and the
 [remaining integration plan](ssh-upstream-integration.md).
