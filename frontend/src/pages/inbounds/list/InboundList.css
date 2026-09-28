@@ -11,6 +11,18 @@
   gap: 4px;
 }
 
+.inbound-enable-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.ssh-runtime-badge {
+  margin-inline-end: 0;
+  font-variant-numeric: tabular-nums;
+}
+
 .client-count-tag {
   font-variant-numeric: tabular-nums;
 }

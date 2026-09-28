@@ -182,8 +182,10 @@ activation is explicitly unsupported.
 The [runtime observability increment](ssh-runtime-observability.md) now exposes
 local SSH listener/protected state and authenticated transport counts through
 an owner-filtered, read-only API. Actual SQLite/PostgreSQL lifecycle and HTTP
-authorization tests cover the backend. Inbound-list display/browser acceptance
-is next; node, global policy, online/device-limit and deployment remain open.
+authorization tests cover the backend. The existing desktop/mobile inbound list
+now displays listener state and authenticated transport counts. Real browser
+acceptance covers owned-port collision/recovery, counts 1/2/1 and UI disable.
+Node, global policy, online/device-limit and deployment remain open.
 
 ## Task 6: mieru vertical integration
 

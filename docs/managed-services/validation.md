@@ -1974,3 +1974,89 @@ Final static/build checks: whole-repository `golangci-lint run` reported
 against the fresh embedded assets. Endpoint formatting, identical panel/docs
 OpenAPI copies and `git diff --check` passed. Logs:
 `/tmp/3x-ui-ssh-status-{go-lint,typecheck-final,fe-lint,fe-build,go-build}.log`.
+
+## SSH runtime status in the existing inbound list (after 40392e16)
+
+The existing list now displays a localized status/count tag beside its enable
+switch, in both desktop table and mobile cards. It consumes the generated DTO
+through strict schema validation and an owner-filtered status query every 3s
+while SSH rows exist. Errors and paused offline queries hide cached results;
+missing rows and unknown states show unavailable. Negative/invalid counts are
+rejected. A tooltip available by hover or keyboard focus explains authenticated
+transports, shared channels and independent client quota/expiry restrictions.
+EN and zh-CN are translated; all 13 locale files contain the new fallback keys.
+
+Eight original component cases first failed because the list had no status tag
+or query. The initial green run exposed a test transport stub that incorrectly
+returned status rows for a list refetch; the recovery test now invalidates the
+status query it is exercising. Invalid payload assertions wait for the query to
+settle, avoiding a false pass against the initial unavailable placeholder.
+Final focused tests: 10 status cases plus 3 existing WebSocket identity cases,
+13 passed in 18.42s. Three temporary mutations were rejected and restored:
+retain cache after an HTTP failure, retain it while offline, and accept negative
+connection counts. Logs: `/tmp/3x-ui-ssh-status-ui-{red,green,green2,final-focused}.log`
+and `ssh-status-ui-mutation-*.log`.
+
+The real browser fixture remains `frontend/scripts/client-policy-e2e.mjs`.
+Build the frontend and a fresh embedded panel before running it:
+
+```sh
+cd frontend && npm run build && cd ..
+go build -o /tmp/3x-ui-ssh-status-ui-panel .
+XUI_E2E_PANEL=/tmp/3x-ui-ssh-status-ui-panel \
+XRAY_E2E_BINARY=/tmp/3x-ui-xray-pinned \
+XUI_E2E_STATUS_SCREENSHOT=/tmp/3x-ui-ssh-status-ui-desktop.png \
+node frontend/scripts/client-policy-e2e.mjs
+```
+
+The fixture creates the inbound and client through actual forms, binds its own
+collision listener only after creating the empty SSH inbound, and waits for
+scheduled runtime application. The enabled row shows protected with the real
+listener-unavailable reason; releasing the owned port changes it to running.
+A pinned OpenSSH connection carries 16384 B each way through Xray to an independent
+loopback echo target. A second authenticated OpenSSH transport for the same
+client changes the displayed count from 1 to 2; closing it returns the count to 1.
+The desktop and 390px mobile displays are checked; the mobile document does not
+overflow horizontally. Clicking the existing enable switch finally shows disabled.
+No status request is mocked in the browser fixture.
+
+The earlier policy assertions remain: actual exported host pin, wrong-pin refusal,
+49152 B billed at 1.5x, saved-policy conflict/reload, billed list balance, quota
+reduction below usage, and real SSH denial. The first expanded browser run passed,
+with initial application/collision recovery in 24877ms and meter recovery in 655ms;
+no browser JS errors. Desktop/mobile screenshots were visually inspected.
+Logs: `/tmp/3x-ui-ssh-status-ui-browser.log`; screenshots:
+`/tmp/3x-ui-ssh-status-ui-desktop.png` and its `.mobile.png` companion.
+
+Typecheck and lint passed; frontend build completed in 2.65s and the fresh Go
+panel build succeeded. Affected controller tests passed in 5.632s; locale had no
+test files. No backend Go behavior, database schema or API route changed in this
+UI increment. Complete frontend and final browser results follow below.
+
+The final browser run additionally used Chromium's actual offline network mode:
+cached running/count values became unavailable, then a fresh response restored
+running/1 after reconnection. It passed with application/collision recovery
+27772ms and meter recovery 284ms, no browser JS errors. Log:
+`/tmp/3x-ui-ssh-status-ui-browser-final.log`. The screenshots were refreshed by
+that run. The complete frontend suite is recorded separately below.
+
+The first complete `npm test` run finished in 330.84s: 183 files passed and
+1 failed; 1819 tests passed and 2 timed out. Both failures were in the unchanged
+`inbound-form-modal.test.tsx` (initial add render and missing TLS certificate),
+at its existing 5000ms timeout. The new status cases and locale checks passed.
+A separate run of that unchanged file passed all 8 cases in 15.41s without
+changing source, assertions or timeout. The complete suite was then rerun with
+`npm test -- --maxWorkers=1` to check behavior without concurrent workers;
+no timeout was relaxed. Logs: `ssh-status-ui-full-frontend.log`,
+`ssh-status-ui-form-recheck.log`, and `ssh-status-ui-full-frontend-serial.log`
+under `/tmp/3x-ui-`.
+
+The complete single-worker run passed all 184 files and 1821 tests in 450.14s,
+including unit, component and actual Chromium Storybook projects. There were no
+skips or failures in its summary. This establishes the complete test result with
+reduced concurrency; it does not erase the two recorded parallel-run timeouts or
+claim a root cause from that comparison alone. Final format check passed all
+731 source/tool files; documentation links and `git diff --check` passed.
+The UI browser acceptance uses SQLite; the backend status service's PostgreSQL
+lifecycle evidence remains in the preceding API increment. No new full-Go or
+PostgreSQL browser run is claimed for this frontend-only change.

@@ -75,8 +75,13 @@ If a desired disable/client change has not yet reached a live listener, the
 API reports `pending` with the actual connection count. Protected reasons are
 sanitized; credentials, client identities, targets and internal bridge settings
 are not included. A replaced database handle cannot inherit old runtime counts.
-The inbound-list display is the next increment; remote runtime observation and
-distributed policy execution remain unfinished.
+The existing inbound list shows the runtime label beside the configured enable
+switch on desktop and mobile. Hover or focus it for the reason and connection
+count explanation. SSH rows refresh every three seconds while the page is active.
+A failed fetch, paused offline request, missing row or unknown state shows
+unavailable and hides cached connection counts. Other protocols keep their
+existing display. Remote runtime observation and distributed policy execution
+remain unfinished.
 
 ## Local client policy API
 

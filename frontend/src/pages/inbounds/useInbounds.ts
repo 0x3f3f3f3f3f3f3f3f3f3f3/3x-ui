@@ -9,7 +9,12 @@ import { Protocols } from '@/schemas/primitives';
 import { isSSMultiUser } from '@/lib/xray/protocol-capabilities';
 import { setDatepicker } from '@/hooks/useDatepicker';
 import { keys } from '@/api/queryKeys';
-import { SlimInboundListSchema, LastOnlineMapSchema, InboundDetailSchema } from '@/schemas/inbound';
+import {
+  SlimInboundListSchema,
+  LastOnlineMapSchema,
+  InboundDetailSchema,
+  SSHRuntimeStatusListSchema,
+} from '@/schemas/inbound';
 import { OnlinesSchema, OnlineByNodeSchema, ActiveInboundsByNodeSchema } from '@/schemas/client';
 import { DefaultsPayloadSchema, type DefaultsPayload } from '@/schemas/defaults';
 
@@ -75,6 +80,16 @@ async function fetchSlimInbounds(): Promise<unknown[]> {
   if (!msg?.success) throw new Error(msg?.msg || 'Failed to fetch inbounds');
   const validated = parseMsg(msg, SlimInboundListSchema, 'inbounds/list/slim');
   return Array.isArray(validated.obj) ? validated.obj : [];
+}
+
+async function fetchSSHRuntimeStatuses() {
+  const msg = await HttpUtil.get('/panel/api/inbounds/ssh/status', undefined, { silent: true });
+  if (!msg?.success) throw new Error(msg?.msg || 'Failed to fetch SSH runtime status');
+  const validated = parseMsg(msg, SSHRuntimeStatusListSchema, 'inbounds/ssh/status', {
+    strict: true,
+  });
+  if (!Array.isArray(validated.obj)) throw new Error('Invalid SSH runtime status response');
+  return validated.obj;
 }
 
 async function fetchOnlineClients(): Promise<string[]> {
@@ -221,6 +236,23 @@ export function useInbounds() {
   // dbInbounds mirrors the slim query data wrapped as DBInbound instances. The
   // WS handlers rebuild only the rows they touch, so no refetch is needed.
   const [dbInbounds, setDbInbounds] = useState<DBInboundInstance[]>([]);
+  const hasSSHInbounds = dbInbounds.some((inbound) => inbound.protocol === 'ssh');
+  const sshStatusQuery = useQuery({
+    queryKey: keys.inbounds.sshStatus(),
+    queryFn: fetchSSHRuntimeStatuses,
+    enabled: hasSSHInbounds,
+    refetchInterval: 3000,
+    retry: false,
+  });
+  const sshRuntimeStatuses = useMemo(
+    () =>
+      new Map(
+        hasSSHInbounds && !sshStatusQuery.isError && !sshStatusQuery.isPaused
+          ? (sshStatusQuery.data ?? []).map((status) => [status.inboundId, status])
+          : [],
+      ),
+    [hasSSHInbounds, sshStatusQuery.data, sshStatusQuery.isError, sshStatusQuery.isPaused],
+  );
   const dbInboundsRef = useRef<DBInboundInstance[]>([]);
   useEffect(() => {
     dbInboundsRef.current = dbInbounds;
@@ -612,6 +644,7 @@ export function useInbounds() {
     fetched,
     fetchError,
     dbInbounds,
+    sshRuntimeStatuses,
     clientCount,
     onlineClients,
     lastOnlineMap,

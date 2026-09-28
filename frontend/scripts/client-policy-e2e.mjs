@@ -38,6 +38,7 @@ let browser;
 let page;
 let lastListing;
 let target;
+let collision;
 let panelLog;
 
 async function port() {
@@ -191,6 +192,10 @@ try {
   assert.equal(createdInbound.success, true, createdInbound.msg);
   const inbound = createdInbound.obj;
   await inboundDialog.waitFor({ state: 'hidden' });
+  await page.getByRole('status', { name: 'SSH runtime: Idle', exact: true }).waitFor();
+  collision = net.createServer((socket) => socket.destroy());
+  collision.listen(sshPort, '127.0.0.1');
+  await once(collision, 'listening');
   await page.goto(origin + '/panel/clients');
   await page.getByRole('button', { name: 'Add Clients', exact: true }).click();
   const clientDialog = page.getByRole('dialog');
@@ -208,6 +213,23 @@ try {
   await clientDialog.waitFor({ state: 'hidden' });
   await page.getByText(email, { exact: true }).first().waitFor();
   const startupStarted = Date.now();
+  await page.goto(origin + '/panel/inbounds');
+  const protectedBadge = page.getByRole('status', { name: 'SSH runtime: Protected', exact: true });
+  await protectedBadge.waitFor({ timeout: 35000 });
+  assert.equal(await page.getByRole('switch').getAttribute('aria-checked'), 'true');
+  await protectedBadge.hover();
+  await page
+    .getByText('SSH listener unavailable. Check the listening address and port.', { exact: true })
+    .waitFor();
+  await new Promise((resolve) => collision.close(resolve));
+  collision = undefined;
+  const runningBadge = page.getByRole('status', { name: 'SSH runtime: Running', exact: true });
+  await until(
+    async () =>
+      (await runningBadge.textContent({ timeout: 1000 }).catch(() => '')) === 'Running · 0',
+    'listener recovers after owned port conflict',
+  );
+  await page.goto(origin + '/panel/clients');
   await until(
     () =>
       new Promise((resolve) => {
@@ -383,6 +405,56 @@ try {
     .getByRole('progressbar', { name: 'Billed usage: 49152 B / 104857600 B', exact: true })
     .waitFor({ timeout: 10000 });
   await page.getByRole('cell', { name: '99.95 MiB', exact: true }).waitFor();
+  await page.goto(origin + '/panel/inbounds');
+  await until(
+    async () =>
+      (await runningBadge.textContent({ timeout: 1000 }).catch(() => '')) === 'Running · 1',
+    'one real authenticated SSH connection',
+  );
+  const secondForwardPort = await port();
+  const secondSSH = spawn(
+    'ssh',
+    [...sshIdentityArgs, '-N', '-D', `127.0.0.1:${secondForwardPort}`, alias],
+    { cwd: temp, stdio: 'ignore' },
+  );
+  processes.push(secondSSH);
+  await until(async () => {
+    assert.equal(secondSSH.exitCode, null, 'second SSH connection exited before authentication');
+    return (await runningBadge.textContent({ timeout: 1000 }).catch(() => '')) === 'Running · 2';
+  }, 'two authenticated transports for the same SSH client');
+  await stop(secondSSH);
+  await until(
+    async () =>
+      (await runningBadge.textContent({ timeout: 1000 }).catch(() => '')) === 'Running · 1',
+    'closed SSH transport disappears from status',
+  );
+  await page.context().setOffline(true);
+  await page
+    .getByRole('status', { name: 'SSH runtime: Unavailable', exact: true })
+    .waitFor({ timeout: 10000 });
+  assert.equal(await runningBadge.count(), 0, 'offline browser retained cached running status');
+  await page.context().setOffline(false);
+  await until(
+    async () =>
+      (await runningBadge.textContent({ timeout: 1000 }).catch(() => '')) === 'Running · 1',
+    'fresh status after browser network recovery',
+  );
+  if (process.env.XUI_E2E_STATUS_SCREENSHOT)
+    await page.screenshot({ path: process.env.XUI_E2E_STATUS_SCREENSHOT });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await until(
+    async () =>
+      (await runningBadge.textContent({ timeout: 1000 }).catch(() => '')) === 'Running · 1',
+    'mobile SSH runtime badge',
+  );
+  assert(
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    'mobile status badge overflows the viewport',
+  );
+  if (process.env.XUI_E2E_STATUS_SCREENSHOT)
+    await page.screenshot({ path: process.env.XUI_E2E_STATUS_SCREENSHOT + '.mobile.png' });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(origin + '/panel/clients');
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   await page.getByRole('tab', { name: 'Traffic policy' }).click();
 
@@ -448,8 +520,15 @@ try {
   assert.deepEqual(pageErrors, []);
   if (process.env.XUI_E2E_SCREENSHOT)
     await page.screenshot({ path: process.env.XUI_E2E_SCREENSHOT });
+  await page.goto(origin + '/panel/inbounds');
+  await page.getByRole('switch').click();
+  await page
+    .getByRole('status', { name: 'SSH runtime: Disabled', exact: true })
+    .waitFor({ timeout: 10000 });
+  assert.equal(await page.getByRole('switch').getAttribute('aria-checked'), 'false');
+  assert.deepEqual(pageErrors, []);
   console.log(
-    `PASS: browser-created SSH inbound and public-key client; downloaded OpenSSH config + actual host pin; mismatched host key refused; real browser -> authenticated panel API -> SQLite -> managed SSH -> pinned Xray -> loopback echo; 16384 B each direction, 49152 B billed at 1.5x; stale editor preserved and explicitly reloaded; list balance uses billed bytes; quota reduced below billed usage marks depleted and rejects real SSH. Initial scheduled application: ${startupWaitMs} ms. Meter initially ready: ${initiallyReady}; readiness wait: ${meterWaitMs} ms.`,
+    `PASS: browser-created SSH inbound and public-key client; idle/protected on owned port collision/recovery; actual authenticated SSH counts 1/2/1 in desktop/mobile list; offline browser clears cached running state and recovers after reconnection; UI disable clears runtime; downloaded OpenSSH config + actual host pin; mismatched host key refused; real browser -> authenticated panel API -> SQLite -> managed SSH -> pinned Xray -> loopback echo; 16384 B each direction, 49152 B billed at 1.5x; stale editor preserved and explicitly reloaded; list balance uses billed bytes; quota reduced below billed usage marks depleted and rejects real SSH. Initial scheduled application and collision recovery: ${startupWaitMs} ms. Meter initially ready: ${initiallyReady}; readiness wait: ${meterWaitMs} ms.`,
   );
 } catch (error) {
   if (page && !page.isClosed()) {
@@ -478,6 +557,7 @@ try {
 } finally {
   if (browser) await browser.close();
   for (const child of processes.reverse()) await stop(child);
+  if (collision) await new Promise((resolve) => collision.close(resolve));
   if (target) await new Promise((resolve) => target.close(resolve));
   if (panelLog !== undefined) closeSync(panelLog);
   rmSync(temp, { recursive: true, force: true });

@@ -94,6 +94,7 @@ export default function InboundsPage() {
     onlineClients,
     lastOnlineMap,
     inboundSpeed,
+    sshRuntimeStatuses,
     totals,
     expireDiff,
     trafficDiff,
@@ -796,6 +797,7 @@ export default function InboundsPage() {
                       onlineClients={onlineClients}
                       lastOnlineMap={lastOnlineMap}
                       inboundSpeed={inboundSpeed}
+                      sshRuntimeStatuses={sshRuntimeStatuses}
                       expireDiff={expireDiff}
                       trafficDiff={trafficDiff}
                       pageSize={pageSize}

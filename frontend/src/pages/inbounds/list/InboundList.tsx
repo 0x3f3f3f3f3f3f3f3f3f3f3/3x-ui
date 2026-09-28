@@ -32,6 +32,7 @@ import { activateOnKey } from '@/utils/a11y';
 
 import { buildRowActionsMenu } from './RowActions';
 import { useInboundColumns } from './useInboundColumns';
+import { SSHRuntimeBadge } from './SSHRuntimeBadge';
 import { buildHostRemarksByInboundId, formatHostRemarksLabel } from './helpers';
 import InboundStatsModal from './InboundStatsModal';
 import type { DBInboundRecord, GeneralAction, InboundListProps, RowAction } from './types';
@@ -52,6 +53,7 @@ export default function InboundList({
   clientCount,
   lastOnlineMap: _lastOnlineMap,
   inboundSpeed,
+  sshRuntimeStatuses,
   expireDiff,
   trafficDiff,
   pageSize,
@@ -167,6 +169,7 @@ export default function InboundList({
   }, [onBulkDelete, selectedRowKeys]);
 
   const columns = useInboundColumns({
+    hasSSHInbounds: dbInbounds.some((inbound) => inbound.protocol === 'ssh'),
     hasAnyRemark,
     hasAnySubSortIndex,
     hasActiveNode,
@@ -174,6 +177,7 @@ export default function InboundList({
     hostRemarksByInboundId,
     clientCount,
     inboundSpeed,
+    sshRuntimeStatuses,
     subEnable,
     expireDiff,
     trafficDiff,
@@ -331,6 +335,9 @@ export default function InboundList({
                           size="small"
                           onChange={(next) => onSwitchEnable(record, next)}
                         />
+                        {record.protocol === 'ssh' && (
+                          <SSHRuntimeBadge status={sshRuntimeStatuses.get(record.id)} />
+                        )}
                         <Dropdown
                           trigger={['click']}
                           placement="bottomRight"

@@ -714,7 +714,33 @@
         "peerNumberConfig": "Peer {n} 設定"
       },
       "sniffingDestOverride": "目標覆寫",
-      "advancedTitle": "進階設定"
+      "advancedTitle": "進階設定",
+      "sshRuntime": {
+        "label": "SSH runtime: {state}",
+        "disabled": "Disabled",
+        "idle": "Idle",
+        "pending": "Pending",
+        "running": "Running",
+        "protected": "Protected",
+        "unsupported": "Unsupported",
+        "unavailable": "Unavailable",
+        "connections": "Authenticated SSH connections: {count}",
+        "explanation": "SSH listener status. Client quota and expiry restrictions still apply. Each authenticated SSH connection counts once, even with multiple forwarding channels.",
+        "awaitingConfiguration": "Waiting for the SSH configuration to be applied.",
+        "remoteUnavailable": "Remote SSH runtime observation is not yet supported.",
+        "awaitingDisable": "Waiting for the running SSH listener to stop.",
+        "noClients": "This inbound has no enabled clients.",
+        "awaitingClients": "Waiting for the client changes to reach the running listener.",
+        "waitingForRouter": "Waiting for the applied routing configuration and a running core.",
+        "ratePolicyUnavailable": "Client rate policies are unavailable. The listener is protected.",
+        "accountingUnavailable": "Client accounting policies are unavailable. The listener is protected.",
+        "listenerStopped": "The SSH listener stopped. Recovery is pending.",
+        "credentialsUnavailable": "Client credentials could not be applied.",
+        "routingUnavailable": "The authenticated routing path is unavailable.",
+        "invalidConfiguration": "The stored SSH server configuration is invalid.",
+        "listenerUnavailable": "SSH listener unavailable. Check the listening address and port.",
+        "unknownReason": "Further runtime details are unavailable. Check service logs."
+      }
     },
     "clients": {
       "tabBasics": "基本",

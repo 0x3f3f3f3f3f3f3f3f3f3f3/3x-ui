@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import { SSHRuntimeStatusSchema } from '@/generated/zod';
+
+export const SSHRuntimeStatusListSchema = SSHRuntimeStatusSchema.extend({
+  inboundId: SSHRuntimeStatusSchema.shape.inboundId.positive(),
+  authenticatedConnections: SSHRuntimeStatusSchema.shape.authenticatedConnections.nonnegative(),
+}).array();
 
 export const SlimInboundSchema = z
   .object({

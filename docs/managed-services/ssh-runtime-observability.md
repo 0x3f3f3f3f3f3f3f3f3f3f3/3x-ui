@@ -109,15 +109,15 @@ Files: `frontend/src/pages/inbounds/useInbounds.ts`, `InboundsPage.tsx`,
 `list/useInboundColumns.tsx` and list props/types; new local status component
 and tests; all locale JSON files; existing SSH browser fixture; docs/matrix.
 
-- [ ] RED-first UI: enabled/protected remains visibly protected with its reason;
+- [x] RED-first UI: enabled/protected remains visibly protected with its reason;
   pending never displays running; two authenticated transports display 2;
   refetch failure displays unavailable; non-SSH rows retain existing rendering.
-- [ ] Add conditional 3s status query and pass statuses/error to the existing
+- [x] Add conditional 3s status query and pass statuses/error to the existing
   list. Place runtime state beside the configured enable switch with a tooltip
   explaining listener readiness and authenticated transport count.
-- [ ] Actual browser creates SSH listener/client and sees running only after
+- [x] Actual browser creates SSH listener/client and sees running only after
   application; an owned listener collision shows protected, recovery shows
   running, real SSH connects/disconnects update counts, disable clears runtime.
-- [ ] Full frontend suite, typecheck/lint/build, fresh embedded panel and actual
+- [x] Full frontend suite, typecheck/lint/build, fresh embedded panel and actual
   browser acceptance. Update matrix/operations/validation, commit and approved
   feature push, then independently verify the remote SHA. Full task stays open.
