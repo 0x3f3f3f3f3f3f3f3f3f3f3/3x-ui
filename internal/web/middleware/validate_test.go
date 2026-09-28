@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/web/entity"
 )
 
@@ -32,6 +33,25 @@ func decodeMsg(t *testing.T, body string) entity.Msg {
 		t.Fatalf("decode msg: %v (body=%q)", err, body)
 	}
 	return msg
+}
+
+func TestManagedSSHInboundRequestValidation(t *testing.T) {
+	r := newRouter(func(c *gin.Context) {
+		inbound, ok := BindAndValidate[model.Inbound](c)
+		if ok {
+			c.JSON(http.StatusOK, entity.Msg{Success: true, Obj: inbound.Protocol})
+		}
+	})
+	for _, protocol := range []string{"ssh", "unknown"} {
+		req := httptest.NewRequest(http.MethodPost, "/submit", strings.NewReader(`{"protocol":"`+protocol+`","listen":"127.0.0.1","port":2222,"settings":"{}"}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		msg := decodeMsg(t, rec.Body.String())
+		if msg.Success != (protocol == "ssh") || (msg.Success && msg.Obj != "ssh") {
+			t.Fatalf("protocol %s: %s", protocol, rec.Body.String())
+		}
+	}
 }
 
 func TestBindAndValidate_ValidPayloadPassesThrough(t *testing.T) {
