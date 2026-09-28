@@ -687,22 +687,18 @@ var renameFile = os.Rename
 
 func (p *process) startCommand(cmd *exec.Cmd) error {
 	p.mu.Lock()
-	p.cmd = cmd
-	p.done = make(chan struct{})
-	p.exitErr = nil
-	done := p.done
-	p.mu.Unlock()
+	defer p.mu.Unlock()
 	p.intentionalStop.Store(false)
 
 	if err := cmd.Start(); err != nil {
-		close(done)
-		p.mu.Lock()
-		p.cmd = nil
-		p.mu.Unlock()
 		return err
 	}
 
 	attachChildLifetime(cmd)
+	p.cmd = cmd
+	p.done = make(chan struct{})
+	p.exitErr = nil
+	done := p.done
 
 	go p.waitForCommand(cmd, done)
 	return nil

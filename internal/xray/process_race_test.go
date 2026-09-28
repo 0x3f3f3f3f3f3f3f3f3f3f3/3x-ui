@@ -100,3 +100,36 @@ func TestProcessVersionAPIPortRaceSafe(t *testing.T) {
 	close(stop)
 	wg.Wait()
 }
+
+func TestProcessStatusDuringActualCommandStart(t *testing.T) {
+	path, err := exec.LookPath("true")
+	if err != nil {
+		t.Skip("requires the true command")
+	}
+	p := &process{logWriter: NewLogWriter()}
+	stop := make(chan struct{})
+	var readers sync.WaitGroup
+	readers.Go(func() {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				_ = p.IsRunning()
+			}
+		}
+	})
+	defer func() { close(stop); readers.Wait() }()
+	for range 30 {
+		if err := p.startCommand(exec.Command(path)); err != nil {
+			t.Fatal(err)
+		}
+		p.mu.RLock()
+		done := p.done
+		p.mu.RUnlock()
+		<-done
+		if p.IsRunning() {
+			t.Fatal("finished command still reported running")
+		}
+	}
+}
