@@ -177,6 +177,11 @@ attributed to happ-settings-presets cleanup. The two Happ files passed together
 with `--project=components --maxWorkers=1` (27 tests, 24.87s); no source, assertions
 or timeout limits changed. Default-concurrency full-suite instability remains.
 
+`npm test -- --maxWorkers=1` subsequently passed the **entire** frontend suite:
+174 files, 1,742 tests, 414.59s, zero unhandled errors. Assertions, test timeouts
+and frontend source were unchanged. This supports resource contention as a
+contributor; it does not erase the recorded failures at default concurrency.
+
 ## Shared stream shaping milestone (adapter integration pending)
 
 Initial unit tests failed on missing limiter/writer operations, then passed.
@@ -211,3 +216,39 @@ with the sample ending within the 2s update target. No tolerance was widened.
 - Static lint initially flagged a direct EOF comparison in the TCP harness;
   switching to `errors.Is` fixed it. Final package lint: exit 0, 0 issues.
 - Formatter diff is empty. `make test-go`: exit 0, including the real TCP test.
+
+## Atomic quota admission milestone (flow attachment pending)
+
+`ClientUsageLedger.Admit` checks enabled state, expiry and billed quota within
+the same transaction that commits raw/billed/remainder/cursor state. Both the
+canonical client and traffic-row quota are honored; the stricter nonzero cap
+wins while control-plane state is being reconciled. Already received usage is
+still settled by Apply, even after disable, without granting forwarding rights.
+Admit rejects stale or closed grants; exact last-request retries are idempotent
+but must still pass current disable/expiry/lowered-quota checks.
+
+The producer must forward only after a successful commit and serialize its
+sequence. Actual adapters, existing-flow cancellation, first-use activation and
+the separate disable/expiry/quota reason model remain to integrate. Pending
+first-use expiry is explicitly rejected until activated by the control plane.
+
+- New admission tests first failed on the missing entry point; initial green
+  run passed in 0.269s. Multipliers 0.5/1/1.5/2/10 stop at the exact raw
+  allowance, including a fractional charge that would cross the billed quota.
+- Competing sources requesting 60 bytes each against a 100-byte quota admit
+  one request; the other reports precisely 40 available bytes and may retry
+  with 40. Total raw and billed usage both remain 100.
+- Disable/expiry/lowered quota are checked on grant retries. Reset retires old
+  grants. These are database admission tests, not TCP/UDP cutoff acceptance.
+- A new test failed when 0.5× billing allowed raw upload+download to overflow
+  int64 while billed usage still fit. Checked combined raw usage fixed it;
+  unlimited and very large quotas still admit representable usage.
+- `go test ./internal/database -run '^TestClientUsage' -count=1`: PASS, 8.319s.
+- `XUI_TEST_PG_DSN=... go test ./internal/database -run '^TestClientUsage.*Postgres$' -count=1 -v`:
+  PASS, 2.237s; real PostgreSQL ledger and competing quota admission.
+- Package static lint: exit 0, 0 issues; formatter diff empty.
+- `go test -race ./internal/database -run '^TestClientUsageAdmission' -count=1`:
+  PASS, 1.769s; `make test-go`: exit 0 across the full Go suite.
+- Disabling the admission quota gate caused the 0.5× boundary test to accept
+  one byte beyond its exact allowance. Restoring the gate returned GREEN;
+  the mutation was reverted before commit.

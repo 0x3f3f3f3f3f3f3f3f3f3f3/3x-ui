@@ -45,6 +45,14 @@ change/reset requires final snapshots from all active sources, closes them
 and advances the revision in one transaction. Reset preserves manual disable,
 expiry and quota configuration. Runtime freeze/drain/restart remains to build.
 
+The internal Admit operation checks current enabled/expiry/quota state and
+commits exact billing before granting forwarding rights. Its source must have
+one exclusive, serialized owner: two independent senders cannot share a meter
+and independently choose sequence numbers. Runtime ownership/lease enforcement
+and attachment to actual protocol flows are prerequisites for activating this
+path. An accounting report replay is not a reusable permission to send a new
+payload. Apply remains the settlement path for already observed usage.
+
 Policy application validates backend capabilities, stages configuration,
 applies it, confirms observed revision and then reports success. Failed apply
 retains the last safe config or blocks the affected service; never direct

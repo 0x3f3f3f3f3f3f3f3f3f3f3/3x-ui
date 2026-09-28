@@ -116,3 +116,7 @@ func TestClientUsageLedger_Postgres(t *testing.T) {
 		t.Fatalf("database allowed two open epochs for one source: %v", err)
 	}
 }
+
+func TestClientUsageAdmission_Postgres(t *testing.T) {
+	testClientUsageAdmissionCompetingSources(t, usagePostgresDB(t))
+}

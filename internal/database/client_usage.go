@@ -5,9 +5,11 @@ import (
 	"errors"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/clientpolicy"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
@@ -19,7 +21,16 @@ var (
 	ErrUsageClosed    = errors.New("usage counter lifetime is closed")
 	ErrUsageBoundary  = errors.New("billing change requires the current revision and final reports from every active meter")
 	ErrUsageUntracked = errors.New("legacy traffic changed outside the client usage ledger")
+	ErrUsageQuota     = errors.New("client billed quota is exhausted")
+	ErrUsageDisabled  = errors.New("client is disabled")
+	ErrUsageExpired   = errors.New("client has expired")
+	ErrUsageUnready   = errors.New("client first-use expiry must be activated before admission")
 )
+
+type UsageQuotaError struct{ RawAllowance int64 }
+
+func (*UsageQuotaError) Error() string { return ErrUsageQuota.Error() }
+func (*UsageQuotaError) Unwrap() error { return ErrUsageQuota }
 
 type ClientUsageReport struct {
 	MeterID  string
@@ -83,6 +94,15 @@ func (l *ClientUsageLedger) Register(ctx context.Context, policyID, source, mete
 }
 
 func (l *ClientUsageLedger) Apply(ctx context.Context, report ClientUsageReport) (ClientUsageDelta, error) {
+	return l.apply(ctx, report, false)
+}
+
+// Admit commits quota consumption before forwarding; Apply instead settles already observed usage.
+func (l *ClientUsageLedger) Admit(ctx context.Context, report ClientUsageReport) (ClientUsageDelta, error) {
+	return l.apply(ctx, report, true)
+}
+
+func (l *ClientUsageLedger) apply(ctx context.Context, report ClientUsageReport, admit bool) (ClientUsageDelta, error) {
 	var delta ClientUsageDelta
 	if err := validateUsageReport(report); err != nil {
 		return delta, err
@@ -96,7 +116,7 @@ func (l *ClientUsageLedger) Apply(ctx context.Context, report ClientUsageReport)
 		if err != nil {
 			return err
 		}
-		delta, err = applyClientUsage(tx, client, &a, report)
+		delta, err = applyClientUsage(tx, client, &a, report, admit)
 		return err
 	})
 	if err != nil {
@@ -150,7 +170,7 @@ func (l *ClientUsageLedger) transition(ctx context.Context, policyID string, rev
 			if !ok || final.Sequence < meter.Sequence {
 				return ErrUsageBoundary
 			}
-			if _, err := applyClientUsage(tx, client, &a, final); err != nil {
+			if _, err := applyClientUsage(tx, client, &a, final, false); err != nil {
 				return err
 			}
 			if err := tx.Model(&model.ClientUsageMeter{}).Where("meter_id = ?", meter.ID).Update("closed", true).Error; err != nil {
@@ -222,11 +242,25 @@ func lockClientUsage(tx *gorm.DB, policyID string) (model.ClientRecord, model.Cl
 	return client, a, tx.Create(&a).Error
 }
 
-func applyClientUsage(tx *gorm.DB, client model.ClientRecord, a *model.ClientUsageAccount, r ClientUsageReport) (ClientUsageDelta, error) {
+func applyClientUsage(tx *gorm.DB, client model.ClientRecord, a *model.ClientUsageAccount, r ClientUsageReport, admit bool) (ClientUsageDelta, error) {
 	var delta ClientUsageDelta
 	var meter model.ClientUsageMeter
 	if err := tx.Where("meter_id = ? AND policy_id = ?", r.MeterID, client.PolicyID).First(&meter).Error; err != nil {
 		return delta, err
+	}
+	var quota int64
+	if admit {
+		var err error
+		quota, err = clientAdmissionQuota(tx, client, a)
+		if err != nil {
+			return delta, err
+		}
+		if meter.Closed {
+			return delta, ErrUsageClosed
+		}
+		if r.Sequence < meter.Sequence {
+			return delta, ErrUsageConflict
+		}
 	}
 	if r.Sequence < meter.Sequence {
 		return delta, nil
@@ -264,6 +298,16 @@ func applyClientUsage(tx *gorm.DB, client model.ClientRecord, a *model.ClientUsa
 			return ClientUsageDelta{}, err
 		}
 	}
+	if _, err := checkedUsageAdd(next.Up, next.Down); err != nil {
+		return ClientUsageDelta{}, err
+	}
+	if admit && quota > 0 && (next.Billed > quota || (next.Billed == quota && next.Remainder > 0)) {
+		allowance, err := clientpolicy.RawAllowance(quota-a.Billed, a.Remainder, clientpolicy.Multiplier(a.Multiplier))
+		if err != nil {
+			return ClientUsageDelta{}, err
+		}
+		return ClientUsageDelta{}, &UsageQuotaError{RawAllowance: allowance}
+	}
 	projected := tx.Model(&xray.ClientTraffic{}).Where("email = ? AND policy_id = ? AND up = ? AND down = ?", client.Email, client.PolicyID, a.Up, a.Down).
 		Updates(map[string]any{"up": next.Up, "down": next.Down})
 	if projected.Error != nil {
@@ -281,6 +325,37 @@ func applyClientUsage(tx *gorm.DB, client model.ClientRecord, a *model.ClientUsa
 	}
 	*a = next
 	return delta, nil
+}
+
+func clientAdmissionQuota(tx *gorm.DB, client model.ClientRecord, a *model.ClientUsageAccount) (int64, error) {
+	var traffic xray.ClientTraffic
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("email = ?", client.Email).First(&traffic).Error; err != nil {
+		return 0, err
+	}
+	if traffic.PolicyID != client.PolicyID {
+		return 0, ErrUsageConflict
+	}
+	if !client.Enable || !traffic.Enable {
+		return 0, ErrUsageDisabled
+	}
+	now := time.Now().UnixMilli()
+	if (client.ExpiryTime > 0 && client.ExpiryTime <= now) || (traffic.ExpiryTime > 0 && traffic.ExpiryTime <= now) {
+		return 0, ErrUsageExpired
+	}
+	if client.ExpiryTime < 0 || traffic.ExpiryTime < 0 {
+		return 0, ErrUsageUnready
+	}
+	if traffic.Total < 0 || client.TotalGB < 0 {
+		return 0, clientpolicy.ErrInvalidUsage
+	}
+	quota := traffic.Total
+	if client.TotalGB > 0 && (quota == 0 || client.TotalGB < quota) {
+		quota = client.TotalGB
+	}
+	if quota > 0 && (a.Billed > quota || (a.Billed == quota && a.Remainder > 0)) {
+		return 0, &UsageQuotaError{}
+	}
+	return quota, nil
 }
 
 func validateUsageReport(r ClientUsageReport) error {
