@@ -195,6 +195,30 @@ try {
   assert.equal(saved.multiplier, '1.5');
   assert.equal(saved.version, 1);
 
+  const meterWaitStarted = Date.now();
+  let initiallyReady;
+  await until(
+    () => {
+      const ready = execFileSync(
+        'python3',
+        [
+          '-c',
+          'import sqlite3,sys\nc=sqlite3.connect(sys.argv[1])\nprint(c.execute("select count(*) from client_usage_meters m join client_usage_accounts a on a.policy_id=m.policy_id where m.policy_id=? and m.revision=a.revision and m.closed=0 and m.admission_only=1",(sys.argv[2],)).fetchone()[0])',
+          path.join(env.XUI_DB_FOLDER, 'x-ui.db'),
+          saved.policyId,
+        ],
+        { encoding: 'utf8' },
+      );
+      const available = ready.trim() === '1';
+      initiallyReady ??= available;
+      return available;
+    },
+    'fresh meter after multiplier boundary',
+    2000,
+  );
+  const meterWaitMs = Date.now() - meterWaitStarted;
+  assert(meterWaitMs <= 2000, `Meter replacement took ${meterWaitMs} ms`);
+
   const hostFile = path.join(temp, 'host-key');
   writeFileSync(hostFile, inbound.settings.hostKey, { mode: 0o600 });
   const publicHost = execFileSync('ssh-keygen', ['-y', '-f', hostFile], {
@@ -202,45 +226,54 @@ try {
   }).trim();
   const knownHosts = path.join(temp, 'known_hosts');
   writeFileSync(knownHosts, `[127.0.0.1]:${sshPort} ${publicHost}\n`, { mode: 0o600 });
+  const sshIdentityArgs = [
+    '-F',
+    '/dev/null',
+    '-o',
+    'BatchMode=yes',
+    '-o',
+    'IdentitiesOnly=yes',
+    '-o',
+    'StrictHostKeyChecking=yes',
+    '-o',
+    `UserKnownHostsFile=${knownHosts}`,
+    '-o',
+    'ExitOnForwardFailure=yes',
+    '-o',
+    'ConnectTimeout=3',
+    '-i',
+    key,
+    '-p',
+    String(sshPort),
+  ];
   const ssh = spawn(
     'ssh',
     [
-      '-F',
-      '/dev/null',
-      '-o',
-      'BatchMode=yes',
-      '-o',
-      'IdentitiesOnly=yes',
-      '-o',
-      'StrictHostKeyChecking=yes',
-      '-o',
-      `UserKnownHostsFile=${knownHosts}`,
-      '-o',
-      'ExitOnForwardFailure=yes',
-      '-i',
-      key,
-      '-p',
-      String(sshPort),
+      ...sshIdentityArgs,
       '-N',
       '-L',
       `127.0.0.1:${forwardPort}:127.0.0.1:${targetPort}`,
       `${email}@127.0.0.1`,
     ],
-    { stdio: 'ignore' },
+    { stdio: ['ignore', 'ignore', 'pipe'] },
   );
   processes.push(ssh);
-  await until(
-    () =>
-      new Promise((resolve) => {
-        const socket = net.connect(forwardPort, '127.0.0.1');
-        socket.once('connect', () => {
-          socket.destroy();
-          resolve(true);
-        });
-        socket.once('error', () => resolve(false));
-      }),
-    'OpenSSH forward',
-  );
+  let sshError = '';
+  ssh.stderr.on('data', (chunk) => {
+    sshError += chunk;
+  });
+  await until(() => {
+    if (ssh.exitCode !== null || ssh.signalCode !== null)
+      throw new Error(`OpenSSH exited: ${sshError}`);
+    return new Promise((resolve) => {
+      const socket = net.connect(forwardPort, '127.0.0.1');
+      socket.once('connect', () => {
+        socket.destroy();
+        resolve(true);
+      });
+      socket.once('error', () => resolve(false));
+    });
+  }, 'OpenSSH forward');
   const payload = Buffer.alloc(16384, 0x37);
   const echoed = await new Promise((resolve, reject) => {
     const socket = net.connect(forwardPort, '127.0.0.1');
@@ -272,6 +305,21 @@ try {
   }, 'real SSH billing');
   await page.getByText('49152 B', { exact: true }).waitFor({ timeout: 10000 });
 
+  const listed = await api('/panel/api/clients/list/paged');
+  const row = listed.items.find((item) => item.email === email);
+  assert.equal(row.billing.billed, '49152');
+  assert.equal(row.billing.remaining, '104808448');
+  assert.equal(row.billing.exhausted, false);
+  const hydrated = await api(`/panel/api/clients/get/${email}`);
+  assert.equal(hydrated.billing.billed, '49152');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page
+    .getByRole('progressbar', { name: 'Billed usage: 49152 B / 104857600 B', exact: true })
+    .waitFor({ timeout: 10000 });
+  await page.getByRole('cell', { name: '99.95 MiB', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.getByRole('tab', { name: 'Traffic policy' }).click();
+
   await page.getByLabel('Upload limit (B/s)', { exact: true }).fill('12345');
   await api(`/panel/api/clients/policy/${email}`, { ...saved, downloadBps: 131072 });
   await page
@@ -292,12 +340,64 @@ try {
     'saved policy reload',
   );
   assert.equal(await page.getByLabel('Upload limit (B/s)', { exact: true }).inputValue(), '32768');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await api(`/panel/api/clients/update/${email}`, {
+    email,
+    id: hydrated.client.uuid || '',
+    subId: hydrated.client.subId,
+    enable: true,
+    totalGB: 32769,
+  });
+  const depleted = await api('/panel/api/clients/list/paged?filter=depleted');
+  assert.equal(depleted.filtered, 1);
+  assert.equal(depleted.summary.depletedCount, 1);
+  assert.equal(depleted.items[0].billing.exhausted, true);
+  assert.equal(depleted.items[0].billing.remaining, '0');
+  assert.equal(depleted.items[0].billing.billed, '49152');
+  await page
+    .getByRole('progressbar', { name: 'Billed usage: 49152 B / 32769 B', exact: true })
+    .waitFor({ timeout: 10000 });
+  await page.getByRole('cell', { name: '0 B', exact: true }).waitFor();
+  let denial;
+  try {
+    execFileSync(
+      'ssh',
+      [...sshIdentityArgs, '-W', `127.0.0.1:${targetPort}`, `${email}@127.0.0.1`],
+      {
+        input: 'quota-probe',
+        encoding: 'utf8',
+        timeout: 5000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      },
+    );
+  } catch (error) {
+    denial = error;
+  }
+  assert(
+    denial && denial.status !== null && denial.status !== 0,
+    'Exhausted SSH client must exit with refusal, not a test timeout',
+  );
+  assert.equal(denial.stdout, '');
+  assert.match(
+    denial.stderr,
+    /Permission denied|administratively prohibited|Connection .* closed by remote host/,
+  );
   assert.deepEqual(pageErrors, []);
   if (process.env.XUI_E2E_SCREENSHOT)
     await page.screenshot({ path: process.env.XUI_E2E_SCREENSHOT });
   console.log(
-    'PASS: real browser -> authenticated panel API -> SQLite -> managed SSH -> pinned Xray -> loopback echo; 16384 B each direction, 49152 B billed at 1.5x; stale editor preserved and explicitly reloaded.',
+    `PASS: real browser -> authenticated panel API -> SQLite -> managed SSH -> pinned Xray -> loopback echo; 16384 B each direction, 49152 B billed at 1.5x; stale editor preserved and explicitly reloaded; list balance uses billed bytes; quota reduced below billed usage marks depleted and rejects real SSH. Meter initially ready: ${initiallyReady}; readiness wait: ${meterWaitMs} ms.`,
   );
+} catch (error) {
+  const diagnostics = (
+    panelLog === undefined ? '' : readFileSync(path.join(temp, 'panel.log'), 'utf8')
+  )
+    .split('\n')
+    .filter((line) =>
+      /managed SSH inbound \d+ protected:|Xray \d+|XRAY:.*(started|exited)/.test(line),
+    );
+  if (diagnostics.length) console.error(diagnostics.join('\n'));
+  throw error;
 } finally {
   if (browser) await browser.close();
   for (const child of processes.reverse()) await stop(child);

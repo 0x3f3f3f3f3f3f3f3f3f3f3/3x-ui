@@ -9,10 +9,12 @@ _openapi:
     - ./public/openapi.json
   toc:
     - depth: 2
-      title: List every client with its attached inbound IDs and traffic record. The
-        reverse field, if set, is returned as a nested JSON object (legacy
-        JSON-encoded-string form is still accepted on write).
-      url: '#list-every-client-with-its-attached-inbound-ids-and-traffic-record-the-reverse-field-if-set-is-returned-as-a-nested-json-object-legacy-json-encoded-string-form-is-still-accepted-on-write'
+      title: List every client with its attached inbound IDs and raw traffic record.
+        Managed accounts also include billing with exact decimal byte strings,
+        fractional carry, multiplier and exhaustion status. The reverse field,
+        if set, is returned as a nested JSON object (legacy JSON-encoded-string
+        form is still accepted on write).
+      url: '#list-every-client-with-its-attached-inbound-ids-and-raw-traffic-record-managed-accounts-also-include-billing-with-exact-decimal-byte-strings-fractional-carry-multiplier-and-exhaustion-status-the-reverse-field-if-set-is-returned-as-a-nested-json-object-legacy-json-encoded-string-form-is-still-accepted-on-write'
     - depth: 2
       title: 'Filter, sort, and paginate clients on the server. Each item is a slim
         row (no uuid/password/auth/flow/security/reverse/tgId) so the clients
@@ -26,12 +28,14 @@ _openapi:
       url: '#filter-sort-and-paginate-clients-on-the-server-each-item-is-a-slim-row-no-uuidpasswordauthflowsecurityreversetgid-so-the-clients-page-can-ship-25-ish-rows-in-a-few-kb-instead-of-the-full-table-the-response-also-includes-a-summary-computed-across-the-full-db-row-set-so-dashboard-counters-stay-stable-as-the-user-paginates-or-filters-the-count-fields-are-exact-while-the-email-arrays-beside-them-stop-at-200-entries-so-the-payload-does-not-grow-with-the-panel-page-size-capped-at-200-fetch-getemail-to-obtain-the-full-per-client-payload-for-an-editinfo-modal'
     - depth: 2
       title: Fetch one client by email, including the inbound IDs and external config
-        IDs it is attached to.
-      url: '#fetch-one-client-by-email-including-the-inbound-ids-and-external-config-ids-it-is-attached-to'
+        IDs it is attached to. Top-level billing contains exact managed
+        accounting or null for legacy clients; usedTraffic remains raw.
+      url: '#fetch-one-client-by-email-including-the-inbound-ids-and-external-config-ids-it-is-attached-to-top-level-billing-contains-exact-managed-accounting-or-null-for-legacy-clients-usedtraffic-remains-raw'
     - depth: 2
       title: Fetch clients by Telegram user ID. Returns an array since multiple
-        clients can share the same Telegram ID.
-      url: '#fetch-clients-by-telegram-user-id-returns-an-array-since-multiple-clients-can-share-the-same-telegram-id'
+        clients can share the same Telegram ID. Each result includes exact
+        managed billing or null for a legacy client.
+      url: '#fetch-clients-by-telegram-user-id-returns-an-array-since-multiple-clients-can-share-the-same-telegram-id-each-result-includes-exact-managed-billing-or-null-for-a-legacy-client'
     - depth: 2
       title: Create a new client and attach it to one or more inbounds in a single
         call. Body is JSON. Per-protocol secrets are generated server-side when
@@ -309,10 +313,12 @@ _openapi:
       url: '#return-every-url-for-one-client-across-all-attached-inbounds-one-per-advertised-endpoint-the-managed-hosts-of-the-inbound-else-its-streamsettingsexternalproxy-entries-else-its-own-address-supported-protocols-vmess-vless-trojan-shadowsocks-hysteria-mtproto-protocols-without-a-url-form-socks-http-mixed-wireguard-dokodemo-tunnel-contribute-nothing'
   structuredData:
     headings:
-      - content: List every client with its attached inbound IDs and traffic record. The
-          reverse field, if set, is returned as a nested JSON object (legacy
+      - content: List every client with its attached inbound IDs and raw traffic record.
+          Managed accounts also include billing with exact decimal byte strings,
+          fractional carry, multiplier and exhaustion status. The reverse field,
+          if set, is returned as a nested JSON object (legacy
           JSON-encoded-string form is still accepted on write).
-        id: list-every-client-with-its-attached-inbound-ids-and-traffic-record-the-reverse-field-if-set-is-returned-as-a-nested-json-object-legacy-json-encoded-string-form-is-still-accepted-on-write
+        id: list-every-client-with-its-attached-inbound-ids-and-raw-traffic-record-managed-accounts-also-include-billing-with-exact-decimal-byte-strings-fractional-carry-multiplier-and-exhaustion-status-the-reverse-field-if-set-is-returned-as-a-nested-json-object-legacy-json-encoded-string-form-is-still-accepted-on-write
       - content: 'Filter, sort, and paginate clients on the server. Each item is a slim
           row (no uuid/password/auth/flow/security/reverse/tgId) so the clients
           page can ship 25-ish rows in a few KB instead of the full table. The
@@ -324,11 +330,13 @@ _openapi:
           for an edit/info modal.'
         id: filter-sort-and-paginate-clients-on-the-server-each-item-is-a-slim-row-no-uuidpasswordauthflowsecurityreversetgid-so-the-clients-page-can-ship-25-ish-rows-in-a-few-kb-instead-of-the-full-table-the-response-also-includes-a-summary-computed-across-the-full-db-row-set-so-dashboard-counters-stay-stable-as-the-user-paginates-or-filters-the-count-fields-are-exact-while-the-email-arrays-beside-them-stop-at-200-entries-so-the-payload-does-not-grow-with-the-panel-page-size-capped-at-200-fetch-getemail-to-obtain-the-full-per-client-payload-for-an-editinfo-modal
       - content: Fetch one client by email, including the inbound IDs and external
-          config IDs it is attached to.
-        id: fetch-one-client-by-email-including-the-inbound-ids-and-external-config-ids-it-is-attached-to
+          config IDs it is attached to. Top-level billing contains exact managed
+          accounting or null for legacy clients; usedTraffic remains raw.
+        id: fetch-one-client-by-email-including-the-inbound-ids-and-external-config-ids-it-is-attached-to-top-level-billing-contains-exact-managed-accounting-or-null-for-legacy-clients-usedtraffic-remains-raw
       - content: Fetch clients by Telegram user ID. Returns an array since multiple
-          clients can share the same Telegram ID.
-        id: fetch-clients-by-telegram-user-id-returns-an-array-since-multiple-clients-can-share-the-same-telegram-id
+          clients can share the same Telegram ID. Each result includes exact
+          managed billing or null for a legacy client.
+        id: fetch-clients-by-telegram-user-id-returns-an-array-since-multiple-clients-can-share-the-same-telegram-id-each-result-includes-exact-managed-billing-or-null-for-a-legacy-client
       - content: Create a new client and attach it to one or more inbounds in a single
           call. Body is JSON. Per-protocol secrets are generated server-side
           when omitted, so callers can send only the universal fields.
@@ -567,6 +575,13 @@ _openapi:
           tunnel) contribute nothing.'
         id: return-every-url-for-one-client-across-all-attached-inbounds-one-per-advertised-endpoint-the-managed-hosts-of-the-inbound-else-its-streamsettingsexternalproxy-entries-else-its-own-address-supported-protocols-vmess-vless-trojan-shadowsocks-hysteria-mtproto-protocols-without-a-url-form-socks-http-mixed-wireguard-dokodemo-tunnel-contribute-nothing
     contents:
+      - content: 'Managed accounts include billing: exact raw up/down, billed, quota and
+          remaining byte strings, remainder in thousandths of a byte, current
+          multiplier, unlimited and exhausted. Billing determines usage filters,
+          traffic/remaining sorting and status counts; an account is exhausted
+          when it cannot fund one more raw byte. Legacy clients omit billing and
+          retain raw usage semantics. The traffic field remains raw.'
+        heading: filter-sort-and-paginate-clients-on-the-server-each-item-is-a-slim-row-no-uuidpasswordauthflowsecurityreversetgid-so-the-clients-page-can-ship-25-ish-rows-in-a-few-kb-instead-of-the-full-table-the-response-also-includes-a-summary-computed-across-the-full-db-row-set-so-dashboard-counters-stay-stable-as-the-user-paginates-or-filters-the-count-fields-are-exact-while-the-email-arrays-beside-them-stop-at-200-entries-so-the-payload-does-not-grow-with-the-panel-page-size-capped-at-200-fetch-getemail-to-obtain-the-full-per-client-payload-for-an-editinfo-modal
       - content: >-
           Fields the server fills in when they are omitted — a valid value sent
           by the caller is never overwritten. Re-adding an email that already

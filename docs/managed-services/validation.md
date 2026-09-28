@@ -807,7 +807,116 @@ Logs: `/tmp/3x-ui-policy-ui-full-frontend.log`,
 `/tmp/3x-ui-ssh-http-validation-red.log`,
 `/tmp/3x-ui-ssh-http-validation-green.log`, `/tmp/3x-ui-policy-ui-build.log`.
 
-The full vertical is still incomplete: creation/bulk policy, SSH credential and
-inbound UI/export, legacy client-list/dashboard quota summaries (which still
-use raw traffic), other backend executors and distributed limits remain open.
-The verified exact billing display here is specifically the policy tab.
+At this policy-editor checkpoint, exact billing display was verified specifically
+in that tab. The following increment covers client-list billing. Creation/bulk
+policy, SSH credential and inbound UI/export, other usage consumers, backend
+executors and distributed limits still remain open.
+
+## Billed client-list integration (2026-09-28)
+
+Client list, information-modal and list-summary reads now expose owned ledger
+usage without creating accounts on read. The SQL predicates/order use billed
+whole bytes plus thousandth-byte carry; legacy clients retain raw semantics.
+The initial regression selected only the raw-exhausted discount account, instead
+of the double-priced, fractional, traffic-cap and large-integer exhausted
+accounts. Component regressions initially displayed raw consumption and omitted
+the exact billed description; Ant Design's default ARIA percentage also truncated
+99.5 to 99. The component now supplies the bounded precise percentage explicitly.
+
+SQLite and actual PostgreSQL tests cover multiplier 0.5/1/1.5/2/4, an effective
+traffic quota below the canonical quota, inability to fund one further raw byte,
+exact 9007199254740993.5 B usage, inclusive integer filter boundaries, fractional
+remaining/usage ordering, status counts and unpaged serialization. An unrelated
+global raw overlay does not replace owned local billing. Reading these views
+does not activate a legacy account.
+
+The cleanup regression originally deleted a discounted client with 120 raw /
+60 billed bytes while retaining a double-priced client with 50 raw / 100 billed
+bytes at a 100-byte quota. Both cleanup entry points now use billed candidate
+selection. Tests preserve interval/monthly/weekly canonical renewal even with
+stale zero renewal fields in the traffic projection. Scoped cleanup removes the
+spent client's selected inbound attachment and retains traffic referenced by its
+sibling; subsequent global cleanup removes that spent traffic. These tests run
+on SQLite and PostgreSQL. The original inbound fixture lacked required SSH
+credentials/traffic ownership and was corrected to seed complete persisted
+state; those failed fixture runs are not acceptance passes. The old client
+bulk-delete fanout remains non-atomic with candidate selection under concurrent
+reset/quota edits; that separate lifecycle risk is still open.
+
+The real browser fixture now checks paged and hydrated billing after its actual
+SSH/Xray echo: 16384 B in each raw direction, 49152 B billed at 1.5x, and
+104808448 B remaining from 100 MiB. The table shows 99.95 MiB remaining. It then
+reduces quota to 32769 B (above 32768 raw bytes, below 49152 billed bytes), checks
+one depleted client in the API/summary, a 0 B table balance and a real OpenSSH
+payload refusal with no target response. No connection-refused or test-timeout
+error is accepted as the quota assertion. The final screenshot was inspected.
+
+Early browser attempts exposed a readiness assumption: public-key authentication
+succeeded but the transport closed while the multiplier's old meter was fenced.
+The controller checks/replaces that meter on its bounded reconciliation cycle.
+The fixture now polls its own SQLite account/meter revision for at most two
+seconds before the first post-edit connection, then still exercises actual
+OpenSSH. The final run observed no current meter initially and readiness after
+309 ms. This is a readiness gate, not a throughput measurement or a retry of
+the exhausted-account assertion. The API's supported flag remains a capability
+flag, not a health/readiness endpoint. Lifecycle-only diagnostics are emitted
+on fixture failure; private keys and panel credentials are not printed.
+
+Validation failures retained as failures:
+
+- The first full Go command overlapped a Vite build deleting/replacing embedded
+  assets; root/web compilation failed with missing dist files. Subsequent build
+  and Go execution are sequential.
+- The first full frontend run had four 5000 ms timeouts (three existing inbound
+  form cases and one policy-editor case), with 1755 other tests passing, while
+  competing with other heavy checks. No timeout or assertion was relaxed.
+- A standalone full frontend run passed all 177 files / 1759 test assertions but
+  exited 1 on an unhandled React `window is not defined` callback attributed to
+  the existing Happ routing editor during environment teardown. Its isolated
+  18-test rerun passed. This does not retroactively turn the full run into a pass.
+
+Executed checks so far for this increment:
+
+- Focused Go list/billing/purge regression including actual PostgreSQL: passed,
+  4.711 s (`/tmp/3x-ui-billing-targeted-final.log`).
+- Frontend generated contracts, typecheck, lint, formatting (714 files), MSW
+  worker consistency and production build: passed.
+- Embedded `go build`, API website generation and website typecheck: passed.
+- Final real browser + HTTP + SSH + Xray fixture: passed, exit 0
+  (`/tmp/3x-ui-billing-browser-verified.log`), screenshot
+  `/tmp/3x-ui-billing-list.png`.
+- A subsequent full Go runner received SIGTERM (exit 143) during the database
+  package without reporting an assertion failure. Its partial run is not a pass;
+  the cause was not identified. A dedicated-terminal rerun finished with only
+  the existing AmneziaWG fixed-port regression failing (TCP 58930 already in
+  use); the service package passed in 96.616 s. An owned loopback listener on
+  58930 reproduced the old fixture failure, and replacing that constant with
+  the existing freePort helper passed unchanged assertions while the listener
+  remained active. That one-line prerequisite was committed separately as
+  `f81bbf56` and its approved fork push was independently verified. No unrelated
+  listener was stopped. The fresh full Go rerun passed all 50 packages with
+  tests, with 5 packages reporting no test files; exit 0. Database tests took
+  47.658 s and service tests 87.819 s
+  (`/tmp/3x-ui-billing-full-go-verified.log`).
+- Focused billing/list/purge race tests on SQLite and PostgreSQL passed in
+  13.549 s (`/tmp/3x-ui-billing-race-final.log`). Full Go lint reported
+  0 issues (`/tmp/3x-ui-billing-lint-final.log`), and `make gen-check` passed.
+- Two standalone full frontend runs passed all 1759 assertions but exited 1
+  with the same Happ/React teardown exception (415.34 s and 413.77 s). Its
+  static Ant Design messages own a separate React root and auto-close timers.
+  The test now destroys those messages inside awaited React act during cleanup;
+  no assertions, error detection or timeout values changed. The focused 18-test
+  rerun passed in 16.48 s (`/tmp/3x-ui-happ-cleanup-green.log`). The final full
+  suite passed **177 files / 1760 tests**, exit 0 with no unhandled errors, in
+  411.93 s (`/tmp/3x-ui-billing-full-frontend-cleanup-fixed.log`). This includes
+  the new billing Storybook example. The cleanup is a separate test-only commit,
+  `41b498d1`; all application behavior assertions remain intact.
+- The reusable traffic cell now documents its billing prop and a fractional
+  1.5x example in its existing Storybook file. Typecheck/lint and
+  `npm run build-storybook` passed; Vite reported its existing advisory about
+  chunks over 500 kB (`/tmp/3x-ui-billing-storybook-build.log`).
+
+Reproduce with the preceding browser command and the same pinned binaries.
+This increment does not verify global node dashboard counts, inbound widgets,
+notifications/subscription billing, distributed policy, other protocol adapters
+or deployment. No whole-goal completion is claimed.

@@ -22,7 +22,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Traffic usage cell for the clients table: used bytes, a color-coded progress bar, and the quota (or an infinity icon for unlimited clients), with an upload/download/remaining breakdown in a hover popover.',
+          'Traffic usage cell for the clients table. Managed accounts use exact billed consumption for the bar and remaining quota, with raw upload/download and the current multiplier in the popover. Legacy clients use their raw counters.',
       },
     },
   },
@@ -30,6 +30,10 @@ const meta = {
     up: { description: 'Uploaded bytes counted against the client.' },
     down: { description: 'Downloaded bytes counted against the client.' },
     total: { description: 'Traffic quota in bytes; 0 or less renders as unlimited.' },
+    billing: {
+      description:
+        'Optional managed ledger snapshot: decimal byte strings with billed thousandth-byte carry, current multiplier and exhausted status. Overrides raw quota calculations.',
+    },
     enabled: { description: 'Grays the bar out when the client is disabled.' },
     trafficDiff: {
       description:
@@ -57,6 +61,26 @@ export const Unlimited: Story = {
     up: 87 * GiB,
     down: 940 * GiB,
     total: 0,
+  },
+};
+
+export const BilledAtMultiplier: Story = {
+  args: {
+    up: 40,
+    down: 25,
+    total: 100,
+    trafficDiff: 5,
+    billing: {
+      up: '40',
+      down: '25',
+      billed: '97',
+      remainder: 500,
+      quota: '100',
+      remaining: '3',
+      unlimited: false,
+      multiplier: '1.5',
+      exhausted: false,
+    },
   },
 };
 

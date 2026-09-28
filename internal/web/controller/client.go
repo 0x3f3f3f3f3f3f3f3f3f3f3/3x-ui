@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -146,7 +147,7 @@ func (a *ClientController) listPaged(c *gin.Context) {
 	jsonObj(c, resp, nil)
 }
 
-func (a *ClientController) buildClientPayload(rec *model.ClientRecord) (gin.H, error) {
+func (a *ClientController) buildClientPayload(ctx context.Context, rec *model.ClientRecord) (gin.H, error) {
 	inboundIds, err := a.clientService.GetInboundIdsForRecord(rec.Id)
 	if err != nil {
 		return nil, err
@@ -160,6 +161,10 @@ func (a *ClientController) buildClientPayload(rec *model.ClientRecord) (gin.H, e
 		return nil, err
 	}
 	rec.Flow = flow
+	billing, err := a.clientService.GetBilling(ctx, rec.Id)
+	if err != nil {
+		return nil, err
+	}
 	var usedTraffic int64
 	if t, tErr := a.inboundService.GetClientTrafficByEmail(rec.Email); tErr == nil && t != nil {
 		usedTraffic = t.Up + t.Down
@@ -170,6 +175,7 @@ func (a *ClientController) buildClientPayload(rec *model.ClientRecord) (gin.H, e
 	}
 	return gin.H{
 		"client":           rec,
+		"billing":          billing,
 		"inboundIds":       inboundIds,
 		"externalLinks":    externalLinks,
 		"usedTraffic":      usedTraffic,
@@ -184,7 +190,7 @@ func (a *ClientController) get(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.obtain"), err)
 		return
 	}
-	payload, err := a.buildClientPayload(rec)
+	payload, err := a.buildClientPayload(c.Request.Context(), rec)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.obtain"), err)
 		return
@@ -206,7 +212,7 @@ func (a *ClientController) getByTgId(c *gin.Context) {
 	}
 	results := make([]gin.H, 0, len(records))
 	for _, rec := range records {
-		payload, err := a.buildClientPayload(rec)
+		payload, err := a.buildClientPayload(c.Request.Context(), rec)
 		if err != nil {
 			jsonMsg(c, I18nWeb(c, "get"), err)
 			return

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ClientBillingSchema } from './client-policy';
 
 const nullableStringArray = z
   .array(z.string())
@@ -47,6 +48,7 @@ export const ClientRecordSchema = z
     trafficResetDay: z.number().optional(),
     inboundIds: nullableNumberArray.optional(),
     traffic: ClientTrafficSchema.nullable().optional(),
+    billing: ClientBillingSchema.nullable().optional(),
     reverse: z.object({ tag: z.string().optional() }).loose().nullable().optional(),
     privateKey: z.string().optional(),
     publicKey: z.string().optional(),
@@ -209,6 +211,7 @@ export const ExternalLinkListSchema = z
 // protocol's real, distinct address instead of one ambiguous shared field.
 export const ClientHydrateSchema = z.object({
   client: ClientRecordSchema,
+  billing: ClientBillingSchema.nullable().optional(),
   inboundIds: nullableNumberArray,
   externalLinks: ExternalLinkListSchema.optional(),
   tunnelAllowedIPs: z.record(z.number().int(), z.string()).optional(),

@@ -981,7 +981,7 @@ export const sections: readonly Section[] = [
         method: 'GET',
         path: '/panel/api/clients/list',
         summary:
-          'List every client with its attached inbound IDs and traffic record. The reverse field, if set, is returned as a nested JSON object (legacy JSON-encoded-string form is still accepted on write).',
+          'List every client with its attached inbound IDs and raw traffic record. Managed accounts also include billing with exact decimal byte strings, fractional carry, multiplier and exhaustion status. The reverse field, if set, is returned as a nested JSON object (legacy JSON-encoded-string form is still accepted on write).',
         response:
           '{\n  "success": true,\n  "obj": [\n    {\n      "id": 1,\n      "email": "alice@example.com",\n      "subId": "abcd1234",\n      "uuid": "...",\n      "totalGB": 53687091200,\n      "expiryTime": 1735689600000,\n      "enable": true,\n      "reverse": null,\n      "inboundIds": [3, 5],\n      "traffic": { "up": 1024, "down": 4096, "enable": true }\n    }\n  ]\n}',
       },
@@ -1079,14 +1079,14 @@ export const sections: readonly Section[] = [
             name: 'usageFrom',
             in: 'query',
             type: 'number',
-            desc: 'Inclusive minimum combined upload and download usage in bytes. Zero means unset.',
+            desc: 'Inclusive minimum billed usage for managed accounts, or combined raw upload/download for legacy clients, in bytes. Zero means unset.',
             optional: true,
           },
           {
             name: 'usageTo',
             in: 'query',
             type: 'number',
-            desc: 'Inclusive maximum combined upload and download usage in bytes. Zero means unbounded.',
+            desc: 'Inclusive maximum billed usage for managed accounts, or combined raw upload/download for legacy clients, in bytes. Fractional carry is included. Zero means unbounded.',
             optional: true,
           },
           {
@@ -1121,13 +1121,15 @@ export const sections: readonly Section[] = [
             optional: true,
           },
         ],
+        description:
+          'Managed accounts include billing: exact raw up/down, billed, quota and remaining byte strings, remainder in thousandths of a byte, current multiplier, unlimited and exhausted. Billing determines usage filters, traffic/remaining sorting and status counts; an account is exhausted when it cannot fund one more raw byte. Legacy clients omit billing and retain raw usage semantics. The traffic field remains raw.',
         responseSchema: 'ClientPageResponse',
       },
       {
         method: 'GET',
         path: '/panel/api/clients/get/:email',
         summary:
-          'Fetch one client by email, including the inbound IDs and external config IDs it is attached to.',
+          'Fetch one client by email, including the inbound IDs and external config IDs it is attached to. Top-level billing contains exact managed accounting or null for legacy clients; usedTraffic remains raw.',
         params: [
           { name: 'email', in: 'path', type: 'string', desc: 'Client email (unique identifier).' },
         ],
@@ -1138,7 +1140,7 @@ export const sections: readonly Section[] = [
         method: 'GET',
         path: '/panel/api/clients/get/tgId/:tgId',
         summary:
-          'Fetch clients by Telegram user ID. Returns an array since multiple clients can share the same Telegram ID.',
+          'Fetch clients by Telegram user ID. Returns an array since multiple clients can share the same Telegram ID. Each result includes exact managed billing or null for a legacy client.',
         params: [
           { name: 'tgId', in: 'path', type: 'integer', desc: 'Telegram user ID (numeric).' },
         ],

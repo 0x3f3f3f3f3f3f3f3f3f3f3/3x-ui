@@ -225,12 +225,17 @@ func (s *ClientService) List() ([]ClientWithAttachments, error) {
 		}
 	}
 
+	billing, err := clientBillingByID(db, clientIds)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]ClientWithAttachments, 0, len(rows))
 	for i := range rows {
 		out = append(out, ClientWithAttachments{
 			ClientRecord: rows[i],
 			InboundIds:   attachments[rows[i].Id],
 			Traffic:      trafficByEmail[rows[i].Email],
+			Billing:      billing[rows[i].Id],
 		})
 	}
 	return out, nil

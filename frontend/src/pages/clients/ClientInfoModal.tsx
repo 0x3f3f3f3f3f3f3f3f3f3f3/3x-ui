@@ -11,6 +11,7 @@ import {
 
 import { ClipboardManager, FileManager, HttpUtil, IntlUtil, SizeFormatter } from '@/utils';
 import { formatInboundLabel, formatTunnelConfigMeta } from '@/lib/inbounds/label';
+import { exactBytes } from '@/lib/traffic/exact-bytes';
 import { normalizeClientIps, type ClientIpInfo } from '@/lib/clients/ip-log';
 import { useDatepicker } from '@/hooks/useDatepicker';
 import { useClientHwids } from '@/hooks/useClientHwids';
@@ -161,6 +162,7 @@ export default function ClientInfoModal({
   }, [open, client?.subId]);
 
   const traffic = client?.traffic || null;
+  const billing = client?.billing;
   const totalBytes = client?.totalGB || 0;
   const used = (traffic?.up || 0) + (traffic?.down || 0);
   const remaining = useMemo(() => {
@@ -408,23 +410,40 @@ export default function ClientInfoModal({
                   <td>{t('pages.inbounds.traffic')}</td>
                   <td>
                     <Tag>
-                      ↑ {SizeFormatter.sizeFormat(traffic?.up || 0)} / ↓{' '}
-                      {SizeFormatter.sizeFormat(traffic?.down || 0)}
+                      ↑{' '}
+                      {billing
+                        ? exactBytes(billing.up)
+                        : SizeFormatter.sizeFormat(traffic?.up || 0)}{' '}
+                      / ↓{' '}
+                      {billing
+                        ? exactBytes(billing.down)
+                        : SizeFormatter.sizeFormat(traffic?.down || 0)}
                     </Tag>
                     <span className="hint">
-                      {SizeFormatter.sizeFormat(used)} /{' '}
-                      {totalBytes > 0 ? SizeFormatter.sizeFormat(totalBytes) : '∞'}
+                      {billing
+                        ? `${t('pages.clients.policy.billed')}: ${exactBytes(billing.billed, billing.remainder)} (${billing.multiplier}×)`
+                        : SizeFormatter.sizeFormat(used)}{' '}
+                      /{' '}
+                      {billing
+                        ? billing.unlimited
+                          ? '∞'
+                          : exactBytes(billing.quota)
+                        : totalBytes > 0
+                          ? SizeFormatter.sizeFormat(totalBytes)
+                          : '∞'}
                     </span>
                   </td>
                 </tr>
                 <tr>
                   <td>{t('remained')}</td>
                   <td>
-                    {remaining < 0 ? (
+                    {(billing ? billing.unlimited : remaining < 0) ? (
                       <Tag color="purple">∞</Tag>
                     ) : (
-                      <Tag color={remaining > 0 ? '' : 'red'}>
-                        {SizeFormatter.sizeFormat(remaining)}
+                      <Tag color={(billing ? !billing.exhausted : remaining > 0) ? '' : 'red'}>
+                        {billing
+                          ? exactBytes(billing.remaining, -billing.remainder)
+                          : SizeFormatter.sizeFormat(remaining)}
                       </Tag>
                     )}
                   </td>

@@ -5,6 +5,9 @@ import { Popover, Progress } from 'antd';
 import InfinityIcon from '@/components/ui/InfinityIcon';
 import { useTheme } from '@/hooks/useTheme';
 import { computeTrafficDisplay } from '@/lib/clients/traffic-display';
+import { clientBillingDisplay } from '@/lib/clients/billing-display';
+import { exactBytes } from '@/lib/traffic/exact-bytes';
+import type { ClientBilling } from '@/schemas/client-policy';
 import { SizeFormatter } from '@/utils';
 import './ClientTrafficCell.css';
 
@@ -15,12 +18,10 @@ export interface ClientTrafficCellProps {
   enabled?: boolean;
   trafficDiff?: number;
   compact?: boolean;
+  billing?: ClientBilling | null;
 }
 
-// Every prop is a primitive and the component is pure, so the memo bails out
-// whenever a client's counters did not move — which is most of them on most
-// pushes. Each skipped instance is one antd Popover (rc-trigger), one Progress,
-// a useTranslation subscription and a theme context read, times up to 200 rows.
+// Query structural sharing keeps unchanged billing snapshots stable between polls.
 const ClientTrafficCell = memo(function ClientTrafficCell({
   up = 0,
   down = 0,
@@ -28,29 +29,50 @@ const ClientTrafficCell = memo(function ClientTrafficCell({
   enabled = true,
   trafficDiff = 0,
   compact = false,
+  billing,
 }: ClientTrafficCellProps) {
   const { t } = useTranslation();
   const { isDark } = useTheme();
 
-  const display = useMemo(
+  const rawDisplay = useMemo(
     () => computeTrafficDisplay({ up, down, total, enabled, trafficDiff }, isDark),
     [up, down, total, enabled, trafficDiff, isDark],
   );
+  const charged = billing ? clientBillingDisplay(billing, trafficDiff, enabled, isDark) : null;
+  const display = charged ?? rawDisplay;
+  const usedLabel = charged?.usedLabel ?? SizeFormatter.sizeFormat(rawDisplay.used);
+  const quotaLabel = charged?.quotaLabel ?? SizeFormatter.sizeFormat(total);
 
   const popover = (
     <table className="client-traffic-popover">
       <tbody>
         <tr>
           <td>↑</td>
-          <td>{SizeFormatter.sizeFormat(up)}</td>
+          <td>{billing ? exactBytes(billing.up) : SizeFormatter.sizeFormat(up)}</td>
           <td>↓</td>
-          <td>{SizeFormatter.sizeFormat(down)}</td>
+          <td>{billing ? exactBytes(billing.down) : SizeFormatter.sizeFormat(down)}</td>
         </tr>
         {!display.isUnlimited && (
           <tr>
             <td colSpan={2}>{t('remained')}</td>
-            <td colSpan={2}>{SizeFormatter.sizeFormat(display.remaining)}</td>
+            <td colSpan={2}>
+              {billing
+                ? exactBytes(billing.remaining, -billing.remainder)
+                : SizeFormatter.sizeFormat(rawDisplay.remaining)}
+            </td>
           </tr>
+        )}
+        {billing && (
+          <>
+            <tr>
+              <td colSpan={2}>{t('pages.clients.policy.billed')}</td>
+              <td colSpan={2}>{exactBytes(billing.billed, billing.remainder)}</td>
+            </tr>
+            <tr>
+              <td colSpan={2}>{t('pages.clients.policy.currentMultiplier')}</td>
+              <td colSpan={2}>{billing.multiplier}×</td>
+            </tr>
+          </>
         )}
       </tbody>
     </table>
@@ -67,10 +89,15 @@ const ClientTrafficCell = memo(function ClientTrafficCell({
   return (
     <Popover content={popover} trigger={['hover', 'click']} placement="top">
       <div className={rootClass}>
-        <span className="client-traffic-cell-used">{SizeFormatter.sizeFormat(display.used)}</span>
+        <span className="client-traffic-cell-used">{usedLabel}</span>
         <Progress
           className="client-traffic-cell-bar"
-          aria-label={`${SizeFormatter.sizeFormat(display.used)} / ${display.isUnlimited ? t('subscription.unlimited') : SizeFormatter.sizeFormat(total)}`}
+          aria-valuenow={display.percent}
+          aria-label={
+            billing
+              ? `${t('pages.clients.policy.billed')}: ${exactBytes(billing.billed, billing.remainder)} / ${billing.unlimited ? t('subscription.unlimited') : exactBytes(billing.quota)}`
+              : `${usedLabel} / ${display.isUnlimited ? t('subscription.unlimited') : quotaLabel}`
+          }
           percent={display.percent}
           showInfo={false}
           strokeColor={display.strokeColor}
@@ -87,7 +114,7 @@ const ClientTrafficCell = memo(function ClientTrafficCell({
               <InfinityIcon />
             </span>
           ) : (
-            SizeFormatter.sizeFormat(total)
+            quotaLabel
           )}
         </span>
       </div>

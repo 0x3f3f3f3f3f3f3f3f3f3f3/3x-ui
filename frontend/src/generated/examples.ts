@@ -441,6 +441,17 @@ export const EXAMPLES: Record<string, unknown> = {
     "trafficResetDay": 1,
     "updated_at": 0
   },
+  "ClientBilling": {
+    "billed": "4608",
+    "down": "2048",
+    "exhausted": false,
+    "multiplier": "1.5",
+    "quota": "1073741824",
+    "remainder": 0,
+    "remaining": "1073737216",
+    "unlimited": false,
+    "up": "1024"
+  },
   "ClientInbound": {
     "clientId": 0,
     "createdAt": 0,
@@ -455,6 +466,7 @@ export const EXAMPLES: Record<string, unknown> = {
     ],
     "items": [
       {
+        "billing": null,
         "comment": "Primary device",
         "createdAt": 1735000000000,
         "email": "alice@example.com",
@@ -591,6 +603,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "tag": ""
   },
   "ClientSlim": {
+    "billing": null,
     "comment": "Primary device",
     "createdAt": 1735000000000,
     "email": "alice@example.com",

@@ -460,6 +460,19 @@ export const ClientSchema = z.object({
 });
 export type Client = z.infer<typeof ClientSchema>;
 
+export const ClientBillingSchema = z.object({
+  billed: z.string(),
+  down: z.string(),
+  exhausted: z.boolean(),
+  multiplier: z.string(),
+  quota: z.string(),
+  remainder: z.number().int(),
+  remaining: z.string(),
+  unlimited: z.boolean(),
+  up: z.string(),
+});
+export type ClientBilling = z.infer<typeof ClientBillingSchema>;
+
 export const ClientInboundSchema = z.object({
   clientId: z.number().int(),
   createdAt: z.number().int(),
@@ -579,6 +592,7 @@ export const ClientReverseSchema = z.object({
 export type ClientReverse = z.infer<typeof ClientReverseSchema>;
 
 export const ClientSlimSchema = z.object({
+  billing: z.lazy(() => ClientBillingSchema).nullable().optional(),
   comment: z.string().optional(),
   createdAt: z.number().int(),
   email: z.string(),

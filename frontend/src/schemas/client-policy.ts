@@ -4,6 +4,7 @@ import {
   ClientPolicySchema as GeneratedPolicySchema,
   ClientPolicyUpdateSchema as GeneratedUpdateSchema,
   ClientPolicyUsageSchema as GeneratedUsageSchema,
+  ClientBillingSchema as GeneratedBillingSchema,
 } from '@/generated/zod';
 
 const RateSchema = z
@@ -46,3 +47,9 @@ export const ClientPolicySchema = GeneratedPolicySchema.extend({
 
 export type ClientPolicy = z.infer<typeof ClientPolicySchema>;
 export type ClientPolicyUpdate = z.infer<typeof ClientPolicyUpdateSchema>;
+
+export const ClientBillingSchema = GeneratedBillingSchema.extend({
+  ...ClientPolicySchema.shape.usage.shape,
+  multiplier: MultiplierSchema,
+});
+export type ClientBilling = z.infer<typeof ClientBillingSchema>;

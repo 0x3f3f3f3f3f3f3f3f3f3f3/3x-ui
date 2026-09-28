@@ -56,6 +56,8 @@ import { activateOnKey } from '@/utils/a11y';
 
 import { useTheme } from '@/hooks/useTheme';
 import { formatInboundLabel } from '@/lib/inbounds/label';
+import { clientBillingDisplay } from '@/lib/clients/billing-display';
+import { exactBytes } from '@/lib/traffic/exact-bytes';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useClients } from '@/hooks/useClients';
@@ -581,12 +583,15 @@ export default function ClientsPage() {
       const total = row.totalGB || 0;
       const now = Date.now();
       const expired = (row.expiryTime ?? 0) > 0 && (row.expiryTime ?? 0) <= now;
-      const exhausted = total > 0 && used >= total;
+      const charged = row.billing ? clientBillingDisplay(row.billing, trafficDiff) : null;
+      const exhausted = charged ? charged.isDepleted : total > 0 && used >= total;
       if (expired || exhausted) return 'depleted';
       if (!row.enable) return 'deactive';
       const nearExpiry =
         (row.expiryTime ?? 0) > 0 && (row.expiryTime ?? 0) - now < (expireDiff || 0);
-      const nearLimit = total > 0 && total - used < (trafficDiff || 0);
+      const nearLimit = charged
+        ? charged.nearLimit
+        : total > 0 && total - used < (trafficDiff || 0);
       if (nearExpiry || nearLimit) return 'expiring';
       return 'active';
     },
@@ -617,6 +622,8 @@ export default function ClientsPage() {
   const sortedClients = filteredClients;
 
   function remainingLabel(row: ClientRecord) {
+    if (row.billing)
+      return row.billing.unlimited ? '∞' : clientBillingDisplay(row.billing).remainingLabel;
     const total = row.totalGB || 0;
     if (total <= 0) return '∞';
     const used = (row.traffic?.up || 0) + (row.traffic?.down || 0);
@@ -625,6 +632,7 @@ export default function ClientsPage() {
   }
 
   function remainingColor(row: ClientRecord): string {
+    if (row.billing) return clientBillingDisplay(row.billing).remainingColor;
     const total = row.totalGB || 0;
     if (total <= 0) return 'purple';
     const used = (row.traffic?.up || 0) + (row.traffic?.down || 0);
@@ -1170,6 +1178,7 @@ export default function ClientsPage() {
             up={record.traffic?.up}
             down={record.traffic?.down}
             total={record.totalGB}
+            billing={record.billing}
             enabled={record.enable}
             trafficDiff={trafficDiff}
           />
@@ -1196,7 +1205,17 @@ export default function ClientsPage() {
         title: t('pages.clients.remaining'),
         key: 'remaining',
         width: 130,
-        render: (_v, record) => <Tag color={remainingColor(record)}>{remainingLabel(record)}</Tag>,
+        render: (_v, record) => (
+          <Tooltip
+            title={
+              record.billing && !record.billing.unlimited
+                ? exactBytes(record.billing.remaining, -record.billing.remainder)
+                : undefined
+            }
+          >
+            <Tag color={remainingColor(record)}>{remainingLabel(record)}</Tag>
+          </Tooltip>
+        ),
       },
       {
         title: t('pages.clients.duration'),
@@ -1848,6 +1867,7 @@ export default function ClientsPage() {
                                     up={row.traffic?.up}
                                     down={row.traffic?.down}
                                     total={row.totalGB}
+                                    billing={row.billing}
                                     enabled={row.enable}
                                     trafficDiff={trafficDiff}
                                   />

@@ -33,6 +33,7 @@ type ClientSlim struct {
 	Comment      string              `json:"comment,omitempty" example:"Primary device"`
 	InboundIds   []int               `json:"inboundIds" example:"[3,5]"`
 	Traffic      *xray.ClientTraffic `json:"traffic,omitempty"`
+	Billing      *ClientBilling      `json:"billing,omitempty"`
 	CreatedAt    int64               `json:"createdAt" example:"1735000000000"`
 	UpdatedAt    int64               `json:"updatedAt" example:"1735100000000"`
 }
@@ -104,8 +105,7 @@ const (
 	// over it — grow with the client count on a request that repeats every 5s,
 	// and left the hover popover rendering thousands of rows.
 	clientSummaryEmailCap = 200
-	// sqlNeverSentinel sorts "never expires" / "unlimited quota" clients last,
-	// matching the sentinel the in-memory comparator used.
+	// sqlNeverSentinel preserves the existing "never expires" ordering.
 	sqlNeverSentinel = "4611686018427387903"
 	// sqlClientEnabled tolerates a NULL enable column, which GORM scans as
 	// false: without the COALESCE such a row would match neither the enabled
@@ -131,6 +131,8 @@ type clientQuery struct {
 	db               *gorm.DB
 	joins            []clientQueryJoin
 	usedExpr         string
+	remainderExpr    string
+	quotaExpr        string
 	nowMs            int64
 	expireDiffMs     int64
 	trafficDiffBytes int64
@@ -156,7 +158,7 @@ func newClientQuery(db *gorm.DB, nowMs, expireDiffMs, trafficDiffBytes int64) cl
 		Where("updated_at >= ?", freshSince).
 		Limit(1).Count(&probe).Error
 	if err != nil || probe == 0 {
-		return q
+		return q.withBilling()
 	}
 	// A master still pushes cross-panel usage here, so the predicates have to
 	// see the same raised counters overlayGlobalTraffic applies on read.
@@ -167,6 +169,15 @@ func newClientQuery(db *gorm.DB, nowMs, expireDiffMs, trafficDiffBytes int64) cl
 	})
 	q.usedExpr = "(CASE WHEN COALESCE(g.up, 0) > COALESCE(ct.up, 0) THEN COALESCE(g.up, 0) ELSE COALESCE(ct.up, 0) END" +
 		" + CASE WHEN COALESCE(g.down, 0) > COALESCE(ct.down, 0) THEN COALESCE(g.down, 0) ELSE COALESCE(ct.down, 0) END)"
+	return q.withBilling()
+}
+
+func (q clientQuery) withBilling() clientQuery {
+	q.joins = append(q.joins, clientQueryJoin{sql: "LEFT JOIN client_usage_accounts a ON a.policy_id = c.policy_id"})
+	q.usedExpr = "(CASE WHEN a.policy_id IS NOT NULL THEN a.billed ELSE " + q.usedExpr + " END)"
+	q.remainderExpr = "COALESCE(a.remainder, 0)"
+	q.quotaExpr = "(CASE WHEN a.policy_id IS NOT NULL AND COALESCE(ct.total, 0) > 0 AND" +
+		" (COALESCE(c.total_gb, 0) <= 0 OR ct.total < c.total_gb) THEN ct.total ELSE COALESCE(c.total_gb, 0) END)"
 	return q
 }
 
@@ -179,13 +190,15 @@ func (q clientQuery) from() *gorm.DB {
 }
 
 func (q clientQuery) depletedExpr() string {
-	return "((c.total_gb > 0 AND " + q.usedExpr + " >= c.total_gb)" +
+	return "((" + q.quotaExpr + " > 0 AND " + q.quotaExpr + " - " + q.usedExpr +
+		" < ((COALESCE(a.multiplier, 1000) + " + q.remainderExpr + " + 999) / 1000))" +
 		" OR (c.expiry_time > 0 AND c.expiry_time <= " + sqlInt(q.nowMs) + "))"
 }
 
 func (q clientQuery) nearDepletionExpr() string {
 	return "((c.expiry_time > 0 AND c.expiry_time - " + sqlInt(q.nowMs) + " < " + sqlInt(q.expireDiffMs) + ")" +
-		" OR (c.total_gb > 0 AND c.total_gb - " + q.usedExpr + " < " + sqlInt(q.trafficDiffBytes) + "))"
+		" OR (" + q.quotaExpr + " > 0 AND (" + q.quotaExpr + " - " + q.usedExpr + " < " + sqlInt(q.trafficDiffBytes) +
+		" OR (" + q.quotaExpr + " - " + q.usedExpr + " = " + sqlInt(q.trafficDiffBytes) + " AND " + q.remainderExpr + " > 0))))"
 }
 
 func (q clientQuery) expiringExpr() string {
@@ -243,7 +256,7 @@ func (q clientQuery) applyParams(tx *gorm.DB, params ClientPageParams, onlines [
 		where(q.usedExpr+" >= ?", params.UsageFrom)
 	}
 	if params.UsageTo > 0 {
-		where(q.usedExpr+" <= ?", params.UsageTo)
+		where("("+q.usedExpr+" < ? OR ("+q.usedExpr+" = ? AND "+q.remainderExpr+" = 0))", params.UsageTo, params.UsageTo)
 	}
 	switch strings.ToLower(strings.TrimSpace(params.AutoRenew)) {
 	case "on":
@@ -314,9 +327,15 @@ func (q clientQuery) applyOrder(tx *gorm.DB, sortKey, order string) *gorm.DB {
 	case "inboundIds":
 		expr = "(SELECT COUNT(*) FROM client_inbounds ci WHERE ci.client_id = c.id)"
 	case "traffic":
-		expr = q.usedExpr
+		return tx.Order(q.usedExpr + dir + ", " + q.remainderExpr + dir + ", c.id ASC")
 	case "remaining":
-		expr = "CASE WHEN c.total_gb > 0 THEN c.total_gb - " + q.usedExpr + " ELSE " + sqlNeverSentinel + " END"
+		fractionDir := " DESC"
+		if dir == " DESC" {
+			fractionDir = " ASC"
+		}
+		return tx.Order("CASE WHEN " + q.quotaExpr + " > 0 THEN 0 ELSE 1 END" + dir +
+			", CASE WHEN " + q.quotaExpr + " > 0 THEN " + q.quotaExpr + " - " + q.usedExpr + " ELSE 0 END" + dir +
+			", CASE WHEN " + q.quotaExpr + " > 0 THEN " + q.remainderExpr + " ELSE 0 END" + fractionDir + ", c.id ASC")
 	case "expiryTime":
 		expr = "CASE WHEN c.expiry_time > 0 THEN c.expiry_time ELSE " + sqlNeverSentinel + " END"
 	case "createdAt":
@@ -454,6 +473,10 @@ func (q clientQuery) pageRows(params ClientPageParams, onlines []string, offset,
 		}
 	}
 
+	billing, err := clientBillingByID(q.db, ids)
+	if err != nil {
+		return nil, err
+	}
 	items := make([]ClientSlim, 0, len(ids))
 	for _, id := range ids {
 		rec := byId[id]
@@ -464,6 +487,7 @@ func (q clientQuery) pageRows(params ClientPageParams, onlines []string, offset,
 			ClientRecord: *rec,
 			InboundIds:   attachments[rec.Id],
 			Traffic:      trafficByEmail[rec.Email],
+			Billing:      billing[rec.Id],
 		}))
 	}
 	return items, nil
@@ -614,6 +638,7 @@ func toClientSlim(c ClientWithAttachments) ClientSlim {
 		Comment:      c.Comment,
 		InboundIds:   c.InboundIds,
 		Traffic:      c.Traffic,
+		Billing:      c.Billing,
 		CreatedAt:    c.CreatedAt,
 		UpdatedAt:    c.UpdatedAt,
 	}

@@ -868,11 +868,8 @@ func (s *InboundService) DelDepletedClients(id int) (err error) {
 		// Collect depleted emails globally — a shared-email row owned by one
 		// inbound depletes every sibling that lists the email.
 		now := time.Now().Unix() * 1000
-		depletedClause := depletedClientsClause
 		var depletedRows []xray.ClientTraffic
-		if err := tx.Model(xray.ClientTraffic{}).
-			Where(depletedClause, now).
-			Find(&depletedRows).Error; err != nil {
+		if err := depletedTrafficQuery(tx, now).Find(&depletedRows).Error; err != nil {
 			return err
 		}
 		if len(depletedRows) == 0 {
@@ -970,7 +967,16 @@ func (s *InboundService) DelDepletedClients(id int) (err error) {
 		// Drop now-orphaned rows. With id >= 0, a row is safe to drop only when
 		// no out-of-scope inbound still references the email.
 		if id < 0 {
-			return tx.Where(depletedClause, now).Delete(xray.ClientTraffic{}).Error
+			ids := make([]int, 0, len(depletedRows))
+			for _, row := range depletedRows {
+				ids = append(ids, row.Id)
+			}
+			for _, batch := range chunkInts(ids, sqlInChunk) {
+				if err := tx.Where("id IN ?", batch).Delete(&xray.ClientTraffic{}).Error; err != nil {
+					return err
+				}
+			}
+			return nil
 		}
 		emails := make([]string, 0, len(depletedEmails))
 		for e := range depletedEmails {

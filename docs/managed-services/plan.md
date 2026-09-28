@@ -143,8 +143,11 @@ Real OpenSSH verifies duplex shaping, quota at four multipliers and server/
 controller restart. Existing panel creation/edit/reset services now drive a
 production manager; real OpenSSH → panel-managed Xray tests run on SQLite and
 PostgreSQL. Public policy API, persisted runtime controls and the existing-client policy tab
-are verified. Creation/bulk policy, list/dashboard billing summaries and the rest
-of the vertical remain open.
+are verified. Client-list billing integration is also verified: exact list/info
+balances, SQL filters/sorting/summary and depleted cleanup candidate selection
+on SQLite/PostgreSQL, plus a real browser and SSH/Xray quota-reduction check. Creation/bulk policy, node dashboard and
+other usage consumers remain open. Depleted-client bulk deletion also needs an
+atomic selection/mutation boundary against concurrent resets and quota edits.
 The concrete private SOCKS bridge now carries authenticated identity, inbound
 tag, transport source and original destination into real Xray. Tests verify
 user/domain/IP/port/source routing, two observable exits, block priority and

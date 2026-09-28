@@ -349,7 +349,12 @@ export function useClients(options: UseClientsOptions = {}) {
     const msg = await HttpUtil.get(`/panel/api/clients/get/${encodeURIComponent(email)}`);
     if (!msg?.success || !msg.obj) return null;
     const validated = parseMsg(msg, ClientHydrateSchema, 'clients/get');
-    return validated.obj;
+    return validated.obj
+      ? {
+          ...validated.obj,
+          client: { ...validated.obj.client, billing: validated.obj.billing ?? null },
+        }
+      : null;
   }, []);
 
   const createMut = useMutation({

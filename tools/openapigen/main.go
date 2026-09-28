@@ -102,6 +102,7 @@ func run(root, outDir string) error {
 				"ClientPolicyUpdate",
 				"ClientPolicyUsage",
 				"ClientPolicy",
+				"ClientBilling",
 				"ClientPageResponse",
 				"ClientsSummary",
 				"InboundTrafficSummary",

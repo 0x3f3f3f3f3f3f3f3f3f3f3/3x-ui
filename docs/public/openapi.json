@@ -1854,6 +1854,59 @@
         ],
         "type": "object"
       },
+      "ClientBilling": {
+        "properties": {
+          "billed": {
+            "example": "4608",
+            "type": "string"
+          },
+          "down": {
+            "example": "2048",
+            "type": "string"
+          },
+          "exhausted": {
+            "example": false,
+            "type": "boolean"
+          },
+          "multiplier": {
+            "example": "1.5",
+            "type": "string"
+          },
+          "quota": {
+            "example": "1073741824",
+            "type": "string"
+          },
+          "remainder": {
+            "example": 0,
+            "format": "int64",
+            "type": "integer"
+          },
+          "remaining": {
+            "example": "1073737216",
+            "type": "string"
+          },
+          "unlimited": {
+            "example": false,
+            "type": "boolean"
+          },
+          "up": {
+            "example": "1024",
+            "type": "string"
+          }
+        },
+        "required": [
+          "billed",
+          "down",
+          "exhausted",
+          "multiplier",
+          "quota",
+          "remainder",
+          "remaining",
+          "unlimited",
+          "up"
+        ],
+        "type": "object"
+      },
       "ClientInbound": {
         "properties": {
           "clientId": {
@@ -2308,6 +2361,14 @@
       "ClientSlim": {
         "description": "ClientSlim is the row-shape used by the clients page. It drops fields the\ntable never reads (UUID, password, auth, flow, security, reverse, tgId)\nso the list payload stays compact even when the panel manages thousands\nof clients. Modals that need the full record still call /get/:email.",
         "properties": {
+          "billing": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ClientBilling"
+              }
+            ],
+            "nullable": true
+          },
           "comment": {
             "example": "Primary device",
             "type": "string"
@@ -8325,7 +8386,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "List every client with its attached inbound IDs and traffic record. The reverse field, if set, is returned as a nested JSON object (legacy JSON-encoded-string form is still accepted on write).",
+        "summary": "List every client with its attached inbound IDs and raw traffic record. Managed accounts also include billing with exact decimal byte strings, fractional carry, multiplier and exhaustion status. The reverse field, if set, is returned as a nested JSON object (legacy JSON-encoded-string form is still accepted on write).",
         "operationId": "get_panel_api_clients_list",
         "responses": {
           "200": {
@@ -8381,6 +8442,7 @@
         ],
         "summary": "Filter, sort, and paginate clients on the server. Each item is a slim row (no uuid/password/auth/flow/security/reverse/tgId) so the clients page can ship 25-ish rows in a few KB instead of the full table. The response also includes a summary computed across the full DB row set so dashboard counters stay stable as the user paginates or filters: the *Count fields are exact, while the email arrays beside them stop at 200 entries so the payload does not grow with the panel. Page size capped at 200; fetch /get/:email to obtain the full per-client payload for an edit/info modal.",
         "operationId": "get_panel_api_clients_list_paged",
+        "description": "Managed accounts include billing: exact raw up/down, billed, quota and remaining byte strings, remainder in thousandths of a byte, current multiplier, unlimited and exhausted. Billing determines usage filters, traffic/remaining sorting and status counts; an account is exhausted when it cannot fund one more raw byte. Legacy clients omit billing and retain raw usage semantics. The traffic field remains raw.",
         "parameters": [
           {
             "name": "page",
@@ -8493,7 +8555,7 @@
             "name": "usageFrom",
             "in": "query",
             "required": false,
-            "description": "Inclusive minimum combined upload and download usage in bytes. Zero means unset.",
+            "description": "Inclusive minimum billed usage for managed accounts, or combined raw upload/download for legacy clients, in bytes. Zero means unset.",
             "schema": {
               "type": "integer"
             }
@@ -8502,7 +8564,7 @@
             "name": "usageTo",
             "in": "query",
             "required": false,
-            "description": "Inclusive maximum combined upload and download usage in bytes. Zero means unbounded.",
+            "description": "Inclusive maximum billed usage for managed accounts, or combined raw upload/download for legacy clients, in bytes. Fractional carry is included. Zero means unbounded.",
             "schema": {
               "type": "integer"
             }
@@ -8585,6 +8647,7 @@
                     ],
                     "items": [
                       {
+                        "billing": null,
                         "comment": "Primary device",
                         "createdAt": 1735000000000,
                         "email": "alice@example.com",
@@ -8639,7 +8702,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Fetch one client by email, including the inbound IDs and external config IDs it is attached to.",
+        "summary": "Fetch one client by email, including the inbound IDs and external config IDs it is attached to. Top-level billing contains exact managed accounting or null for legacy clients; usedTraffic remains raw.",
         "operationId": "get_panel_api_clients_get_email",
         "parameters": [
           {
@@ -8680,7 +8743,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Fetch clients by Telegram user ID. Returns an array since multiple clients can share the same Telegram ID.",
+        "summary": "Fetch clients by Telegram user ID. Returns an array since multiple clients can share the same Telegram ID. Each result includes exact managed billing or null for a legacy client.",
         "operationId": "get_panel_api_clients_get_tgId_tgId",
         "parameters": [
           {

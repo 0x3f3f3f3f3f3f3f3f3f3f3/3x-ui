@@ -97,3 +97,31 @@ in the background. A concurrent edit or any failed/ambiguous save disables furth
 application until **Reload saved policy** succeeds. Reload deliberately replaces
 unsaved policy edits. Unsupported attachments show a capability warning and disabled
 controls; this does not indicate that the underlying process is healthy.
+
+### Billed balances in the client list
+
+For a client with an owned usage account, paged/unpaged client APIs now include
+`billing`; hydration (`GET /panel/api/clients/get/:email`) returns the same field
+beside `client`. Its byte values are decimal strings. Existing `traffic` and
+`usedTraffic` remain raw compatibility fields. An absent/null `billing` means
+legacy accounting; reading a client never creates a usage account.
+
+The Clients table, mobile cards, information modal and page summary use billed
+usage for quota consumption. Compact balances use IEC units (KiB/MiB/GiB), and
+hover details retain exact bytes. Usage filters, remaining/usage sorting and
+status counts execute in SQL with integer whole bytes and fractional carry.
+The effective managed quota is the smaller positive canonical/traffic limit.
+An account is exhausted when it cannot pay for one more raw byte at its current
+multiplier, even if a fractional billed balance remains. Unlimited quota remains
+a separate flag. Historical billed usage is never recalculated on reads.
+
+Both depleted-client cleanup entry points now select managed accounts using
+billed usage, and preserve clients with interval, monthly or weekly renewal.
+Inbound-scoped cleanup retains traffic still referenced by a sibling inbound.
+This corrects candidate selection; the existing client bulk-delete fanout is
+not yet one atomic transaction with candidate selection. A concurrent reset or
+quota edit between selection and deletion is an unresolved lifecycle race.
+
+This does not complete node dashboard counts, inbound-specific traffic widgets,
+notifications, subscription usage or distributed billing. Global raw overlays
+cannot replace this local owned ledger; global ownership remains separate work.

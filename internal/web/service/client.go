@@ -22,6 +22,7 @@ type ClientWithAttachments struct {
 	model.ClientRecord
 	InboundIds []int               `json:"inboundIds"`
 	Traffic    *xray.ClientTraffic `json:"traffic,omitempty"`
+	Billing    *ClientBilling      `json:"billing,omitempty"`
 }
 
 // MarshalJSON is required because model.ClientRecord defines its own
@@ -36,7 +37,8 @@ func (c ClientWithAttachments) MarshalJSON() ([]byte, error) {
 	extras := struct {
 		InboundIds []int               `json:"inboundIds"`
 		Traffic    *xray.ClientTraffic `json:"traffic,omitempty"`
-	}{InboundIds: c.InboundIds, Traffic: c.Traffic}
+		Billing    *ClientBilling      `json:"billing,omitempty"`
+	}{InboundIds: c.InboundIds, Traffic: c.Traffic, Billing: c.Billing}
 	extra, err := json.Marshal(extras)
 	if err != nil {
 		return nil, err

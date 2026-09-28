@@ -1828,6 +1828,59 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "ClientBilling": {
+    "properties": {
+      "billed": {
+        "example": "4608",
+        "type": "string"
+      },
+      "down": {
+        "example": "2048",
+        "type": "string"
+      },
+      "exhausted": {
+        "example": false,
+        "type": "boolean"
+      },
+      "multiplier": {
+        "example": "1.5",
+        "type": "string"
+      },
+      "quota": {
+        "example": "1073741824",
+        "type": "string"
+      },
+      "remainder": {
+        "example": 0,
+        "format": "int64",
+        "type": "integer"
+      },
+      "remaining": {
+        "example": "1073737216",
+        "type": "string"
+      },
+      "unlimited": {
+        "example": false,
+        "type": "boolean"
+      },
+      "up": {
+        "example": "1024",
+        "type": "string"
+      }
+    },
+    "required": [
+      "billed",
+      "down",
+      "exhausted",
+      "multiplier",
+      "quota",
+      "remainder",
+      "remaining",
+      "unlimited",
+      "up"
+    ],
+    "type": "object"
+  },
   "ClientInbound": {
     "properties": {
       "clientId": {
@@ -2282,6 +2335,14 @@ export const SCHEMAS: Record<string, unknown> = {
   "ClientSlim": {
     "description": "ClientSlim is the row-shape used by the clients page. It drops fields the\ntable never reads (UUID, password, auth, flow, security, reverse, tgId)\nso the list payload stays compact even when the panel manages thousands\nof clients. Modals that need the full record still call /get/:email.",
     "properties": {
+      "billing": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ClientBilling"
+          }
+        ],
+        "nullable": true
+      },
       "comment": {
         "example": "Primary device",
         "type": "string"

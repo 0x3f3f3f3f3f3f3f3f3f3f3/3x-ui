@@ -438,6 +438,18 @@ export interface Client {
   updated_at?: number;
 }
 
+export interface ClientBilling {
+  billed: string;
+  down: string;
+  exhausted: boolean;
+  multiplier: string;
+  quota: string;
+  remainder: number;
+  remaining: string;
+  unlimited: boolean;
+  up: string;
+}
+
 export interface ClientInbound {
   clientId: number;
   createdAt: number;
@@ -548,6 +560,7 @@ export interface ClientReverse {
 }
 
 export interface ClientSlim {
+  billing?: ClientBilling | null;
   comment?: string;
   createdAt: number;
   email: string;
