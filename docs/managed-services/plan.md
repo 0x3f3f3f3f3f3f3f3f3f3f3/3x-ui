@@ -105,8 +105,10 @@ Consumes immutable policy/ledger; produces cancellable per-client flow budget.
 The stream scheduler substep is implemented with bounded FIFO waits, separate
 instances per client/direction, live updates and a stream writer. Real loopback
 TCP tests cover two client groups, four connections each, three rate settings,
-an unlimited baseline and live decreases/increases. This is not yet protocol
-integration, bidirectional adapter acceptance, UDP or quota enforcement.
+an unlimited baseline and live decreases/increases. The shared flow controller
+now attaches this to durable admission and real bidirectional TCP forwarding,
+with quota/state cutoff, source fencing and restart persistence. Protocol
+integration, public controls, UDP and distributed enforcement remain open.
 
 - [ ] Test two rates + unlimited, >1 connection, same-IP separate clients,
   bidirectional transfer, live changes, cancellation and bounded buffering.

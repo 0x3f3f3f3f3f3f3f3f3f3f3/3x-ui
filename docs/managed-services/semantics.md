@@ -65,5 +65,41 @@ exact integer billing ledger. It retains no payload buffers. ShapedWriter
 splits stream writes into bounded grants and propagates partial-write errors.
 An owning adapter must cancel blocked I/O by closing its connection; canceling
 the scheduler context interrupts queued waits only. Datagram admission,
-authenticated client registration, durable quota admission, protocol adapters
-and distributed rate-share allocation are still pending.
+protocol authentication adapters and distributed rate-share allocation remain
+pending.
+
+## Implemented shared TCP flow controller
+
+The controller shares upload/download buckets and a serialized durable meter
+across all bindings for one immutable client. It permits at most 128 active
+flows and uses 32 KiB copy buffers and grants. Its Proxy operation has one
+writer per direction; arbitrary adapters must preserve that ownership.
+It checks policy before dialing and commits each accepted payload before its
+write. A failed write may therefore leave accepted, billed bytes undelivered.
+At most one committed grant per direction/flow awaits its write: up to 64 KiB
+per Proxy flow, or 8 MiB at the 128-flow limit. Kernel, TLS and protocol buffers
+are separate and must be included in each adapter's measured in-flight bound.
+
+Active grants validate current enabled/expiry/quota state transactionally.
+Idle checks run every 250ms once the last successful validation is at least
+250ms old. Database operations have a 500ms context deadline; a separate
+watchdog closes flows after one second without validation, checked at 250ms
+intervals. Cancellation closes both stream endpoints, including blocked reads.
+The tests require cutoff within 1.25s; production scheduling and each adapter's
+Close behavior still need protocol-specific verification against the 2s goal.
+
+Source takeover closes the prior admission-only incarnation. Already committed
+grants remain billed; the old process receives no new grants. Metering-source
+names belong to trusted runtimes, not client-provided labels. This fences
+counter ownership, but does not implement distributed rate shares or node
+leases. Only one controller per client/source may be installed by a runtime.
+
+Admission inspects durability settings on its actual transaction connection.
+SQLite requires WAL with FULL/EXTRA, or a rollback journal with EXTRA; memory
+and disabled journals are rejected. PostgreSQL requires fsync on and a commit
+mode that waits for local WAL flush. These choices follow the official
+[SQLite synchronous contract](https://www.sqlite.org/pragma.html#pragma_synchronous)
+and [PostgreSQL WAL contract](https://www.postgresql.org/docs/16/runtime-config-wal.html).
+They depend on the underlying storage honoring sync operations. Tests cover
+settings and process/controller persistence, not physical power interruption
+or recovery of traffic newer than a restored historical backup.

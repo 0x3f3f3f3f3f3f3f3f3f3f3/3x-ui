@@ -120,3 +120,15 @@ func TestClientUsageLedger_Postgres(t *testing.T) {
 func TestClientUsageAdmission_Postgres(t *testing.T) {
 	testClientUsageAdmissionCompetingSources(t, usagePostgresDB(t))
 }
+
+func TestAdmissionSourceOwnership_Postgres(t *testing.T) {
+	testAdmissionSourceClaimFencesPreviousOwner(t, usagePostgresDB(t))
+}
+
+func TestAdmissionDurability_Postgres(t *testing.T) {
+	testAdmissionRejectsNonDurableSettings(t, usagePostgresDB(t), "SET synchronous_commit = off")
+}
+
+func TestAdmissionSourceMigration_Postgres(t *testing.T) {
+	testAdmissionSourceMigrationPreservesObservedCounters(t, usagePostgresDB(t))
+}

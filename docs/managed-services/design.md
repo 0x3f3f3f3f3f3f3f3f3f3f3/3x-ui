@@ -1,6 +1,7 @@
 # Architecture and actual/proposed paths
 
-Status: identity and internal ledger implemented; runtime integration pending.
+Status: identity, ledger and shared TCP flow controller implemented; protocol
+and panel Runtime integration pending.
 The binding scope is [the complete request](requirements.zh-CN.md).
 
 ## Choices evaluated
@@ -52,6 +53,26 @@ and independently choose sequence numbers. Runtime ownership/lease enforcement
 and attachment to actual protocol flows are prerequisites for activating this
 path. An accounting report replay is not a reusable permission to send a new
 payload. Apply remains the settlement path for already observed usage.
+
+`policyflow.Controller` now owns one admission-only meter and two shared rate
+limiters per configured client. Before forwarding each bounded payload grant,
+it serializes and commits the cumulative report. A stable runtime source name
+can claim a new incarnation after restart; this atomically closes the previous
+incarnation. Its old owner cannot obtain more grants or open idle flows. An
+observed counter cannot be retired this way: its final snapshot is required.
+The AdmissionOnly column defaults false when migrating existing meters.
+
+The controller checks current policy before dialing a target and closes all
+tracked flows for an affected client on quota/disable/expiry or source fencing.
+An independent monotonic-time watchdog closes stale flows even if a database
+operation stalls. Stream cancellation does not abandon an in-flight shared
+cursor transaction; an ambiguous transaction result instead protects the
+client until an explicit source takeover recovers the durable cursor.
+
+This is tested with real TCP sockets, SQLite and PostgreSQL. It is not yet
+called by existing production listeners, authentication adapters or Runtime.
+Rates are currently supplied to the controller in memory; persistence and
+node distribution remain required before public controls can enable them.
 
 Policy application validates backend capabilities, stages configuration,
 applies it, confirms observed revision and then reports success. Failed apply

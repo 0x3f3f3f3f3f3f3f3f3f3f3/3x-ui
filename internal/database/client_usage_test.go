@@ -22,7 +22,7 @@ import (
 func usageTestDB(t *testing.T) (*gorm.DB, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "usage.db")
-	db, err := gorm.Open(sqlite.Open(path+"?_journal_mode=WAL&_busy_timeout=10000"), &gorm.Config{Logger: logger.Discard})
+	db, err := gorm.Open(sqlite.Open(path+"?_journal_mode=WAL&_synchronous=FULL&_busy_timeout=10000"), &gorm.Config{Logger: logger.Discard})
 	if err != nil {
 		t.Fatal(err)
 	}

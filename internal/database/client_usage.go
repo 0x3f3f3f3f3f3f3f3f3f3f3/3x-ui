@@ -17,14 +17,15 @@ import (
 )
 
 var (
-	ErrUsageConflict  = errors.New("usage report conflicts with its durable counter lifetime")
-	ErrUsageClosed    = errors.New("usage counter lifetime is closed")
-	ErrUsageBoundary  = errors.New("billing change requires the current revision and final reports from every active meter")
-	ErrUsageUntracked = errors.New("legacy traffic changed outside the client usage ledger")
-	ErrUsageQuota     = errors.New("client billed quota is exhausted")
-	ErrUsageDisabled  = errors.New("client is disabled")
-	ErrUsageExpired   = errors.New("client has expired")
-	ErrUsageUnready   = errors.New("client first-use expiry must be activated before admission")
+	ErrUsageConflict   = errors.New("usage report conflicts with its durable counter lifetime")
+	ErrUsageClosed     = errors.New("usage counter lifetime is closed")
+	ErrUsageBoundary   = errors.New("billing change requires the current revision and final reports from every active meter")
+	ErrUsageUntracked  = errors.New("legacy traffic changed outside the client usage ledger")
+	ErrUsageQuota      = errors.New("client billed quota is exhausted")
+	ErrUsageDisabled   = errors.New("client is disabled")
+	ErrUsageExpired    = errors.New("client has expired")
+	ErrUsageUnready    = errors.New("client first-use expiry must be activated before admission")
+	ErrUsageDurability = errors.New("quota admission requires synchronous, durable database commits")
 )
 
 type UsageQuotaError struct{ RawAllowance int64 }
@@ -112,6 +113,11 @@ func (l *ClientUsageLedger) apply(ctx context.Context, report ClientUsageReport,
 		return delta, err
 	}
 	err := l.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if admit {
+			if err := requireAdmissionDurability(tx); err != nil {
+				return err
+			}
+		}
 		client, a, err := lockClientUsage(tx, hint.PolicyID)
 		if err != nil {
 			return err
@@ -270,6 +276,9 @@ func applyClientUsage(tx *gorm.DB, client model.ClientRecord, a *model.ClientUsa
 			return delta, ErrUsageConflict
 		}
 		return delta, nil
+	}
+	if !admit && meter.AdmissionOnly {
+		return delta, ErrUsageConflict
 	}
 	if meter.Closed {
 		return delta, ErrUsageClosed

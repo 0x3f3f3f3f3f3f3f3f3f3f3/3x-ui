@@ -252,3 +252,79 @@ first-use expiry is explicitly rejected until activated by the control plane.
 - Disabling the admission quota gate caused the 0.5× boundary test to accept
   one byte beyond its exact allowance. Restoring the gate returned GREEN;
   the mutation was reverted before commit.
+
+## Shared TCP flow controller milestone (protocol integration pending)
+
+The new `internal/policyflow` controller joins shared directional shaping,
+pre-forward durable admission and owned connection cancellation. Tests use
+real TCP listeners and file-backed SQLite WAL/FULL, with independent target
+reads. They do not yet authenticate SSH, Snell, mieru or existing Xray clients.
+
+- Four concurrent uploads through two bindings exhaust a 16 MiB billed quota
+  at 2×: exactly 8,388,608 raw bytes admitted and 16,777,216 billed. In the final
+  race run the target received all 8,388,608 bytes. The predeclared target bound
+  is at most the raw allowance, and at least that allowance minus 256 KiB
+  (four flows × two 32 KiB grants). No allowance was increased after a failure.
+- Exhaustion closes existing streams, rejects a subsequent Open and still
+  rejects it after constructing a new controller with the same durable DB.
+  This is controller restart coverage; full panel/backend process restart and
+  machine/power-loss acceptance remain required.
+- Manual disable closed an idle TCP flow in 471ms; another same-IP client
+  continued echoing. Idle expiry and lowered quota closed in 471/478ms. Source
+  replacement closed in 481ms. A held SQLite write transaction caused watchdog
+  cutoff in 1.225s, inside the unchanged 1.25s test bound.
+- A cancellation test occupies the real SQL connection while admission starts,
+  cancels that stream and then releases the connection. Its committed 5 upload
+  bytes survive; another stream writes 6 download bytes, total billed 11. The
+  earlier implementation poisoned the shared cursor with context.Canceled.
+  Reintroducing that defect produced the expected test failure; it was restored.
+- Admission-only source takeover fences the old cursor and idle-source check.
+  Apply cannot use that source to bypass admission. Legacy observed meters
+  retain their counters and false AdmissionOnly flag after column migration,
+  and cannot be discarded without settlement. SQLite and PostgreSQL pass.
+- Real database tests reject SQLite NORMAL/OFF synchronous settings, missing
+  recovery journals and FULL rollback journals, plus PostgreSQL asynchronous
+  commit. Normal WAL/FULL and synchronous PostgreSQL admission remain usable.
+
+The duplex rate test uses two clients at the same loopback address, each with
+four live connections across two bindings. Client A bills at 2× while B bills
+at 1×. Independent socket counts check both directions. Before execution its
+bounds were fixed to the existing scheduler test: 300ms warmup, 1.8s initial
+window, 250ms settling plus 1.5s live-update window, upper rate × time × 1.06
+plus burst and lower rate × time × 0.80. Every live window ends within 2s.
+
+| Final race run | A upload / download B/s | B upload / download B/s |
+|---|---:|---:|
+| Initial caps A=64/128, B=128/64 KiB/s | 65,513 / 131,024 | 131,024 / 65,513 |
+| A changed to 32/64 KiB/s | 32,755 / 65,522 | 131,051 / 65,520 |
+| A changed to 128/128 KiB/s | 122,307 / 129,943 | 128,850 / 65,511 |
+
+The durable-admission unlimited baseline measured 3.09/3.02 MB/s under race
+instrumentation, above the required eight times the largest cap. This is much
+slower than the scheduler-only baseline because each bounded grant commits to
+disk. Higher-rate and many-client capacity, including safe commit batching,
+remain performance work before production rollout. Rate tests do not certify
+arbitrary rates up to the arithmetic/API maximum.
+
+Ignoring Configure updates made the actual live TCP test fail its first reduced
+rate window. The mutation was reverted. Initial race runs also exposed policy
+checks starving behind SQLite writes; successful admission now refreshes the
+monotonic freshness clock, and checks share the client's serialization lock.
+No rate, quota, cutoff tolerance or test timeout was loosened for these fixes.
+
+Verification completed for this milestone:
+
+- Focused `go test -race` for Controller, Admission and ClientUsageAdmission:
+  PASS, including real TCP and stalled-database tests.
+- Real PostgreSQL ledger/admission/source/durability/migration tests: PASS,
+  2.542s, with XUI_TEST_PG_DSN set to the isolated instance.
+- Static lint initially found an embedded selector simplification; fixed.
+  Final `golangci-lint run ./internal/policyflow/... ./internal/database/...`:
+  exit 0, zero issues.
+- `make test-go`: exit 0 across the full Go regression suite, including the
+  new real TCP package; frontend source was unchanged in this milestone.
+
+Production adapters, immutable auth bindings, rate persistence/API/UI,
+first-use activation, separate restriction reasons, UDP, multi-node leases,
+historical-backup reconciliation and the complete A–E protocol matrix remain
+open. This controller milestone is not completion of Tasks 3–9.
