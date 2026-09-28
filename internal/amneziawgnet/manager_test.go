@@ -286,7 +286,7 @@ func TestForwardedPortsOnlyChangeStillReconcilesPortForwards(t *testing.T) {
 		t.Fatalf("generate peer keypair: %v", err)
 	}
 
-	const forwardedPort = 58930
+	forwardedPort := freePort(t)
 	m := &Manager{ifaces: map[int]*managed{}}
 	inst := amneziawg.Instance{
 		Id:            6,
