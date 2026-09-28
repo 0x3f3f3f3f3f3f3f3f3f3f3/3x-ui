@@ -47,6 +47,8 @@ func migrationModels() []any {
 		&model.OutboundTraffics{},
 		&model.InboundClientIps{},
 		&model.ClientRecord{},
+		&model.ClientUsageAccount{},
+		&model.ClientUsageMeter{},
 		&model.ClientInbound{},
 		&model.ClientHwid{},
 		&model.ClientExternalLink{},

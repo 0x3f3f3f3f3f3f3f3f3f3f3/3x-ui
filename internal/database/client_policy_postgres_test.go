@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
+	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
 
 func TestClientPolicyIdentityMigration_Postgres(t *testing.T) {
@@ -121,6 +123,18 @@ func TestClientPolicyIdentityMigration_Postgres(t *testing.T) {
 	if err := source.Create(&imported).Error; err != nil {
 		t.Fatal(err)
 	}
+	if err := source.Create(&xray.ClientTraffic{Email: imported.Email, Up: 7, Down: 11}).Error; err != nil {
+		t.Fatal(err)
+	}
+	ledger := NewClientUsageLedger(source)
+	if _, err := ledger.ChangeMultiplier(context.Background(), imported.PolicyID, 1, 1500, nil); err != nil {
+		t.Fatal(err)
+	}
+	meter := usageMeter(t, ledger, imported, "local/xray")
+	report := ClientUsageReport{MeterID: meter.ID, Sequence: 1, Up: 3}
+	if _, err := ledger.Apply(context.Background(), report); err != nil {
+		t.Fatal(err)
+	}
 	if err := sourceHandle.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -133,5 +147,12 @@ func TestClientPolicyIdentityMigration_Postgres(t *testing.T) {
 	}
 	if copied.PolicyID != imported.PolicyID {
 		t.Fatalf("SQLite→Postgres replaced identity %q with %q", imported.PolicyID, copied.PolicyID)
+	}
+	ledger = NewClientUsageLedger(GetDB())
+	if d, err := ledger.Apply(context.Background(), report); err != nil || d != (ClientUsageDelta{}) {
+		t.Fatalf("cross-dialect restore double-billed an acknowledged report: %+v, %v", d, err)
+	}
+	if a := usageRead(t, ledger, imported); a.Up != 10 || a.Down != 11 || a.Billed != 22 || a.Remainder != 500 || a.Revision != 2 || a.Multiplier != 1500 {
+		t.Fatalf("cross-dialect restore lost ledger/cursor consistency: %+v", a)
 	}
 }

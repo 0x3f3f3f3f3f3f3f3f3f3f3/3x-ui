@@ -44,7 +44,7 @@ Files: this directory; read existing models, Runtime, services, jobs, build/CI.
 - [x] Verify upstream release and exact newer fork baseline without downgrade.
 - [x] Source-derived capability matrix and architecture alternatives/data paths.
 - [x] Identify credential locally and verify SSH with pinned official host keys.
-- [ ] Complete baseline Go/frontend/build checks and record failures/skips.
+- [x] Execute baseline Go/frontend/build checks and record failures/skips.
 - [ ] Probe official backend binaries, licenses and isolated network capabilities.
 - [x] Commit audit and push branch; verify remote SHA (3e226aea includes audit).
 
@@ -75,17 +75,26 @@ Files: `internal/database/model/client_policy.go`, `database/db.go`,
 extend model/model.go conversions, portable exports and API generator.
 Consumes Task 2; produces stable UUID policy identity and atomic ledger API.
 
-Identity substep implemented: internal create-only ClientRecord.PolicyID, legacy
-backfill, new-client generation; SQLite and PostgreSQL migration/backup checks
-pass. Billing ledger, node propagation and runtime binding remain open below.
+Identity substep pushed as f2d23a46: internal create-only ClientRecord.PolicyID,
+legacy backfill, new-client generation; SQLite and PostgreSQL checks pass.
+The internal ledger now atomically persists usage, fractional billing, source
+cursors and revisions, with raw totals projected into client_traffics. Its
+activation seeds existing local usage at 1×. Runtime/API activation and global
+node-history migration remain pending; existing collectors still use their
+old path and cannot yet enable this ledger from the panel.
 
 - [ ] Write SQLite/Postgres migration tests retaining old raw usage at 1×.
-- [ ] Implement transactional raw/billed/remainder/cursor/revision updates.
+- [x] Implement transactional raw/billed/remainder/cursor/revision updates.
 - [ ] Red→green replay/out-of-order/concurrent/reset/restart/deletion/restore tests.
 - [ ] Integrate existing local and remote traffic paths exactly once per source.
 - [ ] Implement multiplier boundary settlement before accepting a policy change.
 - [ ] Carry new fields through all CRUD/bulk/import/export/backup/node paths.
 - [ ] Verify DB backends and recovery; commit/push with evidence.
+
+Internal ledger boundaries are verified, but the unchecked multiplier item
+also requires stopping/draining live producers and resuming the new revision.
+The ledger rejects incomplete boundaries and untracked legacy writes; that is
+a protection against incomplete integration, not a completed runtime adapter.
 
 ## Task 4: Shared live rate and quota data path
 

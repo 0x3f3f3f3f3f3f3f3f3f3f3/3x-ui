@@ -72,6 +72,9 @@ The user subsequently explicitly approved this task's feature-branch pushes.
 `3e226aeaca84392dd3b534b1c341baa955cdbd0f`, exactly matching local HEAD.
 This includes audit commit `4e2ff8c6` and arithmetic commit `3e226aea`.
 
+Identity milestone `f2d23a46ab6daf09bcf25bf356e57273740daad1` was subsequently
+pushed and independently matched by `git ls-remote` on the same branch.
+
 ## Immutable local client identity milestone
 
 Implemented: create-only, internal UUID `ClientRecord.PolicyID`; existing rows
@@ -124,3 +127,45 @@ Additional checks for this milestone:
 
 The complete request's unresolved requirements in plan.md and matrix.md have
 not been removed or reclassified as complete.
+
+## Internal durable ledger milestone (runtime integration pending)
+
+The new database operations write account totals, fractional carry, meter
+cursor and raw client_traffics projection in one transaction. They use the
+immutable identity and reject untracked writes to the legacy projection.
+Activation preserves existing local raw usage at 1×; global node history,
+existing collector replacement, public controls and data-plane cutoff remain
+unimplemented. These tests are database evidence, not protocol acceptance.
+
+- Initial ledger tests failed on missing ledger types/operations; the first
+  implementation passed the SQLite suite in 5.423s.
+- A behavioral regression test then demonstrated that a recreated label
+  inherited a residual traffic row. Binding the projection to PolicyID fixed
+  it; the extended suite passed in 4.933s.
+- SQLite tests cover replay/out-of-order/conflicts, counter-regression rejection,
+  connection reopen, eight concurrent sources, multiplier 0.5/1/1.5/2/10 with
+  1/13/1001-byte reporting batches, retained fractional carry across changes,
+  10 GiB at 1× + 5 GiB at 2× = 20 GiB, and integer-overflow rollback.
+- An actual SQLite trigger aborts the cursor update after charging; the test
+  verifies account/projection rollback and a subsequent retry. No mocked DB.
+- DumpSQLite/RestoreSQLite preserves the cursor and half-byte remainder;
+  replaying the restored report is free, and the next byte completes the carry.
+- Reset requires final snapshots, closes the old meters, clears raw/billed/carry
+  while retaining multiplier, quota and manual disable. Old reports stay retired.
+- `XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' go test ./internal/database -run '^TestClientPolicyIdentityMigration_Postgres$|^TestClientUsageLedger_Postgres$' -count=1 -v`:
+  PASS, 3.116s, against PostgreSQL 16.15. Includes concurrent sources, index
+  enforcement, segment billing and actual SQLite→PostgreSQL migration of
+  raw/billed values, revision, fractional remainder and acknowledged cursor.
+
+- `go test -race -count=1 ./internal/database -run '^TestClientUsage|^TestClientPolicyIdentity'`:
+  PASS, 26.595s (PostgreSQL-gated tests are excluded from this result).
+- `make test-go`: exit 0, 47 packages passed; externally gated tests are not
+  counted as data-plane acceptance.
+- `golangci-lint run ./internal/database/... ./internal/clientpolicy/... ./internal/xray/...`:
+  exit 0, 0 issues; formatter diff empty.
+- `npm run gen`: exit 0, no generated API changes; `go build ./...`: exit 0.
+- Removing the cursor persistence statement caused the replay test to charge
+  the same 100 upload/50 download bytes twice. Restoring it returned GREEN
+  (0.204s). The mutation was reverted before commit.
+- Complete frontend baseline rerun is running with heavy Go work finished;
+  existing test timeouts and source remain unchanged.

@@ -7,6 +7,7 @@ type ClientTraffic struct {
 	InboundId  int    `json:"inboundId" form:"inboundId" gorm:"index:idx_client_traffics_inbound" example:"1"`
 	Enable     bool   `json:"enable" form:"enable" example:"true"`
 	Email      string `json:"email" form:"email" gorm:"unique" example:"user1"`
+	PolicyID   string `json:"-" form:"-" gorm:"size:36;not null;default:''"`
 	UUID       string `json:"uuid" form:"uuid" gorm:"-" example:"e18c9a96-71bf-48d4-933f-8b9a46d4290c"`
 	SubId      string `json:"subId" form:"subId" gorm:"-" example:"i7tvdpeffi0hvvf1"`
 	Up         int64  `json:"up" form:"up" example:"1048576"`

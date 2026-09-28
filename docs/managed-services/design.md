@@ -1,6 +1,6 @@
 # Architecture and actual/proposed paths
 
-Status: design selected for implementation, not yet an implemented system.
+Status: identity and internal ledger implemented; runtime integration pending.
 The binding scope is [the complete request](requirements.zh-CN.md).
 
 ## Choices evaluated
@@ -27,6 +27,23 @@ idempotent by owner/client/source/incarnation/sequence; no in-memory-only
 cursor is sufficient. Out-of-order, stale and conflicting reports fail safely.
 Rate changes and multiplier changes serialize with the old revision's final
 counter snapshot; no retroactive reprice. Readers expose raw and billed totals.
+
+The implemented ledger adds `client_usage_accounts` and `client_usage_meters`
+to the existing database migration/backup model lists. It is tied to the
+canonical `clients.policy_id`; `client_traffics.policy_id` prevents stale
+statistics from being adopted by a recreated label. One transaction writes
+raw/billed/remainder totals, the cumulative cursor and the existing raw traffic
+projection. A conditional projection write rejects concurrent legacy writers.
+This internal activation is not yet called by production traffic collectors.
+
+Each source registers a UUID for one counter lifetime. Registration retries
+are idempotent; a unique partial index prevents two active lifetimes for the
+same client/source. Within a lifetime, older sequences are ignored, exact
+replays do not charge, conflicting sequences and regressed counters fail.
+A reset requires a new lifetime, not a guessed counter restart. Multiplier
+change/reset requires final snapshots from all active sources, closes them
+and advances the revision in one transaction. Reset preserves manual disable,
+expiry and quota configuration. Runtime freeze/drain/restart remains to build.
 
 Policy application validates backend capabilities, stages configuration,
 applies it, confirms observed revision and then reports success. Failed apply
