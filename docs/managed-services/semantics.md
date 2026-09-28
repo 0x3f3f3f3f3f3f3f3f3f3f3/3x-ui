@@ -146,3 +146,40 @@ authenticated by that key; changes to target/reverse ACLs cancel affected
 sessions so stale grants cannot persist. Authentication is revalidated after
 the signed handshake to catch revocations during authentication. Rate changes
 go through the shared controller and preserve healthy existing connections.
+
+## Implemented authenticated TCP routing bridge
+
+`internal/routedbridge` supplies the concrete -L/-D dial adapter:
+OpenSSH → authenticated SSH policy ID → shared payload admission/shaping →
+private authenticated SOCKS5 entry → existing Xray rules/outbound → target.
+Each entry keeps the managed inbound's tag. Its immutable binding maps policy
+ID to the current client label and a separate random 256-bit credential. The
+label becomes Xray's authenticated username, preserving exact and regexp user
+rules without rewriting them; it never selects the billing account. Credentials
+belong only to this bridge instance and are not exported to tunnel clients.
+
+Original domains and ports pass through SOCKS without local resolution or
+sniffing. IP requests remain IP requests. The SSH adapter obtains source IP/port
+from the transport socket, not the client-supplied channel origin; the private
+bridge carries it through PROXY protocol. Listeners must be literal loopback
+addresses, authenticated, and distinct from existing configured ports/tags.
+No anonymous-auth downgrade or direct fallback is permitted. Handshakes have
+a five-second ceiling and close promptly on context cancellation. The caller
+owns the returned connection and must attach it to the admitted policy flow.
+
+Each bridge adds a separate unused Xray policy level, inheriting default timeout
+settings but disabling user upload/download and online counters. The existing
+client-level Xray counters therefore count only native ingress, even when that
+same client also uses SSH. The admission ledger counts SSH application payload
+once, before bridge forwarding; bridge headers and protocol framing are excluded.
+Inbound/outbound operational counters may still observe the hop and are not an
+additional billing source. Actual Xray tests verify these counter boundaries.
+
+Configuration generation and credential changes still require production
+Runtime ownership/reconciliation before exposing the service. Panel online/IP
+limits must use the authenticated adapter's transport records; the bridge's
+online stats are deliberately disabled. -R has not gained a client-side target
+from this bridge. Balancer, DNS-refresh, routed throughput/quota stress, global
+nodes, credential rename reconciliation and production recovery remain open.
+The bridge builds on the documented [Xray SOCKS inbound](https://xtls.github.io/en/config/inbounds/socks.html)
+and pinned core source at `52a412d9e2f5` (`proxy/socks/server.go`, `infra/conf/socks.go`).

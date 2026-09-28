@@ -133,8 +133,10 @@ The internal SSH server now implements authenticated TCP forwarding, bounded
 authorized reverse listeners, live key revocation and shared policy flows.
 Real OpenSSH verifies duplex shaping, quota at four multipliers and server/
 controller restart. It has no production manager or panel creation path yet.
-The required dial adapter carries immutable identity, inbound tag and original
-destination; the current tests supply real TCP dialers, not an Xray router.
+The concrete private SOCKS bridge now carries authenticated identity, inbound
+tag, transport source and original destination into real Xray. Tests verify
+user/domain/IP/port/source routing, two observable exits, block priority and
+no duplicate billing. Production Runtime/configuration wiring remains open.
 Standard -R does not reveal the client-side target to the server; listener ACLs
 do not claim to enforce that target. See semantics.md for the open constraint.
 

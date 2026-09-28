@@ -107,5 +107,6 @@ they do not imply UI/API/routing/deployment or multi-node completion.
 | Live credential revocation | V | Existing-key removal, other-user isolation and an in-flight signed handshake |
 | Aggregate duplex rate / live update | V | Two same-IP clients, two SSH processes/four channels each, independent socket counts |
 | Quota / multiplier / restart denial | V | OpenSSH long transfers at 0.5/1/1.5/2×; server/controller restart |
-| Xray route execution, production manager and panel integration | N | Required destination-aware adapter exists; production wiring remains |
+| Internal Xray TCP route execution / no double billing | V | OpenSSH through real Xray: exact/regexp users, domain/IP/port/source, two exits, block priority, native-versus-bridge counters |
+| Production manager and panel integration | N | Concrete routed adapter exists; production Runtime/configuration wiring remains |
 | Enforcing a standard -R client's local target | N | Target absent from protocol; listener ACL is not target enforcement |

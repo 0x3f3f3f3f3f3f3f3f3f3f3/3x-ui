@@ -28,6 +28,7 @@ type Destination struct {
 	InboundTag string
 	Host       string
 	Port       uint16
+	Source     netip.AddrPort
 }
 
 type DialFunc func(context.Context, Destination) (io.ReadWriteCloser, error)
@@ -211,7 +212,11 @@ func (s *Server) handle(raw net.Conn) {
 		workers.Go(func() {
 			defer release()
 			_ = s.controller.Proxy(ctx, client.PolicyID, channel, func(ctx context.Context) (io.ReadWriteCloser, error) {
-				return s.dial(ctx, Destination{PolicyID: client.PolicyID, InboundTag: s.tag, Host: request.Host, Port: uint16(request.Port)})
+				source, ok := raw.RemoteAddr().(*net.TCPAddr)
+				if !ok {
+					return nil, ErrConfig
+				}
+				return s.dial(ctx, Destination{PolicyID: client.PolicyID, InboundTag: s.tag, Host: request.Host, Port: uint16(request.Port), Source: source.AddrPort()})
 			})
 		})
 	}
