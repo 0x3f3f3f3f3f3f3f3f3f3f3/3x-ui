@@ -145,9 +145,13 @@ production manager; real OpenSSH → panel-managed Xray tests run on SQLite and
 PostgreSQL. Public policy API, persisted runtime controls and the existing-client policy tab
 are verified. Client-list billing integration is also verified: exact list/info
 balances, SQL filters/sorting/summary and depleted cleanup candidate selection
-on SQLite/PostgreSQL, plus a real browser and SSH/Xray quota-reduction check. Creation/bulk policy, node dashboard and
-other usage consumers remain open. Depleted-client bulk deletion also needs an
-atomic selection/mutation boundary against concurrent resets and quota edits.
+on SQLite/PostgreSQL, plus a real browser and SSH/Xray quota-reduction check.
+Depleted cleanup now rechecks immutable identity and eligibility under canonical
+and traffic row locks, commits membership and data removal together, and applies
+runtime updates after commit. Concurrent reset, quota increase, identity
+replacement, rollback and unrelated-edit isolation have SQLite/PostgreSQL
+regressions. Creation/bulk policy, node dashboard and other usage consumers
+remain open.
 The concrete private SOCKS bridge now carries authenticated identity, inbound
 tag, transport source and original destination into real Xray. Tests verify
 user/domain/IP/port/source routing, two observable exits, block priority and

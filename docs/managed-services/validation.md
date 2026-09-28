@@ -839,9 +839,10 @@ spent client's selected inbound attachment and retains traffic referenced by its
 sibling; subsequent global cleanup removes that spent traffic. These tests run
 on SQLite and PostgreSQL. The original inbound fixture lacked required SSH
 credentials/traffic ownership and was corrected to seed complete persisted
-state; those failed fixture runs are not acceptance passes. The old client
-bulk-delete fanout remains non-atomic with candidate selection under concurrent
-reset/quota edits; that separate lifecycle risk is still open.
+state; those failed fixture runs are not acceptance passes. At this milestone,
+the old client bulk-delete fanout was still non-atomic with candidate selection
+under concurrent reset/quota edits. The subsequent atomic-purge increment below
+addresses that race for both depleted-cleanup entry points.
 
 The real browser fixture now checks paged and hydrated billing after its actual
 SSH/Xray echo: 16384 B in each raw direction, 49152 B billed at 1.5x, and
@@ -920,3 +921,94 @@ Reproduce with the preceding browser command and the same pinned binaries.
 This increment does not verify global node dashboard counts, inbound widgets,
 notifications/subscription billing, distributed policy, other protocol adapters
 or deployment. No whole-goal completion is claimed.
+
+### Atomic depleted-client purge (2026-09-28)
+
+Both depleted-cleanup entry points now capture the traffic row ID, canonical
+client ID and policy identity in one candidate query. They acquire affected
+inbound mutation locks in sorted order before entering the serial writer, then
+lock canonical and traffic rows in sorted order and recheck both eligibility
+and identity inside the deletion transaction. A reset or quota increase that
+commits before those locks survives; a replacement identity is excluded even
+when its label and numeric IDs are reused and it is itself depleted. Distinct
+case-sensitive canonical labels remain distinct throughout cleanup.
+
+Settings, membership, traffic/IP/global/node counters, group baselines and,
+for global client deletion, HWIDs, external links and canonical rows are changed
+together. Inbound-only cleanup retains canonical records, preserves traffic
+referenced by a sibling inbound, and removes empty inbounds as before. Surviving
+clients are not resynchronized from possibly stale settings. An attachment
+added outside the initially locked inbound set causes an explicit retry error
+and a rollback. Runtime calls and routing-reference cleanup occur after commit;
+node dirty flags are persisted with the deletion. Ordinary explicit BulkDelete
+is unchanged by this increment.
+
+The first regression run paused the actual candidate query with a GORM callback,
+completed the public reset or bulk quota edit, then resumed cleanup. Old client
+cleanup deleted credited clients on SQLite and PostgreSQL; old inbound cleanup
+deleted their inbound on PostgreSQL and also exposed SQLite lock failures.
+Replacing the canonical policy identity reproduced stale-label deletion too.
+Injecting a traffic-row deletion failure showed that the old client path could
+leave settings empty while reporting success. Logs:
+`/tmp/3x-ui-purge-concurrency-red.log` and
+`/tmp/3x-ui-purge-identity-rollback-red.log`.
+
+A first implementation locked every inbound. A parked runtime removal proved
+that this blocked an unrelated client's public quota edit for the test's full
+five-second deadline. The implementation now locks only affected inbounds;
+the same test completes the edit while the runtime remains parked and verifies
+that deletion was already committed. The traffic writer is also free during
+that wait (`/tmp/3x-ui-purge-isolation-red.log`).
+
+Additional mutation checks removed row locks and identity checks, and restored
+case-folded membership matching. They reproduced replacement-identity deletion,
+allowed independent PostgreSQL `FOR UPDATE NOWAIT` probes to acquire both state
+rows after eligibility was checked, and removed a distinct healthy uppercase
+identity. With the real implementation restored, the PostgreSQL probes report
+SQLSTATE 55P03 for both rows. Logs:
+`/tmp/3x-ui-purge-lock-identity-mutation-red.log`,
+`/tmp/3x-ui-purge-state-lock-mutation-red.log`, and
+`/tmp/3x-ui-purge-case-identity-red.log`.
+
+Test-harness corrections: the rollback PostgreSQL cases initially shared a
+schema and collided on an inbound tag; each case now owns its schema. The lock
+probe initially also counted GORM DryRun subquery callbacks; it now observes
+only executed queries with returned rows. An intermediate compile failed on an
+unused import left by extracting the old cleanup function; that import was
+removed. None of these runs count as acceptance passes.
+
+Focused regression with SQLite and actual PostgreSQL passed in 9.642 s:
+
+```sh
+export XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable'
+go test ./internal/web/service \
+  -run '^(TestDepletion|TestBilledDepletionPurge|TestDelDepleted)' \
+  -count=1 -timeout=90s
+```
+
+Log: `/tmp/3x-ui-purge-final-targeted.log`.
+
+Further verification:
+
+- `go test -race -shuffle=on -count=1 -timeout=5m ./internal/web/service
+  -run 'Test(Depletion|BilledDepletionPurge|DelDepleted|ManagedUsage|ResetTrafficOfDepleted|GroupTotalsSurviveClientDelete)'`
+  passed in 47.618 s with the same PostgreSQL DSN and pinned Xray binary
+  (`/tmp/3x-ui-purge-race.log`).
+- `GOFLAGS=-p=1 XRAY_E2E_BINARY=/tmp/3x-ui-xray-pinned
+  XUI_TEST_PG_DSN=... make test-go` passed: 50 packages with tests, 5 packages
+  without test files, exit 0. Database tests took 47.545 s and service tests
+  96.693 s (`/tmp/3x-ui-purge-full-go.log`). Opt-in scale jobs were not enabled;
+  package success is not a claim that skipped opt-in cases ran.
+- Initial lint reported two test-only findings: a non-wrapping error format
+  and an if-chain suitable for a switch. After correcting them, the focused
+  SQLite/PostgreSQL suite passed again in 9.457 s
+  (`/tmp/3x-ui-purge-final-targeted-lint-fixed.log`), full `make lint-go`
+  reported 0 issues (`/tmp/3x-ui-purge-lint-final.log`), and `go build ./...`
+  exited 0 (`/tmp/3x-ui-purge-build.log`). Production code was unchanged after
+  the full Go and race runs. No frontend files changed in this increment.
+
+This increment validates management
+transaction boundaries, not a new protocol data path or distributed node
+atomicity. Runtime failures still use the existing reconciliation mechanism;
+the complete protocol, deployment and other usage-consumer requirements remain
+open.

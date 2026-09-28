@@ -1524,38 +1524,7 @@ func (s *ClientService) bulkCreate(inboundSvc *InboundService, payloads []Client
 }
 
 func (s *ClientService) DelDepleted(inboundSvc *InboundService) (int, bool, error) {
-	db := database.GetDB()
-	now := time.Now().UnixMilli()
-
-	var rows []xray.ClientTraffic
-	if err := depletedTrafficQuery(db, now).Find(&rows).Error; err != nil {
-		return 0, false, err
-	}
-	if len(rows) == 0 {
-		return 0, false, nil
-	}
-
-	seen := make(map[string]struct{}, len(rows))
-	emails := make([]string, 0, len(rows))
-	for _, r := range rows {
-		if r.Email == "" {
-			continue
-		}
-		if _, ok := seen[r.Email]; ok {
-			continue
-		}
-		seen[r.Email] = struct{}{}
-		emails = append(emails, r.Email)
-	}
-	if len(emails) == 0 {
-		return 0, false, nil
-	}
-
-	res, needRestart, err := s.BulkDelete(inboundSvc, emails, false)
-	if err != nil {
-		return res.Deleted, needRestart, err
-	}
-	return res.Deleted, needRestart, nil
+	return inboundSvc.purgeDepletedClients(-1, true)
 }
 
 type BulkSetEnableResult struct {
