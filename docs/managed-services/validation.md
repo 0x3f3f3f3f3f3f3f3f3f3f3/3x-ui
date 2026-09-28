@@ -1753,3 +1753,87 @@ DB schema changed, so this increment does not claim fresh frontend/browser,
 contract generation or migration checks.
 
 `go build ./...` also exited 0 (`/tmp/3x-ui-ssh-probe-build.log`). Changed Go files pass `golangci-lint fmt --diff`; local documentation links and `git diff --check` pass.
+
+## SSH outbound editor and browser acceptance
+
+The editor increment adds the typed SSH registry/schema, defaults, form adapter,
+dedicated connection fields and routed-probe UI selection to existing Outbounds.
+Observed REDs preceded the implementation: absent protocol/schema/fields; URL,
+wildcard and host-with-port acceptance; unsupported SSH JSON silently discarded;
+UTF-8 tag byte overflow; private-key reveal surviving an editor-target change;
+missing endpoint display; SSH dispatched through the TCP probe lane. Logs are
+`/tmp/3x-ui-ssh-outbound-{form,modal,validation,modal-tag,editor-switch,row,hook}-red.log`.
+The first editor-switch test accidentally remounted its provider and could not
+detect retained reveal state. A stateful wrapper now changes the target without
+remounting the form; that test failed before the keyed field reset was added.
+
+Focused schema/adapter/modal/hook regression: 5 files, 87 tests passed in 15.56s
+(`/tmp/3x-ui-ssh-outbound-focused2.log`). Full `npm test -- --maxWorkers=1`:
+**183 files, 1810 tests passed**, no skipped test in the summary, 440.77s
+(`/tmp/3x-ui-ssh-outbound-full-frontend.log`). `npm run typecheck`, `npm run lint`
+and `npm run build` exited 0; the build ran the existing OpenAPI generator and
+left generated contracts unchanged. No public route, DTO or DB schema changed.
+The protocol form is local to the outbound editor; it introduces no shared
+component requiring a separate Storybook story. Existing Node DEP0205 and
+Vitest plugin-hook notices remain in the test log.
+
+`go build -o /tmp/3x-ui-ssh-outbound-panel .` built a fresh panel with those assets.
+Affected Go regression `go test ./internal/web/controller ./internal/web/locale
+-count=1` passed the controller package in 5.669s; locale has no Go test files.
+Translation key usage is covered by the complete frontend suite. This frontend
+increment does not claim a new full-Go or race run beyond the preceding probe
+increment's evidence.
+
+Reproduce the browser/data-path acceptance from `frontend/` on isolated Linux
+with Chromium installed, OpenSSH available and a freshly built panel:
+
+```sh
+XUI_E2E_PANEL=/path/to/fresh/panel \
+XRAY_E2E_BINARY=/path/to/pinned/xray \
+SSH_E2E_SERVER=/usr/sbin/sshd \
+XUI_E2E_SCREENSHOT=/tmp/ssh-outbound-editor.png \
+node scripts/ssh-outbound-e2e.mjs
+```
+
+The fixture currently requires root for its independent OpenSSH test account.
+It owns a temporary SQLite database, independent Ed25519 keys, loopback ports,
+process groups and echo target; it never edits host sshd or reads the Git key.
+The real browser probe defaults to public `https://example.com` (override via
+`XUI_E2E_TEST_URL` with another reachable public URL). Public-URL safety remains
+enabled. Cleanup removes only fixture processes/files; credentials are redacted
+from failure text and textareas/password inputs are masked in screenshots.
+
+Executed assertions:
+
+- Actual Chromium creates an SSH outbound, hides its PEM, saves the dialog/list
+  and reloads. The admin API returns the exact authored key and host pin.
+- An existing routing rule is added through the authenticated settings API.
+  Actual Xray SOCKS → managed bridge → OpenSSH reaches the independent echo
+  target; the target's exact bytes and sshd authentication log prove traversal.
+  The compiled core config contains no upstream private key.
+- Clicking **Check** while TCP mode is selected sends an HTTP probe. The response
+  is mode `http`, status 200, with an independently observed SSH authentication.
+- Browser pin edits reject traffic without direct fallback; restoring the pin
+  restores the actual route. Reopened key fields start hidden.
+- Anonymous template access returns 404. Valid monitor/node-sync tokens first
+  access status successfully, then receive 403 for authored template read/write,
+  probes, compiled configuration and full database backup.
+- Admin downloads a real SQLite backup, changes to a wrong pin and proves
+  refusal, imports the backup, waits for the panel's restart and logs in again.
+  Restored credentials establish a fresh SSH connector and reach the target.
+
+The complete run reports 3 echo connections, exactly 186 payload bytes,
+6 upstream authentications, HTTP 200, anonymous 404, both restricted scopes
+denied and `backupRestored: true`; there are no browser JavaScript errors.
+Final log: `/tmp/3x-ui-ssh-outbound-browser-final.log`. Screenshot review found
+mask rectangles moving during the modal animation; the fixture now waits for
+finite animations and hides textarea/password glyphs before capture as well.
+Initial browser harness runs failed
+because the route was incorrectly written as `xray#outbounds` and the exact
+button-name selector omitted Ant Design's accessible icon name. The harness was
+corrected to `/panel/outbound` and its actual button label; these failed runs
+are not counted as acceptance.
+
+PostgreSQL restoration of these authored outbounds, automatic node-owned bridge
+distribution, continuous upstream health, packaging and the remaining full-task
+protocol/policy acceptance are still open.

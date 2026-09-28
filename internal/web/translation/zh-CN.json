@@ -2294,7 +2294,24 @@
         "poolSize": "池大小"
       },
       "defaultOutbound": "默认出站",
-      "defaultOutboundDesc": "未匹配任何路由规则的流量走此出站（列表中的第一个出站）。"
+      "defaultOutboundDesc": "未匹配任何路由规则的流量走此出站（列表中的第一个出站）。",
+      "sshOutbound": {
+        "invalidTag": "请输入不超过 128 个 UTF-8 字节的非空标签，不含控制字符或首尾空格。",
+        "invalidAccount": "请输入不超过 255 个 UTF-8 字节的账号名，不含控制字符或首尾空格。",
+        "invalidPrivateKey": "请输入不超过 64 KiB 的私钥。",
+        "invalidPassphrase": "私钥口令不能超过 4096 个 UTF-8 字节。",
+        "invalidAddress": "请输入主机名或 IPv4/IPv6 地址，不含协议前缀或端口。",
+        "hostKey": "服务器主机公钥",
+        "hostKeyHint": "粘贴通过可信渠道取得的服务器公钥。主机密钥校验不可关闭。",
+        "passphrase": "私钥口令",
+        "keyHidden": "私钥已隐藏",
+        "keyMissing": "尚未设置私钥",
+        "showKey": "显示或编辑私钥",
+        "hideKey": "隐藏私钥",
+        "capabilityHint": "SSH 上游仅支持 TCP 转发。应用此出站前，请启用核心 API。",
+        "keyHint": "请使用独立的转发密钥。服务端会校验私钥和可选口令。",
+        "invalidConfiguration": "SSH 出站配置无效，请检查必填字段并移除不支持的设置。"
+      }
     },
     "hosts": {
       "addHost": "添加主机",

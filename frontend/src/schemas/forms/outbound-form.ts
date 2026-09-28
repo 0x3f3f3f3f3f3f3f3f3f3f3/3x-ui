@@ -13,6 +13,7 @@ import {
   FreedomFragmentSchema,
   FreedomNoiseSchema,
   OutboundDomainStrategySchema,
+  SSHOutboundSettingsSchema,
   WireguardDomainStrategySchema,
 } from '@/schemas/protocols/outbound';
 
@@ -198,6 +199,7 @@ export const OutboundFormSettingsSchema = z.discriminatedUnion('protocol', [
   z.object({ protocol: z.literal('trojan'), settings: TrojanOutboundFormSettingsSchema }),
   z.object({ protocol: z.literal('shadowsocks'), settings: ShadowsocksOutboundFormSettingsSchema }),
   z.object({ protocol: z.literal('socks'), settings: SocksOutboundFormSettingsSchema }),
+  z.object({ protocol: z.literal('ssh'), settings: SSHOutboundSettingsSchema }),
   z.object({ protocol: z.literal('http'), settings: HttpOutboundFormSettingsSchema }),
   z.object({ protocol: z.literal('wireguard'), settings: WireguardOutboundFormSettingsSchema }),
   z.object({ protocol: z.literal('amneziawg'), settings: AmneziaWGOutboundFormSettingsSchema }),

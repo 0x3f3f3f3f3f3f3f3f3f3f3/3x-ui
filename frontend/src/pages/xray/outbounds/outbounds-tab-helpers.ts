@@ -1,7 +1,7 @@
 import type { TFunction } from 'i18next';
 
 import { isOutboundProtocol, OutboundProtocols as Protocols } from '@/schemas/primitives';
-import { isUdpOutbound } from '@/hooks/useXraySetting';
+import { requiresHttpProbe } from '@/hooks/useXraySetting';
 import type {
   OutboundTestMode,
   OutboundTestState,
@@ -26,6 +26,11 @@ export function originalOutboundIndex(rows: OutboundRow[], positionalIndex: numb
 export function outboundAddresses(o: OutboundRow): string[] {
   const settings = o.settings as Record<string, unknown> | undefined;
   switch (true) {
+    case isOutboundProtocol(o, Protocols.SSH): {
+      const address = (settings?.address as string | undefined) || '';
+      const host = address.includes(':') && !address.startsWith('[') ? `[${address}]` : address;
+      return address ? [`${host}:${settings?.port ?? 22}`] : [];
+    }
     case isOutboundProtocol(o, Protocols.VMess): {
       const serverObj = settings?.vnext as Array<{ address: string; port: number }> | undefined;
       return serverObj ? serverObj.map((s) => `${s.address}:${s.port}`) : [];
@@ -81,7 +86,7 @@ export function showSecurity(security?: string): boolean {
 }
 
 export function effectiveTestMode(o: unknown, mode: OutboundTestMode): OutboundTestMode {
-  return mode === 'tcp' && isUdpOutbound(o) ? 'http' : mode;
+  return mode === 'tcp' && requiresHttpProbe(o) ? 'http' : mode;
 }
 
 export function testModeLabel(mode: string, t: TFunction): string {

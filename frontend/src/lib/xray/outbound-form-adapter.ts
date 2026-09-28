@@ -573,6 +573,19 @@ export function rawOutboundToFormValues(raw: RawOutboundRow): OutboundFormValues
     case 'socks':
       typed = { protocol: 'socks', settings: simpleAuthFromWire(settings, 1080) };
       break;
+    case 'ssh':
+      typed = {
+        protocol: 'ssh',
+        settings: {
+          address: asString(settings.address),
+          port: asNumber(settings.port, 22),
+          user: asString(settings.user),
+          privateKey: asString(settings.privateKey),
+          privateKeyPassphrase: asString(settings.privateKeyPassphrase),
+          hostKey: asString(settings.hostKey),
+        },
+      };
+      break;
     case 'http':
       typed = { protocol: 'http', settings: httpFromWire(settings) };
       break;
@@ -860,6 +873,21 @@ function muxAllowed(values: OutboundFormValues): boolean {
 export type WireOutboundPayload = Raw;
 
 export function formValuesToWirePayload(values: OutboundFormValues): WireOutboundPayload {
+  if (values.protocol === 'ssh') {
+    const { address, port, user, privateKey, privateKeyPassphrase, hostKey } = values.settings;
+    return {
+      tag: values.tag,
+      protocol: 'ssh',
+      settings: {
+        address,
+        port,
+        user,
+        privateKey,
+        hostKey,
+        ...(privateKeyPassphrase ? { privateKeyPassphrase } : {}),
+      },
+    };
+  }
   let settings: Raw;
   switch (values.protocol) {
     case 'vmess':

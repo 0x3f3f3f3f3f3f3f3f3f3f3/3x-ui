@@ -72,6 +72,12 @@ describe('useXraySetting', () => {
   // either, so a differently spelled UDP outbound must still skip the TCP dial.
   it.each<[string, Record<string, unknown>, string]>([
     ['probes a canonical UDP outbound over HTTP', { protocol: 'wireguard', tag: 'wg' }, 'http'],
+    ['verifies SSH authentication over HTTP', { protocol: 'ssh', tag: 'ssh-exit' }, 'http'],
+    [
+      'verifies a case-variant SSH outbound over HTTP',
+      { protocol: 'SSH', tag: 'ssh-exit' },
+      'http',
+    ],
     [
       'probes a "WireGuard"-spelled outbound over HTTP',
       { protocol: 'WireGuard', tag: 'wg' },
@@ -111,5 +117,40 @@ describe('useXraySetting', () => {
 
     expect(bodies).toHaveLength(1);
     expect(bodies[0].mode).toBe(want);
+  });
+
+  it('keeps SSH outbounds in a single HTTP batch during Test All', async () => {
+    const outbounds = [
+      { tag: 'ssh-one', protocol: 'ssh' },
+      { tag: 'ssh-two', protocol: 'SSH' },
+    ];
+    const bodies: Array<Record<string, unknown>> = [];
+    vi.spyOn(HttpUtil, 'post').mockImplementation(async (url, data) => {
+      if (url === '/panel/api/xray/') {
+        return new Msg(true, '', JSON.stringify(xrayPayload({ xraySetting: { outbounds } })));
+      }
+      const body = data as Record<string, unknown>;
+      bodies.push(body);
+      const tested = JSON.parse(String(body.outbounds)) as Array<{ tag: string }>;
+      return new Msg(
+        true,
+        '',
+        tested.map(({ tag }) => ({ tag, success: true, mode: 'http' })),
+      );
+    });
+    const queryClient = makeTestQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useXraySetting(), { wrapper });
+    await waitFor(() => expect(result.current.fetched).toBe(true));
+    await act(async () => {
+      await result.current.testAllOutbounds('tcp');
+    });
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0].mode).toBe('http');
+    expect(JSON.parse(String(bodies[0].outbounds))).toEqual(outbounds);
+    expect(result.current.outboundTestStates[0].result?.success).toBe(true);
+    expect(result.current.outboundTestStates[1].result?.success).toBe(true);
   });
 });

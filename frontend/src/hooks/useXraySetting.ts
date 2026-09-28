@@ -47,6 +47,13 @@ export function isUdpOutbound(outbound: unknown): boolean {
   );
 }
 
+export function requiresHttpProbe(outbound: unknown): boolean {
+  return (
+    isUdpOutbound(outbound) ||
+    isOutboundProtocol(outbound as { protocol?: unknown } | null | undefined, 'ssh')
+  );
+}
+
 export type OutboundTestMode = 'tcp' | 'http' | 'real';
 
 export type { OutboundTrafficRow, OutboundTestResult };
@@ -333,7 +340,7 @@ export function useXraySetting(): UseXraySettingResult {
   const testOutbound = useCallback(
     async (index: number, outbound: unknown, mode = 'tcp'): Promise<OutboundTestResult | null> => {
       if (!outbound) return null;
-      const effMode = mode === 'tcp' && isUdpOutbound(outbound) ? 'http' : mode;
+      const effMode = mode === 'tcp' && requiresHttpProbe(outbound) ? 'http' : mode;
       setOutboundTestStates((prev) => ({
         ...prev,
         [index]: { testing: true, result: null, mode: effMode },
@@ -350,7 +357,7 @@ export function useXraySetting(): UseXraySettingResult {
   const testSubscriptionOutbound = useCallback(
     async (tag: string, outbound: unknown, mode = 'tcp'): Promise<OutboundTestResult | null> => {
       if (!outbound || !tag) return null;
-      const effMode = mode === 'tcp' && isUdpOutbound(outbound) ? 'http' : mode;
+      const effMode = mode === 'tcp' && requiresHttpProbe(outbound) ? 'http' : mode;
       setSubscriptionTestStates((prev) => ({
         ...prev,
         [tag]: { testing: true, result: null, mode: effMode },
@@ -401,7 +408,7 @@ export function useXraySetting(): UseXraySettingResult {
           // freedom ("direct") and dns aren't proxies — skip them in every mode.
           if (isOutboundProtocol(ob, 'freedom') || isOutboundProtocol(ob, 'dns')) return;
           if (kind === 'sub' && !tag) return;
-          const toHttp = mode !== 'tcp' || isUdpOutbound(ob);
+          const toHttp = mode !== 'tcp' || requiresHttpProbe(ob);
           if (kind === 'tpl') {
             if (toHttp) httpTplQueue.push({ index, outbound: ob });
             else tcpQueue.push({ kind: 'tpl', index, outbound: ob });

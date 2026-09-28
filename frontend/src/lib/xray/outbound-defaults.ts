@@ -8,6 +8,7 @@ import type { HysteriaOutboundSettings } from '@/schemas/protocols/outbound/hyst
 import type { LoopbackOutboundSettings } from '@/schemas/protocols/outbound/loopback';
 import type { ShadowsocksOutboundSettings } from '@/schemas/protocols/outbound/shadowsocks';
 import type { SocksOutboundSettings } from '@/schemas/protocols/outbound/socks';
+import type { SSHOutboundSettings } from '@/schemas/protocols/outbound/ssh';
 import type { TrojanOutboundSettings } from '@/schemas/protocols/outbound/trojan';
 import type { VlessOutboundSettings } from '@/schemas/protocols/outbound/vless';
 import type { VmessOutboundSettings } from '@/schemas/protocols/outbound/vmess';
@@ -139,6 +140,7 @@ export type AnyOutboundSettings =
   | LoopbackOutboundSettings
   | ShadowsocksOutboundSettings
   | SocksOutboundSettings
+  | SSHOutboundSettings
   | TrojanOutboundSettings
   | VlessOutboundSettings
   | VmessOutboundSettings
@@ -171,6 +173,8 @@ export function createDefaultOutboundSettings(protocol: string): AnyOutboundSett
       return createDefaultShadowsocksOutboundSettings();
     case 'socks':
       return createDefaultSocksOutboundSettings();
+    case 'ssh':
+      return { address: '', port: 22, user: '', privateKey: '', hostKey: '' };
     case 'http':
       return createDefaultHttpOutboundSettings();
     case 'wireguard':

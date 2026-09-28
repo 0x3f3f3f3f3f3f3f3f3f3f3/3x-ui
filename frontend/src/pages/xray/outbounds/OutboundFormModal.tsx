@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Form, Input, InputNumber, Modal, Radio, Select, Space, Tabs, message } from 'antd';
 import { Controller, FormProvider, useForm, useWatch } from 'react-hook-form';
+import { ZodError } from 'zod';
 import { FinalMaskField, SniffingField } from '@/lib/xray/forms/fields';
 import { FormField, rhfZodValidate } from '@/components/form/rhf';
 import { JsonEditor } from '@/components/form';
@@ -10,6 +11,8 @@ import { formValuesToWirePayload, rawOutboundToFormValues } from '@/lib/xray/out
 import { parseOutboundLink } from '@/lib/xray/outbound-link-parser';
 import { XMUX_FRESH_DEFAULTS } from '@/schemas/protocols/stream/xhttp';
 import { OutboundFormBaseSchema, type OutboundFormValues } from '@/schemas/forms/outbound-form';
+import { SSHOutboundSchema, SSHOutboundTagSchema } from '@/schemas/protocols/outbound/ssh';
+import { isOutboundProtocol } from '@/schemas/primitives/outbound-protocol';
 import {
   canEnableReality,
   canEnableStream,
@@ -40,6 +43,7 @@ import {
   ServerTarget,
   ShadowsocksFields,
   SocksFields,
+  SSHFields,
   TrojanFields,
   VlessFields,
   VmessFields,
@@ -258,22 +262,29 @@ export default function OutboundFormModal({
     return (existingTags || []).includes(myTag);
   }, [tag, existingTags, isEdit, outboundProp]);
 
-  /*
-   * Bridge form <-> JSON tab: when leaving the JSON tab back to Basic, push
-   * any edits into form state. When entering JSON tab, snapshot current
-   * form values so the user sees the live shape.
-   */
+  // Validate SSH before hydration, which discards unsupported wire fields.
+  function parseEditorJSON(raw: string): Record<string, unknown> | undefined {
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      return isOutboundProtocol(parsed, 'ssh')
+        ? SSHOutboundSchema.parse({ ...parsed, protocol: 'ssh' })
+        : parsed;
+    } catch (e) {
+      messageApi.error(
+        e instanceof ZodError
+          ? t('pages.xray.sshOutbound.invalidConfiguration')
+          : `JSON: ${(e as Error).message}`,
+      );
+      return undefined;
+    }
+  }
+
   function applyJsonToForm(): boolean {
     if (!jsonDirty) return true;
     const raw = jsonText.trim();
     if (!raw) return true;
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(raw) as Record<string, unknown>;
-    } catch (e) {
-      messageApi.error(`JSON: ${(e as Error).message}`);
-      return false;
-    }
+    const parsed = parseEditorJSON(raw);
+    if (!parsed) return false;
     const next = rawOutboundToFormValues(parsed);
     methods.reset(next);
     setJsonDirty(false);
@@ -306,13 +317,8 @@ export default function OutboundFormModal({
     if (activeKey === '2') {
       const raw = jsonText.trim();
       if (!raw) return;
-      let parsed: Record<string, unknown>;
-      try {
-        parsed = JSON.parse(raw) as Record<string, unknown>;
-      } catch (e) {
-        messageApi.error(`JSON: ${(e as Error).message}`);
-        return;
-      }
+      const parsed = parseEditorJSON(raw);
+      if (!parsed) return;
       values = rawOutboundToFormValues(parsed);
       methods.reset(values);
       setJsonDirty(false);
@@ -380,7 +386,11 @@ export default function OutboundFormModal({
                       <Controller
                         control={methods.control}
                         name="tag"
-                        rules={{ required: 'pages.xray.outboundForm.tagRequired' }}
+                        rules={{
+                          required: 'pages.xray.outboundForm.tagRequired',
+                          validate:
+                            protocol === 'ssh' ? rhfZodValidate(SSHOutboundTagSchema) : undefined,
+                        }}
                         render={({ field, fieldState }) => {
                           const errorMessage = fieldState.error?.message
                             ? t(fieldState.error.message, {
@@ -413,13 +423,15 @@ export default function OutboundFormModal({
                         }}
                       />
 
-                      <FormField label={t('pages.xray.outbound.sendThrough')} name="sendThrough">
-                        <Input placeholder={t('pages.xray.outboundForm.localIpPlaceholder')} />
-                      </FormField>
+                      {protocol !== 'ssh' && (
+                        <FormField label={t('pages.xray.outbound.sendThrough')} name="sendThrough">
+                          <Input placeholder={t('pages.xray.outboundForm.localIpPlaceholder')} />
+                        </FormField>
+                      )}
 
                       {/* Freedom's own card owns the strategy — the core migrates this
                           root key into the same sockopt value, so two knobs would race. */}
-                      {protocol !== 'freedom' && (
+                      {protocol !== 'freedom' && protocol !== 'ssh' && (
                         <FormField
                           label={t('pages.xray.outbound.targetStrategy')}
                           name="targetStrategy"
@@ -436,6 +448,9 @@ export default function OutboundFormModal({
                       {protocol === 'shadowsocks' && <ShadowsocksFields />}
                       {protocol === 'http' && <HttpFields />}
                       {protocol === 'socks' && <SocksFields />}
+                      {protocol === 'ssh' && (
+                        <SSHFields key={`${open}:${String(outboundProp?.tag ?? '')}`} />
+                      )}
 
                       {protocol === 'loopback' && <LoopbackFields />}
                       {protocol === 'blackhole' && <BlackholeFields />}
@@ -542,28 +557,31 @@ export default function OutboundFormModal({
 
                       {security === 'reality' && realityAllowed && <RealityForm />}
 
-                      {((streamAllowed && network) ||
-                        !streamAllowed ||
-                        protocol === 'wireguard') && (
-                        <SockoptForm
-                          outboundTags={dialerProxyTags ?? existingTags}
-                          showDomainStrategy={protocol !== 'freedom'}
-                        />
-                      )}
-
-                      <Controller
-                        control={methods.control}
-                        name="streamSettings.finalmask"
-                        render={({ field }) => (
-                          <FinalMaskField
-                            key={`${protocol}:${network}`}
-                            value={field.value}
-                            onChange={field.onChange}
-                            network={network}
-                            protocol={protocol}
+                      {protocol !== 'ssh' &&
+                        ((streamAllowed && network) ||
+                          !streamAllowed ||
+                          protocol === 'wireguard') && (
+                          <SockoptForm
+                            outboundTags={dialerProxyTags ?? existingTags}
+                            showDomainStrategy={protocol !== 'freedom'}
                           />
                         )}
-                      />
+
+                      {protocol !== 'ssh' && (
+                        <Controller
+                          control={methods.control}
+                          name="streamSettings.finalmask"
+                          render={({ field }) => (
+                            <FinalMaskField
+                              key={`${protocol}:${network}`}
+                              value={field.value}
+                              onChange={field.onChange}
+                              network={network}
+                              protocol={protocol}
+                            />
+                          )}
+                        />
+                      )}
 
                       <MuxForm protocol={protocol} network={network} />
                     </>

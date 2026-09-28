@@ -1,8 +1,7 @@
 # SSH upstream runtime integration
 
-This is an implemented backend increment of the full task. The dedicated
-Outbounds form, node distribution and packaging acceptance are still pending.
-The existing outbound probe service now runs real SSH routes as described below.
+The runtime, dedicated Outbounds form and real route probes are implemented.
+Node distribution and packaging acceptance are still pending.
 Do not treat the complete SSH vertical as delivered.
 
 The existing administrator Xray settings service accepts an authored outbound:
@@ -69,7 +68,8 @@ verification. The existing API block is retained; the panel does not silently
 enable a disabled API. With the API disabled or no usable API listener, the change
 is refused before replacing a running core. API-less SSH upstream activation is
 not supported by this increment. Native-only operation remains available, including
-after an unused SSH preview. This capability boundary must be exposed in the editor.
+after an unused SSH preview. The editor displays this API prerequisite and the
+TCP-only capability before the connection fields.
 
 After a replacement starts, the panel requires a successful StatsService request
 within five seconds while the child remains running. Only then are old generations
@@ -94,8 +94,8 @@ fingerprint is temporarily accepted alongside the applied fingerprint.
 Core readiness does not prove SSH upstream reachability. A syntactically valid
 wrong pin replaces the old pin and refuses new traffic; it never keeps access
 through a superseded pin or falls back directly. The existing outbound test
-service can verify a submitted route; continuous upstream health/status and
-browser acceptance remain pending.
+service can verify a submitted route; continuous upstream health/status remains
+pending. Browser acceptance is described below.
 
 ## Isolated route probes
 
@@ -124,8 +124,45 @@ Probes need no core API because the actual HTTP response verifies this temporary
 path. The API prerequisite for applied runtime activation remains unchanged.
 
 Administrative authorization and the controller's configured, sanitized public
-test URL are unchanged. Real route tests use isolated local targets by calling
-the service directly; full browser/API authorization acceptance remains pending.
+test URL are unchanged. Service tests use isolated local HTTP targets; the actual
+browser probe uses a public HTTPS target through OpenSSH and leaves the public-URL
+safety check enabled.
+
+## Existing editor and administrator access
+
+Open **Outbounds**, add an outbound and select `ssh`. Enter its tag, address,
+port, account, dedicated private key, optional key passphrase and verified host
+public key. Use **Show / edit private key** to reveal the multiline PEM field;
+it is hidden again when reopening or changing the edited outbound. The passphrase
+uses the existing password input. The explicitly selected JSON tab contains the
+authored configuration, including credentials. Save the dialog, then save the
+outbound list. Existing routing rules can select its tag.
+
+The form checks the backend's byte limits, required pin/account/key, address and
+port. Backend cryptographic validation remains authoritative. SSH exposes no
+native transport, mux, send-through, target-strategy or socket controls, and its
+wire adapter emits only `tag`, `protocol` and typed `settings`. Unsupported SSH
+JSON fields are rejected before hydration instead of silently discarded. The
+row shows its endpoint; **Check** and **Test all** use HTTP route probes even when
+TCP mode is selected. This does not advertise SSH UDP support.
+
+The existing admin session/API scope owns the authored template and database
+backup. Actual browser/API tests verify that unauthenticated requests receive
+404 and valid `monitor`/`node-sync` tokens receive 403 on template reads/writes,
+probes, compiled config and database download. A node-sync token therefore cannot
+copy the master's authored credentials or its process-local bridge credentials.
+The current node protocol does not distribute outbound templates; automatic
+node-owned SSH bridge provisioning remains open. Do not install a master's
+compiled loopback outbound on another node.
+
+The SQLite browser acceptance downloads a real database backup, changes to a
+wrong host pin and verifies refusal, restores that backup through the existing
+import endpoint, waits for panel restart, logs in again and proves traffic
+through a fresh SSH connector with the restored key and pin. Backups contain
+the administrative private key and must be protected like existing credentials.
+PostgreSQL SSH runtime/settings tests exist, but this new browser backup/restore
+scenario has only been run on SQLite; PostgreSQL restoration remains unverified
+for this outbound increment.
 
 See [verification evidence](validation.md) and the
 [remaining integration plan](ssh-upstream-integration.md).

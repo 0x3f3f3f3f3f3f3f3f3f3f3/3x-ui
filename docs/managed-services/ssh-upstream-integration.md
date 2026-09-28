@@ -129,7 +129,7 @@ path through managed/temporary bridge, not merely upstream TCP reachability.
 Keep settings in existing admin-authorized config backup/restore and node paths;
 node capability rejection must be explicit until its runtime supports the bridge.
 
-- [ ] Browser creates/edits SSH outbound, saves/loads it, routes an actual request;
+- [x] Browser creates/edits SSH outbound, saves/loads it, routes an actual request;
   meaningful schema/form tests ensure unsupported controls cannot be emitted.
 - [x] Existing outbound probe service uses actual Xray/SSH HTTP routes; wrong pin
   rejection, isolated resources, proxy-chain dependencies and live-flow isolation.
@@ -138,6 +138,13 @@ node capability rejection must be explicit until its runtime supports the bridge
 - [ ] Regenerate contracts/docs when interfaces change; frontend suite/build,
   backend affected suites, race and packaging checks; update matrix/operations,
   commit/push and independently verify remote SHA.
+
+Editor increment evidence: actual Chromium creates/saves/reloads and edits pins;
+Xray/OpenSSH traffic and a public HTTP probe execute; anonymous and valid monitor/
+node-sync token access is denied; SQLite database download/import restores the
+key/pin and real route after panel restart. Node template distribution and the
+PostgreSQL outbound-backup scenario remain open, so the combined distribution
+checkbox above stays incomplete. See [validation](validation.md).
 
 Other protocols, full multi-node policy execution, deployment/upgrade safeguards
 and all remaining A–E acceptance remain under the unchanged whole-task goal.

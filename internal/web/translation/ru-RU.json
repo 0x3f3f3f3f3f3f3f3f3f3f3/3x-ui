@@ -2294,7 +2294,24 @@
         "poolSize": "Размер пула"
       },
       "defaultOutbound": "Исходящий по умолчанию",
-      "defaultOutboundDesc": "Трафик без совпадения с правилами маршрутизации идёт через этот исходящий (первый в списке)."
+      "defaultOutboundDesc": "Трафик без совпадения с правилами маршрутизации идёт через этот исходящий (первый в списке).",
+      "sshOutbound": {
+        "invalidTag": "Use a nonempty tag of at most 128 UTF-8 bytes, without control characters or surrounding spaces.",
+        "invalidAccount": "Enter an account name of at most 255 UTF-8 bytes, without control characters or surrounding spaces.",
+        "invalidPrivateKey": "Enter a private key of at most 64 KiB.",
+        "invalidPassphrase": "The passphrase must not exceed 4096 UTF-8 bytes.",
+        "invalidAddress": "Enter a hostname or an IPv4/IPv6 address, without a scheme or port.",
+        "hostKey": "Server host key",
+        "hostKeyHint": "Paste the server public key obtained through a trusted channel. Host key verification is required.",
+        "passphrase": "Private key passphrase",
+        "keyHidden": "Private key hidden",
+        "keyMissing": "No private key set",
+        "showKey": "Show / edit private key",
+        "hideKey": "Hide private key",
+        "capabilityHint": "SSH upstreams support TCP forwarding only. Enable the core API before applying this outbound.",
+        "keyHint": "Use a dedicated forwarding key. The server validates the private key and optional passphrase.",
+        "invalidConfiguration": "Invalid SSH outbound configuration. Check the required fields and remove unsupported settings."
+      }
     },
     "hosts": {
       "addHost": "Добавить хост",
