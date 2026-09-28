@@ -139,7 +139,9 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 	inbound.Name = "dokodemo-door"
 	inbound.CanSpliceCopy = 1
 	inbound.User = &protocol.MemoryUser{
-		Level: d.config.UserLevel,
+		Level:    d.config.UserLevel,
+		ClientID: d.config.ClientId,
+		Email:    d.config.Email,
 	}
 
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{

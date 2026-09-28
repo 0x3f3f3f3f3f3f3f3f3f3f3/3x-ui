@@ -727,7 +727,7 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 		return readV(ctx, reader, writer, timer, readCounter)
 	}
 	inbound := session.InboundFromContext(ctx)
-	if inbound == nil || inbound.CanSpliceCopy == 3 {
+	if inbound == nil || inbound.CanSpliceCopy == 3 || inbound.User != nil && inbound.User.ClientID != "" {
 		return readV(ctx, reader, writer, timer, readCounter)
 	}
 	outbounds := session.OutboundsFromContext(ctx)

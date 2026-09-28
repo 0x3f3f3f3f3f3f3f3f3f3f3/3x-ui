@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/app/clientpolicy"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -93,16 +94,20 @@ func (r *cachedReader) Interrupt() {
 
 // DefaultDispatcher is a default implementation of Dispatcher.
 type DefaultDispatcher struct {
-	ohm    outbound.Manager
-	router routing.Router
-	policy policy.Manager
-	stats  stats.Manager
-	fdns   dns.FakeDNSEngine
+	clients clientpolicy.Manager
+	ohm     outbound.Manager
+	router  routing.Router
+	policy  policy.Manager
+	stats   stats.Manager
+	fdns    dns.FakeDNSEngine
 }
 
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		d := new(DefaultDispatcher)
+		core.OptionalFeatures(ctx, func(engine clientpolicy.Manager) {
+			d.clients = engine
+		})
 		if err := core.RequireFeatures(ctx, func(om outbound.Manager, router routing.Router, pm policy.Manager, sm stats.Manager, dc dns.Client) error {
 			core.OptionalFeatures(ctx, func(fdns dns.FakeDNSEngine) {
 				d.fdns = fdns
@@ -432,6 +437,18 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, netw
 }
 
 func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.Link, destination net.Destination) {
+	managedCtx, release, err := d.manageLink(ctx, destination, link)
+	if err != nil {
+		errors.LogInfo(ctx, "managed client rejected: ", err)
+		common.Close(link.Writer)
+		common.Interrupt(link.Reader)
+		if in := session.InboundFromContext(ctx); in != nil && in.Conn != nil {
+			in.Conn.Close()
+		}
+		return
+	}
+	defer release()
+	ctx = managedCtx
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 

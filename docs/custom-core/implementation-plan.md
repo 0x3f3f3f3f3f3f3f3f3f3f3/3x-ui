@@ -37,9 +37,9 @@ Produces: committed source at the existing panel's core pin, a reproducible `bui
 - [x] Read user requirements, repo guidance, main source, build/test scripts and DB models.
 - [x] Verify clean checkout and create a new branch directly from main.
 - [x] Verify upstream releases, fork ancestry, SSH authentication and library candidates.
-- [ ] Import original core with license and origin manifest; point panel module replacement at it.
-- [ ] Build both baselines; record failures/skips without claiming full validation.
-- [ ] Commit source import separately from implementation; push and verify remote SHA.
+- [x] Import original core with license and origin manifest; point panel module replacement at it.
+- [x] Build panel, frontend and custom core; record baseline failures without claiming full validation.
+- [x] Commit source import separately from implementation; push and verify remote SHA.
 
 ## Task 2: Policy arithmetic and runtime state
 
@@ -47,10 +47,10 @@ Files: `core/xray/app/clientpolicy/{config.proto,policy.go,accounting.go,limiter
 Produces: `Engine.Apply(Policy) error`, `Engine.Open(context.Context, Metadata, func()) (*Session,error)`, `Session.Admit(direction,bytes) error`, `Engine.Snapshot(clientID)`.
 Policy values use uint64 byte rates, an explicit burst, multiplier millionths and monotonic version; client identity is a nonempty opaque server-owned string. Admission is serialized per client for atomic quota, separate upload/download token buckets and connection registry. Metadata retains inbound, authenticated account, session ID, original/actual target and active policy version.
 
-- [ ] Write failing tests for fractional/batch-invariant accounting, multiplier switch, overflow and invalid fields.
-- [ ] Implement fixed-point arithmetic and inspect passing tests, including property/fuzz seeds.
-- [ ] Write failing concurrent quota and restriction-composition tests; implement policy state and cancellation outside locks.
-- [ ] Test two rates, unlimited control, concurrent streams, fairness and hot updates before implementing limiter.
+- [x] Write failing tests for fractional/batch-invariant accounting, multiplier switch, overflow and invalid fields.
+- [x] Implement fixed-point arithmetic and inspect passing tests, including property/fuzz seeds.
+- [x] Write failing concurrent quota and restriction-composition tests; implement policy state and cancellation outside locks.
+- [x] Test two rates, unlimited control, concurrent streams and engine hot updates (remaining fairness/real-socket hot-update gates recorded).
 - [ ] Commit tested runtime primitives; do not call this a delivered data plane until task 3 passes.
 
 ## Task 3: Real Tunnel data path
@@ -59,8 +59,8 @@ Files: `core/xray/proxy/dokodemo/*`, `common/protocol/user.*`, `common/session/*
 Consumes task 2. Produces trusted `client_id` in runtime user/session context and enforcement wrappers around decrypted payload.
 
 - [ ] First write a failing real TCP/UDP fixed-target test that exceeds a shared client budget through two listeners.
-- [ ] Extend protobuf with new field numbers; retain old fields and names; reject missing policy for managed identities.
-- [ ] Bind Tunnel listener ownership, meter both directions once and disable raw-copy bypass only for managed sessions.
+- [x] Extend protobuf with new field numbers; retain old fields and names; reject missing policy for managed identities.
+- [x] Bind configured Tunnel listener identity, meter both directions once and guard managed raw-copy; panel ownership lifecycle remains task 6.
 - [ ] Verify direct, selected proxy and block route, domain/IPv4/IPv6, half-close, timeout, UDP boundaries, active disconnect and no NAT dependency.
 - [ ] Verify independent socket-byte observations, 100 MiB quota at multiplier 2, last-budget contention and nonzero rate tiers.
 - [ ] Commit and push measured evidence.
@@ -156,3 +156,9 @@ Files: `internal/{mtproto,tuic,amneziawgnet}`, their core adapters, supervision/
 - [ ] Review every requirement and matrix cell against current authoritative evidence; skips never count as passes.
 - [ ] Fresh whole-branch review, fix findings, final logical commits and exact remote SHA verification.
 - [ ] Final report includes all twelve requested delivery items and remaining unverified evidence; goal stays active until actual requirements are satisfied.
+
+## Execution checkpoint — 2026-09-28
+
+Source import commits `d50ce235` and `23f7c784` pushed and remote SHA verified. All 1039 original upstream blobs were checked against the Git index. The first import exposed inherited `main`, `debug.*`, and `.dat` ignore rules; the second commit restores those files and preserves Windows CRLF bytes. No history was rewritten. At that push verification, remote main was `17d7dd46` and the existing backend branch was `5f51dccb`. Only the new feature ref was pushed; other branches may be changed independently by their owners.
+
+Runtime policy and Tunnel integration now exist and pass targeted race and real socket tests; exact evidence is in testing.md. This is a partial stage 2: durable quota recovery, protected control API, panel identity migration/forms, ACL, original-target metadata, all other protocols and sidecar migration remain unfinished. In-memory quota must not be represented as restart-safe. Native execution remains authorized; no merge/release/deployment requested or performed.

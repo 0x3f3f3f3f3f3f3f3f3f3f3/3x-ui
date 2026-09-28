@@ -8,6 +8,8 @@ import (
 )
 
 type DokodemoConfig struct {
+	ClientID       string            `json:"clientId"`
+	Email          string            `json:"email"`
 	AllowedNetwork *NetworkList      `json:"allowedNetwork"`
 	RewriteAddress *Address          `json:"rewriteAddress"`
 	RewritePort    uint16            `json:"rewritePort"`
@@ -43,5 +45,7 @@ func (v *DokodemoConfig) Build() (proto.Message, error) {
 	}
 	config.FollowRedirect = v.FollowRedirect
 	config.UserLevel = v.UserLevel
+	config.ClientId = v.ClientID
+	config.Email = v.Email
 	return config, nil
 }

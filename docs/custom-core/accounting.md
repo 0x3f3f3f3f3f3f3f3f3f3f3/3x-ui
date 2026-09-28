@@ -1,6 +1,6 @@
 # Identity, metering and enforcement contract
 
-Status: required semantics/design; implementation status is in the plan and matrix.
+Status: in-memory execution primitives and Tunnel admission are implemented; durability and panel integration are not implemented. Full intended semantics remain below.
 
 - `client_id` is a panel-generated opaque UUID, independent of display email, protocol UUID/password/PSK, port and node. Migration assigns once and preserves old email-keyed API/statistics compatibility. Deletion/recreation gets a new identity; shared subscriptions alone are not sufficient identity evidence.
 - Count decoded TCP bytes and complete UDP payloads at the admission boundary, once per business leg. Separately label IP-packet paths. A byte admitted toward a destination counts even if the remote subsequently fails; kernel retransmissions, encrypted frames, sniff replay and internal bridge copies do not count again.
@@ -21,3 +21,7 @@ Before implementation acceptance, choose and test the exact reservation quantum,
 Multipliers: 0.5, 1, 1.5, 2, 10; arbitrary split batches must produce identical totals/remainders. 10 GiB at 1 then 5 GiB at 2 bills 20 GiB. A 100 MiB quota at 2 permits at most 50 MiB admitted bidirectional raw bytes (whole datagram granularity may leave budget unused). Concurrency test contends on the final budget. Compare independent sender/receiver observations at the same boundary; echoes count both directions.
 
 Rate measurements: 256 KiB/s and 1 MiB/s, burst 64 KiB, 10-second steady windows after a 2-second warmup; unlimited baseline must exceed 4 MiB/s or result is inconclusive. Upper bound R*T+B+1% timing allowance; healthy steady throughput at least 85% of R. Report scheduling/buffer uncertainty, startup burst and update delay separately. These are initial gates, not numbers to loosen after failures.
+
+## Current execution boundary and limitation
+
+Dispatcher wraps the routed decoded payload after sniff caching. Upload admission occurs before handing buffers to the outbound; download admission occurs before writing each buffer to the client. Quota exhaustion cancels every registered session, including idle connections. This can discard the final admitted in-flight buffers: the 100 MiB/2× echo test observed 8192 bytes admitted but not delivered to the receiving application. No claim of delivered-byte-perfect accounting is made. The admitted budget was not exceeded. The core currently holds usage only in memory; restart persistence remains task 4 and must be completed before installation/upgrade integration.

@@ -15,7 +15,7 @@ This is the initial source-audit matrix, not a support announcement. `E/U` = exi
 | Hysteria2 | E/U both | E/U | N | QUIC/mux/UDP and auth updates |
 | WireGuard | E/U both | E/U | N | per-peer identity, IP/payload accounting distinction |
 | TUN | E/U inbound | no account auth; resource identity required | N | packet semantics, route and owner mapping |
-| Tunnel/dokodemo-door | E/U inbound; NA outbound (listener adapter) | forwarding client lifecycle N | N | TCP/UDP, all routing modes, owner lifecycle, shared policy |
+| Tunnel/dokodemo-door | E/U inbound; NA outbound (listener adapter) | forwarding client lifecycle N | I/V for scoped in-memory Tunnel tests below; persistence N | TCP/UDP, all routing modes, owner lifecycle, shared policy |
 | Snell v4 | N both | N | N | official Surge interoperability + independent outbound test |
 | Snell v5 | N both | N | N | v4-like paths separately, QUIC Proxy Mode mandatory |
 | Snell v6 beta | N both | N | N | fixed beta client/server, shaping modes, TCP/UDP/reuse |
@@ -55,3 +55,13 @@ Each applicable row above must cover **both directions separately** and every fe
 - Encrypted/opaque payloads do not guarantee sniffable domains, nor do ordinary proxy accounts provide trusted device IDs.
 
 Lack of an upstream API, platform test machine or commercial client is **not** inapplicability. It is development or verification work still outstanding.
+
+## Incremental verified evidence (does not upgrade an entire row)
+
+- Tunnel TCP/UDP and both protocol aliases: trusted configured `clientId` reaches Dispatcher policy; two TCP listeners plus UDP share exact counters; manual disable closes active TCP and blocks UDP. Four real socket tests pass.
+- Selected SOCKS outbound and default block: exercised in one core instance with a separate internal SOCKS listener as the test upstream. Metering is once at the managed ingress. Missing managed policy rejects traffic.
+- Engine primitives: fixed-point multipliers, batch/fraction invariance, concurrent quota, reason composition, expiry, stale policy/revocation and shared directional token buckets pass race tests. These are not proof of all protocols, global limits or persistent accounting.
+- 100 MiB quota at multiplier 2: admitted 50 MiB bidirectional payload; exact figures and endpoint loss are in testing.md.
+- Panel UI/API/DB integration, durable accounting, all Snell/mieru/SSH adapters, ACL/listener ownership lifecycle and full single-core migration are still N.
+
+- Independent binary TCP Tunnel rates: two connections share each configured upload/download limit, 256 KiB/s and 1 MiB/s; six cases including unlimited controls pass. See testing.md and evidence/tunnel-rates.jsonl.
