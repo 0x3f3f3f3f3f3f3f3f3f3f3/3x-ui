@@ -169,3 +169,45 @@ unimplemented. These tests are database evidence, not protocol acceptance.
   (0.204s). The mutation was reverted before commit.
 - Complete frontend baseline rerun is running with heavy Go work finished;
   existing test timeouts and source remain unchanged.
+
+The subsequent full frontend run exited 1 after 298.99s: 173 files / 1,741 tests
+passed; happ-routing-editor's `retains invalid JSON {"Name": until repaired`
+timed out at 5s. Two React scheduler `window is not defined` errors were
+attributed to happ-settings-presets cleanup. The two Happ files passed together
+with `--project=components --maxWorkers=1` (27 tests, 24.87s); no source, assertions
+or timeout limits changed. Default-concurrency full-suite instability remains.
+
+## Shared stream shaping milestone (adapter integration pending)
+
+Initial unit tests failed on missing limiter/writer operations, then passed.
+Coverage includes invalid/zero rates, bounded grants/queue, cancellation,
+live update wakeup, repeated-update credit preservation, four writers sharing
+one cap, stream contents and partial writes. Billing does not affect rate.
+
+`go test ./internal/clientpolicy -run '^TestLimiterTCPSharedClientsAndLiveChanges$' -count=1 -v`
+passed in 6.017s with actual IPv4 loopback TCP. Both client groups use
+127.0.0.1 and four connections, each group sharing one limiter. Target-side
+socket reads supply independent counts. This validates the scheduler/writer,
+not any claimed SSH/Snell/mieru/Xray protocol integration.
+
+Predefined bounds: exclude 300ms startup; measure for 1.8s initially and 1.5s
+after changes. Upper bytes = rate × elapsed × 1.06 + configured burst; lower
+bytes = rate × elapsed × 0.80. The fixed 6% scheduling/delivery margin and burst
+were set before execution. Existing streams are sampled 250ms after changes,
+with the sample ending within the 2s update target. No tolerance was widened.
+
+| Measurement | Raw target-side result |
+|---|---:|
+| Unlimited, 4 connections, 300ms | 2,603,859,815 B/s |
+| Client A, 65,536 B/s, 1.801s | 65,516 B/s |
+| Client B, 131,072 B/s, 1.801s | 131,031 B/s |
+| A live decrease to 32,768 B/s, 1.500s | 32,749 B/s |
+| B during A decrease | 126,661 B/s |
+| A live increase to 131,072 B/s, 1.501s | 131,021 B/s |
+| B during A increase | 135,377 B/s (inside burst envelope) |
+
+- `go test -race ./internal/clientpolicy -count=1 -v`: PASS, 9.541s, including
+  the real TCP test. Queue capacity/cancellation and concurrent writers pass.
+- Static lint initially flagged a direct EOF comparison in the TCP harness;
+  switching to `errors.Is` fixed it. Final package lint: exit 0, 0 issues.
+- Formatter diff is empty. `make test-go`: exit 0, including the real TCP test.

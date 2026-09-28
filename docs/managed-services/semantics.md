@@ -48,3 +48,22 @@ implemented or verified.
   limits; independently measure TCP, UDP and racing connections. These bounds
   are not yet established for the final adapters and remain open acceptance
   items, not production guarantees.
+
+## Implemented stream scheduler contract
+
+The internal Limiter accepts integer rates in [0, 1 TiB/s], 0 unlimited.
+Each instance belongs to one client/direction and must be shared by its
+connections. Tokens cover raw bytes; billing multiplier is never an input.
+For positive rate R, burst is `min(65536, max(1, floor(R/10)))` bytes; grants
+are at most 65536 bytes and the pending queue contains at most 128 callers.
+Queue overflow returns an explicit error, and canceling a waiter removes it.
+Changing the rate wakes all waiters and preserves existing token credit capped
+to the new burst; repeatedly saving the same policy cannot issue extra credit.
+
+The scheduler uses transient floating-point time credit, independently of the
+exact integer billing ledger. It retains no payload buffers. ShapedWriter
+splits stream writes into bounded grants and propagates partial-write errors.
+An owning adapter must cancel blocked I/O by closing its connection; canceling
+the scheduler context interrupts queued waits only. Datagram admission,
+authenticated client registration, durable quota admission, protocol adapters
+and distributed rate-share allocation are still pending.

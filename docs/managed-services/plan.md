@@ -102,6 +102,12 @@ Files: `internal/clientpolicy` engine/stream/datagram files and E2E tests;
 core dispatcher adapter plus Runtime apply/reconcile path.
 Consumes immutable policy/ledger; produces cancellable per-client flow budget.
 
+The stream scheduler substep is implemented with bounded FIFO waits, separate
+instances per client/direction, live updates and a stream writer. Real loopback
+TCP tests cover two client groups, four connections each, three rate settings,
+an unlimited baseline and live decreases/increases. This is not yet protocol
+integration, bidirectional adapter acceptance, UDP or quota enforcement.
+
 - [ ] Test two rates + unlimited, >1 connection, same-IP separate clients,
   bidirectional transfer, live changes, cancellation and bounded buffering.
 - [ ] Implement shared token scheduling, durable quota reservation and reasons.
