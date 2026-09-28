@@ -1902,6 +1902,138 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "ClientPolicy": {
+    "properties": {
+      "downloadBps": {
+        "example": 131072,
+        "format": "int64",
+        "type": "integer"
+      },
+      "multiplier": {
+        "example": "1.5",
+        "type": "string"
+      },
+      "policyId": {
+        "example": "b2345678-1234-4234-8234-123456789012",
+        "type": "string"
+      },
+      "scope": {
+        "example": "local",
+        "type": "string"
+      },
+      "supported": {
+        "example": true,
+        "type": "boolean"
+      },
+      "uploadBps": {
+        "example": 65536,
+        "format": "int64",
+        "type": "integer"
+      },
+      "usage": {
+        "$ref": "#/components/schemas/ClientPolicyUsage"
+      },
+      "version": {
+        "example": 0,
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "downloadBps",
+      "multiplier",
+      "policyId",
+      "scope",
+      "supported",
+      "uploadBps",
+      "usage",
+      "version"
+    ],
+    "type": "object"
+  },
+  "ClientPolicyUpdate": {
+    "properties": {
+      "downloadBps": {
+        "example": 131072,
+        "format": "int64",
+        "type": "integer"
+      },
+      "multiplier": {
+        "example": "1.5",
+        "type": "string"
+      },
+      "policyId": {
+        "example": "b2345678-1234-4234-8234-123456789012",
+        "type": "string"
+      },
+      "scope": {
+        "example": "local",
+        "type": "string"
+      },
+      "uploadBps": {
+        "example": 65536,
+        "format": "int64",
+        "type": "integer"
+      },
+      "version": {
+        "example": 0,
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "downloadBps",
+      "multiplier",
+      "policyId",
+      "scope",
+      "uploadBps",
+      "version"
+    ],
+    "type": "object"
+  },
+  "ClientPolicyUsage": {
+    "properties": {
+      "billed": {
+        "example": "4608",
+        "type": "string"
+      },
+      "down": {
+        "example": "2048",
+        "type": "string"
+      },
+      "quota": {
+        "example": "1073741824",
+        "type": "string"
+      },
+      "remainder": {
+        "example": 0,
+        "format": "int64",
+        "type": "integer"
+      },
+      "remaining": {
+        "example": "1073737216",
+        "type": "string"
+      },
+      "unlimited": {
+        "example": false,
+        "type": "boolean"
+      },
+      "up": {
+        "example": "1024",
+        "type": "string"
+      }
+    },
+    "required": [
+      "billed",
+      "down",
+      "quota",
+      "remainder",
+      "remaining",
+      "unlimited",
+      "up"
+    ],
+    "type": "object"
+  },
   "ClientRecord": {
     "properties": {
       "adTag": {

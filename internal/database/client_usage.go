@@ -59,7 +59,7 @@ func (l *ClientUsageLedger) Read(ctx context.Context, policyID string) (model.Cl
 }
 
 func (l *ClientUsageLedger) Ensure(ctx context.Context, policyID string) error {
-	return l.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return WithClientUsageTx(ctx, l.db, func(tx *gorm.DB) error {
 		if err := requireAdmissionDurability(tx); err != nil {
 			return err
 		}
@@ -73,7 +73,7 @@ func (l *ClientUsageLedger) Register(ctx context.Context, policyID, source, mete
 	if _, err := uuid.Parse(meterID); err != nil || source == "" || len(source) > 200 || strings.TrimSpace(source) != source {
 		return meter, ErrUsageConflict
 	}
-	err := l.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := WithClientUsageTx(ctx, l.db, func(tx *gorm.DB) error {
 		_, a, err := lockClientUsage(tx, policyID)
 		if err != nil {
 			return err
@@ -122,7 +122,7 @@ func (l *ClientUsageLedger) apply(ctx context.Context, report ClientUsageReport,
 	if err := l.db.WithContext(ctx).Where("meter_id = ?", report.MeterID).First(&hint).Error; err != nil {
 		return delta, err
 	}
-	err := l.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := WithClientUsageTx(ctx, l.db, func(tx *gorm.DB) error {
 		if admit {
 			if err := requireAdmissionDurability(tx); err != nil {
 				return err
@@ -145,6 +145,11 @@ func (l *ClientUsageLedger) ChangeMultiplier(ctx context.Context, policyID strin
 	return l.transition(ctx, policyID, revision, multiplier, finals, false, false)
 }
 
+// Prepaid sources have durable final cursors; observed sources must settle explicitly.
+func (l *ClientUsageLedger) ChangeMultiplierAdmitted(ctx context.Context, policyID string, multiplier clientpolicy.Multiplier) (model.ClientUsageAccount, error) {
+	return l.transition(ctx, policyID, 0, multiplier, nil, false, true)
+}
+
 func (l *ClientUsageLedger) Reset(ctx context.Context, policyID string, revision int64, finals []ClientUsageReport) (model.ClientUsageAccount, error) {
 	return l.transition(ctx, policyID, revision, 0, finals, true, false)
 }
@@ -161,7 +166,7 @@ func (l *ClientUsageLedger) transition(ctx context.Context, policyID string, rev
 			return result, err
 		}
 	}
-	err := l.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := WithClientUsageTx(ctx, l.db, func(tx *gorm.DB) error {
 		if admittedOnly {
 			if err := requireAdmissionDurability(tx); err != nil {
 				return err

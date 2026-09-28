@@ -479,6 +479,39 @@ export const ClientPageResponseSchema = z.object({
 });
 export type ClientPageResponse = z.infer<typeof ClientPageResponseSchema>;
 
+export const ClientPolicySchema = z.object({
+  downloadBps: z.number().int(),
+  multiplier: z.string(),
+  policyId: z.string(),
+  scope: z.string(),
+  supported: z.boolean(),
+  uploadBps: z.number().int(),
+  usage: z.lazy(() => ClientPolicyUsageSchema),
+  version: z.number().int(),
+});
+export type ClientPolicy = z.infer<typeof ClientPolicySchema>;
+
+export const ClientPolicyUpdateSchema = z.object({
+  downloadBps: z.number().int(),
+  multiplier: z.string(),
+  policyId: z.string(),
+  scope: z.string(),
+  uploadBps: z.number().int(),
+  version: z.number().int(),
+});
+export type ClientPolicyUpdate = z.infer<typeof ClientPolicyUpdateSchema>;
+
+export const ClientPolicyUsageSchema = z.object({
+  billed: z.string(),
+  down: z.string(),
+  quota: z.string(),
+  remainder: z.number().int(),
+  remaining: z.string(),
+  unlimited: z.boolean(),
+  up: z.string(),
+});
+export type ClientPolicyUsage = z.infer<typeof ClientPolicyUsageSchema>;
+
 export const ClientRecordSchema = z.object({
   adTag: z.string(),
   allowedIPs: z.string(),

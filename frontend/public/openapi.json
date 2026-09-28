@@ -1928,6 +1928,138 @@
         ],
         "type": "object"
       },
+      "ClientPolicy": {
+        "properties": {
+          "downloadBps": {
+            "example": 131072,
+            "format": "int64",
+            "type": "integer"
+          },
+          "multiplier": {
+            "example": "1.5",
+            "type": "string"
+          },
+          "policyId": {
+            "example": "b2345678-1234-4234-8234-123456789012",
+            "type": "string"
+          },
+          "scope": {
+            "example": "local",
+            "type": "string"
+          },
+          "supported": {
+            "example": true,
+            "type": "boolean"
+          },
+          "uploadBps": {
+            "example": 65536,
+            "format": "int64",
+            "type": "integer"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/ClientPolicyUsage"
+          },
+          "version": {
+            "example": 0,
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "downloadBps",
+          "multiplier",
+          "policyId",
+          "scope",
+          "supported",
+          "uploadBps",
+          "usage",
+          "version"
+        ],
+        "type": "object"
+      },
+      "ClientPolicyUpdate": {
+        "properties": {
+          "downloadBps": {
+            "example": 131072,
+            "format": "int64",
+            "type": "integer"
+          },
+          "multiplier": {
+            "example": "1.5",
+            "type": "string"
+          },
+          "policyId": {
+            "example": "b2345678-1234-4234-8234-123456789012",
+            "type": "string"
+          },
+          "scope": {
+            "example": "local",
+            "type": "string"
+          },
+          "uploadBps": {
+            "example": 65536,
+            "format": "int64",
+            "type": "integer"
+          },
+          "version": {
+            "example": 0,
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "downloadBps",
+          "multiplier",
+          "policyId",
+          "scope",
+          "uploadBps",
+          "version"
+        ],
+        "type": "object"
+      },
+      "ClientPolicyUsage": {
+        "properties": {
+          "billed": {
+            "example": "4608",
+            "type": "string"
+          },
+          "down": {
+            "example": "2048",
+            "type": "string"
+          },
+          "quota": {
+            "example": "1073741824",
+            "type": "string"
+          },
+          "remainder": {
+            "example": 0,
+            "format": "int64",
+            "type": "integer"
+          },
+          "remaining": {
+            "example": "1073737216",
+            "type": "string"
+          },
+          "unlimited": {
+            "example": false,
+            "type": "boolean"
+          },
+          "up": {
+            "example": "1024",
+            "type": "string"
+          }
+        },
+        "required": [
+          "billed",
+          "down",
+          "quota",
+          "remainder",
+          "remaining",
+          "unlimited",
+          "up"
+        ],
+        "type": "object"
+      },
       "ClientRecord": {
         "properties": {
           "adTag": {
@@ -8743,6 +8875,178 @@
                     "suggestedExpiryTime": 1893456000000,
                     "timeZone": "UTC",
                     "validThrough": "2029-12-31T23:59:59Z"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/clients/policy/{email}": {
+      "get": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Read a client’s aggregate rate policy and exact byte accounting.",
+        "operationId": "get_panel_api_clients_policy_email",
+        "description": "Rates use raw bytes/second from the client perspective; 0 is unlimited. Scope local covers all attachments on this panel node. supported reports backend capability, not current process health. Usage counters are decimal strings to preserve int64 precision. billed and remaining hold whole-byte accounting components. Add remainder/1000 to billed, and subtract it from a positive remaining balance, for the fractional-byte balance. quota 0 and unlimited true mean no quota.",
+        "parameters": [
+          {
+            "name": "email",
+            "in": "path",
+            "required": true,
+            "description": "Client email.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/ClientPolicy"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "downloadBps": 131072,
+                    "multiplier": "1.5",
+                    "policyId": "b2345678-1234-4234-8234-123456789012",
+                    "scope": "local",
+                    "supported": true,
+                    "uploadBps": 65536,
+                    "usage": {
+                      "billed": "4608",
+                      "down": "2048",
+                      "quota": "1073741824",
+                      "remainder": 0,
+                      "remaining": "1073737216",
+                      "unlimited": false,
+                      "up": "1024"
+                    },
+                    "version": 0
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Atomically update aggregate rates and the billing multiplier for a client.",
+        "operationId": "post_panel_api_clients_policy_email",
+        "description": "Requires policyId and version returned by GET; stale edits, including deleted and recreated clients, fail without mutation. Supply all fields. Rates are integers from 0 to 1099511627776 raw B/s. The multiplier is a decimal string from 0.001 to 1000 with at most three fractional digits. Changing it preserves historical billing and fractional carry, fences existing metering sources, and closes their flows. Rate-only edits preserve connections and apply within 2 seconds. Currently enforced for local SSH attachments; other backends and global scope are rejected until their executors are available. A runtime failure after commit is reported as policy saved; reload before retrying.",
+        "parameters": [
+          {
+            "name": "email",
+            "in": "path",
+            "required": true,
+            "description": "Client email.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "description": "Expected edit version returned by GET."
+                  },
+                  "policyId": {
+                    "type": "string",
+                    "description": "Immutable client identity returned by GET."
+                  },
+                  "uploadBps": {
+                    "type": "integer",
+                    "description": "Aggregate raw upload bytes/second; 0 unlimited."
+                  },
+                  "downloadBps": {
+                    "type": "integer",
+                    "description": "Aggregate raw download bytes/second; 0 unlimited."
+                  },
+                  "multiplier": {
+                    "type": "string",
+                    "description": "Exact positive decimal billing multiplier."
+                  },
+                  "scope": {
+                    "type": "string",
+                    "description": "local; shared across attachments on this node."
+                  }
+                },
+                "required": [
+                  "version",
+                  "policyId",
+                  "uploadBps",
+                  "downloadBps",
+                  "multiplier",
+                  "scope"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/ClientPolicy"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "downloadBps": 131072,
+                    "multiplier": "1.5",
+                    "policyId": "b2345678-1234-4234-8234-123456789012",
+                    "scope": "local",
+                    "supported": true,
+                    "uploadBps": 65536,
+                    "usage": {
+                      "billed": "4608",
+                      "down": "2048",
+                      "quota": "1073741824",
+                      "remainder": 0,
+                      "remaining": "1073737216",
+                      "unlimited": false,
+                      "up": "1024"
+                    },
+                    "version": 0
                   }
                 }
               }

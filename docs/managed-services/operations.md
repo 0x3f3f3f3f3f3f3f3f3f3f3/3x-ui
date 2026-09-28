@@ -46,3 +46,38 @@ refuse to run against the host network namespace.
 
 These are required implementation/validation tasks. No installation script or
 rollback guarantee for the new backends is claimed at this stage.
+
+## Local client policy API
+
+`GET /panel/api/clients/policy/:email` returns the client identity, edit version,
+raw directional B/s limits, decimal-string multiplier and exact usage. Save all
+policy fields with `POST` to the same path, retaining `policyId` and `version`
+from GET. Reload after a conflict. Admin/session authentication is required;
+monitor and node-sync tokens cannot use this endpoint.
+
+The current executor supports clients whose attachments are all local managed
+SSH inbounds. Scope `local` means the sum across those listeners on this node;
+it does not claim a global multi-node limit. A rate is an integer from 0 to
+1099511627776 raw B/s, with zero unlimited. One Mbps is 125000 B/s; one MB/s is
+1000000 B/s. The billing multiplier is a decimal string from 0.001 to 1000 with
+at most three fractional digits. It affects billing, not raw bandwidth.
+
+Rate-only changes preserve live flows. A multiplier change atomically closes
+previous metering sources, preserves historical billed bytes and thousandth-byte
+carry, and retires their existing flows; clients reconnect using the new billing
+boundary. Flow reset preserves rates, scope, multiplier and the edit version.
+A post-commit runtime error explicitly says that the policy was saved; reload
+before retrying. `supported` means backend capability, not process health.
+
+Database backups include `client_policy_settings`, accounting records, cursors
+and SSH credentials. SQLite restore and SQLite→PostgreSQL copy are tested.
+Portable client JSON import/export does not yet carry the new policy and must
+not substitute for a complete database backup during this development stage.
+
+Usage `billed` and `remaining` are whole-byte accounting components. Preserve
+`remainder` (0–999 thousandths of a byte) when displaying the fractional balance:
+exact billed bytes = billed + remainder/1000; for a positive limited balance,
+exact remaining bytes = remaining − remainder/1000. For example, billed `5`,
+remaining `995`, remainder `500` represents 5.5 billed bytes and 994.5 remaining
+bytes. Use integer/decimal arithmetic for display; never convert large byte
+strings to JavaScript Number.

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"gorm.io/gorm"
 
+	"github.com/mhsanaei/3x-ui/v3/internal/clientpolicy"
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/logger"
@@ -224,15 +226,33 @@ func (m *sshRuntimeManager) reconcile(ctx context.Context) {
 		}
 		return
 	}
+	policies, err := m.loadClientPolicies(ctx)
+	if err != nil {
+		for _, entry := range m.entries {
+			entry.stop()
+			entry.report("client rate policy unavailable")
+		}
+		return
+	}
+	configured := make(map[string]error)
 	for _, entry := range m.entries {
 		if entry.suspended {
 			continue
 		}
 		ready := true
 		for _, client := range entry.config.Clients {
-			operationCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
-			err := m.controller.Configure(operationCtx, client.PolicyID, policyflow.Rates{})
-			cancel()
+			err, exists := configured[client.PolicyID]
+			if !exists {
+				policy := policies[client.PolicyID]
+				if policy.Scope != "" && policy.Scope != "local" {
+					err = ErrClientPolicyUnsupported
+				} else {
+					operationCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+					err = m.controller.Configure(operationCtx, client.PolicyID, policyflow.Rates{Upload: policy.UploadBps, Download: policy.DownloadBps})
+					cancel()
+				}
+				configured[client.PolicyID] = err
+			}
 			if err != nil {
 				ready = false
 				break
@@ -281,6 +301,38 @@ func (m *sshRuntimeManager) reconcile(ctx context.Context) {
 		entry.serveDone = done
 		go func() { defer listener.Close(); done <- server.Serve(listener) }()
 	}
+}
+
+func (m *sshRuntimeManager) loadClientPolicies(ctx context.Context) (map[string]model.ClientPolicySettings, error) {
+	ids := make([]string, 0)
+	for _, entry := range m.entries {
+		if !entry.suspended {
+			for _, client := range entry.config.Clients {
+				ids = append(ids, client.PolicyID)
+			}
+		}
+	}
+	slices.Sort(ids)
+	ids = slices.Compact(ids)
+	policies := make(map[string]model.ClientPolicySettings, len(ids))
+	ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+	for _, part := range chunkStrings(ids, sqlInChunk) {
+		var rows []model.ClientPolicySettings
+		if err := m.db.WithContext(ctx).Where("policy_id IN ?", part).Find(&rows).Error; err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			if row.Scope != "local" {
+				return nil, ErrClientPolicyUnsupported
+			}
+			if row.UploadBps < 0 || row.UploadBps > clientpolicy.MaxRate || row.DownloadBps < 0 || row.DownloadBps > clientpolicy.MaxRate {
+				return nil, clientpolicy.ErrInvalidRate
+			}
+			policies[row.PolicyID] = row
+		}
+	}
+	return policies, nil
 }
 
 func NotifySSHChange(inboundID int, full bool) error {

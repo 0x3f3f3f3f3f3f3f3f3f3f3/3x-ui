@@ -22,3 +22,12 @@ func (r *ClientRecord) BeforeCreate(_ *gorm.DB) error {
 	r.PolicyID = id.String()
 	return nil
 }
+
+// Missing settings preserve the legacy defaults; billing stays in ClientUsageAccount.
+type ClientPolicySettings struct {
+	PolicyID    string `gorm:"primaryKey;size:36"`
+	UploadBps   int64  `gorm:"not null;default:0"`
+	DownloadBps int64  `gorm:"not null;default:0"`
+	Scope       string `gorm:"not null;default:local;size:16"`
+	Version     int64  `gorm:"not null;default:0"`
+}

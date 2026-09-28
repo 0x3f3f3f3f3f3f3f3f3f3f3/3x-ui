@@ -18,7 +18,7 @@ func (l *ClientUsageLedger) ClaimAdmissionSource(ctx context.Context, policyID, 
 	if source == "" || len(source) > 200 || strings.TrimSpace(source) != source {
 		return result, ErrUsageConflict
 	}
-	err := l.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := WithClientUsageTx(ctx, l.db, func(tx *gorm.DB) error {
 		if err := requireAdmissionDurability(tx); err != nil {
 			return err
 		}
@@ -56,7 +56,7 @@ func (l *ClientUsageLedger) CheckAdmissionSource(ctx context.Context, meterID st
 	if err := l.db.WithContext(ctx).Where("meter_id = ?", meterID).First(&hint).Error; err != nil {
 		return err
 	}
-	return l.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return WithClientUsageTx(ctx, l.db, func(tx *gorm.DB) error {
 		if err := requireAdmissionDurability(tx); err != nil {
 			return err
 		}

@@ -49,6 +49,7 @@ func migrationModels() []any {
 		&model.ClientRecord{},
 		&model.ClientUsageAccount{},
 		&model.ClientUsageMeter{},
+		&model.ClientPolicySettings{},
 		&model.ClientInbound{},
 		&model.ClientHwid{},
 		&model.ClientExternalLink{},

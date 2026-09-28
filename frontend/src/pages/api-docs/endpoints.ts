@@ -1216,6 +1216,62 @@ export const sections: readonly Section[] = [
         responseSchema: 'ClientRenewalPreview',
       },
       {
+        method: 'GET',
+        path: '/panel/api/clients/policy/:email',
+        summary: 'Read a client’s aggregate rate policy and exact byte accounting.',
+        description:
+          'Rates use raw bytes/second from the client perspective; 0 is unlimited. Scope local covers all attachments on this panel node. supported reports backend capability, not current process health. Usage counters are decimal strings to preserve int64 precision. billed and remaining hold whole-byte accounting components. Add remainder/1000 to billed, and subtract it from a positive remaining balance, for the fractional-byte balance. quota 0 and unlimited true mean no quota.',
+        params: [{ name: 'email', in: 'path', type: 'string', desc: 'Client email.' }],
+        responseSchema: 'ClientPolicy',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/policy/:email',
+        summary: 'Atomically update aggregate rates and the billing multiplier for a client.',
+        description:
+          'Requires policyId and version returned by GET; stale edits, including deleted and recreated clients, fail without mutation. Supply all fields. Rates are integers from 0 to 1099511627776 raw B/s. The multiplier is a decimal string from 0.001 to 1000 with at most three fractional digits. Changing it preserves historical billing and fractional carry, fences existing metering sources, and closes their flows. Rate-only edits preserve connections and apply within 2 seconds. Currently enforced for local SSH attachments; other backends and global scope are rejected until their executors are available. A runtime failure after commit is reported as policy saved; reload before retrying.',
+        params: [
+          { name: 'email', in: 'path', type: 'string', desc: 'Client email.' },
+          {
+            name: 'version',
+            in: 'body (json)',
+            type: 'integer',
+            desc: 'Expected edit version returned by GET.',
+          },
+          {
+            name: 'policyId',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'Immutable client identity returned by GET.',
+          },
+          {
+            name: 'uploadBps',
+            in: 'body (json)',
+            type: 'integer',
+            desc: 'Aggregate raw upload bytes/second; 0 unlimited.',
+          },
+          {
+            name: 'downloadBps',
+            in: 'body (json)',
+            type: 'integer',
+            desc: 'Aggregate raw download bytes/second; 0 unlimited.',
+          },
+          {
+            name: 'multiplier',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'Exact positive decimal billing multiplier.',
+          },
+          {
+            name: 'scope',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'local; shared across attachments on this node.',
+          },
+        ],
+        responseSchema: 'ClientPolicy',
+      },
+      {
         method: 'POST',
         path: '/panel/api/clients/update/:email',
         summary:

@@ -183,6 +183,10 @@ func TestClientPolicyIdentityBackfillsMoreThanOneBatchAndRestores(t *testing.T) 
 		t.Fatalf("migration rewrote a preexisting policy identity: %q", identities[501])
 	}
 	dump := filepath.Join(t.TempDir(), "backup.sql")
+	policy := model.ClientPolicySettings{PolicyID: existing, UploadBps: 65536, DownloadBps: 131072, Scope: "local", Version: 3}
+	if err := GetDB().Create(&policy).Error; err != nil {
+		t.Fatal(err)
+	}
 	if err := DumpSQLite(path, dump); err != nil {
 		t.Fatal(err)
 	}
@@ -195,6 +199,10 @@ func TestClientPolicyIdentityBackfillsMoreThanOneBatchAndRestores(t *testing.T) 
 	}
 	if err := InitDB(restored); err != nil {
 		t.Fatal(err)
+	}
+	var restoredPolicy model.ClientPolicySettings
+	if err := GetDB().First(&restoredPolicy, "policy_id = ?", existing).Error; err != nil || restoredPolicy != policy {
+		t.Fatalf("SQLite backup/restore lost policy rates or edit version: %+v, %v", restoredPolicy, err)
 	}
 	rows = nil
 	if err := GetDB().Find(&rows).Error; err != nil {

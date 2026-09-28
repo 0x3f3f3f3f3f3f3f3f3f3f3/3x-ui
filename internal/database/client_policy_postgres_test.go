@@ -127,6 +127,10 @@ func TestClientPolicyIdentityMigration_Postgres(t *testing.T) {
 	if err := source.Create(&imported).Error; err != nil {
 		t.Fatal(err)
 	}
+	policy := model.ClientPolicySettings{PolicyID: imported.PolicyID, UploadBps: 65536, DownloadBps: 131072, Scope: "local", Version: 3}
+	if err := source.Create(&policy).Error; err != nil {
+		t.Fatal(err)
+	}
 	if err := source.Create(&xray.ClientTraffic{Email: imported.Email, Up: 7, Down: 11}).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -151,6 +155,10 @@ func TestClientPolicyIdentityMigration_Postgres(t *testing.T) {
 	}
 	if copied.SSHConfig != imported.SSHConfig {
 		t.Fatal("SQLite to PostgreSQL migration lost SSH credentials or permissions")
+	}
+	var copiedPolicy model.ClientPolicySettings
+	if err := GetDB().First(&copiedPolicy, "policy_id = ?", imported.PolicyID).Error; err != nil || copiedPolicy != policy {
+		t.Fatalf("SQLite to PostgreSQL migration lost policy rates or version: %+v, %v", copiedPolicy, err)
 	}
 	if copied.PolicyID != imported.PolicyID {
 		t.Fatalf("SQLite→Postgres replaced identity %q with %q", imported.PolicyID, copied.PolicyID)

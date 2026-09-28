@@ -55,6 +55,8 @@ func (a *ClientController) initRouter(g *gin.RouterGroup) {
 	g.GET("/get/:email", a.get)
 	g.GET("/get/tgId/:tgId", a.getByTgId)
 	g.GET("/traffic/:email", a.getTrafficByEmail)
+	g.GET("/policy/:email", a.getPolicy)
+	g.POST("/policy/:email", a.updatePolicy)
 	g.GET("/subLinks/:subId", a.getSubLinks)
 	g.GET("/links/:email", a.getClientLinks)
 	g.POST("/happLink/:id", a.generateHappLink)
@@ -100,6 +102,24 @@ func (a *ClientController) list(c *gin.Context) {
 		return
 	}
 	jsonObj(c, rows, nil)
+}
+
+func (a *ClientController) getPolicy(c *gin.Context) {
+	policy, err := a.clientService.GetPolicy(c.Request.Context(), c.Param("email"))
+	jsonObj(c, policy, err)
+}
+
+func (a *ClientController) updatePolicy(c *gin.Context) {
+	var request service.ClientPolicyUpdate
+	if err := c.ShouldBindJSON(&request); err != nil {
+		jsonObj(c, nil, err)
+		return
+	}
+	policy, err := a.clientService.UpdatePolicy(c.Request.Context(), c.Param("email"), request)
+	if err == nil {
+		notifyClientsChanged()
+	}
+	jsonObj(c, policy, err)
 }
 
 func (a *ClientController) renewalPreview(c *gin.Context) {

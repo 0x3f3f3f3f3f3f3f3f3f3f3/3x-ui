@@ -88,7 +88,10 @@ The following narrower scopes now have implementation and direct evidence:
 |---|---|---|
 | Existing service create/edit, key-only client creation, disabled listener protection | V | `TestSSHInboundPreservesCanonicalCredentials`, real managed lifecycle test |
 | Public-key rotation, manual disable, metadata edit: unrelated existing client stays connected | V | actual two-client SSH → Xray path on SQLite and PostgreSQL |
-| Raw/billed payload at default 1×, delayed expiry, reset source replacement, quota reduction | V | real service mutations and TCP payload; public rate/multiplier controls remain N |
+| Raw/billed payload, delayed expiry, reset source replacement, quota reduction | V | real service mutations and TCP payload; policy API now exposes exact billing; UI remains N |
+| Versioned policy API, fixed-point multiplier boundary, precise usage strings | V | real HTTP admin/scope checks; SQLite/PostgreSQL transactions, stale/recreated identity rejection, historical carry and reset persistence |
+| Public aggregate rate changes across two SSH inbounds | V | actual OpenSSH → panel-managed Xray, two same-IP clients/four channels each, raw duplex counters, unlimited baseline, 32/64/128 KiB/s, live changes within 2s; UI remains N |
+| Policy backup and cross-dialect migration | V | raw rate fields and edit version survive SQLite dump/restore and SQLite→PostgreSQL migration; client portable import/export remains N |
 | Port collision logging/retry, core exit protection, core stop/restart | V | actual occupied listener and actual Xray process; capacity/complete fault rollback remain N |
 | Credential and permission persistence | V | canonical JSON/merge, old SQLite/PostgreSQL migration, SQLite backup restore and cross-dialect migration |
 | SSH settings generated API types | U | generated schemas/typecheck; complete HTTP/controller, UI and export acceptance remains open |
@@ -122,7 +125,7 @@ they do not imply UI/API/routing/deployment or multi-node completion.
 | Aggregate duplex rate / live update | V | Two same-IP clients, two SSH processes/four channels each, independent socket counts |
 | Quota / multiplier / restart denial | V | OpenSSH long transfers at 0.5/1/1.5/2×; server/controller restart |
 | Internal Xray TCP route execution / no double billing | V | OpenSSH through real Xray: exact/regexp users, domain/IP/port/source, two exits, block priority, native-versus-bridge counters |
-| Production manager and panel integration | N | Concrete routed adapter exists; production Runtime/configuration wiring remains |
+| Production manager and service/API integration | V | actual Runtime/configuration wiring, process lifecycle and durable local policy application; UI/deployment/upstream/global-node work remains N |
 | Enforcing a standard -R client's local target | N | Target absent from protocol; listener ACL is not target enforcement |
 
 Panel lifecycle prerequisites now recognize admission-owned accounts: single

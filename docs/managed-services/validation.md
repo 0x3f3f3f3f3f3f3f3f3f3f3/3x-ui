@@ -38,11 +38,10 @@ merge were performed.
 
 ## Acceptance not yet executed
 
-All real-protocol bandwidth, quota, routing, authentication, recovery and
-multi-node tests from requirements sections A–D remain open. Full static,
-race, frontend, PostgreSQL and packaging checks also remain open until their
-actual results are recorded. The implementation must establish pre-test burst,
-sampling, cutoff and overshoot bounds; none is claimed for unbuilt adapters.
+At the initial audit, real-protocol tests and full verification were unexecuted.
+The milestones below record subsequent evidence; matrix.md identifies the
+remaining incomplete capabilities. Passing one adapter's tests never validates
+an unbuilt adapter, multi-node behavior or the complete deployment workflow.
 
 ## Exact arithmetic milestone (not runtime billing integration)
 
@@ -660,3 +659,83 @@ lint-staged but are intentionally ignored by oxfmt. The formatter's documented
 `--no-error-on-unmatched-pattern` option now permits that empty ignored set; normal
 source files still run through formatting and linting. This tooling prerequisite
 is committed separately as `263a7c78`; hooks were not disabled.
+
+## Durable local policy API and production SSH shaping
+
+The existing client API now reads and edits raw upload/download B/s, an exact
+positive decimal billing multiplier, explicit local scope and an edit version.
+Requests carry the immutable policy ID as well as the version, preventing a
+stale editor from changing a newly created client with a reused email. Byte
+counters are decimal strings, including values above JavaScript's safe integer
+range. The account remains the sole authority for the multiplier and carry.
+
+- Service tests first failed on missing policy methods. SQLite and real
+  PostgreSQL now verify atomic rates/multiplier boundaries, stale edits,
+  observed-source rejection with full rollback, reset persistence, and legacy
+  reads that neither activate accounting nor reprice previous usage.
+- Recreated-label regression first accepted the obsolete edit. Requiring the
+  immutable ID alongside the edit version rejects it without changing the
+  replacement client. Concurrent editors must produce one success and one
+  conflict.
+- HTTP tests execute the real authorization and scope middleware: anonymous
+  XHR requests get 401, monitor/node-sync tokens get 403, and admin requests
+  reach the actual database service. Raw 9007199254740993 bytes is returned
+  exactly; changing the multiplier does not reprice that history.
+- Actual OpenSSH clients traverse two service-created SSH inbounds and the
+  pinned Xray. Each of two clients uses two SSH transports and four channels,
+  simultaneously uploading/downloading from the same source IP. Before runtime
+  wiring, a requested 65536 B/s cap delivered 6782976 bytes in 1.5 seconds.
+- The new runtime wiring reads persisted policies in bounded batches and updates
+  the shared per-client limiters. The existing unlimited-rate controller no
+  longer overrides saved limits. Invalid/unavailable policy protects listeners.
+- Initial multi-client runs also exposed SQLite writer starvation: independent
+  busy-handler retries caused `context deadline exceeded` and false stream
+  cutoff. A cancellable database-local writer queue now covers ledger operations
+  and serialized panel transactions. Nested transactions keep their existing
+  ownership; PostgreSQL retains concurrent row-level transactions. The original
+  500 ms database operation limit and one-second freshness policy are unchanged.
+- With that correction, the race-enabled real path passed a 1.55–1.64 MB/s
+  unlimited baseline and initial 65536/131072 B/s caps. Live edits measured about
+  32752/65514 and 131074/131063 raw B/s for the changed client; the other client
+  retained about 131063/65526 B/s. The unchanged acceptance window is 80% to
+  106% of the configured rate plus the declared 100 ms burst, capped at 64 KiB.
+  Live update plus its 1.5-second measurement fits within two seconds. Existing
+  streams stay open; multiplier 2 produces exactly twice the raw admission sum.
+- The same production test passed on real PostgreSQL. Schema omission tests
+  failed with a missing policy table before the migration was enabled; identity,
+  SQLite backup/restore and cross-dialect policy persistence then passed with
+  race detection (database 16.986s).
+
+Reproduce with the same actual core and isolated PostgreSQL fixture:
+
+```sh
+XRAY_E2E_BINARY=/path/to/pinned-xray \
+XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' \
+go test -race ./internal/web/service -run '^TestClientPolicy' -count=1 -v
+go test ./internal/web/controller -run '^TestClientPolicyHTTP' -count=1
+```
+
+Limits: this increment exposes local policy through the authenticated API;
+policy UI, portable client import/export, other backends and global node leases
+remain required. Non-SSH or remote attachments and global scope are explicitly
+rejected until their real execution paths exist. The broader goal is incomplete.
+
+Final increment verification: complete `GOFLAGS=-p=1 make test-go` with the actual
+core and PostgreSQL passed all 50 tested packages (database 47.827s, service
+80.735s). Package serialization prevents unrelated tests from competing with
+bandwidth windows. Final focused race tests also passed the extra restart and
+concurrent-edit assertions: production SSH 11.93s on SQLite and 12.06s on
+PostgreSQL, including reloaded nonzero caps after complete core/manager shutdown.
+No existing transfer ended during the rate-only edits. Existing managed
+restriction/reset/renewal and bounded writer-cancellation tests passed too.
+
+Go lint reports zero issues, the main Go build passes, frontend typecheck/lint/
+build pass, and 70 generated/OpenAPI contract tests pass. The documentation
+site's pinned pnpm 12.6.0 frozen install, API MDX generation and typecheck pass.
+Its current generator mechanically replaces the old v10 component fallback in
+all generated API pages. Full logs are `/tmp/3x-ui-policy-full-go.log`,
+`/tmp/3x-ui-policy-final-race.log`, `/tmp/3x-ui-policy-final-lint.log`,
+`/tmp/3x-ui-policy-final-build.log`, `/tmp/3x-ui-policy-frontend-contracts.log`
+and `/tmp/3x-ui-policy-docs-typecheck.log`. No full-frontend suite, complete UI
+workflow, kernel adapter, packaging/deployment or whole-goal claim follows from
+this increment's focused frontend/API checks.

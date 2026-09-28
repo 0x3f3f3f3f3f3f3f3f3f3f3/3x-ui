@@ -131,7 +131,7 @@ func runSerializedTx(fn func(tx *gorm.DB) error) error {
 
 func runSerializedTxContext(ctx context.Context, fn func(tx *gorm.DB) error) error {
 	return submitTrafficWriteContext(ctx, func() error {
-		return database.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return database.WithClientUsageTx(ctx, database.GetDB(), func(tx *gorm.DB) error {
 			ctx := context.WithValue(tx.Statement.Context, serializedTxContextKey{}, true)
 			return fn(tx.WithContext(ctx))
 		})

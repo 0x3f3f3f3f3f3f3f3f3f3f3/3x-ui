@@ -497,6 +497,41 @@ export const EXAMPLES: Record<string, unknown> = {
     },
     "total": 2000
   },
+  "ClientPolicy": {
+    "downloadBps": 131072,
+    "multiplier": "1.5",
+    "policyId": "b2345678-1234-4234-8234-123456789012",
+    "scope": "local",
+    "supported": true,
+    "uploadBps": 65536,
+    "usage": {
+      "billed": "4608",
+      "down": "2048",
+      "quota": "1073741824",
+      "remainder": 0,
+      "remaining": "1073737216",
+      "unlimited": false,
+      "up": "1024"
+    },
+    "version": 0
+  },
+  "ClientPolicyUpdate": {
+    "downloadBps": 131072,
+    "multiplier": "1.5",
+    "policyId": "b2345678-1234-4234-8234-123456789012",
+    "scope": "local",
+    "uploadBps": 65536,
+    "version": 0
+  },
+  "ClientPolicyUsage": {
+    "billed": "4608",
+    "down": "2048",
+    "quota": "1073741824",
+    "remainder": 0,
+    "remaining": "1073737216",
+    "unlimited": false,
+    "up": "1024"
+  },
   "ClientRecord": {
     "adTag": "",
     "allowedIPs": "",

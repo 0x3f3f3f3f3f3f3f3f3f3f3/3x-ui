@@ -455,6 +455,36 @@ export interface ClientPageResponse {
   total: number;
 }
 
+export interface ClientPolicy {
+  downloadBps: number;
+  multiplier: string;
+  policyId: string;
+  scope: string;
+  supported: boolean;
+  uploadBps: number;
+  usage: ClientPolicyUsage;
+  version: number;
+}
+
+export interface ClientPolicyUpdate {
+  downloadBps: number;
+  multiplier: string;
+  policyId: string;
+  scope: string;
+  uploadBps: number;
+  version: number;
+}
+
+export interface ClientPolicyUsage {
+  billed: string;
+  down: string;
+  quota: string;
+  remainder: number;
+  remaining: string;
+  unlimited: boolean;
+  up: string;
+}
+
 export interface ClientRecord {
   adTag: string;
   allowedIPs: string;
