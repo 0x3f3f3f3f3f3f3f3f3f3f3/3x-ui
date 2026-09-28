@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  focusManager,
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 
 import { HttpUtil, Msg } from '@/utils';
 import { parseMsg } from '@/utils/zodValidate';
@@ -242,12 +248,19 @@ export function useClients(options: UseClientsOptions = {}) {
     queryFn: () => fetchClientPage(query ?? DEFAULT_QUERY),
     enabled: withList && query !== null,
     staleTime: Infinity,
-    // List is sorted/paged server-side, so the WS patch can't add new or
-    // re-sort rows; poll the current page to keep it live (pauses when hidden).
-    refetchInterval: 5000,
     refetchOnWindowFocus: 'always',
     placeholderData: keepPreviousData,
   });
+  const refetchPage = listQuery.refetch;
+  useEffect(() => {
+    if (!withList || query === null) return;
+    // WS cache patches reset QueryObserver's interval; an independent clock
+    // keeps server-owned billing, sorting and summary data fresh under pushes.
+    const timer = window.setInterval(() => {
+      if (focusManager.isFocused()) void refetchPage({ cancelRefetch: false });
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [withList, query, refetchPage]);
 
   const inboundOptionsQuery = useQuery({
     queryKey: keys.inbounds.options(),
@@ -280,13 +293,8 @@ export function useClients(options: UseClientsOptions = {}) {
   const allGroups = listQuery.data?.groups ?? [];
   const fetched = listQuery.data !== undefined || listQuery.isError;
   const fetchError = listQuery.error ? (listQuery.error as Error).message : '';
-  // isFetching is deliberately NOT read here. Touching it makes it a tracked
-  // property, so the 5s refetchInterval notifies twice per cycle — two whole
-  // page renders even when structural sharing leaves the data identical, and
-  // each one bumps rc-table's immutable mark and re-runs every cell renderer.
-  // Callers that want a spinner for an explicit refresh drive it locally.
-  // Showing kept-previous data for a new key (filter/sort/page) — drives the
-  // table overlay so the 5s background poll doesn't flash it.
+  // Keep background isFetching unobserved so unchanged polls do not redraw rows.
+  // Only a new page/filter key with placeholder data drives the transition overlay.
   const transitioning = listQuery.isPlaceholderData;
 
   const inbounds = inboundOptionsQuery.data ?? [];
