@@ -66,4 +66,6 @@ Lack of an upstream API, platform test machine or commercial client is **not** i
 
 - Independent binary TCP Tunnel rates: two connections share each configured upload/download limit, 256 KiB/s and 1 MiB/s; six cases including unlimited controls pass. See testing.md and evidence/tunnel-rates.jsonl.
 
-- Local durable reservations: graceful and abrupt engine recovery, exact/frozen counters, version/tombstone persistence, atomic batches, storage failure and real Tunnel restart tests implemented. External ledger, control API, restore fencing and global budgets remain N.
+- Local durable reservations: graceful and abrupt engine recovery, exact/frozen counters, version/tombstone persistence, atomic batches, storage failure and real Tunnel restart tests implemented. Panel settlement, restore fencing and global budgets remain N; protected core control API is implemented and tested as described below.
+
+- Private Unix gRPC API v1: capability negotiation, atomic policy updates, current state, version-checked revocation, connection query/close, checkpoint and committed cumulative ledger. Real existing-flow RPC update resumes within 2 s with exact multiplier-boundary accounting. Panel adapter rejects unsupported cores, but Runtime/DB/UI integration remains N.

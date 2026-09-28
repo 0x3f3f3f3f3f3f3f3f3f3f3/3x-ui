@@ -1,0 +1,63 @@
+syntax = "proto3";
+package xray.app.clientpolicy.command.v1;
+option go_package = "github.com/xtls/xray-core/app/clientpolicy/command";
+import "app/clientpolicy/config.proto";
+
+message Empty {}
+message ClientRequest { string client_id = 1; uint64 expected_policy_version = 2; }
+message Capabilities {
+ uint32 api_version = 1;
+ string core_version = 2;
+ string instance_id = 3;
+ uint64 epoch = 4;
+ repeated string capabilities = 5;
+ uint64 reservation_raw_bytes = 6;
+}
+message Usage {
+ uint64 raw_upload = 1;
+ uint64 raw_download = 2;
+ uint64 billed_bytes = 3;
+ uint64 remainder = 4;
+}
+message ClientState {
+ xray.app.clientpolicy.PolicyConfig policy = 1;
+ Usage usage = 2;
+ uint64 uncertain_bytes = 3;
+ uint32 reasons = 4;
+ uint32 active_sessions = 5;
+}
+message ApplyRequest { repeated xray.app.clientpolicy.PolicyConfig policies = 1; }
+message Connection {
+ uint64 session_id = 1;
+ string inbound_tag = 2;
+ string authenticated_account = 3;
+ string original_target = 4;
+ string actual_target = 5;
+ uint64 policy_version = 6;
+}
+message Connections { repeated Connection connections = 1; }
+message CloseResult { uint32 closed = 1; }
+message LedgerRequest { uint64 after_sequence = 1; uint32 limit = 2; }
+message LedgerRecord {
+ string instance_id = 1;
+ uint64 epoch = 2;
+ uint64 sequence = 3;
+ string client_id = 4;
+ uint64 policy_version = 5;
+ Usage usage = 6;
+ uint64 uncertain_bytes = 7;
+ uint64 reserved_bytes = 8;
+ bool revoked = 9;
+}
+message LedgerPage { repeated LedgerRecord records = 1; uint64 next_sequence = 2; }
+service ClientPolicyService {
+ rpc GetCapabilities(Empty) returns (Capabilities);
+ rpc GetClient(ClientRequest) returns (ClientState);
+ rpc ApplyPolicies(ApplyRequest) returns (Empty);
+ rpc RevokeClient(ClientRequest) returns (Empty);
+ rpc ListConnections(ClientRequest) returns (Connections);
+ rpc CloseConnections(ClientRequest) returns (CloseResult);
+ rpc CheckpointUsage(Empty) returns (Empty);
+ rpc ReadLedger(LedgerRequest) returns (LedgerPage);
+}
+message Config {}

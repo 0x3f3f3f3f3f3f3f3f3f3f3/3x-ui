@@ -1,6 +1,6 @@
 # Identity, metering and enforcement contract
 
-Status: runtime primitives, Tunnel admission and local durable reservations are implemented. Panel settlement, committed-event API, rollback fencing and multi-node budgets remain unfinished. Full intended semantics remain below.
+Status: runtime primitives, Tunnel admission and local durable reservations are implemented. Panel settlement, rollback fencing and multi-node budgets remain unfinished. Full intended semantics remain below.
 
 - `client_id` is a panel-generated opaque UUID, independent of display email, protocol UUID/password/PSK, port and node. Migration assigns once and preserves old email-keyed API/statistics compatibility. Deletion/recreation gets a new identity; shared subscriptions alone are not sufficient identity evidence.
 - Count decoded TCP bytes and complete UDP payloads at the admission boundary, once per business leg. Separately label IP-packet paths. A byte admitted toward a destination counts even if the remote subsequently fails; kernel retransmissions, encrypted frames, sniff replay and internal bridge copies do not count again.
@@ -37,3 +37,5 @@ On clean checkpoint/shutdown the exact admitted counters are committed and unuse
 This bounds **unavailable budget**, not confirmed delivered traffic. Committed reservations prevent reissuing admitted quota after the tested process crashes, assuming the store and its filesystem durability contract remain intact. File loss, administrator rollback, cloned state or unfenced panel restore are separate failure classes that still require the panel authority and external fencing. No universal zero-overuse or power-loss guarantee is claimed.
 
 Normal reservation commits are amortized over raw traffic, not performed per byte. The 131,073 one-byte test performs three reservations; local measured unlimited throughput is ~29–34 MB/s with the 64 KiB quantum, much lower than memory-only operation. Larger quanta/group commit need explicit crash-budget tradeoffs and new measurements before acceptance.
+
+Committed cumulative records are now available through protected API v1; see [control-api.md](control-api.md). The panel must still implement transactional cursor/totals settlement before these records become its reliable ledger.

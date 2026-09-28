@@ -13,6 +13,14 @@ type Manager interface {
 	Open(context.Context, Metadata, func()) (*Session, error)
 	Snapshot(string) (Snapshot, error)
 	Remove(string) error
+	RemoveVersion(string, uint64) error
+	ApplyBatch([]Policy) error
+	Capabilities() Capabilities
+	GetClient(string) (Policy, Snapshot, error)
+	Connections(string) ([]Connection, error)
+	CloseConnections(string) (int, error)
+	Checkpoint() error
+	ReadLedger(uint64, int) ([]LedgerRecord, error)
 }
 
 func init() {

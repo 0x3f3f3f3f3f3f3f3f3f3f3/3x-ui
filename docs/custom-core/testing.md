@@ -73,10 +73,21 @@ Real Tunnel restarts: three full core instances sequentially reopen the same sto
 
 The same six independent-process rate cases were repeated with durable reservations. [tunnel-rates-persistent.jsonl](evidence/tunnel-rates-persistent.jsonl) contains the raw observations. Upload rates measured 263,780 / 1,037,099 B/s; download 262,347 / 1,048,157 B/s. All original rate/burst/healthy-throughput assertions passed. Unlimited controls were 29,070,308 B/s upload and 34,310,353 B/s download. This is a substantial local throughput cost versus the earlier in-memory controls; no general high-throughput acceptance claim is made.
 
-Remaining durability work: committed-event export and protected control APIs, panel DB idempotent settlement, restore/rollback fencing, multi-node budget leases, full configuration-start rollback, disk/power-loss tests and further throughput work. Runtime Snapshot combines current live usage with a durable sequence marker; it is **not** an atomic committed ledger event and must not be used as one by the panel.
+Remaining durability work: panel DB idempotent settlement, restore/rollback fencing, multi-node budget leases, full configuration-start rollback, disk/power-loss tests and further throughput work. Runtime Snapshot combines current live usage with a durable sequence marker; it is **not** an atomic committed ledger event and must not be used as one by the panel.
 
 Additional checks found two further baseline issues: adding the upstream `core` package to race testing failed in `testing/servers/udp/udp.go` (shared `Server.accepting` flag assignment/close); broader `go vet ./infra/conf` reports unreachable legacy reverse configuration code after its removal error. These are failures, not skipped/passed checks. Targeted `app/clientpolicy` and `testing/policy` tests in that run passed; baseline fixes and exact reruns remain separate work.
 
 Persistence checkpoint validation: focused race tests across clientpolicy/dispatcher/protocol/conf/Tunnel passed; `go vet` of clientpolicy/dispatcher/core/testing-policy passed; full panel `make test-go` with the persistence dependency passed. These do not erase the separately recorded full-core/scenario/race/vet baseline failures.
 
 Baseline repair checkpoint: the missing WireGuard stream-settings regression first panicked, then passed after applying empty optional settings; the actual UDP core tests now pass under race after removing the racy helper flag (socket close terminates its loop). `go vet ./infra/conf` passes after removing code that was already unreachable after the existing legacy-reverse removal error. No removed feature was re-enabled or disabled by that cleanup. Full core/scenario rerun is still pending at this checkpoint.
+
+
+## Protected control service and panel adapter
+
+At baseline-repair commit `1d3f5525`, the complete `go test -shuffle=on -count=1 ./...` managed-core suite passed (scenario package 352.548 s). This was the fixed source snapshot compiled before the following API work; it does not claim every upstream test contains data-transfer assertions or that skipped paths were validated.
+
+API v1 tests first received gRPC Unimplemented, then exposed the generic Unix listener's synthetic TCP peer address. The protected API now uses an actual Unix listener while retaining the original listener path for other API services. `go test -race -count=1 ./app/clientpolicy/... ./app/commander ./testing/policy ./infra/conf` passed. Tests verify private transport requirements even for direct protobuf config, rejection of TCP/no peer, socket permissions, live RPC rate/multiplier changes, atomic committed counters, cursor replay/pagination, ahead-of-store cursor rejection, and closing an existing TCP socket. Exact hot-update accounting and method semantics are in [control-api.md](control-api.md).
+
+Panel `go test -race ./internal/xray -run TestClientPolicyAdapter -count=1` passed against actual local gRPC transports. The fixtures test capability negotiation only: absent service, incompatible version, wrong instance and missing enforcement capabilities fail explicitly; a fully matching service succeeds. These are not additional protocol interoperability tests. Runtime/DB/UI integration remains unfinished.
+
+API checkpoint: final focused core/API race checks, focused vet, rebuilt Custom Xray-core and full panel `make test-go` passed. Final lifecycle regression also confirms a closed engine no longer advertises readiness. The new adapter has not yet been wired into production panel Runtime.

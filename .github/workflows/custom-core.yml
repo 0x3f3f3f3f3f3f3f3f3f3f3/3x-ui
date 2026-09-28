@@ -23,7 +23,7 @@ jobs:
         run: go test -shuffle=on -count=1 ./...
       - name: Core race checks
         working-directory: core/xray
-        run: go test -race -count=1 ./app/clientpolicy ./app/dispatcher ./proxy/dokodemo ./common/protocol
+        run: go test -race -count=1 ./app/clientpolicy/... ./app/commander ./app/dispatcher ./proxy/dokodemo ./common/protocol ./testing/policy
       - name: Build custom core
         run: bash tools/build-custom-core.sh
       - name: Build panel against same managed source

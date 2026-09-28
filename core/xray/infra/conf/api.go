@@ -3,6 +3,7 @@ package conf
 import (
 	"strings"
 
+	clientpolicyservice "github.com/xtls/xray-core/app/clientpolicy/command"
 	"github.com/xtls/xray-core/app/commander"
 	loggerservice "github.com/xtls/xray-core/app/log/command"
 	observatoryservice "github.com/xtls/xray-core/app/observatory/command"
@@ -27,6 +28,11 @@ func (c *APIConfig) Build() (*commander.Config, error) {
 	services := make([]*serial.TypedMessage, 0, 16)
 	for _, s := range c.Services {
 		switch strings.ToLower(s) {
+		case "clientpolicyservicev1":
+			if err := commander.ValidatePrivateUnixSocket(c.Listen); err != nil {
+				return nil, err
+			}
+			services = append(services, serial.ToTypedMessage(&clientpolicyservice.Config{}))
 		case "reflectionservice":
 			services = append(services, serial.ToTypedMessage(&commander.ReflectionConfig{}))
 		case "handlerservice":

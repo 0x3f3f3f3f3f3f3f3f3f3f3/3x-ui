@@ -103,7 +103,9 @@ func (e *Engine) Snapshot(id string) (Snapshot, error) {
 	return Snapshot{InstanceID: e.instanceID, Epoch: e.epoch, Sequence: c.sequence, UncertainBytes: c.uncertain, Usage: c.usage, PolicyVersion: c.policy.Version, Reasons: c.reasonsLocked(time.Now()), ActiveSessions: len(c.sessions)}, nil
 }
 
-func (e *Engine) Remove(id string) error {
+func (e *Engine) Remove(id string) error { return e.RemoveVersion(id, 0) }
+
+func (e *Engine) RemoveVersion(id string, version uint64) error {
 	c, err := e.state(id)
 	if err != nil {
 		return err
@@ -116,6 +118,10 @@ func (e *Engine) Remove(id string) error {
 	if c.closed {
 		c.mu.Unlock()
 		return ErrEngineClosed
+	}
+	if version != 0 && version != c.policy.Version {
+		c.mu.Unlock()
+		return ErrPolicyVersion
 	}
 	if err := c.persistLocked(c.policy, true, 0); err != nil {
 		c.mu.Unlock()
@@ -139,6 +145,7 @@ func (e *Engine) Close() error {
 		return nil
 	}
 	e.closed = true
+	e.ready.Store(false)
 	clients := make([]*clientState, 0, len(e.clients))
 	for _, c := range e.clients {
 		clients = append(clients, c)

@@ -3,6 +3,7 @@ package commander
 import (
 	"context"
 	"net"
+	"os"
 	"strings"
 	"sync"
 
@@ -18,11 +19,12 @@ import (
 // Commander is a Xray feature that provides gRPC methods to external clients.
 type Commander struct {
 	sync.Mutex
-	server   *grpc.Server
-	services []Service
-	ohm      outbound.Manager
-	tag      string
-	listen   string
+	server      *grpc.Server
+	services    []Service
+	ohm         outbound.Manager
+	tag         string
+	listen      string
+	privateUnix bool
 }
 
 // NewCommander creates a new Commander based on the given config.
@@ -49,6 +51,12 @@ func NewCommander(ctx context.Context, config *Config) (*Commander, error) {
 		if !ok {
 			return nil, errors.New("not a Service.")
 		}
+		if guard, ok := service.(interface{ RequiresPrivateUnixSocket() bool }); ok && guard.RequiresPrivateUnixSocket() {
+			if err := ValidatePrivateUnixSocket(c.listen); err != nil {
+				return nil, err
+			}
+			c.privateUnix = true
+		}
 		c.services = append(c.services, service)
 	}
 
@@ -62,15 +70,21 @@ func (c *Commander) Type() interface{} {
 
 // Start implements common.Runnable.
 func (c *Commander) Start() error {
+	if c.privateUnix {
+		if err := ValidatePrivateUnixSocket(c.listen); err != nil {
+			return err
+		}
+	}
 	c.Lock()
 	c.server = grpc.NewServer()
 	for _, service := range c.services {
 		service.Register(c.server)
 	}
+	server := c.server
 	c.Unlock()
 
 	listen := func(listener net.Listener) {
-		if err := c.server.Serve(listener); err != nil {
+		if err := server.Serve(listener); err != nil {
 			errors.LogErrorInner(context.Background(), err, "failed to start grpc server")
 		}
 	}
@@ -88,10 +102,23 @@ func (c *Commander) Start() error {
 			}
 			addr = tcpAddr
 		}
-		l, err := internet.ListenSystem(context.Background(), addr, nil)
+		var l net.Listener
+		var err error
+		if c.privateUnix {
+			l, err = net.Listen("unix", c.listen)
+		} else {
+			l, err = internet.ListenSystem(context.Background(), addr, nil)
+		}
 		if err != nil {
 			errors.LogErrorInner(context.Background(), err, "API server failed to listen on ", c.listen)
 			return err
+		}
+		if c.privateUnix {
+			if err := os.Chmod(c.listen, 0600); err != nil {
+				l.Close()
+				c.server.Stop()
+				return err
+			}
 		}
 		errors.LogInfo(context.Background(), "API server listening on ", l.Addr())
 		go listen(l)

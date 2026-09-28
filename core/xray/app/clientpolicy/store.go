@@ -35,6 +35,7 @@ type storedClient struct {
 type stateStore interface {
 	save(storedClient) (uint64, error)
 	saveBatch([]storedClient) ([]uint64, error)
+	read(uint64, int) ([]storedClient, error)
 	close() error
 }
 
