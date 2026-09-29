@@ -152,7 +152,8 @@ activation, remote accounting and protocol management remain incomplete.
 ## Internal mieru backend evidence
 
 The integrated-service mieru columns remain N. These scopes concern the native
-adapter and shared controller on SQLite, before public Runtime integration.
+adapter and shared controller, before public Runtime integration. PostgreSQL
+evidence is limited to the explicitly named cases below.
 
 | Internal mieru capability | Status | Evidence / limit |
 |---|---|---|
@@ -160,13 +161,16 @@ adapter and shared controller on SQLite, before public Runtime integration.
 | Stable identity, domain, target and original source in dispatch | V | Actual native sessions preserve policy ID, inbound tag, original localhost name, port, network and underlay source; required callback has no automatic direct fallback |
 | Whole-datagram fixed-point quota and bidirectional payload billing | V | 1.5x/0.5x exact counters; rejected reply sends/charges no prefix, smaller remaining packet succeeds; native rolling quota fields are empty |
 | Shared live duplex shaping across native listeners | V | Actual mixed streams/packets, two same-IP clients and two listeners, 32/64 KiB/s, unlimited baseline and live changes; receiver-observed packet flight is explicitly bounded in the test |
+| Shared SSH/mieru local controller ownership | V | Real SSH plus official mieru clients on both underlays, SQLite/PostgreSQL, aggregate duplex 64/128 KiB/s and unlimited baseline, existing-flow live changes within 2s, SSH shutdown preserves mieru; direct loopback connectors in this test, public mixed-protocol attachment still pending |
 | Quota, disable and owned shutdown | V | Existing TCP/UDP cutoff and server restart denial; malformed UDP cleanup, TCP backpressure, unrelated-user continuity and partial-start listener release |
 | Live native credential replacement | V | Official TCP/UDP clients; atomic invalid-batch rejection, unchanged sessions, rotation/removal/re-addition, empty set, delayed/cached authentication denial, exact policy-ID reassignment billing, pending dial cancellation and idle TCP socket reclamation |
 | Continuous one-way UDP target lifetime | V | Actual 31-second upload-only traffic retains one target source port and exact upload-only billing |
 | Internal authenticated Xray TCP/UDP routing / policy-aware bridge | V | Private policy-ID credentials, actual direct IPv4 peer replies, user/domain/IP/source/tag/network/port/priority/block/balancer exits; official mieru clients on both underlays, exact single billing and existing-flow revocation. Other outbounds, IPv6 and public Runtime remain open |
+| Private bridge gRPC hot insertion | V | Actual core retains managed authentication and uint32 levels 255/4294967295, TCP/UDP payload and peer metadata, no duplicate user counters, existing stream continuity during add/remove; required policy definitions preloaded at startup |
 | Public model/Runtime/API/UI/export/node/deployment integration | N | No public mieru service option or manager is claimed by this increment |
 | Internal native session/queue bounds and generation diagnostics | V | Maintained protocol-only extension limits native admission before allocation, bounds payload trees/staging, reclaims finished metadata and suppresses per-generation diagnostic groups; real TCP/UDP stress and payload recovery. This is not a process RSS bound or public Runtime completion |
-| PostgreSQL mieru vertical acceptance | N | The adapter's second-dialect public integration and real data-path acceptance remain open |
+| Native UDP progress under application backpressure | V | Byte/segment/staging window bounds, current wire credits, earlier-fragment retention and separate ACK/delivery progress; encrypted ACK gap tests, complete native race suites and 20 unchanged real SSH-peer-stop recovery repetitions; queue bounds and rate tolerances unchanged |
+| PostgreSQL mieru vertical acceptance | N | Shared ownership, accounting and cross-protocol native rate checks pass on PostgreSQL; the second-dialect public integration and remaining real data-path matrix remain open |
 
 ## UDP core prerequisite evidence
 

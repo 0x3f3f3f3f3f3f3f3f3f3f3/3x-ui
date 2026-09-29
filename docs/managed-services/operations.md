@@ -17,9 +17,10 @@ The server's protocol-only resource extension is reproduced and verified with
 [source and license instructions](../../tools/managed-mieru/README.md).
 The official client dependency remains unchanged. Native queue/session limits
 and diagnostic suppression do not replace the shared policy controller.
-The next integration steps are an authenticated UDP-capable routing bridge,
-Runtime and existing management/export paths, followed by node and packaging
-acceptance. No new production listener is enabled by adding this dependency.
+The authenticated TCP/UDP bridge and its private gRPC serializer are implemented
+internally. Next are public Runtime and existing management/export paths,
+followed by node and packaging acceptance. No new production listener is enabled
+by adding this dependency. See the [public integration plan](mieru-integration-plan.md).
 
 ## Development
 

@@ -137,13 +137,7 @@ func (x *XrayAPI) AddInbound(inbound []byte) error {
 	}
 	client := *x.HandlerServiceClient
 
-	conf := new(conf.InboundDetourConfig)
-	err := json.Unmarshal(inbound, conf)
-	if err != nil {
-		logger.Debug("Failed to unmarshal inbound:", err)
-		return err
-	}
-	config, err := conf.Build()
+	config, err := buildAPIInbound(inbound)
 	if err != nil {
 		logger.Debug("Failed to build inbound Detur:", err)
 		return err

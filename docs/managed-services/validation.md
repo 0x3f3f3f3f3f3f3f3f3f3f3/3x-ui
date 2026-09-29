@@ -2844,3 +2844,153 @@ source reproduction passed byte for byte. Logs:
 The final verification script exited zero. Relative documentation links, Python
 syntax, source-manifest JSON, authored Go formatting and staged whitespace checks
 also passed. No additional public-service or full-frontend acceptance is claimed.
+
+## Shared protocol ownership and private hot insertion (2026-09-29)
+
+This increment prepares public mieru integration; it does not add the public
+protocol selector, service manager, API/UI/export, nodes or deployment. SSH now
+acquires the common database-keyed controller owner. The native mieru adapter
+can hold a second lease without fencing the SSH source or gaining a separate
+rate/flow allowance. Final release closes active flows; stale repeated release
+cannot close a later owner. A copied policy ID in a different database keeps
+independent accounting. Owners must stop their own adapters/watchers before
+releasing the lease, as the SSH manager does.
+
+The initial shared-ownership test failed against the unchanged SSH manager with
+`usage counter lifetime is closed`. After the manager acquired the common lease,
+128 aggregate flows, exact 1.5× fractional charging, peer-stop survival, last-owner
+shutdown, quota-preserving reacquisition and 20 concurrent owners passed.
+A database-isolation mutation caused one database to receive three bytes instead
+of its one byte, and the new isolation test rejected it.
+
+Real `golang.org/x/crypto/ssh` and unmodified official mieru v3.38.0 clients then
+streamed concurrently through both authenticated adapters into loopback TCP
+peers. Both TCP and UDP mieru underlays were exercised. These tests use explicit
+loopback connectors; they are cross-protocol policy evidence, not the public
+Runtime or Xray routing acceptance. Measurement uses actual target upload bytes
+and client download bytes, with 250ms settling, 1.2s sustained windows, rates
+65536/131072 then 131072/65536 B/s, and the preset lower 80% / upper 106% plus
+one 100ms burst bounds. Each live change completes its measurement within 2s.
+The unlimited 300ms baseline must exceed 1048576 B/s in each direction.
+
+The first SQLite run measured unlimited 4.27–5.34 million B/s and shaped
+63,774–131,032 B/s across the configured directions, within those predefined
+bounds. After closing SSH and releasing its manager, the existing mieru flow
+continued at the same configured budget. A temporary overlay restored a separate
+SSH controller with an independent source: the 65536 B/s aggregate case forwarded
+5,059,381 bytes (TCP underlay) or 4,961,077 bytes (UDP underlay) in about 1.2s;
+both cases correctly failed. No tolerance was changed.
+
+Real gRPC hot insertion initially failed at level 4294967295 because the imported
+core JSON builder used uint8; at level 255 it installed a listener but discarded
+the managed flag, causing capability authentication to return EOF. The explicit
+private serializer fixes both. The running-core test verifies authenticated
+readiness, TCP echo, an 8193-byte UDP packet and its actual reply peer, no core
+user counters for managed payload, and continuity of an existing stream before
+and after insertion/removal. The core's required private policy definitions are
+installed at process startup; this is not dynamic policy installation.
+
+Two further overlays removed the managed flag or replaced the private level
+with zero. They failed capability health and the duplicate-counter assertion,
+respectively; the latter exposed 8208 upload plus 8208 download bytes in the core
+user counters. Bypassing private-config validation also failed the rejection
+cases, including public listeners, empty/ambiguous credentials and fallbacks.
+Original-source logs and mutation logs are under
+`/tmp/3x-ui-mieru-{shared-policy,shared-rate,hot-api}-*.log` and
+`/tmp/3x-ui-mieru-public-mutants/`.
+
+Focused `-race -count=2` verification passed 14 top-level executions and 42
+subtest executions across service, routedbridge and xray, with zero skips or
+race reports. Service tests ran on SQLite and the isolated PostgreSQL fixture,
+including both real protocol underlays, in 62.761s; routedbridge took 1.315s and
+xray 1.127s. Log: `/tmp/3x-ui-mieru-public-race.jsonl`. Affected-package lint before
+full regression reported zero issues. Full repository checks follow below.
+
+The first complete repository invocation failed the new UDP peer-stop recovery
+test: 85,197 upload bytes in 1.200s at 131,072 B/s, below the preset 80% bound.
+The other 52 tested packages passed; service failed, and seven packages had no
+tests. That invocation recorded 2,598 passing top-level tests / 4,373 passing
+subtests, one top-level/subtest failure, and 18 top-level / 11 subtest skips.
+Its build, final lint and stock-core steps did not run because the script stopped
+at the failure. Log: `/tmp/3x-ui-mieru-public-full.jsonl`.
+
+Native receiver tests exposed three separate defects. Segment-only window
+credits promised 335,872 payload bytes but retained only 259,776. Queued replies
+could reopen a full receiver using stale credits. Finally, advertising more
+than 64 staging slots lost fragments before the input worker could run.
+Byte-aware credits, send-time window refresh and staging-aware credits each
+passed their deterministic test after failing against the preceding source.
+They were insufficient alone: unchanged real UDP recovery repeated runs still
+failed once in 12, once in 15 and once in 20 runs, respectively. A temporary
+inline-input experiment also failed (one baseline and one recovery failure in
+20 runs); it was not adopted.
+
+A sequence-history diagnostic then reproduced one failure in 30 runs. Missing
+fragment 798 was first dropped by staging and repeatedly retransmitted while
+the reorder buffer was full of later fragments. Those retransmissions were
+discarded, leaving an empty readable queue and 64 later fragments stranded
+behind the gap. The connection and download direction remained active.
+The bounded reorder buffer now retains earlier fragments, evicting the latest
+ones when necessary. Deterministic segment-capacity and byte-capacity cases
+first failed after reading only 65,536/131,072 and 131,072/262,144 bytes; both
+now read the complete ordered prefix with no duplication and no increase in
+their queue payload bounds. The test fixture initially used `io.ReadFull` with
+the native one-shot read deadline, which stalled on its second read; that owned
+test was stopped and the fixture changed to reset its deadline for each read
+before recording the meaningful RED results. No throughput expectation, rate,
+settling period or measurement duration changed.
+
+Diagnostic overlays and RED/GREEN logs are under
+`/tmp/3x-ui-mieru-public-debug/`. Final original-source verification follows.
+
+Priority retention alone still failed one unchanged recovery run in 20. The
+remaining receiver issue was coupling cumulative ACK progress to movement into
+the application queue: a full reader caused already-retained contiguous data to
+remain unacknowledged, provoking repeated retransmission and sender backoff.
+Managed sessions now keep separate acknowledgment and delivery cursors. Wire
+ACK tests first observed next=128 where all 256 contiguous fragments were
+retained; after the change they acknowledge 256 with a zero window. A deliberate
+hole stays at 128 until its retransmission is retained, and neither duplicate
+nor rejected overflow fragments advance the ACK. The existing ordering and
+payload-bound tests remain unchanged and pass. A temporary behavior experiment
+passed all 20 real UDP recovery repetitions in 101.095s before the production
+change; this is recorded as experimental evidence, not final verification.
+
+Private serializer review also added a duplicate-password rejection case:
+separate emails sharing one Trojan credential were previously accepted. That
+case failed before validation and passed after rejecting duplicate passwords.
+Logs: `/tmp/3x-ui-mieru-public-debug/{ack,duplicate-credential}-{red,green}.log`.
+
+Final full native `-race -count=1` verification passed 100 top-level tests and
+1,865 subtests, with no skips or race reports: adapter 118.237s and copied native
+package 31.103s. Final shared-policy/private-core `-race -count=2` passed 14
+top-level executions and 44 subtest executions, no skips or races: service
+62.672s, routedbridge 1.305s, xray 1.127s. These used SQLite, the isolated
+PostgreSQL fixture, real SSH/official mieru clients and the pinned managed core.
+Source reproduction passed byte for byte before these runs.
+
+The final original-source UDP recovery test passed all 20 repetitions in
+100.942s. Unlimited upload/download baselines measured 4,488,052–5,023,575 B/s.
+After stopping SSH, mieru upload measured 125,493–125,599 B/s at 131,072 B/s;
+download measured 63,768–69,279 B/s at 65,536 B/s. Every sample met the unchanged
+80% lower / 106% plus 100ms burst upper bounds. Logs:
+`/tmp/3x-ui-mieru-public-final-{native-race,shared-race}.jsonl` and
+`/tmp/3x-ui-mieru-public-final-recovery.log`. Full-root/build/static/stock-core
+results are recorded below when the remaining checks finish.
+
+The final complete root invocation passed all 53 tested packages: 2,604 top-level
+and 4,379 subtests passed, with no failures. It retained exactly the prior set of
+18 top-level / 11 subtest skips; seven other packages have no tests. The complete
+service package passed in 219.183s, including the formerly failing UDP recovery
+case and SQLite/PostgreSQL management regressions. This successful complete
+invocation supersedes neither the recorded first failure nor the experimental
+runs; all are retained as separate evidence.
+
+`go build ./...` passed. Final lint over mieru, xray, routedbridge and service
+reported zero issues. Explicit rejection using the separate stock core passed
+before any target access (test 0.12s, package 0.160s), with no skips. The frozen
+`/tmp/3x-ui-mieru-public-final-checks.sh` exited zero. Full JSON, build, lint and
+stock-core logs use `/tmp/3x-ui-mieru-public-final-{full,build,lint,stock}` with
+`.jsonl` for full tests and `.log` for the other commands. Relative document links
+and whitespace checks also passed. No frontend or public mieru completion is
+claimed by these internal prerequisites, and no database schema changed here.

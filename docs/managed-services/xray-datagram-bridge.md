@@ -109,3 +109,18 @@ contain an actual IP; missing metadata closes the flow. The client rejects
 malformed or oversized response frames and closes their stream. All writes
 carry one complete packet, including an empty packet. These internal results
 do not enable a public service or select the new core in Runtime.
+
+The panel's gRPC inbound builder now recognizes the private managed Trojan
+settings, retains uint32 client levels and serializes protobuf managed field 3
+from pinned patch 0002. It accepts only literal loopback listeners and explicit,
+unique identities with nonempty credentials and levels; fallback or unknown
+private settings are rejected. Ordinary inbounds keep the existing builder.
+Actual hot-add tests preserve authenticated health, TCP/UDP payload, actual UDP
+peer metadata, absent duplicate user counters and an existing core stream
+through addition/removal. Both level 255 and 4294967295 are exercised.
+
+The test core starts with the required private policy definitions. The gRPC
+serializer does not install policy definitions or override the panel's decision
+to restart for a policy/routing change. Successful gRPC insertion alone is not
+readiness: the runtime still has to verify `ManagedBridge.Check` before opening
+a public listener. Full public mieru Runtime activation remains outstanding.
