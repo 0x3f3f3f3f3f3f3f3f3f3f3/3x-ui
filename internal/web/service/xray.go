@@ -1599,7 +1599,7 @@ func (s *XrayService) GetXrayAPIPort() int {
 
 func (s *XrayService) GetXrayAPIEndpoint() (string, error) {
 	process := currentXrayProcess()
-	if process == nil || !process.IsRunning() {
+	if process == nil || !process.IsControlReady() {
 		return "", errors.New("local xray is not running")
 	}
 	return process.GetAPIEndpoint()

@@ -2,9 +2,9 @@ name: Custom core
 on:
   push:
     branches: [feature/custom-xray-unified-policy]
-    paths: ["core/**", "internal/database/**", "internal/web/service/client_policy*", "internal/xray/client_policy*", "tools/build-custom-core.sh", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
+    paths: ["core/**", "internal/database/**", "internal/web/service/client_policy*", "internal/web/service/xray.go", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
   pull_request:
-    paths: ["core/**", "internal/database/**", "internal/web/service/client_policy*", "internal/xray/client_policy*", "tools/build-custom-core.sh", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
+    paths: ["core/**", "internal/database/**", "internal/web/service/client_policy*", "internal/web/service/xray.go", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
 permissions:
   contents: read
 jobs:
@@ -30,6 +30,18 @@ jobs:
         run: make dist-stub && go build ./...
       - name: Panel policy SQLite and adapter race checks
         run: go test -race ./internal/database ./internal/web/service ./internal/xray -run 'TestClientStableIdentity|TestClientPolicyLedger|TestClientPolicyAdapter' -count=1
+      - name: Build pinned unmodified core for rejection regression
+        run: |
+          upstream_core_dir="$(go mod download -json github.com/xtls/xray-core@v1.260327.1-0.20260908222543-52a412d9e2f5 | jq -er .Dir)"
+          go -C "$upstream_core_dir" build -buildvcs=false -o "$GITHUB_WORKSPACE/build/upstream-xray" ./main
+      - name: Runtime transport and negotiated process activation
+        run: |
+          set -o pipefail
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" XRAY_UPSTREAM_E2E_BINARY="$PWD/build/upstream-xray" \
+            go test -race ./internal/xray ./internal/web/runtime -run 'TestManagedProcess|TestLocalRuntimeUsesPrivateControl|TestXrayAPI_E2E|TestExplicitControlEndpoint|TestPrivateControl' -count=1 -v | tee /tmp/policy-process.log
+          for test in TestManagedProcessNegotiatesAndSeedsBeforeOpeningListeners TestManagedProcessRejectsUnmodifiedCoreBeforeBusinessTraffic TestLocalRuntimeUsesPrivateControlForHandlersRoutingAndStats; do
+            grep -q -- "^--- PASS: $test " /tmp/policy-process.log
+          done
   policy-postgres:
     runs-on: ubuntu-latest
     services:

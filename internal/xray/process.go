@@ -196,6 +196,7 @@ type process struct {
 	startTime  time.Time
 
 	intentionalStop atomic.Bool
+	controlReady    atomic.Bool
 }
 
 // OnlineAPISupport describes whether the running Xray core implements the
@@ -592,6 +593,18 @@ func (p *process) refreshVersion() {
 
 // Start launches the Xray process with the current configuration.
 func (p *process) Start() (err error) {
+	if len(p.config.ClientPolicy) > 0 {
+		return fmt.Errorf("%w: managed configuration requires negotiated activation", ErrClientPolicyCapability)
+	}
+	if err = p.startConfig(p.config); err == nil {
+		p.controlReady.Store(true)
+	}
+	return err
+}
+
+func (p *process) IsControlReady() bool { return p.controlReady.Load() && p.IsRunning() }
+
+func (p *process) startConfig(startConfig *Config) (err error) {
 	if p.IsRunning() {
 		return errors.New("xray is already running")
 	}
@@ -603,7 +616,7 @@ func (p *process) Start() (err error) {
 		}
 	}()
 
-	data, err := json.MarshalIndent(p.config, "", "  ")
+	data, err := json.MarshalIndent(startConfig, "", "  ")
 	if err != nil {
 		return common.NewErrorf("Failed to generate XRAY configuration files: %v", err)
 	}
@@ -740,6 +753,7 @@ func (p *process) waitForCommand(cmd *exec.Cmd, done chan struct{}) {
 
 // Stop terminates the running Xray process.
 func (p *process) Stop() error {
+	p.controlReady.Store(false)
 	if !p.IsRunning() {
 		return errors.New("xray is not running")
 	}

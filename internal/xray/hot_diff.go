@@ -83,6 +83,7 @@ func ComputeHotDiff(oldCfg, newCfg *Config) (*HotDiff, bool) {
 		old, new json_util.RawMessage
 	}{
 		{"log", oldCfg.LogConfig, newCfg.LogConfig},
+		{"clientPolicy", oldCfg.ClientPolicy, newCfg.ClientPolicy},
 		{"dns", oldCfg.DNSConfig, newCfg.DNSConfig},
 		{"transport", oldCfg.Transport, newCfg.Transport},
 		{"policy", oldCfg.Policy, newCfg.Policy},

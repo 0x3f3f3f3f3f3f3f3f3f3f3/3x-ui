@@ -138,3 +138,19 @@ This command passed (xray 3.047 s, runtime 1.296 s), including the actual binary
 `TestFailedCoreStartReleasesListenersAndKeepsCommittedPolicy` first reproduced a leaked TCP listener, a held durable-state lock and a falsely running instance after both a real Unix control-address conflict and an injected final-feature failure. Closing all features repaired the resource leaks but the final-feature case still persisted rejected version 2. Deferring the policy commit until the remaining features succeed repaired that second failure. Recovery preserves version 1, enabled state, multiplier 1 and the original 7 raw-upload / 7 billed bytes. The conflicting Unix socket owned by the test remains usable; the failed core's own socket is removed.
 
 The extra multiple-committer case fails when the single-barrier guard is temporarily removed. Restored code passes the focused race regression. The core/policy/control scoped race suite and focused vet passed. The full `go test -p=1 -shuffle=on -count=1 ./...` managed-core suite passed, including the scenarios package in 337.015 seconds. No test thresholds were changed.
+
+## Negotiated panel process startup — 2026-09-29
+
+`TestManagedProcessNegotiatesAndSeedsBeforeOpeningListeners` first failed because `StartManaged` did not exist. The implemented path rejects ordinary startup of a managed configuration and keeps the business listener closed during usage preparation. A real child starts with 100 historical download/billed bytes; a 256-byte echo yields exactly 256 upload / 356 download / 612 billed bytes. A preparation error and a second-listener bind conflict both stop the child and release the first listener. Runtime readiness stays false until successful activation.
+
+`TestManagedProcessRejectsUnmodifiedCoreBeforeBusinessTraffic` runs the actual unmodified upstream binary built from module version `v1.260327.1-0.20260908222543-52a412d9e2f5` without changing its source. Managed control negotiation fails within the test deadline, the child stops, and the managed business port remains closed. This is a real unsupported-core rejection test, separate from the gRPC capability fixtures.
+
+```sh
+XRAY_E2E_BINARY="$PWD/build/custom-xray" XRAY_UPSTREAM_E2E_BINARY=/path/to/upstream-xray \
+  go test -race ./internal/xray ./internal/web/runtime \
+  -run 'TestManagedProcess|TestLocalRuntimeUsesPrivateControl' -count=1 -v
+```
+
+With the rebuilt custom binary at core-source commit `26ccc460`, this passed (xray 2.819 s, Runtime 1.460 s). The broader Runtime/API race command including the existing real TCP API regression also passed. Full panel `GOFLAGS=-p=1 GOTOOLCHAIN=go1.27.1 make test-go`, focused vet and the custom-core build passed. CI now builds the pinned upstream binary and requires explicit PASS lines for these process tests; an unset binary environment variable and its resulting skip do not count as evidence.
+
+Production DB cutover, automatic state-file provisioning, policy reconciliation, durable polling/statistics projection and UI activation remain open. These process tests exercise the real executable and preparation boundary, not that unfinished whole-panel flow.

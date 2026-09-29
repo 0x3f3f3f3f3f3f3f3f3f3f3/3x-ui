@@ -16,6 +16,7 @@ type Config struct {
 	OutboundConfigs  json_util.RawMessage `json:"outbounds"`
 	Transport        json_util.RawMessage `json:"transport,omitempty"`
 	Policy           json_util.RawMessage `json:"policy"`
+	ClientPolicy     json_util.RawMessage `json:"clientPolicy,omitempty"`
 	API              json_util.RawMessage `json:"api"`
 	Stats            json_util.RawMessage `json:"stats"`
 	Reverse          json_util.RawMessage `json:"reverse,omitempty"`
@@ -53,6 +54,9 @@ func (c *Config) Equals(other *Config) bool {
 		return false
 	}
 	if !bytes.Equal(c.Policy, other.Policy) {
+		return false
+	}
+	if !bytes.Equal(c.ClientPolicy, other.ClientPolicy) {
 		return false
 	}
 	if !bytes.Equal(c.API, other.API) {
