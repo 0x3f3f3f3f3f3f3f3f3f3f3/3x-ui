@@ -12,13 +12,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
-	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 	"github.com/xtls/xray-core/app/clientpolicy"
 	_ "github.com/xtls/xray-core/app/proxyman/inbound"
 	_ "github.com/xtls/xray-core/app/proxyman/outbound"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/infra/conf"
+
+	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
+	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
 
 func TestLocalRuntimeUsesPrivateControlForHandlersRoutingAndStats(t *testing.T) {
@@ -87,8 +88,10 @@ func TestLocalRuntimeUsesPrivateControlForHandlersRoutingAndStats(t *testing.T) 
 	}
 	port := probe.Addr().(*net.TCPAddr).Port
 	_ = probe.Close()
-	ib := &model.Inbound{Tag: "owned", Protocol: model.Tunnel, Listen: "127.0.0.1", Port: port, Enable: true,
-		Settings: fmt.Sprintf(`{"network":"tcp","address":"127.0.0.1","port":%d,"clientId":"owner"}`, target.Addr().(*net.TCPAddr).Port)}
+	ib := &model.Inbound{
+		Tag: "owned", Protocol: model.Tunnel, Listen: "127.0.0.1", Port: port, Enable: true,
+		Settings: fmt.Sprintf(`{"network":"tcp","address":"127.0.0.1","port":%d,"clientId":"owner"}`, target.Addr().(*net.TCPAddr).Port),
+	}
 	if err := local.AddInbound(ctx, ib); err != nil {
 		t.Fatal(err)
 	}

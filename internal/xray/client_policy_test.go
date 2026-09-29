@@ -34,7 +34,7 @@ func capabilitySocket(t *testing.T, response *policycommand.Capabilities) string
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(path, 0600); err != nil {
+	if err := os.Chmod(path, 0o600); err != nil {
 		listener.Close()
 		t.Fatal(err)
 	}

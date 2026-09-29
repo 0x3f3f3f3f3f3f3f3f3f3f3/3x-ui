@@ -6,10 +6,11 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
-	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
+	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
 
 func TestClientStableIdentityMigration(t *testing.T) {

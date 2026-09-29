@@ -7,9 +7,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/xtls/xray-core/app/clientpolicy"
+
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
-	"github.com/xtls/xray-core/app/clientpolicy"
 )
 
 func TestClientPolicyStateProvisioningPreservesUsageAndRejectsLostActiveStore(t *testing.T) {
@@ -19,7 +20,7 @@ func TestClientPolicyStateProvisioningPreservesUsageAndRejectsLostActiveStore(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	for path, want := range map[string]os.FileMode{dir: 0700, config.StateFile: 0600} {
+	for path, want := range map[string]os.FileMode{dir: 0o700, config.StateFile: 0o600} {
 		info, err := os.Stat(path)
 		if err != nil || info.Mode().Perm() != want {
 			t.Fatalf("private state permissions %s: %v, %v", path, info, err)
@@ -69,11 +70,11 @@ func TestClientPolicyStateProvisioningPreservesUsageAndRejectsLostActiveStore(t 
 func TestClientPolicyStateProvisioningRetriesPendingCreation(t *testing.T) {
 	setupPolicyLedgerDB(t)
 	dir := filepath.Join(t.TempDir(), "managed")
-	if err := os.Mkdir(dir, 0700); err != nil {
+	if err := os.Mkdir(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	state := filepath.Join(dir, "state.db")
-	if err := os.Mkdir(state, 0700); err != nil {
+	if err := os.Mkdir(state, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := EnsureLocalClientPolicyState(dir); !errors.Is(err, clientpolicy.ErrStorage) {

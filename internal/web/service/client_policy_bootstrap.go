@@ -1,9 +1,10 @@
 package service
 
 import (
-	"github.com/mhsanaei/3x-ui/v3/internal/web/runtime"
 	command "github.com/xtls/xray-core/app/clientpolicy/command"
 	"github.com/xtls/xray-core/infra/conf"
+
+	"github.com/mhsanaei/3x-ui/v3/internal/web/runtime"
 )
 
 // Preparation runs while the process has no business listeners; existing committed seeds are immutable.

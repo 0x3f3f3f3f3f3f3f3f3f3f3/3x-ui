@@ -7,11 +7,12 @@ import (
 	"path/filepath"
 
 	"github.com/google/uuid"
-	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/xtls/xray-core/app/clientpolicy"
 	"github.com/xtls/xray-core/infra/conf"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
+	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 )
 
 var ErrClientPolicyStateMissing = errors.New("previously activated client policy state is missing; restore its durable state before activation")
@@ -23,11 +24,11 @@ func EnsureLocalClientPolicyState(dir string) (*conf.ClientPolicyConfig, error) 
 	if err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("%w: private state directory: %w", clientpolicy.ErrStorage, err)
 	}
 	info, err := os.Lstat(dir)
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+	if err != nil || !info.IsDir() || info.Mode().Perm()&0o077 != 0 {
 		return nil, fmt.Errorf("%w: state directory must be private and cannot be a symbolic link", clientpolicy.ErrStorage)
 	}
 	var source model.ClientPolicySource
@@ -64,7 +65,7 @@ func EnsureLocalClientPolicyState(dir string) (*conf.ClientPolicyConfig, error) 
 		if err != nil {
 			return fmt.Errorf("%w: inspect state: %w", clientpolicy.ErrStorage, err)
 		}
-		if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+		if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
 			return fmt.Errorf("%w: state must be a private regular file", clientpolicy.ErrStorage)
 		}
 		return nil

@@ -82,10 +82,12 @@ func (p *Process) StartManaged(ctx context.Context, prepare func(context.Context
 		if _, err := policyAPI.GetClient(ctx, policy.ClientID); err != nil {
 			return fmt.Errorf("managed client was not prepared: %w", err)
 		}
-		policies = append(policies, &clientpolicy.PolicyConfig{ClientId: policy.ClientID, Version: policy.Version,
+		policies = append(policies, &clientpolicy.PolicyConfig{
+			ClientId: policy.ClientID, Version: policy.Version,
 			Enabled: policy.Enabled, MultiplierMicros: policy.Multiplier, QuotaBytes: policy.QuotaBytes,
 			UploadBytesPerSecond: policy.UploadRate, DownloadBytesPerSecond: policy.DownloadRate,
-			BurstBytes: policy.BurstBytes, ExpiresAt: policy.ExpiresAt})
+			BurstBytes: policy.BurstBytes, ExpiresAt: policy.ExpiresAt,
+		})
 	}
 	for len(policies) > 0 {
 		n := min(len(policies), 1000)
@@ -128,7 +130,7 @@ func (p *Process) waitForPolicy(ctx context.Context, socket, instanceID string) 
 		}
 		select {
 		case <-ctx.Done():
-			return nil, fmt.Errorf("managed core negotiation: %w: %v", ctx.Err(), err)
+			return nil, fmt.Errorf("managed core negotiation: %w: %w", ctx.Err(), err)
 		case <-time.After(20 * time.Millisecond):
 		}
 	}

@@ -46,7 +46,7 @@ func TestPrivateControlRejectsPublicSocketAndSymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer listener.Close()
-	for _, permissions := range []struct{ dir, socket os.FileMode }{{0755, 0600}, {0700, 0660}} {
+	for _, permissions := range []struct{ dir, socket os.FileMode }{{0o755, 0o600}, {0o700, 0o660}} {
 		if err := os.Chmod(dir, permissions.dir); err != nil {
 			t.Fatal(err)
 		}
@@ -59,7 +59,7 @@ func TestPrivateControlRejectsPublicSocketAndSymlink(t *testing.T) {
 			t.Fatalf("accepted unsafe socket permissions %o/%o: %v", permissions.dir, permissions.socket, err)
 		}
 	}
-	if err := os.Chmod(socket, 0600); err != nil {
+	if err := os.Chmod(socket, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	link := filepath.Join(dir, "link.sock")

@@ -5,11 +5,12 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/testpg"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 func TestClientStableIdentityMigrationPostgres(t *testing.T) {

@@ -22,13 +22,13 @@ func dialLocalControl(endpoint string) (*grpc.ClientConn, error) {
 	if filepath.IsAbs(endpoint) {
 		network = "unix"
 		if err := commander.ValidatePrivateUnixSocket(endpoint); err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrInvalidAPIEndpoint, err)
+			return nil, fmt.Errorf("%w: %w", ErrInvalidAPIEndpoint, err)
 		}
 		info, err := os.Lstat(endpoint)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrInvalidAPIEndpoint, err)
 		}
-		if info.Mode()&os.ModeSocket == 0 || info.Mode().Perm()&0077 != 0 {
+		if info.Mode()&os.ModeSocket == 0 || info.Mode().Perm()&0o077 != 0 {
 			return nil, fmt.Errorf("%w: socket must be private", ErrInvalidAPIEndpoint)
 		}
 	} else {
@@ -59,7 +59,7 @@ func (p *Process) GetAPIEndpoint() (string, error) {
 	}
 	if len(p.config.API) != 0 {
 		if err := json.Unmarshal(p.config.API, &api); err != nil {
-			return "", fmt.Errorf("%w: %v", ErrInvalidAPIEndpoint, err)
+			return "", fmt.Errorf("%w: %w", ErrInvalidAPIEndpoint, err)
 		}
 	}
 	if api.Listen != "" {
