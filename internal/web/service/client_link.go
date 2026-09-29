@@ -102,7 +102,12 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 		return err
 	}
 	if tx == nil {
-		tx = database.GetDB()
+		return runSerializedTx(func(tx *gorm.DB) error {
+			return s.syncInboundClients(tx, inboundId, clients, detachEmails, prune)
+		})
+	}
+	if err := validateTunnelOwnerLinks(tx, inboundId, clients, detachEmails, prune); err != nil {
+		return err
 	}
 
 	emails := make([]string, 0, len(clients))

@@ -246,3 +246,11 @@ go test -race -p=1 ./internal/xray ./internal/web/runtime \
 The final scoped core race run passed (policy 4.911 s, API 1.039 s, dispatcher 1.028 s, config 1.238 s, UDP 2.027 s, real policy traffic 11.148 s). The final adapter/Runtime race checks passed in 1.208 s / 1.342 s. Focused core vet and panel lint passed with zero lint issues. The complete serial, shuffled core suite passed, including scenarios in 353.533 s. The complete panel suite passed with the current custom binary and unmodified upstream binary enabled (service 67.008 s, Xray 14.660 s). No frontend or SQL schema changed in this increment.
 
 Ordinary panel identity compilation/activation, Vision, remaining account adapters and complete account lifecycle are not established by these tests.
+
+## Tunnel ownership through existing client services — 2026-09-29
+
+The original service tests failed in three ways: attaching a credential-free Tunnel owner returned `empty client ID`; full sync, delta and add accepted a second owner; two concurrent attachment requests both succeeded. The checks now lock the Tunnel row and validate the resulting client_inbounds membership in the same transaction as the mutation. Disabled clients still own their listeners. A failed request preserves the previous settings, client record and accounting rows.
+
+A further failing test reproduced the same credential assumption during owner rename. Rename now retains the record ID and stable client ID across two listeners. Detaching one listener preserves its sibling. The create/replacement regression also fails when the Tunnel credential exemption is removed, and verifies explicit reassignment retains the old account while assigning a different stable identity.
+
+The restored SQLite race checks passed in 3.770 s; real PostgreSQL checks passed in 11.290 s, with separate schemas per test. Panel lint passed with zero issues. The complete shuffled, serial panel regression passed with the custom and unmodified core binaries enabled (service 58.594 s, Xray 14.647 s). These tests establish service/database ownership; they do not establish live policy activation, migration of unowned legacy listeners or the final UI flow.

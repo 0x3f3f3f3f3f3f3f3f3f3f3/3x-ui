@@ -1192,6 +1192,8 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	// Secure client ID
 	for _, client := range clients {
 		switch inbound.Protocol {
+		case model.Tunnel:
+			// The listener owns the account; there is no protocol credential.
 		case "trojan":
 			if client.Password == "" {
 				return inbound, false, common.NewError("empty client ID")

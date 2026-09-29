@@ -93,6 +93,7 @@ Files: `internal/database/{db.go,model/*}`, `internal/web/{service,controller,ru
 
 - [ ] Migrate SQLite/PostgreSQL legacy clients to stable IDs, preserve usage, default multiplier 1/unlimited rates; test rename/rotation/import.
 - [ ] Bind existing client records to forwarding rules, node, ACL, outbounds and exclusive listener resources.
+- [x] Scoped Tunnel attachment ownership: credential-free create/attach/rename, single-owner transactional sync/delta validation, concurrent attachment exclusion and explicit reassignment preserve stable client records.
 - [ ] Extend Runtime lifecycle, batch operations and state/reason/statistics UI, API registry/codegen and all locale keys (English/Chinese translations).
 - [ ] Test wildcard/dual-stack/control-port collision, reassignment, reset/renew restrictions and active connection termination.
 - [x] Core prerequisite: drain established TCP/UDP/Unix connections on inbound removal; test same-port Tunnel reassignment and unaffected sibling listeners.
@@ -181,3 +182,5 @@ Task 6 policy-edit checkpoint: optional settings survive legacy client edits and
 Task 6 collection checkpoint: the existing traffic polling entrypoint now collects committed ledger pages through Runtime and resumes from the SQL cursor after failures. Cursor validation occurs before checkpointing, and the core avoids rewriting unchanged clients. Automatic owner/config activation and the legacy raw/billed statistics, reset and expiry cutover still remain open.
 
 Task 5 partial checkpoint: four authenticated account adapters now preserve server-side client identity and advertise individual capabilities. Handler mutations verify private transport and required capabilities before changes. Tests cover TCP/UDP/Mux payloads sharing a Tunnel policy, a live shared rate change, exact historical billing and Runtime credential rotation. Vision, the other account families, full panel-generated identity binding, account deletion/bulk lifecycle and production activation remain open. The Shadowsocks 2022 audit found mutable table/index and authentication-context lifetime concerns; managed 2022 is rejected until its adapter is repaired and verified.
+
+Task 6 owner checkpoint: the existing client_inbounds relation now accepts a credential-free Tunnel owner and rejects a second distinct client, including a disabled existing owner. SQLite/PostgreSQL service tests cover normal create/attach/rename/detach/replacement and failed/concurrent mutations. This establishes database ownership, not automatic managed configuration, legacy unowned-rule migration, live service reconciliation, ACL or complete UI support.
