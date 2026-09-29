@@ -1,5 +1,6 @@
 import { afterEach, vi } from 'vitest';
-import { act, cleanup } from '@testing-library/react';
+import { act, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { message } from 'antd';
 import i18next from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
@@ -81,9 +82,20 @@ if (!i18next.isInitialized) {
 }
 
 afterEach(async () => {
-  // Async act drains React's pending work before Vitest removes window.
+  // Static Ant messages own a separate root and RAF timer outside RTL's cleanup.
   await act(async () => {
+    message.destroy();
     cleanup();
+  });
+  await waitFor(() => {
+    // JSDOM uses prefixed motion events but never emits CSS animation completion.
+    document.querySelectorAll('.ant-message-fade-leave-active').forEach((notice) => {
+      fireEvent.animationEnd(notice);
+      fireEvent(notice, new Event('webkitAnimationEnd', { bubbles: true }));
+    });
+    if (document.querySelector('.ant-message-notice')) {
+      throw new Error('Ant message animation is still active after test cleanup');
+    }
   });
   document.body.innerHTML = '';
 });
