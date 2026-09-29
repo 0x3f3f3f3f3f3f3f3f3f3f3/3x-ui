@@ -33,6 +33,7 @@ export const ClientPolicyAccountingSchema = z.object({
   remaining: policyBilledBytes.nullable(),
   appliedVersion: policyWholeBytes,
   desiredVersion: policyWholeBytes,
+  policyPending: z.boolean().optional().default(false),
   resetPending: z.boolean(),
 });
 

@@ -90,27 +90,35 @@ func desiredClientPolicy(client model.ClientRecord) (clientpolicy.Policy, error)
 	return policy, policy.Validate()
 }
 
-func prepareClientPolicyRecord(tx *gorm.DB, client model.ClientRecord, reset *model.ClientPolicyReset) (clientpolicy.Policy, error) {
+func fingerprintClientPolicy(client model.ClientRecord, reset *model.ClientPolicyReset) (clientpolicy.Policy, string, error) {
 	policy, err := desiredClientPolicy(client)
 	if err != nil {
-		return policy, err
+		return policy, "", err
 	}
 	if reset != nil {
 		if reset.Id != 0 && (reset.ClientID != client.StableID || reset.PolicyVersion > client.DesiredPolicyVersion) {
-			return policy, ErrClientPolicyLedger
+			return policy, "", ErrClientPolicyLedger
 		}
 		if err := validateClientPolicyReset(reset); err != nil {
-			return policy, err
+			return policy, "", err
 		}
 		policy.QuotaBaselineBytes = uint64(reset.BilledBytes + reset.UncertainBytes)
 		policy.QuotaBaselineRemainder = uint64(reset.Remainder)
 	}
 	raw, err := json.Marshal(policy)
 	if err != nil {
-		return policy, err
+		return policy, "", err
 	}
 	hash := sha256.Sum256(raw)
 	fingerprint := hex.EncodeToString(hash[:])
+	return policy, fingerprint, nil
+}
+
+func prepareClientPolicyRecord(tx *gorm.DB, client model.ClientRecord, reset *model.ClientPolicyReset) (clientpolicy.Policy, error) {
+	policy, fingerprint, err := fingerprintClientPolicy(client, reset)
+	if err != nil {
+		return policy, err
+	}
 	version := client.DesiredPolicyVersion
 	if version < 0 || version == 0 && client.PolicyFingerprint != "" || version > 0 && client.PolicyFingerprint == "" {
 		return policy, ErrClientPolicyLedger

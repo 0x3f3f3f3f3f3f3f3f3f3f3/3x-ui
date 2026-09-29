@@ -8,6 +8,7 @@ export const pendingAccounting: ClientPolicyAccounting = {
   remaining: '80',
   appliedVersion: '2',
   desiredVersion: '3',
+  policyPending: true,
   resetPending: true,
 };
 
@@ -16,5 +17,6 @@ export const acknowledgedAccounting: ClientPolicyAccounting = {
   period: { upload: '0', download: '0', billed: '0', uncertain: '0' },
   remaining: '100',
   appliedVersion: '3',
+  policyPending: false,
   resetPending: false,
 };

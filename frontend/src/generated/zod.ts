@@ -485,6 +485,7 @@ export const ClientPolicyAccountingSchema = z.object({
   desiredVersion: z.string(),
   lifetime: z.lazy(() => ClientPolicyUsageSchema),
   period: z.lazy(() => ClientPolicyUsageSchema),
+  policyPending: z.boolean(),
   quotaBytes: z.string(),
   remaining: z.string().nullable().optional(),
   resetPending: z.boolean(),

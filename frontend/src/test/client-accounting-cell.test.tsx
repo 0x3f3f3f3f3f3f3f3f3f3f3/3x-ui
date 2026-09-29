@@ -3,11 +3,32 @@ import { describe, expect, it } from 'vitest';
 
 import ClientTrafficCell from '@/components/clients/ClientTrafficCell';
 import { ThemeProvider } from '@/hooks/useTheme';
-import type { ClientPolicyAccounting } from '@/schemas/client';
+import { ClientPolicyAccountingSchema, type ClientPolicyAccounting } from '@/schemas/client';
 import InboundInfoModal from '@/pages/inbounds/info/InboundInfoModal';
 import { acknowledgedAccounting, pendingAccounting } from './fixtures/client-policy-accounting';
 
 describe('confirmed client accounting', () => {
+  it('shows saved policy changes awaiting compilation even when version numbers match', () => {
+    const cell = (policyPending: boolean) => (
+      <ThemeProvider>
+        <ClientTrafficCell
+          accounting={ClientPolicyAccountingSchema.parse({
+            ...acknowledgedAccounting,
+            policyPending,
+          })}
+        />
+      </ThemeProvider>
+    );
+    const view = render(cell(true));
+    expect(
+      screen
+        .getByRole('status', { name: 'Policy awaiting core confirmation' })
+        .getAttribute('title'),
+    ).toBe('Policy awaiting core confirmation');
+    view.rerender(cell(false));
+    expect(screen.queryByRole('status', { name: 'Policy awaiting core confirmation' })).toBeNull();
+  });
+
   it('keeps the configured quota in legacy details when their statistics lag', async () => {
     render(
       <ThemeProvider>

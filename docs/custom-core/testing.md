@@ -994,3 +994,31 @@ require all five automatic-activation tests.
 Final root checks pass: full panel Go suite (314.69 s), lint with zero issues
 (32.64 s), and panel build (19.19 s). Source review, Go formatting, workflow
 YAML and all 19 embedded shell blocks pass.
+
+
+Pending-policy regressions reproduce saved-but-unprepared upload/download rate,
+multiplier, quota, enabled-state and expiry changes with equal acknowledged and
+prepared versions. A real managed-client disable with injected compiler failure
+reproduces the same missing indication while stopping old access. The corrected
+projection marks pending before preparation, through version acknowledgement,
+and during reset acknowledgement, then clears it without changing lifetime
+usage. Renaming an account retains confirmed accounting without inventing an
+enforcement change. SQLite focused race passes (28.483 s), PostgreSQL focused
+race passes (121.284 s), and the real traffic component regression changes from
+a missing indicator to four passing component tests. Generated schemas and API
+documentation include the new boolean.
+
+The first combined root gate exposed two earlier fixture races. The legacy job
+fixture captured inbound downlink before the transport counter completed; it now
+waits for all six counters, including the fixed 26/2-byte IPv4 VLESS headers. The
+original job shuffle (1790723776738892903) passes five race repetitions (47.003 s).
+The bootstrap fixture deferred a promoted inner Stop method, allowing the outer
+process finalizer to stop its restarted child. Forced GC reproduced the missing
+control socket; cleanup now retains the outer owner. The original service shuffle
+(1790723842097750927) passes five forced-GC race repetitions (11.446 s).
+The concurrent frontend gate passed 1757 tests but hit the default 5-second limit
+in three Happ routing-editor cases and the bulk calendar renewal case. The separate
+serial rerun passes every frontend check, including all 178 files / 1781 tests
+(308.66 s), typecheck, lint, format, production build and Storybook. Complete Go
+checks then pass: shuffled panel suite (273.23 s), lint with zero issues (25.73 s),
+and build (8.30 s). No timeouts, assertions or test diagnostics were suppressed.

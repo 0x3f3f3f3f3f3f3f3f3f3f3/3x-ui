@@ -103,7 +103,24 @@ export const PendingAccounting: Story = {
       remaining: '8053063679.5',
       appliedVersion: '2',
       desiredVersion: '3',
+      policyPending: true,
       resetPending: true,
+    },
+  },
+};
+
+export const SavedPolicyAwaitingCompilation: Story = {
+  args: {
+    accounting: {
+      clientId: 'e18c9a96-71bf-48d4-933f-8b9a46d4290c',
+      lifetime: { upload: '100', download: '200', billed: '300', uncertain: '0' },
+      period: { upload: '100', download: '200', billed: '300', uncertain: '0' },
+      quotaBytes: '1000',
+      remaining: '700',
+      appliedVersion: '2',
+      desiredVersion: '2',
+      policyPending: true,
+      resetPending: false,
     },
   },
 };

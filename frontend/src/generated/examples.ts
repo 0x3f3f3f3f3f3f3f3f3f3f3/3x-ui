@@ -513,6 +513,7 @@ export const EXAMPLES: Record<string, unknown> = {
       "uncertain": "0",
       "upload": "1048576"
     },
+    "policyPending": false,
     "quotaBytes": "10737418240",
     "remaining": "1.5",
     "resetPending": false

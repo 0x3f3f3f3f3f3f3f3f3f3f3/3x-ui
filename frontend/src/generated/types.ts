@@ -461,6 +461,7 @@ export interface ClientPolicyAccounting {
   desiredVersion: string;
   lifetime: ClientPolicyUsage;
   period: ClientPolicyUsage;
+  policyPending: boolean;
   quotaBytes: string;
   remaining?: string | null;
   resetPending: boolean;

@@ -493,3 +493,21 @@ child queues activation without starting a business process. Existing managed
 postcommit failures retain their fail-closed behavior. Cold owned Tunnel startup
 uses the managed identity compiler, including when its policy fields are omitted.
 This does not make existing unmetered legacy Tunnel history attributable.
+
+
+### Pending saved enforcement changes
+
+Confirmed accounting includes `policyPending`. It is true when the latest ledger
+acknowledgement trails the prepared policy version, or when the client's saved
+enforcement fields and latest reset no longer match the prepared fingerprint.
+The latter catches a saved edit whose candidate compilation fails before version
+preparation. Reading statistics does not reserve a new version or alter usage.
+The canonical fingerprint calculation is shared with policy preparation.
+
+The traffic cell shows the existing pending-policy indicator for either case,
+with reset confirmation retaining priority. Older responses can still use the
+version comparison. The versions report the last committed acknowledgement and
+prepared desired version; equal numbers alone do not imply the latest saved edit
+was applied. This projection requires an existing confirmed ledger and describes
+enforcement fields, not live process health, first activation without a receipt,
+credential synchronization or complete listener configuration state.

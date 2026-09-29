@@ -343,3 +343,12 @@ mandatory. Real traffic, refusal, stopped state and selector boundaries pass
 SQLite full-service race and PostgreSQL focused race. Complete UI application
 state, general legacy Tunnel migration, remaining protocols and multi-node
 budgets are still unfinished.
+
+
+Saved enforcement status checkpoint: existing confirmed accounting now compares
+the current saved policy/reset fingerprint as well as acknowledgement versions.
+This prevents pre-preparation compiler failures from concealing pending changes
+in the traffic cell. It preserves exact historical usage and does not claim live
+health or first activation status where no confirmed receipt exists. Ordinary
+client policy editing, bulk editing and complete activation status remain work
+in progress.

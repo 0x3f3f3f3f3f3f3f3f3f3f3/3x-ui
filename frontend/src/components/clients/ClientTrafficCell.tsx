@@ -40,7 +40,8 @@ const ClientTrafficCell = memo(function ClientTrafficCell({
 
   const pendingLabel = accounting?.resetPending
     ? t('pages.clients.accounting.resetPending')
-    : accounting && accounting.appliedVersion !== accounting.desiredVersion
+    : accounting &&
+        (accounting.policyPending || accounting.appliedVersion !== accounting.desiredVersion)
       ? t('pages.clients.accounting.policyPending')
       : null;
   const accountingRows = accounting

@@ -545,6 +545,9 @@ func TestClientPolicyDisableWithCompilerFailureStopsExistingAccess(t *testing.T)
 	}
 	t.Cleanup(func() { _ = flow.Close() })
 	managedActivationEcho(t, flow, "warm")
+	if _, _, err := svc.GetXrayTraffic(); err != nil {
+		t.Fatal(err)
+	}
 	db := database.GetDB()
 	injected := errors.New("candidate inbound read failed")
 	const callback = "test:fail-managed-candidate-inbounds"
@@ -565,6 +568,13 @@ func TestClientPolicyDisableWithCompilerFailureStopsExistingAccess(t *testing.T)
 	stored, err := (&ClientService{}).GetRecordByEmail(nil, owner.Email)
 	if err != nil || stored.Enable {
 		t.Fatalf("disable was not committed before compilation failed: %+v %v", stored, err)
+	}
+	traffic, err := (&InboundService{}).GetClientTrafficByEmail(owner.Email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !accountingPolicyPending(t, traffic.Accounting) || traffic.Accounting.AppliedVersion != traffic.Accounting.DesiredVersion {
+		t.Fatalf("failed compilation concealed saved disable: %+v", traffic.Accounting)
 	}
 	managedActivationClosed(t, flow)
 	if process.IsRunning() {

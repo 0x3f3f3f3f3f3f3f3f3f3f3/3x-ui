@@ -44,5 +44,6 @@ type ClientPolicyAccounting struct {
 	Remaining      *string           `json:"remaining" example:"1.5"`
 	AppliedVersion string            `json:"appliedVersion" example:"2"`
 	DesiredVersion string            `json:"desiredVersion" example:"2"`
+	PolicyPending  bool              `json:"policyPending" example:"false"`
 	ResetPending   bool              `json:"resetPending" example:"false"`
 }

@@ -124,7 +124,7 @@ func TestClientPolicyAccountingFollowsRenameWithoutLeakingIntoReusedEmail(t *tes
 			if traffic.Accounting != nil || traffic.Up != 0 || traffic.Down != 0 {
 				t.Fatalf("reused email inherited prior usage: %+v", traffic)
 			}
-		} else if got := traffic.Accounting; got == nil || got.ClientID != id || got.Lifetime.Billed != "1.5" {
+		} else if got := traffic.Accounting; got == nil || got.ClientID != id || got.Lifetime.Billed != "1.5" || got.PolicyPending {
 			t.Fatalf("rename lost stable lifetime accounting: %+v", got)
 		} else if traffic.Up != 19 || traffic.Down != 23 {
 			t.Fatalf("rename lost the existing global display counters: %+v", traffic)

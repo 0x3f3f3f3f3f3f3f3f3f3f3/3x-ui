@@ -15,26 +15,31 @@ import (
 
 type clientPolicyAccountingRow struct {
 	model.ClientPolicyReceipt
-	Email               string
-	DesiredVersion      int64
-	QuotaBytes          int64
-	SourceEpoch         int64
-	SourceSequence      int64
-	SourceCount         int64
-	HasRemote           bool
-	TotalClientID       string
-	TotalUpload         int64
-	TotalDownload       int64
-	TotalBilled         int64
-	TotalUncertain      int64
-	Reset               model.ClientPolicyReset `gorm:"embedded;embeddedPrefix:reset_"`
-	LatestResetID       int64
-	LatestResetVersion  int64
-	LatestResetInstance string
+	Email          string
+	DesiredVersion int64
+	QuotaBytes     int64
+	SourceEpoch    int64
+	SourceSequence int64
+	SourceCount    int64
+	HasRemote      bool
+	TotalClientID  string
+	TotalUpload    int64
+	TotalDownload  int64
+	TotalBilled    int64
+	TotalUncertain int64
+	Reset          model.ClientPolicyReset `gorm:"embedded;embeddedPrefix:reset_"`
+	LatestReset    model.ClientPolicyReset `gorm:"embedded;embeddedPrefix:latest_reset_"`
+	DesiredClient  model.ClientRecord      `gorm:"embedded;embeddedPrefix:desired_"`
 }
 
 const clientPolicyAccountingQuery = `
 SELECT p.*, c.email, c.desired_policy_version AS desired_version, c.total_gb AS quota_bytes,
+ c.stable_id AS desired_stable_id, c.enable AS desired_enable,
+ c.total_gb AS desired_total_gb, c.expiry_time AS desired_expiry_time,
+ c.policy_upload_bytes_per_second AS desired_policy_upload_bytes_per_second,
+ c.policy_download_bytes_per_second AS desired_policy_download_bytes_per_second,
+ c.policy_multiplier AS desired_policy_multiplier, c.policy_fingerprint AS desired_policy_fingerprint,
+ c.desired_policy_version AS desired_desired_policy_version,
  s.epoch AS source_epoch, s.sequence AS source_sequence,
  t.client_id AS total_client_id, t.raw_upload AS total_upload, t.raw_download AS total_download,
  t.billed_bytes AS total_billed, t.uncertain_bytes AS total_uncertain,
@@ -43,8 +48,12 @@ SELECT p.*, c.email, c.desired_policy_version AS desired_version, c.total_gb AS 
  r.raw_upload AS reset_raw_upload, r.raw_download AS reset_raw_download,
  r.billed_bytes AS reset_billed_bytes, r.remainder AS reset_remainder,
  r.uncertain_bytes AS reset_uncertain_bytes, r.policy_version AS reset_policy_version,
- latest.id AS latest_reset_id, latest.policy_version AS latest_reset_version,
- latest.instance_id AS latest_reset_instance,
+ latest.id AS latest_reset_id, latest.policy_version AS latest_reset_policy_version,
+ latest.instance_id AS latest_reset_instance_id, latest.client_id AS latest_reset_client_id,
+ latest.request_id AS latest_reset_request_id, latest.epoch AS latest_reset_epoch,
+ latest.sequence AS latest_reset_sequence, latest.raw_upload AS latest_reset_raw_upload,
+ latest.raw_download AS latest_reset_raw_download, latest.billed_bytes AS latest_reset_billed_bytes,
+ latest.remainder AS latest_reset_remainder, latest.uncertain_bytes AS latest_reset_uncertain_bytes,
  (SELECT COUNT(*) FROM client_policy_receipts other WHERE other.client_id = p.client_id) AS source_count,
  EXISTS (SELECT 1 FROM client_inbounds ci JOIN inbounds i ON i.id = ci.inbound_id
   WHERE ci.client_id = c.id AND i.node_id IS NOT NULL) AS has_remote
@@ -109,7 +118,7 @@ func projectClientPolicyAccounting(row clientPolicyAccountingRow) (*xray.ClientP
 	if row.QuotaBytes < 0 || row.BilledBytes > math.MaxInt64-row.UncertainBytes {
 		return nil, ErrClientPolicyLedger
 	}
-	if row.LatestResetID != 0 && (row.LatestResetVersion <= 0 || row.LatestResetVersion > row.DesiredVersion || row.LatestResetInstance != row.InstanceID) {
+	if row.LatestReset.Id != 0 && (row.LatestReset.PolicyVersion <= 0 || row.LatestReset.PolicyVersion > row.DesiredVersion || row.LatestReset.InstanceID != row.InstanceID) {
 		return nil, ErrClientPolicyLedger
 	}
 	if row.Reset.Id != 0 {
@@ -144,13 +153,19 @@ func projectClientPolicyAccounting(row clientPolicyAccountingRow) (*xray.ClientP
 		}
 		remaining = &amount
 	}
+	var latestReset *model.ClientPolicyReset
+	if row.LatestReset.Id != 0 {
+		latestReset = &row.LatestReset
+	}
+	_, fingerprint, desiredErr := fingerprintClientPolicy(row.DesiredClient, latestReset)
+	policyPending := desiredErr != nil || fingerprint != row.DesiredClient.PolicyFingerprint || row.PolicyVersion != row.DesiredVersion
 	return &xray.ClientPolicyAccounting{
 		ClientID:   row.ClientID,
 		Lifetime:   formatClientPolicyUsage(row.RawUpload, row.RawDownload, row.BilledBytes, row.Remainder, row.UncertainBytes),
 		Period:     formatClientPolicyUsage(row.RawUpload-base.RawUpload, row.RawDownload-base.RawDownload, billed, remainder, uncertain),
 		QuotaBytes: strconv.FormatInt(row.QuotaBytes, 10), Remaining: remaining,
 		AppliedVersion: strconv.FormatInt(row.PolicyVersion, 10), DesiredVersion: strconv.FormatInt(row.DesiredVersion, 10),
-		ResetPending: row.LatestResetID > row.Reset.Id,
+		ResetPending: row.LatestReset.Id > row.Reset.Id, PolicyPending: policyPending,
 	}, nil
 }
 

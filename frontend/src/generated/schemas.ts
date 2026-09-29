@@ -1922,6 +1922,10 @@ export const SCHEMAS: Record<string, unknown> = {
       "period": {
         "$ref": "#/components/schemas/ClientPolicyUsage"
       },
+      "policyPending": {
+        "example": false,
+        "type": "boolean"
+      },
       "quotaBytes": {
         "example": "10737418240",
         "type": "string"
@@ -1942,6 +1946,7 @@ export const SCHEMAS: Record<string, unknown> = {
       "desiredVersion",
       "lifetime",
       "period",
+      "policyPending",
       "quotaBytes",
       "resetPending"
     ],

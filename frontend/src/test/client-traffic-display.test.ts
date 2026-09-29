@@ -68,6 +68,7 @@ describe('computeTrafficDisplay', () => {
         appliedVersion: '2',
         desiredVersion: '2',
         resetPending: false,
+        policyPending: false,
       },
     });
     const display = computeTrafficDisplay(
@@ -108,6 +109,7 @@ describe('computeTrafficDisplay', () => {
         appliedVersion: '4',
         desiredVersion: '4',
         resetPending: false,
+        policyPending: false,
       },
     });
     const display = computeTrafficDisplay(
@@ -130,6 +132,7 @@ describe('computeTrafficDisplay', () => {
         appliedVersion: '1',
         desiredVersion: '1',
         resetPending: false,
+        policyPending: false,
       },
     });
     const display = computeTrafficDisplay(

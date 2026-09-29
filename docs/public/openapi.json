@@ -1948,6 +1948,10 @@
           "period": {
             "$ref": "#/components/schemas/ClientPolicyUsage"
           },
+          "policyPending": {
+            "example": false,
+            "type": "boolean"
+          },
           "quotaBytes": {
             "example": "10737418240",
             "type": "string"
@@ -1968,6 +1972,7 @@
           "desiredVersion",
           "lifetime",
           "period",
+          "policyPending",
           "quotaBytes",
           "resetPending"
         ],
