@@ -192,3 +192,22 @@ This proves the normal edit-service path for a client already activated in a man
 Additional regressions reproduced an omitted policy overwriting a concurrently committed edit and stale inbound settings overwriting the canonical policy. Policy omission now reads the locked authoritative row inside the serialized inbound transaction; detached-client edits update policy columns only when supplied. The SQLite race regression passed in 3.831 s before the final combined checks. The live edit/disable deadlines include time spent in the ordinary edit service. Restarting from the acknowledged configuration preserves disabled version 5 and 271,660 billed bytes; removing the snapshot update makes restart fail with a stale-policy error.
 
 Final commit gate: the combined adapter/Runtime/SQLite race checks passed (2.412 s / 1.290 s / 5.700 s), and the PostgreSQL settings/concurrency/real-child suite passed in 27.059 s. The full serial panel suite passed after the omission repair (service package 55.001 s). `make lint-go` with golangci-lint v2.14.0 reported zero issues. Frontend code generation, typecheck, lint and production build passed. The full frontend suite (`npm test -- --maxWorkers=1`) passed 174 files / 1743 tests in 427.86 s, including headless Chromium.
+
+## Scheduled collection and idle checkpoints — 2026-09-29
+
+`TestCheckpointCommitsOnlyChangedUsageAndReservations` first failed because two unchanged clients generated new ledger sequences on every checkpoint. The repair avoids idle writes while retaining exact commits after a fully consumed 65,536-byte reservation, a multiplier change and a fractional remainder. Recovery preserves 65,536 raw upload / 6 raw download / 65,541 billed bytes plus a 500,000-millionth remainder, with zero crash uncertainty. Core policy/API race checks passed (4.850 s / 1.038 s); focused vet passed. The full core regression is recorded below once complete.
+
+`TestClientPolicyPollingRetriesCommittedTraffic` calls the production traffic collector against an actual child process. Its first version failed because polling never attempted ledger settlement. A database failure injected while saving the source cursor now rolls back the entire page. Retrying preserves the historical 100/200-byte seed and accounts for a 1024-byte echo at multiplier 2 as 1124 upload / 1224 download / 4396 billed bytes. A fresh service instance polling again does not duplicate usage.
+
+The expanded test uses 1001 clients to require multiple pages. Removing pagination made the active client's bill remain at the original 300 bytes; restoring it passed under race in 16.035 s. A separate cursor regression then reproduced checkpointing concealing a database cursor one sequence ahead of the core. The cursor must be checked before checkpointing. This is collection evidence for an already managed process; automatic activation and legacy statistics/lifecycle cutover are still pending.
+
+A subsequent run alongside core regression/lint failed during startup: a ten-second negotiation context also capped all 1001-client restoration despite a longer caller deadline. An independent slow-preparation test reproduced cancellation at 10.07 s with a twenty-second caller deadline. Activation now honors the caller deadline while negotiation remains separately bounded. Neither that failed run nor the intentional RED/mutation runs count as passing evidence.
+
+Final targeted race checks passed: process/adapter 13.488 s, Runtime 1.291 s, SQLite collection 17.417 s, and PostgreSQL collection 46.545 s (the 1001-client test itself 44.68 s). The cursor regression also verifies successful retry after restoring the valid cursor, yielding 2148 upload / 2248 download / 8492 billed bytes after two echoes. Final panel lint reported zero issues. The full managed-core `go test -p=1 -shuffle=on -count=1 ./...` passed, including scenarios in 368.028 s. The full panel `GOFLAGS=-p=1 GOTOOLCHAIN=go1.27.1 make test-go` also passed. CI now explicitly requires the real polling test to run in both databases; CI execution itself is not claimed as local evidence.
+
+```sh
+XRAY_E2E_BINARY="$PWD/build/custom-xray" XRAY_UPSTREAM_E2E_BINARY=/path/to/pinned/upstream-xray \
+  go test -race -p=1 ./internal/xray ./internal/web/runtime ./internal/web/service \
+  -run '^TestManagedProcess|^TestLocalRuntimeUsesPrivateControl|^TestClientPolicyPolling' -count=1
+# Repeat TestClientPolicyPolling with the isolated PostgreSQL environment.
+```

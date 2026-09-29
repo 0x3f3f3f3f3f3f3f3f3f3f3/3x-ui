@@ -46,8 +46,10 @@ jobs:
         run: |
           set -o pipefail
           XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race ./internal/web/service \
-            -run 'TestClientPolicy(StateProvisioning|RuntimeBootstrap|Options|Omission|Desired)' -count=1 -v | tee /tmp/policy-bootstrap.log
-          grep -q -- '^--- PASS: TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts ' /tmp/policy-bootstrap.log
+            -run 'TestClientPolicy(StateProvisioning|RuntimeBootstrap|Options|Omission|Desired|Polling)' -count=1 -v | tee /tmp/policy-bootstrap.log
+          for test in TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts TestClientPolicyPollingRetriesCommittedTraffic; do
+            grep -q -- "^--- PASS: $test " /tmp/policy-bootstrap.log
+          done
   policy-postgres:
     runs-on: ubuntu-latest
     services:
@@ -77,7 +79,7 @@ jobs:
       - name: Real PostgreSQL migrations, commit failure and Tunnel ledger
         run: |
           set -o pipefail
-          XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race ./internal/database ./internal/web/service -run 'TestClientStableIdentityMigrationPostgres|TestClientPolicyCrossDatabaseMigration|TestClientPolicy(Ledger|StateProvisioning|RuntimeBootstrap|Options|Omission|Desired)' -count=1 -v | tee /tmp/policy-postgres.log
-          for test in TestClientStableIdentityMigrationPostgres TestClientPolicyCrossDatabaseMigration TestClientPolicyLedgerPostgresCommitFailure TestClientPolicyLedgerRealTunnelAndRestart TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts; do
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race ./internal/database ./internal/web/service -run 'TestClientStableIdentityMigrationPostgres|TestClientPolicyCrossDatabaseMigration|TestClientPolicy(Ledger|StateProvisioning|RuntimeBootstrap|Options|Omission|Desired|Polling)' -count=1 -v | tee /tmp/policy-postgres.log
+          for test in TestClientStableIdentityMigrationPostgres TestClientPolicyCrossDatabaseMigration TestClientPolicyLedgerPostgresCommitFailure TestClientPolicyLedgerRealTunnelAndRestart TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts TestClientPolicyPollingRetriesCommittedTraffic; do
             grep -q -- "^--- PASS: $test " /tmp/policy-postgres.log
           done

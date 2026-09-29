@@ -23,6 +23,38 @@ type ManagedPolicyBootstrap struct {
 type ManagedProcessRuntime interface {
 	StartManagedProcess(context.Context, *xray.Process, func(context.Context, *command.Capabilities) (*ManagedPolicyBootstrap, error)) error
 	ApplyManagedPolicies(context.Context, *xray.Process, []clientpolicy.Policy) error
+	ReadManagedLedger(context.Context, *xray.Process, uint64, bool) (*command.Capabilities, *command.LedgerPage, error)
+}
+
+func (l *Local) ReadManagedLedger(ctx context.Context, process *xray.Process, after uint64, checkpoint bool) (*command.Capabilities, *command.LedgerPage, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if process == nil || !process.IsControlReady() {
+		return nil, nil, errors.New("managed core is not ready")
+	}
+	var config conf.ClientPolicyConfig
+	if err := json.Unmarshal(process.GetConfig().ClientPolicy, &config); err != nil {
+		return nil, nil, err
+	}
+	endpoint, err := process.GetAPIEndpoint()
+	if err != nil {
+		return nil, nil, err
+	}
+	api, err := xray.DialClientPolicy(ctx, endpoint, config.InstanceID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer api.Close()
+	if checkpoint {
+		if _, err := api.ReadLedger(ctx, after, 1); err != nil {
+			return nil, nil, err
+		}
+		if err := api.Checkpoint(ctx); err != nil {
+			return nil, nil, err
+		}
+	}
+	page, err := api.ReadLedger(ctx, after, 1000)
+	return api.Capabilities(), page, err
 }
 
 func (l *Local) ApplyManagedPolicies(ctx context.Context, process *xray.Process, policies []clientpolicy.Policy) error {

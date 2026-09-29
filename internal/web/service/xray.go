@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/amneziawg"
 	"github.com/mhsanaei/3x-ui/v3/internal/amneziawgnet"
@@ -1187,6 +1189,15 @@ func (s *XrayService) GetXrayTraffic() ([]*xray.Traffic, []*xray.ClientTraffic, 
 		err := errors.New("xray is not running")
 		logger.Debug("Attempted to fetch Xray traffic, but Xray is not running:", err)
 		return nil, nil, err
+	}
+	if len(process.GetConfig().ClientPolicy) != 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err := pollLocalClientPolicyLedger(ctx, process)
+		cancel()
+		if err != nil {
+			logger.Warning("Failed to collect managed client ledger:", err)
+			return nil, nil, fmt.Errorf("collect managed client ledger: %w", err)
+		}
 	}
 	if err := s.xrayAPI.InitProcess(process); err != nil {
 		logger.Debug("Failed to initialize Xray API:", err)
