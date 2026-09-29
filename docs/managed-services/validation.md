@@ -4126,3 +4126,68 @@ restart persistence and real public presence. `golangci-lint run
 ./internal/web/service` reported **0 issues** (`mieru-ipv6-lint.log`).
 No runtime source changed, so production build/full-suite evidence remains the
 preceding UDP-idle milestone; neither was rerun for this test-only increment.
+
+## Public mieru preview and preflight rejection (2026-09-29)
+
+`TestMieruPreviewAndRejectedConfigKeepWorkingFlows` and its PostgreSQL counterpart
+exercise actual official TCP/UDP native clients through the production Runtime
+and managed core. Existing TCP and UDP payload flows continue during repeated
+public `GetXrayConfig` previews of a saved logging change for 1.1s, spanning more
+than four native reconciliation ticks. An invalid routing CIDR is then saved;
+`RestartXray(false)` must reject it in preflight while both existing flows and
+fresh official-client flows still use the previous valid configuration. Restoring
+the original template preserves those flows and the running core. Independent
+target receive counts must equal raw upload/download totals and 1.5x billing
+must equal three times each direction's observed bytes.
+
+The initial preview-side-effect mutation applied the managed runtime plan from
+`GetXrayConfig`; both native transports failed with closed-pipe errors during
+existing payload exchange (**1 top-level / 2 subtests**, 5.240s,
+`mieru-preview-red.jsonl`). The first restored run failed all four database /
+transport cases because the test expected the invalid CIDR text in the error.
+The actual preflight contract deliberately withholds core diagnostics and wraps
+`exec.ExitError` with exit code 23. The final test asserts that typed exit status
+and the validation-stage error prefix. No production behavior, data-path
+assertion or timing bound changed (`mieru-preview-green.jsonl`, 15.765s).
+
+A separate mutation skipped preflight validation. The actual core then failed
+startup and restored its previous configuration; the test rejected this later
+failure stage (**1 top-level / 2 subtests**, 9.317s,
+`mieru-preview-validation-red.jsonl`). With the final fixture, the preview-apply
+mutation again failed both native transports in 5.199s
+(`mieru-preview-final-red.jsonl`). These controls use Go overlays only; repository
+runtime source remains unchanged.
+
+The next restored run exposed another fixture issue after the original template
+was restored: all four cases timed out on an old TCP flow
+(`mieru-preview-final-green.jsonl`, 65.061s); lint did not execute. The first
+diagnostic showed the restore replaced the core even though its resulting
+configuration was identical. The fixture's inbound creation had left the
+pending-restart flag set. Unlike the panel's timer, its direct initial
+`RestartXray(true)` did not consume that notification. Before establishing the
+baseline flows, the final fixture calls the same `ApplyPendingRestart` path as
+`internal/web/web.go`. It does not write the flag directly. A diagnostic then
+observed pending=true at creation, false before restoration, a 6.421ms restore,
+the same core/configuration, and all four old/fresh TCP/UDP flows continuing
+(`mieru-preview-pending-diagnostic.jsonl`). No production fix or relaxed
+continuity assertion was needed.
+
+With that final baseline, both negative controls still failed as intended:
+preview application **1 top-level / 2 subtests** in 5.199s, omitted validation
+**1 top-level / 2 subtests** in 9.287s (`mieru-preview-settled-red.jsonl` and
+`mieru-preview-settled-validation-red.jsonl`). Restored source passed **2
+top-level / 4 subtests**, no skips or failures, under race/shuffle in 21.930s:
+
+```sh
+go test -p 1 -race -shuffle=on ./internal/web/service \
+  -run '^TestMieruPreviewAndRejectedConfigKeepWorkingFlows' \
+  -count=1 -timeout=120s -json
+golangci-lint run ./internal/web/service
+```
+
+The managed core and PostgreSQL environment are the same as the IPv6 increment.
+Lint reported **0 issues**. Logs: `mieru-preview-settled-green.jsonl` and
+`mieru-preview-settled-lint.log`. Only a new acceptance test and documentation
+changed; no production code or existing test helper changed, and no additional
+build/full-suite rerun is claimed. This covers preview and preflight rejection,
+not continuity after an already-stopped core or a complete panel-process restart.

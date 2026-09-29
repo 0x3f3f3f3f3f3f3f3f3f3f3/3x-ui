@@ -256,6 +256,13 @@ change; a source-loss mutation demonstrates that the new route test fails if
 the bridge replaces the original IPv6 source. External IPv6/export coverage and
 the remaining public routing and fault matrix stay open.
 
+Public preview/preflight acceptance also has both-database/both-underlay
+evidence: saved previews do not replace the runtime, invalid routing is rejected
+before replacement, existing and fresh flows retain the working configuration,
+and restoring the template preserves exact billing. Destructive-preview and
+skipped-validation mutations fail. Post-stop rollback and panel-process recovery
+are still required.
+
 ## Task 7: Snell v4/v5/v6 vertical integration
 
 Files: new `internal/snell`, backend asset manifest/installer, namespace bridge,

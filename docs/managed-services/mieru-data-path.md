@@ -273,3 +273,17 @@ address makes both native transports fail their source rule. Production source
 needed no change for this acceptance increment; test helpers now honor their
 requested listener/client address. This does not claim external IPv6 reachability
 or kernel address-family translation.
+
+## Configuration preview and preflight rejection
+
+Generating a public configuration preview does not apply its native runtime
+plan. The current core and native flows keep using the last applied generation.
+Before an actual replacement, the installed core validates the generated
+configuration without starting listeners. Invalid routing therefore leaves
+existing TCP/UDP payload flows and fresh admissions on the working generation.
+Restoring the saved template keeps that generation usable.
+
+Core validator output remains private because it can contain configuration
+secrets; callers receive the validation failure and wrapped process exit status.
+Continuity before replacement is separate from recovery after a process has
+already stopped or failed to start.
