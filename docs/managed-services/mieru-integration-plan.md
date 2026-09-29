@@ -75,6 +75,14 @@ instruction. They do not change the specified limits, units or acceptance scope.
   exactly 2x payload billing, and saved policy after core restart. Run both DB
   dialects. This is stream payload performance; sustained native UDP payload
   and the remaining route/quota/fault matrix stay separate required checks.
+- [x] Public bounded-workload UDP payload rates: actual production Runtime and
+  managed core, SQLite/PostgreSQL, TCP/UDP underlays, two same-IP clients across
+  two listeners with four associations each. The same connections cover an
+  unlimited baseline and 32/64 KiB/s live duplex changes within 2s; every flow
+  advances, billing is exactly 2x, and core restart retains policy. One 2048-byte
+  packet per flow/direction is outstanding. See validation.md for fixed bounds,
+  failed diagnostics and mutations; unrestricted buffering and natural client
+  disconnect cleanup remain open.
 - [x] Native configuration export/subscription: emit the official client
   profile format, cover host overrides and supported formats, reject unsupported
   representations clearly. Verify exported profiles with the official client.
@@ -86,8 +94,8 @@ instruction. They do not change the specified limits, units or acceptance scope.
   four simultaneous TCP/UDP payload flows, 0.5/1/1.5/2x multipliers, independent
   receive observations, same-IP peer continuity and core-restart denial. Reset,
   quota increase and renewal preserve independent restrictions. Actual Linux
-  SIGKILL recovery has both-underlay evidence. Unrestricted buffers, full
-  sustained UDP shaping, panel-process restart and remaining fault cases stay open.
+  SIGKILL recovery has both-underlay evidence. Unrestricted buffers, panel-process
+  restart and remaining fault cases stay open; bounded UDP rates are covered above.
 - [ ] Run applicable complete backend/frontend/static/build checks, record skips
   separately, commit logical milestones, push the approved feature branch and
   independently verify its remote SHA. Keep unexecuted acceptance items open.

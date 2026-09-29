@@ -3816,3 +3816,105 @@ The skips are retained explicitly (none count as passes):
 - `internal/web/job`: `TestCheckClientIpScale/N=10000_single`, `TestCheckClientIpScale/N=10000_spread50`, `TestCheckClientIpScale/N=100000_single`, `TestCheckClientIpScale/N=100000_spread50`.
 - `internal/web/service`: `TestDelAllClientsPostgresScale`, `TestSyncInboundPostgresScale`, `TestSetClientLimitHwidIsSerializedWithSyncInbound`, `TestSSHUpstreamPolicyRatesAndRestart`, `TestSSHOutboundRunsThroughProductionXray`, `TestAddTrafficPollScale`, `TestAddInbound_PostgresCommitFailureMakesNoRuntimeCall`, `TestAddDelClientPostgresScale`, `TestGetXrayConfigScale`, `TestWsPayloadScale`, `TestSSHUpstreamPolicyQuotaAndLifecycle`, `TestBulkOpsPostgresScale`, `TestSSHUpstream_Postgres/runtime`, `TestSSHUpstream_Postgres/rates`, `TestSSHUpstream_Postgres/quota`, `TestGetClientTrafficByEmailABScale`, `TestUpdateInbound_PostgresCommitFailureMakesNoRuntimeCall`, `TestGoldenRoutingFixturesBuildInXray/rule/balancer-routed`, `TestGoldenRoutingFixturesBuildInXray/rule/full`, `TestGoldenDNSFixturesBuildInXray/dns/full`, `TestGoldenDNSFixturesBuildInXray/dns-server/full`, `TestGoldenDNSFixturesBuildInXray/dns-server/legacy-expectips`, `TestAllAPIsPostgresScale`, `TestGroupAndListPostgresScale`.
 - `internal/web/service/outbound`: `TestSSHProbeResolvesNativeProxyChain`, `TestSSHProbeUsesRequestedPinAndIsolatesInvalidContext`, `TestSSHProbeUsesRealCoreAndOpenSSH`, `TestSSHProbeFailureCleansOwnedResources`, `TestAddTrafficReturnsDeferredCommitFailure`.
+
+## Public UDP payload rates and durable admission batching (2026-09-29)
+
+This continues the previously failed public UDP workload; it does not replace
+those recorded failures. Transaction tracing attributed 84 admissions during a
+400ms window to 751.7ms cumulative wall time: 370.4ms waiting for the shared
+SQLite writer, 94.7ms transaction body, and 286.6ms remaining begin/commit work.
+These are overlapping instrumented totals, not independent per-request latency.
+Batching without a coalescing interval improved capacity but still failed the
+524288 B/s baseline (first direction 366739 B/s). A bounded 1ms collection window
+was then added outside locks, with at most 32 requests per durable transaction.
+
+The original fixture stopped unbounded baseline connections before opening new
+limited connections. Instrumentation found two old sessions still consuming
+16384 bytes of the first client's upload budget during the first limited window;
+together with the new flows' 32768 bytes, aggregate delivery matched 32 KiB/s.
+Explicitly requiring old public sessions to disappear within 2s failed on all
+four database/underlay combinations. Natural client-exit cleanup remains open.
+The final workload instead uses the same four associations per client from the
+unlimited baseline through all live policy changes. Each direction/association
+keeps one 2048-byte packet outstanding until an independent receiver acknowledges
+it. Actual payload still crosses the native protocol, private bridge and core.
+This bounds the workload from its start and adds existing-flow 0-to-limit
+coverage; no baseline threshold, measurement window or rate tolerance was eased.
+
+Official mieru v3.38.0 clients (TCP exports use MULTIPLEXING_OFF) and the pinned
+managed core run through production ClientService/Runtime. Both SQLite and
+PostgreSQL, both native underlays, two same-IP clients and two inbounds are used.
+The baseline is 400ms after 200ms startup, requiring every client/direction above
+524288 B/s (8x the larger cap). Caps are 32768/65536 B/s and their inverse; the
+first client changes twice while the second remains unchanged. Each 1.5s window
+requires at least 80% of the cap and at most 106% plus 100ms burst, one 2048-byte
+packet debt and four outstanding packets. Initial and live changes complete
+the acceptance window within 2s. Every association must progress without
+corruption or termination. Exact 2x durable billing and core restart are checked.
+
+`go test -p 1 ./internal/web/service -run
+'^TestClientPolicyProductionMieruUDPPayloadRates' -count=1 -timeout=180s -json`
+with the managed-core path and PostgreSQL DSN above passed **2 top-level / 4
+subtests, no skips**, in 84.032s. All 16 baseline directions measured
+911312–1246780 B/s; all 64 capped direction/windows measured 32745–65536 B/s.
+Log: `/tmp/3x-ui-rate-trace/public-udp-bounded-rates-matrix.jsonl`.
+
+Mutation checks use temporary Go overlays and leave production source intact.
+Restoring per-request commits made the final fixture fail its baseline at
+158437 B/s (12.401s, `public-udp-bounded-no-batch-red.jsonl`). Bypassing both
+UDP pacing gates failed the first ceiling: 1447936 bytes versus 65618 allowed
+in 1.5s (14.253s, `public-udp-pacing-disabled-red.jsonl`). These are expected
+negative controls, not passing rate results.
+
+New actual-SQLite controller tests cover queued duplex admission, canceled
+requests, exact 1.5x accounting, a failed final meter write rolling back the
+account and cursor, other-client continuity, Close while database access is
+blocked, replacement without inherited pending bytes, and near-int64 overflow.
+The old implementation required 16/8 cursor writes instead of at most three;
+that meaningful RED preceded batching. Another meaningful RED showed aggregate
+overflow incorrectly faulting an individually admissible packet before fallback;
+the error is now recorded after that fallback. A commit-error-to-success mutation
+caused actual payload leakage and failed. Full policyflow race/shuffle passed
+**13 top-level / 14 subtests, no skips**, in 20.506s
+(`admission-batch-final-policyflow.jsonl`). Broader restored-source regression
+and build results are recorded below. The earlier 15-byte stream-window miss,
+unrestricted buffer bounds and the complete Task 6 matrix remain open.
+
+Restored-source regression after both negative controls passed:
+
+- Public real SSH and mixed SSH/mieru TCP payload: `go test -p 1
+  ./internal/web/service -run '^TestClientPolicyProductionSSH' -count=1
+  -timeout=240s -json` — **4 top-level / 4 subtests**, no skips, 96.181s.
+- Public natural quota: `go test -p 1 -race ./internal/web/service -run
+  '^TestMieruInboundNaturalQuota' -count=1 -timeout=240s -json` — **2 top-level /
+  16 subtests**, no skips, 120.358s.
+- Shared controller/accounting/adapters: `go test -p 1 -race -shuffle=on
+  ./internal/policyflow ./internal/database ./internal/sshtunnel ./internal/mieru
+  -count=1 -timeout=300s -json` — **4 packages, 163 top-level / 150 subtests**
+  passed. Three top-level tests skipped: `TestMigrate_Postgres`,
+  `TestClientWeeklyRenewMigration_Postgres`,
+  `TestHostAutoMigrateCreatesColumns_Postgres`; their separate opt-in migration
+  environment was not provided. Package durations were 20.437s, 115.625s,
+  14.666s and 123.430s respectively. No race failures.
+
+These commands used both pinned managed-core environment variables and the
+PostgreSQL DSN above. Logs under `/tmp/3x-ui-rate-trace/`:
+`admission-mixed-tcp-regression.jsonl`, `admission-natural-quota-regression.jsonl`,
+`admission-shared-backend-race.jsonl`. The isolated negative-control overlays are
+absent from these commands.
+
+Final full-root regression with the same managed-core, Mihomo and PostgreSQL
+environment passed: `go test -p 1 -shuffle=on -count=1 ./... -json` — **53 test
+packages, 2662 top-level / 4548 subtests**, zero failures, **28 top-level / 14
+subtest skips**, and seven packages without tests. All 42 skipped test names
+match the explicit list in the preceding canonical-attachment full-root record;
+none count as passes. The service package took 501.924s. Its new UDP matrix also
+passed both databases and underlays (SQLite 41.19s, PostgreSQL 42.33s).
+Log: `/tmp/3x-ui-rate-trace/admission-full-go.jsonl`.
+
+`golangci-lint run ./internal/policyflow/... ./internal/web/service/...` reported
+**0 issues**. `go build -o /tmp/3x-ui-admission-batch-panel .` completed with exit
+zero after the full-root tests. Logs: `admission-backend-lint.log` and
+`admission-panel-build.log` in the same directory. No frontend source or assets
+changed in this increment. These results establish the scoped batching/UDP
+increment, not completion of the remaining native cleanup or full original goal.

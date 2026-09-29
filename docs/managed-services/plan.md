@@ -234,6 +234,14 @@ canonical CRUD/bulk/portable restore, API/UI status, and native exports now have
 scoped evidence in validation.md. Public shared-rate performance, node policy,
 deployment, and the remaining acceptance matrix are still required.
 
+Public actual UDP payload rates now have scoped receiver-side evidence for
+both databases and both native underlays. Concurrent durable admission is
+batched without releasing payload before commit; bounded queues, rollback,
+cancellation and exact billing have targeted coverage. This does not close the
+full public-rate item: unrestricted buffering, natural client-exit cleanup and
+the earlier unexplained short stream-rate window remain open. See validation.md
+for the unchanged acceptance bounds, failed diagnostics and mutation results.
+
 ## Task 7: Snell v4/v5/v6 vertical integration
 
 Files: new `internal/snell`, backend asset manifest/installer, namespace bridge,

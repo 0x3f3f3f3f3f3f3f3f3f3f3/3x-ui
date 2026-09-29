@@ -96,6 +96,26 @@ one upload and 16 download writers per association. Native protocol and kernel
 buffers are additional; this is not a claim of zero buffered or undelivered
 traffic. See [mieru data path](mieru-data-path.md) for integration boundaries.
 
+## Durable admission batching
+
+Concurrent stream grants and datagrams for one policy/source share a durable
+transaction. Each client has at most 256 pending request records and 32 active
+records per batch. A temporary worker waits up to 1ms to collect concurrent
+requests; the wait holds no policy, queue or database lock. A full batch starts
+without that wait. The queue retains metadata, not copies of payload buffers,
+and excess requests fail with the existing busy error.
+
+Upload and download totals advance the same meter cursor only after the ledger
+transaction commits. No writer receives permission before that commit. Canceled
+requests still queued when their batch begins are excluded. Cancellation after
+commit can leave billed but undelivered bytes, as with individual admission.
+Quota or aggregate overflow retries each request separately, preserving partial
+stream grants and whole-datagram admission. Other transaction errors protect the
+affected source and never release its pending payload. Closing the controller
+cancels database work and waits for its admission workers before replacement.
+The existing pre-admission and post-commit pacing gates remain independent of
+batch size; fixed-point billing retains its remainder across commits.
+
 ## Implemented shared TCP flow controller
 
 The controller shares upload/download buckets and a serialized durable meter

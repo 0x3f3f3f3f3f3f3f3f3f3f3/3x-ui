@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -57,6 +56,9 @@ type clientState struct {
 	policyID           string
 	meter              model.ClientUsageMeter
 	opMu               sync.Mutex
+	admissionMu        sync.Mutex
+	admissionQueue     []*admissionRequest
+	admissionRunning   bool
 	upload, download   *clientpolicy.Limiter
 	writeUp, writeDown *clientpolicy.Limiter
 	flowsMu            sync.Mutex
@@ -246,50 +248,6 @@ func (s *clientState) closeFlows(cause error) {
 	for _, f := range flows {
 		f.closeWithCause(cause)
 	}
-}
-
-func (s *clientState) admit(ctx context.Context, direction Direction, requested int, partial bool) (int, error) {
-	s.opMu.Lock()
-	defer s.opMu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return 0, context.Cause(ctx)
-	}
-	if fault := s.fault.Load(); fault != nil {
-		return 0, fault.err
-	}
-	// Finish each committed cursor update even when its originating stream is cancelled.
-	ctx, cancel := context.WithTimeout(s.controller.ctx, operationTimeout)
-	defer cancel()
-	for requested > 0 {
-		if s.meter.Sequence == math.MaxInt64 {
-			return 0, clientpolicy.ErrOverflow
-		}
-		r := database.ClientUsageReport{MeterID: s.meter.ID, Sequence: s.meter.Sequence + 1, Up: s.meter.Up, Down: s.meter.Down}
-		counter := &r.Up
-		if direction == Download {
-			counter = &r.Down
-		}
-		if int64(requested) > math.MaxInt64-*counter {
-			return 0, clientpolicy.ErrOverflow
-		}
-		*counter += int64(requested)
-		_, err := s.controller.ledger.Admit(ctx, r)
-		if err == nil {
-			s.meter.Sequence, s.meter.Up, s.meter.Down = r.Sequence, r.Up, r.Down
-			s.checked()
-			return requested, nil
-		}
-		var quota *database.UsageQuotaError
-		if partial && errors.As(err, &quota) && quota.RawAllowance > 0 && quota.RawAllowance < int64(requested) {
-			requested = int(quota.RawAllowance)
-			continue
-		}
-		if !errors.Is(err, database.ErrUsageQuota) && !errors.Is(err, database.ErrUsageDisabled) && !errors.Is(err, database.ErrUsageExpired) && !errors.Is(err, database.ErrUsageUnready) {
-			s.fault.Store(&flowFault{err})
-		}
-		return 0, err
-	}
-	return 0, database.ErrUsageQuota
 }
 
 type Flow struct {

@@ -195,3 +195,21 @@ or terminating the active flow. UDP-only exports retain native multiplexing.
 See [the compatibility decision and real test](mieru-integration-plan.md#tcp-client-scheduling-compatibility).
 Manually enabling TCP multiplexing retains the underlying head-of-line blocking
 behavior; it is not covered by a handshake-latency guarantee.
+
+## Public UDP rate acceptance
+
+The production Runtime now has an official-client sustained UDP workload on
+SQLite/PostgreSQL and both native underlays. Two same-IP clients each use four
+associations across two inbounds. Receiver observations cover unlimited traffic,
+32/64 KiB/s duplex policies, existing-flow changes within 2s, exact 2x billing
+and core restart. One 2048-byte packet per direction/association is outstanding
+from the baseline onward. This is a bounded-workload result; unrestricted
+buffers and natural disconnect cleanup remain separate acceptance items.
+
+Concurrent payload admission now uses the shared controller's
+[bounded durable batches](semantics.md#durable-admission-batching) to amortize
+small-packet database commits. Both pacing gates still apply and every payload
+waits for its cursor transaction before delivery. See the
+[validation record](validation.md#public-udp-payload-rates-and-durable-admission-batching-2026-09-29)
+for the failed baselines, fixture correction, unchanged tolerances and negative
+controls. No complete Task 6 claim follows from these scoped checks.
