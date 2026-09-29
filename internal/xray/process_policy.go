@@ -22,6 +22,11 @@ func (p *Process) StartManaged(ctx context.Context, prepare func(context.Context
 	if prepare == nil {
 		return fmt.Errorf("%w: managed preparation is required", ErrClientPolicyCapability)
 	}
+	if _, bounded := ctx.Deadline(); !bounded {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+	}
 	desired := p.GetConfig()
 	data, err := json.Marshal(desired)
 	if err != nil {
@@ -67,9 +72,9 @@ func (p *Process) StartManaged(ctx context.Context, prepare func(context.Context
 			p.setExitErr(err)
 		}
 	}()
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	policyAPI, err := p.waitForPolicy(ctx, socket, policyConfig.InstanceID)
+	negotiationCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	policyAPI, err := p.waitForPolicy(negotiationCtx, socket, policyConfig.InstanceID)
+	cancel()
 	if err != nil {
 		return err
 	}

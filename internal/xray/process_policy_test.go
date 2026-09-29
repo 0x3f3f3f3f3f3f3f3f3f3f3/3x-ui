@@ -23,7 +23,7 @@ func TestManagedProcessNegotiatesAndSeedsBeforeOpeningListeners(t *testing.T) {
 	if binary == "" {
 		t.Skip("set XRAY_E2E_BINARY to the built custom core")
 	}
-	for _, mode := range []string{"success", "preparation-failure", "listener-conflict"} {
+	for _, mode := range []string{"success", "slow-preparation", "preparation-failure", "listener-conflict"} {
 		t.Run(mode, func(t *testing.T) {
 			dir, err := os.MkdirTemp("", "panel-managed-start-")
 			if err != nil {
@@ -68,7 +68,11 @@ func TestManagedProcessNegotiatesAndSeedsBeforeOpeningListeners(t *testing.T) {
 			if err := process.Start(); !errors.Is(err, ErrClientPolicyCapability) || process.IsRunning() {
 				t.Fatalf("plain startup bypassed negotiation: running=%t, error=%v", process.IsRunning(), err)
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			activationTimeout := 10 * time.Second
+			if mode == "slow-preparation" {
+				activationTimeout = 20 * time.Second
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), activationTimeout)
 			defer cancel()
 			errSetup := errors.New("panel ledger transaction failed")
 			err = process.StartManaged(ctx, func(ctx context.Context, api *ClientPolicyAPI) error {
@@ -82,9 +86,16 @@ func TestManagedProcessNegotiatesAndSeedsBeforeOpeningListeners(t *testing.T) {
 				if mode == "preparation-failure" {
 					return errSetup
 				}
+				if mode == "slow-preparation" {
+					select {
+					case <-time.After(11 * time.Second):
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+				}
 				return api.Initialize(ctx, &clientpolicy.PolicyConfig{ClientId: "owner", Version: 1, Enabled: true, MultiplierMicros: 1000000, QuotaBytes: 1000, BurstBytes: 65536}, &policycommand.Usage{RawDownload: 100, BilledBytes: 100})
 			})
-			if mode != "success" {
+			if mode != "success" && mode != "slow-preparation" {
 				if mode == "preparation-failure" && !errors.Is(err, errSetup) {
 					t.Fatalf("lost preparation failure: %v", err)
 				}
