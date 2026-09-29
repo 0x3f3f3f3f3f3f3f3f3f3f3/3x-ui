@@ -229,3 +229,30 @@ synchronizes with any already-started admission transaction before the exact
 stable-usage check. Committed but undelivered bytes keep their existing charge.
 This evidence concerns observed authenticated session closure; silent UDP
 peer loss and close frames behind full TCP queues remain separate cases.
+
+## Silent UDP peer loss
+
+The native UDP parser now services maintenance while reading invalid packets
+and limits each managed socket read to the existing five-second maintenance
+interval. Previously, a quiet read could take 60–120 seconds, and repeated
+invalid packets could keep resetting that timeout without returning to the
+outer maintenance loop. Expired managed sessions end with a timeout error;
+they no longer spend up to a second trying to drain their graceful-close queue.
+The production one-minute idle TTL, authentication and payload limits remain
+unchanged. The individual-session cancellation described above then releases
+adapter policy waits and target connections.
+
+The wall-clock acceptance bound is 67 seconds after physical UDP socket loss:
+60 seconds idle TTL, five seconds maintenance and two seconds scheduling margin.
+This is a loss-detection bound, separate from the two-second policy-update and
+observed-close requirements. It does not establish physical TCP FIN detection
+behind full native queues or unrestricted public sender buffering bounds.
+
+Official-client wall-clock tests close the actual UDP sockets before stopping
+the client, preventing an authenticated close message. Both TCP and UDP payload
+associations remain present five seconds later, then release native resources
+and adapter presence in 60.0s (quiet) and 65.0s (invalid packets). Their exact
+settled usage stays unchanged and a new user transmits through the surviving
+listener. A separate encrypted-wire test advances only the expired session's
+last-receive timestamp and verifies an existing healthy session still works;
+that simulated-age test is not the wall-clock acceptance evidence.

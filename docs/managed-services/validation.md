@@ -3991,3 +3991,89 @@ peer-close change; the preceding full-root result belongs to the batching commit
 `native-peer-close-build-final.log`. Original rate/quotas and unchanged-client
 checks remain in force. Complete Task 6 and physical peer-loss detection remain
 open; no frontend source changed in this increment.
+
+## Native UDP idle maintenance and real transport loss (2026-09-29)
+
+The native packet parser could starve the outer five-second cleanup ticker:
+quiet reads use a process-fixed 60–120s timeout, while invalid packets restart
+that read inside the parser. A managed UDP reader now checks the same ticker
+inside the parser and caps each read at five seconds. Already-expired managed
+sessions close with a timeout error before removal, avoiding the graceful-close
+queue wait on a vanished peer. Idle TTL remains 60s; unmanaged/client behavior,
+wire format, queue bounds and policy/accounting rules are unchanged.
+
+`TestManagedPacketIdleExpiryDoesNotNeedAnotherValidPacket` uses an actual UDP
+socket and authenticated native sessions, but explicitly simulates elapsed idle
+time on one session. Quiet and continuous invalid-packet cases must release that
+lease within the existing five-second maintenance period plus two seconds;
+another established session must then receive actual encrypted payload. The
+stronger two-session original-source run failed **1 top-level / 2 subtests** in
+14.050s, retaining both leases (`native-idle-healthy-red.jsonl`). A separate
+expired-session test queues a reply with remote window zero: cleanup took
+1.072446416s, exceeding its predeclared 500ms limit
+(`native-idle-stalled-red.jsonl`, **1 top-level failure**, package 1.100s).
+After both fixes, the combined focused race run passed **2 top-level / 2
+subtests**, no skips, in 11.049s (`native-idle-focused-green.jsonl`).
+
+`TestOfficialUDPTransportLossExpiresWithoutAuthenticatedTraffic` supplies the
+official v3.38.0 client's PacketDialer with actual UDP sockets. It exchanges TCP
+and UDP payload, checks exact 22-byte upload / 22-byte download / 88-byte billed
+totals at 2x, then closes those physical sockets **before** Client.Stop. Both
+sessions must remain online after five seconds, proving the test did not merely
+deliver a graceful session-close message. With production clocks and timeouts,
+native leases/buffers and adapter presence must disappear within **67s from
+physical loss**: 60s idle TTL + 5s maintenance + 2s scheduling margin. It then
+checks unchanged usage and fresh TCP/UDP traffic by another user through the
+same listener. No healthy official client sends heartbeats during the wait,
+because they could wake the old parser and mask the quiet-socket bug.
+
+An overlay restoring the prior native packet source, with continuous invalid
+packets, failed after 67.001s with two leases, 25 buffered bytes and two online
+records: **1 top-level / 1 subtest failure**, package 68.735s
+(`native-idle-wallclock-red.jsonl`). The restored-source race run passed **1
+top-level / 2 subtests**, no skips, in 128.036s. Actual cleanup was
+59.995933639s for quiet and 64.988051908s for invalid packets
+(`native-idle-wallclock-green.jsonl`). No bound was relaxed after failure.
+
+Commands for these focused results:
+
+```sh
+go test -p 1 -race ./internal/mieru/native \
+  -run '^TestManaged(PacketIdleExpiry|ExpiredSession)' -count=1 -timeout=45s -json
+go test -p 1 -race ./internal/mieru \
+  -run '^TestOfficialUDPTransportLossExpiresWithoutAuthenticatedTraffic$' \
+  -count=1 -timeout=160s -json
+python3 tools/managed-mieru/prepare.py --verify
+```
+
+The negative control used `-overlay` to replace only `underlay_packet.go` with
+its source at a0470c2e, selected `/invalid-packets$`, and used a 100s test timeout.
+All diagnostic logs are under `/tmp/3x-ui-rate-trace/`. The maintained patch
+again reproduces checksum-verified v3.38.0 source, authored tests and license
+byte for byte. This increment verifies silent UDP expiry, not TCP FIN hidden
+behind full native queues, unrestricted public sender buffers, or the whole
+Task 6 acceptance matrix. The earlier unrestricted public Client.Stop cleanup
+failure remains recorded. Full affected-path regression follows below.
+
+The complete native and adapter race regression passed:
+`go test -p 1 -race -shuffle=on ./internal/mieru/... -count=1 -timeout=450s
+-json` — **2 packages, 111 top-level / 1885 subtests**, no skips or failures.
+Adapter took 258.861s; native protocol took 40.200s
+(`native-idle-final-race.jsonl`). The package timeout accommodates the two new
+real one-minute waits; each test's original cleanup bound remains unchanged.
+
+With the same pinned managed core, Mihomo and owned PostgreSQL environment as
+the preceding milestone, public normal-build regression also passed:
+`go test -p 1 -shuffle=on ./internal/web/service ./internal/sub -run
+'^Test.*Mieru|^TestManagedPolicy' -count=1 -timeout=600s -json` — **2 packages,
+35 top-level / 84 subtests**, no skips or failures. Service took 369.165s and
+subscription took 3.993s (`native-idle-public-final.jsonl`). This rechecks public
+shared stream/datagram rates, natural quota and restriction combinations,
+core recovery, management lifecycle and official client subscription paths.
+
+`golangci-lint run ./internal/mieru/...` reported **0 issues** and
+`go build -o /tmp/3x-ui-idle-panel .` exited zero. Logs are
+`native-idle-lint-final.log` and `native-idle-build-final.log`.
+No frontend source changed, and this increment did not rerun the entire root
+Go suite: the earlier full-root evidence belongs to the admission batching
+milestone. The complete original task remains open.

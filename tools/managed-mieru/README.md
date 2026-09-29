@@ -75,3 +75,10 @@ The managed adapter also observes the native session's read-only `Done` signal.
 It cancels first-use, route and policy waits when that session ends, while keeping
 the authenticated credential generation and other sessions usable. This signal
 does not shorten native idle detection or change the wire protocol.
+
+Managed UDP readers service the existing five-second maintenance ticker inside
+the packet parser and cap each socket read to that interval. Quiet sockets and
+continuous invalid packets therefore cannot postpone the existing one-minute
+idle check. Already-expired managed sessions close with a timeout error, without
+waiting for their stalled graceful-close queue. No extra maintenance worker,
+wire-format change or client modification is required.

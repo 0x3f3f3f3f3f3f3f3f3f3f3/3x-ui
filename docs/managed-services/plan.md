@@ -242,6 +242,13 @@ full public-rate item: unrestricted buffering, natural client-exit cleanup and
 the earlier unexplained short stream-rate window remain open. See validation.md
 for the unchanged acceptance bounds, failed diagnostics and mutation results.
 
+Native session completion now cancels adapter policy and first-use waits.
+Managed UDP idle maintenance also runs during quiet/invalid-packet reads and
+avoids waiting on expired graceful-close queues. Real official-client socket
+loss reclaimed both payload associations within the predeclared 67s idle bound,
+with stable usage and listener reuse. This scoped lifecycle evidence does not
+close TCP FIN detection behind full queues or the remaining public acceptance.
+
 ## Task 7: Snell v4/v5/v6 vertical integration
 
 Files: new `internal/snell`, backend asset manifest/installer, namespace bridge,

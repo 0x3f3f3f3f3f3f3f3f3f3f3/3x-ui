@@ -360,7 +360,16 @@ func (u *PacketUnderlay) readOneSegment() (*segment, net.Addr, error) {
 		// Peer may select a different MTU.
 		// Use the largest possible value here to avoid error.
 		b := make([]byte, 1500)
-		common.SetReadTimeout(u.conn, readOneSegmentTimeout)
+		timeout := readOneSegmentTimeout
+		if u.serverResources != nil {
+			select {
+			case <-u.sessionCleanTicker.C:
+				u.cleanSessions()
+			default:
+			}
+			timeout = min(timeout, sessionCleanInterval)
+		}
+		common.SetReadTimeout(u.conn, timeout)
 		n, addr, err := u.conn.ReadFrom(b)
 		if err != nil {
 			if stderror.IsTimeout(err) {
@@ -842,6 +851,9 @@ func (u *PacketUnderlay) cleanSessions() {
 		}
 		if time.Now().UnixMicro()-session.lastRXTime.Load() > idleSessionTimeout.Microseconds() {
 			log.Debugf("Found idle %v", session)
+			if session.resource != nil {
+				_ = session.closeWithError(stderror.ErrTimeout)
+			}
 			if err := u.RemoveSession(session); err != nil {
 				log.Debugf("%v RemoveSession() failed: %v", u, err)
 			}
