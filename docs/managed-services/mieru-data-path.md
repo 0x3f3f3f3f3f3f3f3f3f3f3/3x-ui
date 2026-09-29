@@ -287,3 +287,20 @@ Core validator output remains private because it can contain configuration
 secrets; callers receive the validation failure and wrapped process exit status.
 Continuity before replacement is separate from recovery after a process has
 already stopped or failed to start.
+
+## Public routing and observable exits
+
+Public configuration services have real-client evidence for user, domain,
+literal-IP, original-source, inbound, network and port matching, first-match
+deny priority and round-robin balancing. SQLite/PostgreSQL, both native underlays
+and both payload types use two freedom outbounds whose actual socket sources
+are `127.0.0.2` and `127.0.0.3`. The destination records each unique probe and its
+source before echoing it; UDP replies also retain the actual target peer.
+Blocked probes have a live allowed-user control through the same service.
+
+The two clients use the same incoming source IP, while user rules select
+different outgoing source addresses. Removing the user matchers makes the
+second client's probe arrive through the wrong exit. These are fresh-flow
+decisions after `SaveXraySetting` / `RestartXray(false)`; the result does not
+claim migration of an already-established flow to a different route or cover
+every available outbound protocol.

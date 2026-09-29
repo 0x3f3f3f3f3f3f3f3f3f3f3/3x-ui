@@ -263,6 +263,13 @@ and restoring the template preserves exact billing. Destructive-preview and
 skipped-validation mutations fail. Post-stop rollback and panel-process recovery
 are still required.
 
+Public real routing now has 80 route-case observations across both databases,
+both native transports and both payload types: separate same-IP user exits,
+domain/IP/source/inbound/network/port matching, deny priority and round-robin
+balancing. Independent target source addresses identify the selected outlet;
+blocked cases also require a healthy allowed control. Other outbound types,
+established-flow route migration and the remaining failure matrix stay open.
+
 ## Task 7: Snell v4/v5/v6 vertical integration
 
 Files: new `internal/snell`, backend asset manifest/installer, namespace bridge,

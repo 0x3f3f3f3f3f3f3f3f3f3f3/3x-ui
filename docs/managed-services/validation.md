@@ -4191,3 +4191,58 @@ Lint reported **0 issues**. Logs: `mieru-preview-settled-green.jsonl` and
 changed; no production code or existing test helper changed, and no additional
 build/full-suite rerun is claimed. This covers preview and preflight rejection,
 not continuity after an already-stopped core or a complete panel-process restart.
+
+## Public mieru routing with observed exits (2026-09-29)
+
+`TestMieruPublicRoutesChooseObservedExit` and its PostgreSQL counterpart use
+canonical public clients, `SaveXraySetting`, `RestartXray(false)`, actual official
+v3.38.0 clients and the pinned managed core. Each combination of database, native
+underlay and payload network runs ten cases: first user, second same-IP user,
+domain, literal IP, original source, combined public inbound/network/port,
+wrong-port block, wrong-network block, first-deny priority and round-robin.
+That is **80 leaf route cases**; Go also reports 12 grouping subtests.
+
+Two freedom exits redirect to an owned target using actual socket source
+addresses `127.0.0.2` / `127.0.0.3`. Each probe carries a unique eight-byte marker.
+The target records its source and marker independently, then echoes the payload.
+The client verifies the echo; UDP also verifies its returned target peer.
+Round-robin must produce A/B/A across three fresh probes. Blocked probes must
+produce no target observation during the declared 200ms window, followed by a
+successful second-user control through B on the same running service. No host
+interface, firewall or global routing changes are made for these loopback exits.
+
+The initial user-matcher-removal overlay failed at core validation because a
+user-only rule became empty (**1 top-level / 4 grouping/leaf subtest failures**,
+3.444s, `mieru-public-routing-red.jsonl`). That was not route-selection evidence.
+The fixture now explicitly includes its tested network in user rules, so
+removing only the user condition creates a valid but overly broad rule. The
+meaningful negative control passed the first-user case and failed the second:
+marker `0000000000000002` arrived from **127.0.0.2 instead of 127.0.0.3**
+(`mieru-public-routing-user-red.jsonl`, 4.546s). The reported failure includes
+the parent groups; only one leaf failed and one leaf passed.
+
+Restored source passed under race/shuffle: **2 top-level / 92 subtests**, no
+skips or failures, in 28.574s (`mieru-public-routing-green.jsonl`):
+
+```sh
+go test -p 1 -race -shuffle=on ./internal/web/service \
+  -run '^TestMieruPublicRoutesChooseObservedExit' -count=1 -timeout=240s -json
+```
+
+The managed core and PostgreSQL environment are the same as the preceding
+acceptance increments. Production source remains unchanged; the overlay strips
+only generated routing `user` matchers and is never applied to the repository.
+This evidence concerns fresh-flow route choices after public configuration
+application. It does not prove established-flow route migration, every outbound
+protocol, global node routing, or complete Task 6 acceptance. Blocked payload can
+still incur its documented durable-admission charge; this test does not assert
+that blocked or undelivered bytes are uncharged.
+
+The final readable negative-control log records
+`source=127.0.0.2 payload=0000000000000002 want=127.0.0.3/0000000000000002`
+and the first-user pass (4.531s, `mieru-public-routing-final-red.jsonl`). Initial
+lint found one gofumpt layout issue in the round-robin test literal; formatting
+was corrected without changing assertions. `golangci-lint run
+./internal/web/service` then reported **0 issues**
+(`mieru-public-routing-lint-final.log`). Only the new test and documentation
+changed; production build/full-suite evidence remains the preceding milestones.
