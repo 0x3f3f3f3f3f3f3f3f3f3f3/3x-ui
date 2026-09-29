@@ -4892,3 +4892,80 @@ selection still contain dynamic upstream inputs; full artifact reproducibility
 is not established by the managed-core/source comparison. Existing installer,
 menu and web updater activation/rollback remain unfinished. No release or image
 was published, and no host installation or service was changed.
+
+## Fork download and actual updater preflight (2026-09-29)
+
+The production download/prepare path now selects only the managed fork, resolves
+full tag commits, downloads numeric asset IDs with mandatory sidecar and API
+SHA256 checks, verifies the complete manifest, and optionally executes the
+candidate's existing managed-core preflight. `update.sh` uses it before any
+package-manager or service-stop action and installs bundled scripts/units.
+It no longer downloads upstream update assets or tolerates missing checksums.
+
+Focused race/shuffle validation: **37 top-level and 165 subtests passed, no
+skips**, across `internal/updatebundle` and `tools/update-stage`. Cases include
+latest/explicit/prerelease and annotated-tag selection, redirects, moved tags,
+missing/duplicate/pending/oversized assets, exact response bounds, truncated and
+corrupt transfers, recursive tag limits, checksum filename/digest disagreement,
+proxy-credential error privacy, CLI identity arguments and stage cleanup.
+The HTTP fixtures use actual loopback exchanges with the fixed repository path;
+they do not constitute acceptance of a published GitHub release.
+
+The first stalled-body test canceled too early and passed without reaching the
+suspected read path. A transport read-entry barrier then reproduced both lost
+cancellation causes (metadata and archive). Preserving the context error fixed
+those failures without changing the expected behavior. CLI preflight tests
+first failed on the missing flag, then exercised actual owned executable
+fixtures and checked that failed candidates never publish a stage.
+
+The reproducible whole-script probe is
+[`tools/managed-release/probe_update.py`](../../tools/managed-release/probe_update.py):
+
+```sh
+CGO_ENABLED=0 go build -p 1 -trimpath -o /trusted/tools/update-stage ./tools/update-stage
+sudo python3 tools/managed-release/probe_update.py \
+  --helper /trusted/tools/update-stage --panel /trusted/clean-source-panel \
+  --managed-core /trusted/managed-xray --stock-core /trusted/stock-xray
+```
+
+It requires Linux, namespace/mount privileges, Python, `ip`, and a static
+`/usr/bin/busybox`. Before any network or mount action, each child checks PID 1,
+private proc/net/mount identities and an owned temporary root marker. It enables
+only that namespace's loopback and chroots before running the actual updater.
+Package-manager, curl and service-manager fixtures cannot affect the host.
+
+**Nine cases passed**: missing/wrong bootstrap checksum, bad archive checksum,
+corrupt gzip, missing panel, missing required unit, wrong compiled source,
+actual stock-core rejection, and actual managed-core success followed by a
+refused service stop. Old program/core/unit/menu/DB hashes were preserved in
+all cases, failure status was recorded, and temporary update directories were
+removed. Invalid release cases performed no package-manager, stop or global
+process-kill action. The valid candidate reached the stop request only after
+its real managed HMAC preflight; the refused stop preserved program files.
+The probe initially omitted private-loopback setup, causing the valid managed
+candidate to time out; enabling loopback after the isolation guards fixed the
+fixture. A checksum assertion was also corrected to the actual SHA256 error
+text; the invalid hash remained unchanged.
+
+The panel fixture was the clean-source Linux arm64 build of `faaa4098`; its
+compiled declaration was checked. The test bundles combine this candidate with
+current helper/scripts and an explicitly constructed fixture manifest. They
+are interoperability/ordering fixtures, not source attestations or published
+release acceptance. The managed core is the separately rebuilt packaged core;
+the stock core is the separately pinned upstream binary. Business DB files are
+sentinels here, not schema-migration fixtures.
+
+Full repository lint and the final affected-package lint passed with zero issues.
+The final native helper passed all nine isolated script cases; Windows amd64 and
+macOS arm64 helper builds passed (compile checks only). Logs under
+`/tmp/3x-ui-rate-trace/`: `release-download-api-red.log`,
+`release-download-cancel-read-red.jsonl`, `release-prepare-cli-red.jsonl`,
+`release-prepare-final-race.jsonl`, `release-download-lint.log`,
+`updater-managed-preflight-red.jsonl` and `updater-managed-preflight-final-green.jsonl`.
+
+This closes the demonstrated pre-extraction deletion defect for validation
+failures in the standalone updater. Copy/start failure after a successful stop,
+program/DB transactional rollback, crash recovery, successful migration/health
+activation, first installer, menu/web update entry points, Docker/native foreign
+platform execution, and the separate Xray updater remain open. There was no
+host installation, service operation, release publication or image deployment.

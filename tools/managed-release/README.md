@@ -90,3 +90,12 @@ Installer/menu/web-updater activation and program/database rollback remain
 unfinished. The bundled scripts still require that integration before they are
 a safe upgrade path. A passing assembly probe does not establish installation,
 upgrade, container runtime or full protocol/policy acceptance.
+
+The actual updater's validation order has a separate isolated negative-acceptance
+probe, `probe_update.py`. It requires a built static `update-stage`, an unmodified
+native panel with full source metadata, managed and stock cores, Python, static
+BusyBox and Linux namespace/mount privileges. See
+[validation.md](../../docs/managed-services/validation.md#fork-download-and-actual-updater-preflight-2026-09-29)
+for its invocation and scope. It exercises the whole `update.sh` in owned
+chroots, including real candidate preflight and service-stop refusal; it does
+not yet validate successful activation or program/database rollback.

@@ -1,10 +1,12 @@
 # Release archive staging
 
-The `update-stage` command validates a downloaded Linux release archive into a
-new private directory. It does not stop services, replace an installation,
-execute archive members or migrate a database. Installer/updater integration,
-fork provenance, managed-core compatibility and transactional rollback remain
-required work. The current `update.sh` has not yet been changed to use it.
+The `update-stage` command validates a Linux release archive into a new private
+directory. Its optional download mode selects this fork's release and tag commit;
+`--preflight` executes the verified candidate's managed-core check. The helper
+does not stop services, replace an installation or migrate a database. `update.sh`
+now runs these checks before dependencies, service stop or program replacement.
+First installation, menu/web-updater integration and transactional program/DB
+rollback remain required work; preflight alone does not make activation atomic.
 
 Build and run:
 
@@ -182,5 +184,55 @@ fail at its unchanged 2-second deadline; restoring it passes.
 
 This command does not start the candidate web service, migrate or restore a
 database, validate every user configuration, replace an installed directory or
-prove a packaged image works. Installer/menu/web-updater integration and safe
-activation with program/database rollback remain separate unfinished work.
+prove a packaged image works. First installation, menu/web-updater integration
+and safe activation with program/database rollback remain unfinished work.
+
+## Fork download and updater preparation
+
+```sh
+./update-stage --download --preflight --parent /trusted/staging-parent \
+  --release-platform linux-arm64
+# Explicit opt-in to a prerelease:
+./update-stage --download --preflight --parent /trusted/staging-parent \
+  --release-platform linux-arm64 --release-tag dev-latest
+```
+
+The production downloader uses only
+`0x3f3f3f3f3f3f3f3f3f3f3/3x-ui`. It resolves the release's Git tag reference
+to a full 40-character commit, including bounded annotated-tag dereferencing;
+release notes and `target_commitish` are not authoritative commit sources.
+Default selection requires a published stable release. Explicit selection can
+use a prerelease but must match its tag. Draft releases fail.
+
+Both the archive and mandatory `.sha256` sidecar must have uploaded asset
+metadata with bounded size and SHA256 digest. Downloads use the captured numeric
+asset IDs, support GitHub asset redirects, and check exact length and digest.
+The sidecar must name the selected archive and agree with its API digest. Full
+manifest identity/inventory verification follows extraction. A moving rolling
+tag whose asset identity differs fails; there is no upstream or unchecked
+fallback. Metadata is bounded to 1 MiB, the sidecar to 4096 bytes, and the whole
+download to five minutes. Transfer failure, cancellation, validation failure and
+failed candidate preflight remove the owned download/stage directories.
+
+`--preflight` requires complete release verification. It invokes that stage's
+`x-ui verify-release` with the selected identity before printing the stage path.
+The subprocess has a two-minute ceiling; cancellation first sends SIGTERM for
+owned-core cleanup, with a ten-second force-kill fallback. These are process
+bounds, not a promise to validate arbitrarily slow storage in that time.
+
+The standalone `update.sh` fetches a static helper and mandatory checksum from
+the selected fork channel over HTTPS. Bootstrap bodies are bounded even when a
+server omits Content-Length. Only then does the helper select, download, verify
+and preflight the actual candidate. Missing assets/checksums, incompatible
+manifests, wrong sources and stock cores fail before package-manager actions or
+service stop. The menu and service units installed by this script come from the
+verified archive. It checks service-stop errors and does not issue global
+`pkill` patterns. Its subsequent copy/start phase still lacks the required
+transaction journal, consistent database backup and automatic rollback.
+
+For an administrator-controlled offline archive, the same script accepts
+`XUI_UPDATE_ARCHIVE`, `XUI_UPDATE_SHA256`, `XUI_UPDATE_COMMIT`, `XUI_UPDATE_TAG`,
+`XUI_UPDATE_HELPER` and `XUI_UPDATE_HELPER_SHA256`. All are required together;
+commit and hashes must come from a trusted release channel. This mode still
+performs full inventory and actual runtime preflight. It is not an unchecked
+recovery bypass and does not establish trust in a locally supplied hash.
