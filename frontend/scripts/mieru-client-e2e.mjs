@@ -329,6 +329,10 @@ try {
     assert.equal(profile.user.password, nativePassword);
     assert.equal(profile.servers[0].ipAddress, '127.0.0.1');
     assert.deepEqual(
+      profile.multiplexing,
+      network === 'udp' ? undefined : { level: 'MULTIPLEXING_OFF' },
+    );
+    assert.deepEqual(
       profile.servers[0].portBindings,
       (network === 'both' ? ['TCP', 'UDP'] : [network.toUpperCase()]).map((protocol) => ({
         port: inboundPort,
@@ -352,6 +356,7 @@ try {
     assert.equal(imported.profiles[0].user.name, email);
     assert.equal(imported.profiles[0].user.password, nativePassword);
     assert.deepEqual(imported.profiles[0].servers, profile.servers);
+    assert.deepEqual(imported.profiles[0].multiplexing, profile.multiplexing);
     imported.socks5Port = await port();
     writeFileSync(configPath, JSON.stringify(imported), { mode: 0o600 });
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();

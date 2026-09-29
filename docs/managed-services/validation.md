@@ -3542,3 +3542,64 @@ PostgreSQL after the controller correction (two top-level tests, zero skips,
 20.775s; `/tmp/3x-ui-rate-trace/published-ssh-regression.jsonl`). The panel build
 passed (`go build -o /tmp/3x-ui-rate-guard-panel .`), the affected controller/limiter
 static analysis reported zero issues, and `git diff --check` passed.
+
+### Explicit TCP scheduling in managed mieru exports
+
+The supported exported TCP configuration now uses `MULTIPLEXING_OFF`; UDP-only
+profiles retain the upstream default. Official TCP+UDP profiles apply the choice
+at profile scope; Mihomo emits separate transport nodes and applies it only to
+TCP. The [compatibility decision](mieru-integration-plan.md#tcp-client-scheduling-compatibility)
+records the confirmed TCP backpressure behavior, extra connection cost and
+manual-profile limitation. No rate, burst, buffer or handshake limit was widened.
+The retained official-protocol characterization passed with race detection in
+6.422s (`/tmp/3x-ui-rate-trace/multiplex-boundary-test.log`).
+
+Backend exports first failed four TCP/both cases, then passed two top-level
+cases/six subtests, zero skips. Frontend's first attempt could not open Vitest's
+loopback listener (`EPERM`) and ran no assertions. The authorized loopback rerun
+then failed six tests for the missing URI/JSON scheduling field; after the fix,
+all 16 tests in both affected files passed (6.42s), as did TypeScript and lint.
+Logs: `/tmp/3x-ui-rate-trace/multiplex-exports-red.log`,
+`multiplex-exports-green.log`, `multiplex-ui-red-localhost.jsonl.log`,
+`multiplex-ui-green.log`, `multiplex-ui-types.log`, `multiplex-ui-lint.log` in
+that same directory. Unsupported or duplicate explicit multiplexing options
+are rejected; legacy panel TCP links gain the explicit setting when downloaded.
+
+The complete subscription race suite with the actual managed core and Mihomo
+v1.19.30 passed: 475 top-level tests, 511 subtests, 44.559s. Two opt-in scale
+subtests skipped and are not passes. Both native transport choices carried real
+TCP/UDP payload through official clients and Mihomo after importing the generated
+profiles. Log: `/tmp/3x-ui-rate-trace/multiplex-sub-full.jsonl`.
+Fresh full frontend/build/browser and public mixed-rate checks are tracked
+separately; this export result alone does not close those acceptance items.
+
+Using the explicitly exported TCP scheduling configuration, two complete normal
+mixed-rate repetitions passed: four top-level tests/eight database/underlay
+subtests, zero skips, 147.198s. Log:
+`/tmp/3x-ui-rate-trace/multiplex-public-rates.jsonl`. The independent-client,
+multi-listener, live-existing-connection, exact 2x billing and core-restart
+assertions all ran with the original limits. The earlier UDP window 15 bytes
+below its lower bound has not been attributed to TCP multiplexing; this result
+does not erase that unresolved observation or establish the remaining sustained
+UDP-payload acceptance.
+
+Fresh production frontend and embedded-panel builds passed (Vite 2.73s).
+The complete browser script passed for TCP, UDP and both: actual downloaded
+JSON preserved the explicit TCP option through official v3.38.0 CLI import,
+carried real TCP/UDP echoes, retained exact 17,408-byte counters in each direction
+and 52,224 billed bytes at 1.5x, showed two sessions on desktop/mobile, and closed
+existing TCP within 2s of reduced-quota API completion. Disable and deletion
+also completed for all three settings. Logs:
+`/tmp/3x-ui-rate-trace/multiplex-ui-build.log`, `multiplex-panel-build.log` and
+`multiplex-browser.log`. The current full frontend and affected static checks
+are separate from this real-browser evidence.
+
+Final checks for this export correction: affected Go lint reported zero issues
+(`/tmp/3x-ui-rate-trace/multiplex-backend-lint-final.log`). Its first run found
+two import-group formatting issues in new test files; adding the missing blank
+separators resolved them without behavioral changes. The fresh complete serial
+frontend run passed all 189 files and 1,868 tests in 482.90s, with no skipped
+tests reported (`/tmp/3x-ui-rate-trace/multiplex-ui-full-test.log`). TypeScript,
+frontend lint, production frontend/panel builds, real browser/CLI and full
+subscription checks are recorded above. `git diff --check` passed. The original
+whole-task and remaining mieru acceptance requirements remain open.

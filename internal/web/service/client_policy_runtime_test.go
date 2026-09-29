@@ -176,6 +176,10 @@ func TestClientPolicyProductionSSHSharedRatesChangeLive(t *testing.T) {
 }
 
 func testClientPolicyProductionSSHSharedRates(t *testing.T, configure func(map[string]any)) {
+	testClientPolicyProductionSharedRates(t, configure, "")
+}
+
+func testClientPolicyProductionSharedRates(t *testing.T, configure func(map[string]any), nativeNetwork string) {
 	binary := os.Getenv("XRAY_E2E_BINARY")
 	if binary == "" {
 		t.Skip("set XRAY_E2E_BINARY for real OpenSSH and panel-managed Xray")
@@ -212,7 +216,7 @@ func testClientPolicyProductionSSHSharedRates(t *testing.T, configure func(map[s
 	}
 	svc := &XrayService{}
 	isManuallyStopped.Store(false)
-	runtime.SetManager(runtime.NewManager(runtime.LocalDeps{APIPort: svc.GetXrayAPIPort, SetNeedRestart: svc.SetToNeedRestart, SSHChanged: NotifySSHChange}))
+	runtime.SetManager(runtime.NewManager(runtime.LocalDeps{APIPort: svc.GetXrayAPIPort, SetNeedRestart: svc.SetToNeedRestart, SSHChanged: NotifySSHChange, MieruChanged: NotifyMieruChange}))
 	t.Cleanup(func() {
 		_ = svc.StopXray()
 		runtime.SetManager(nil)
@@ -233,8 +237,15 @@ func testClientPolicyProductionSSHSharedRates(t *testing.T, configure func(map[s
 			t.Fatal(err)
 		}
 		clients[n] = model.Client{Email: fmt.Sprintf("policy-%d", n), SubID: fmt.Sprintf("policy-sub-%d", n), Enable: true, SSH: &model.SSHClient{PublicKeys: []string{string(ssh.MarshalAuthorizedKey(sshPub))}, Targets: []model.SSHTarget{{Host: domains[n], Port: 443}}}}
+		if nativeNetwork != "" {
+			clients[n].Password = fmt.Sprintf("native-policy-password-%d", n)
+		}
 	}
-	inbounds := make([]*model.Inbound, 2)
+	protocols := []model.Protocol{model.SSH, model.SSH}
+	if nativeNetwork != "" {
+		protocols = []model.Protocol{model.SSH, model.Mieru, model.Mieru}
+	}
+	inbounds := make([]*model.Inbound, len(protocols))
 	for n := range inbounds {
 		_, portText, _ := net.SplitHostPort(productionSSHAddress(t))
 		port, _ := strconv.Atoi(portText)
@@ -242,8 +253,12 @@ func testClientPolicyProductionSSHSharedRates(t *testing.T, configure func(map[s
 		if n > 0 {
 			members = nil
 		}
-		encoded, _ := json.Marshal(map[string]any{"clients": members})
-		inbounds[n] = &model.Inbound{Protocol: model.SSH, Enable: true, Listen: "127.0.0.1", Port: port, Settings: string(encoded)}
+		settings := map[string]any{"clients": members}
+		if protocols[n] == model.Mieru {
+			settings["network"] = nativeNetwork
+		}
+		encoded, _ := json.Marshal(settings)
+		inbounds[n] = &model.Inbound{Protocol: protocols[n], Enable: true, Listen: "127.0.0.1", Port: port, Settings: string(encoded)}
 		if _, _, err := (&InboundService{}).AddInbound(inbounds[n]); err != nil {
 			t.Fatal(err)
 		}
@@ -269,11 +284,19 @@ func testClientPolicyProductionSSHSharedRates(t *testing.T, configure func(map[s
 		t.Fatalf("start policy Xray: %v; core result: %s", err, svc.GetXrayResult())
 	}
 	for _, inbound := range inbounds {
-		productionSSHWait(t, sshListenAddress(inbound))
+		if inbound.Protocol == model.Mieru {
+			waitProductionMieru(t, inbound.Id)
+		} else {
+			productionSSHWait(t, sshListenAddress(inbound))
+		}
 	}
 	for n := range clients {
 		for _, inbound := range inbounds {
-			groups[n].start(t, inbound, clients[n].Email, keys[n], domains[n])
+			if inbound.Protocol == model.Mieru {
+				groups[n].startMieru(t, inbound, nativeNetwork, clients[n], domains[n])
+			} else {
+				groups[n].start(t, inbound, clients[n].Email, keys[n], domains[n])
+			}
 		}
 	}
 	time.Sleep(200 * time.Millisecond)
@@ -302,24 +325,41 @@ func testClientPolicyProductionSSHSharedRates(t *testing.T, configure func(map[s
 	measure := func(label string) time.Time {
 		t.Helper()
 		before := [2][2]int64{}
+		meterBefore := [2][2]int64{}
+		meterStarted := [2]time.Time{}
+		for n := range groups {
+			meterStarted[n] = time.Now()
+			policy, err := policySvc.GetPolicy(ctx, clients[n].Email)
+			if err != nil {
+				t.Fatal(err)
+			}
+			meterBefore[n][0], _ = strconv.ParseInt(policy.Usage.Up, 10, 64)
+			meterBefore[n][1], _ = strconv.ParseInt(policy.Usage.Down, 10, 64)
+		}
+		start := time.Now()
 		for n, g := range groups {
 			before[n] = [2]int64{g.up.Load(), g.down.Load()}
 		}
-		start := time.Now()
 		time.Sleep(1500 * time.Millisecond)
+		after := [2][2]int64{}
+		for n, g := range groups {
+			after[n] = [2]int64{g.up.Load(), g.down.Load()}
+		}
 		finished := time.Now()
 		elapsed := finished.Sub(start).Seconds()
 		for n, g := range groups {
 			if ended := g.ended.Load(); ended != 0 {
 				t.Fatalf("rate edit closed %d existing client %d streams", ended, n)
 			}
-			for direction, count := range []int64{g.up.Load() - before[n][0], g.down.Load() - before[n][1]} {
+			for direction, count := range []int64{after[n][0] - before[n][0], after[n][1] - before[n][1]} {
 				rate := rates[n][direction]
 				burst := min(int64(65536), max(int64(1), rate/10))
 				lower, upper := float64(rate)*elapsed*0.80, float64(rate)*elapsed*1.06+float64(burst)
 				if float64(count) < lower || float64(count) > upper {
 					policy, err := policySvc.GetPolicy(ctx, clients[n].Email)
-					t.Logf("usage diagnostic: %+v, %v; delivered=%d/%d", policy.Usage, err, g.up.Load(), g.down.Load())
+					up, _ := strconv.ParseInt(policy.Usage.Up, 10, 64)
+					down, _ := strconv.ParseInt(policy.Usage.Down, 10, 64)
+					t.Logf("usage diagnostic: %+v, %v; delivered=%d/%d; admitted in %.3fs=%d/%d", policy.Usage, err, after[n][0], after[n][1], time.Since(meterStarted[n]).Seconds(), up-meterBefore[n][0], down-meterBefore[n][1])
 					t.Fatalf("%s client %d direction %d: %d bytes outside [%.0f,%.0f] in %.3fs", label, n, direction, count, lower, upper, elapsed)
 				}
 				t.Logf("%s client %d direction %d: %.0f raw B/s", label, n, direction, float64(count)/elapsed)
@@ -376,7 +416,11 @@ func testClientPolicyProductionSSHSharedRates(t *testing.T, configure func(map[s
 		t.Fatal(err)
 	}
 	for _, inbound := range inbounds {
-		productionSSHWait(t, sshListenAddress(inbound))
+		if inbound.Protocol == model.Mieru {
+			waitProductionMieru(t, inbound.Id)
+		} else {
+			productionSSHWait(t, sshListenAddress(inbound))
+		}
 	}
 	for n := range clients {
 		policy, err := policySvc.GetPolicy(ctx, clients[n].Email)
@@ -384,7 +428,11 @@ func testClientPolicyProductionSSHSharedRates(t *testing.T, configure func(map[s
 			t.Fatalf("restart lost the saved policy: %+v, %v", policy, err)
 		}
 		for _, inbound := range inbounds {
-			groups[n].start(t, inbound, clients[n].Email, keys[n], domains[n])
+			if inbound.Protocol == model.Mieru {
+				groups[n].startMieru(t, inbound, nativeNetwork, clients[n], domains[n])
+			} else {
+				groups[n].start(t, inbound, clients[n].Email, keys[n], domains[n])
+			}
 		}
 	}
 	time.Sleep(350 * time.Millisecond)

@@ -26,6 +26,7 @@ export function genMieruLink(
   url.username = email;
   url.password = password;
   url.searchParams.set('profile', remark || 'mieru');
+  if (network !== 'udp') url.searchParams.set('multiplexing', 'MULTIPLEXING_OFF');
   for (const transport of network === 'both' ? ['TCP', 'UDP'] : [network.toUpperCase()]) {
     url.searchParams.append('port', String(port));
     url.searchParams.append('protocol', transport);
@@ -43,8 +44,12 @@ export function mieruConfigFromLink(link: string): string | null {
       url.port ||
       url.pathname ||
       url.hash ||
-      [...query.keys()].some((key) => !['profile', 'port', 'protocol'].includes(key)) ||
-      query.getAll('profile').length !== 1
+      [...query.keys()].some(
+        (key) => !['profile', 'port', 'protocol', 'multiplexing'].includes(key),
+      ) ||
+      query.getAll('profile').length !== 1 ||
+      query.getAll('multiplexing').length > 1 ||
+      (query.has('multiplexing') && query.get('multiplexing') !== 'MULTIPLEXING_OFF')
     )
       return null;
     const ports = query.getAll('port');
@@ -55,6 +60,9 @@ export function mieruConfigFromLink(link: string): string | null {
     const result = MieruProfileSchema.safeParse({
       profileName: query.get('profile'),
       user: { name: decodeURIComponent(url.username), password: decodeURIComponent(url.password) },
+      ...(protocols.includes('TCP') || query.has('multiplexing')
+        ? { multiplexing: { level: 'MULTIPLEXING_OFF' } }
+        : {}),
       servers: [
         {
           [isIP ? 'ipAddress' : 'domainName']: host,

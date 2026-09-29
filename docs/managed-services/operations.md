@@ -42,6 +42,15 @@ do not receive fabricated nodes. Server-side quotas and private bridge ports
 are not exported to clients. A `running` badge describes the listener/router
 state; each client still undergoes quota, expiry and enable checks.
 
+TCP-capable official profiles and TCP Mihomo nodes select `MULTIPLEXING_OFF`.
+Download older TCP profiles again to pick up this setting. It gives each native
+session its own TCP connection, so a new handshake does not wait behind another
+session's buffered, shaped upload. These connections still share one client's
+rate and quota. UDP-only profiles retain the upstream default. Manually enabling
+TCP multiplexing can delay new handshakes during shaping; that configuration
+has no verified handshake-latency guarantee. See the
+[compatibility evidence and resource cost](mieru-integration-plan.md#tcp-client-scheduling-compatibility).
+
 ## Development
 
 Use the versions in audit.md, a C compiler, and an isolated checkout:

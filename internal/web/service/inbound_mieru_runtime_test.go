@@ -509,14 +509,18 @@ func newProductionMieruFixture(t *testing.T, underlay string) productionMieruFix
 	return productionMieruFixture{service: svc, inbound: inbound, user: user, client: client, address: address, udpTarget: udpTarget}
 }
 
-func productionMieruClient(t *testing.T, underlay string, address netip.AddrPort, user model.Client) clientapi.Client {
+func productionMieruClient(t *testing.T, underlay string, address netip.AddrPort, user model.Client, multiplexing ...appctlpb.MultiplexingLevel) clientapi.Client {
 	t.Helper()
 	client := clientapi.NewClient()
 	transport := appctlpb.TransportProtocol_TCP
 	if underlay == "udp" {
 		transport = appctlpb.TransportProtocol_UDP
 	}
-	if err := client.Store(&clientapi.ClientConfig{Profile: &appctlpb.ClientProfile{ProfileName: proto.String("public-runtime"), User: &appctlpb.User{Name: proto.String(user.Email), Password: proto.String(user.Password)}, Servers: []*appctlpb.ServerEndpoint{{IpAddress: proto.String("127.0.0.1"), PortBindings: []*appctlpb.PortBinding{{Port: proto.Int32(int32(address.Port())), Protocol: transport.Enum()}}}}}}); err != nil {
+	profile := &appctlpb.ClientProfile{ProfileName: proto.String("public-runtime"), User: &appctlpb.User{Name: proto.String(user.Email), Password: proto.String(user.Password)}, Servers: []*appctlpb.ServerEndpoint{{IpAddress: proto.String("127.0.0.1"), PortBindings: []*appctlpb.PortBinding{{Port: proto.Int32(int32(address.Port())), Protocol: transport.Enum()}}}}}
+	if len(multiplexing) > 0 {
+		profile.Multiplexing = &appctlpb.MultiplexingConfig{Level: multiplexing[0].Enum()}
+	}
+	if err := client.Store(&clientapi.ClientConfig{Profile: profile}); err != nil {
 		t.Fatal(err)
 	}
 	if err := client.Start(); err != nil {

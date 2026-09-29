@@ -20,6 +20,7 @@ describe('mieru native configuration download', () => {
       profiles: [
         {
           profileName: 'native profile',
+          multiplexing: { level: 'MULTIPLEXING_OFF' },
           user: { name: 'native-user', password: 'fixture:p@ss/#?中文' },
           servers: [
             {

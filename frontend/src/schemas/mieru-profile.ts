@@ -9,6 +9,7 @@ export const MieruProfileSchema = z.object({
     name: MieruCredentialsSchema.shape.email,
     password: MieruCredentialsSchema.shape.password,
   }),
+  multiplexing: z.object({ level: z.literal('MULTIPLEXING_OFF') }).optional(),
   servers: z
     .array(
       z

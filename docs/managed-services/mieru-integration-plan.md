@@ -98,3 +98,33 @@ The Mihomo subscription therefore receives native nodes, with separate TCP/UDP
 choices when the server enables both. Legacy Clash and Xray JSON cannot represent
 this protocol and must not emit a substitute direct-only profile. Real official
 Mihomo validation and data-path checks accompany the official mieru client tests.
+
+## TCP client scheduling compatibility
+
+Generated official TCP/both profiles select `MULTIPLEXING_OFF`; generated TCP
+Mihomo nodes do the same. UDP-only profiles retain the upstream default. This
+uses the official [profile option](https://github.com/enfein/mieru/blob/v3.38.0/docs/client-install.md)
+and [Mihomo setting](https://wiki.metacubex.one/config/proxies/mieru/).
+One TCP connection per native session avoids putting a new SOCKS handshake
+behind a saturated session on the same byte stream. Every connection still
+shares the canonical client's rate buckets, meter, quota and active-flow cap.
+The cost is more TCP connections and no TCP connection reuse; existing 256
+underlay and 128 per-client flow limits remain enforced.
+
+This choice follows a retained real official-client test,
+`TestNativeTCPMultiplexingBackpressureIsConnectionScoped`: finite buffered
+traffic at 16 KiB/s delays a second handshake on the same underlay, while an
+independent underlay works; lifting the cap releases the delayed handshake.
+The upstream TCP sender does not use the packet transport's per-session credit
+control. Enlarging queues or raising handshake deadlines would hide the coupling.
+Manual TCP profiles that enable multiplexing remain subject to this behavior;
+bounded handshake latency for those profiles is not a verified capability.
+Existing exported TCP profiles should be downloaded again. The JSON download
+path also applies this explicit choice to older panel links lacking the option;
+it rejects unsupported explicit choices instead of silently rewriting them.
+
+Public rate tests now use this documented exported TCP scheduling choice and
+log it. Their client count, listener count, payload paths, unlimited baseline,
+rate bounds, sampling windows, billing checks and live-change deadline remain
+unchanged. Original default-multiplexing failures remain in validation.md; the
+UDP throughput failure is a separate open item.

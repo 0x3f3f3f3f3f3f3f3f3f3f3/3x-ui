@@ -76,6 +76,9 @@ func (s *SubService) mieruProfiles(inbound *model.Inbound, client model.Client) 
 			User:        &appctlpb.User{Name: proto.String(client.Email), Password: proto.String(client.Password)},
 			Servers:     []*appctlpb.ServerEndpoint{server},
 		}
+		if network != "udp" {
+			profile.Multiplexing = &appctlpb.MultiplexingConfig{Level: appctlpb.MultiplexingLevel_MULTIPLEXING_OFF.Enum()}
+		}
 		if err := appctlcommon.ValidateClientConfigSingleProfile(profile); err != nil {
 			continue
 		}
@@ -97,11 +100,15 @@ func (s *SubService) genMieruMihomoProxies(inbound *model.Inbound, client model.
 				if len(server.GetPortBindings()) > 1 {
 					name += " (" + binding.GetProtocol().String() + ")"
 				}
-				proxies = append(proxies, map[string]any{
+				proxy := map[string]any{
 					"name": name, "type": "mieru", "server": host, "port": int(binding.GetPort()),
 					"transport": binding.GetProtocol().String(), "udp": true,
 					"username": profile.GetUser().GetName(), "password": profile.GetUser().GetPassword(),
-				})
+				}
+				if binding.GetProtocol() == appctlpb.TransportProtocol_TCP {
+					proxy["multiplexing"] = "MULTIPLEXING_OFF"
+				}
+				proxies = append(proxies, proxy)
 			}
 		}
 	}

@@ -37,6 +37,13 @@ func TestMieruShareLinkUsesOfficialNativeProfile(t *testing.T) {
 			if err := appctlcommon.ValidateClientConfigSingleProfile(profile); err != nil {
 				t.Fatalf("official profile validation: %v", err)
 			}
+			wantMultiplexing := appctlpb.MultiplexingLevel_MULTIPLEXING_DEFAULT
+			if test.network != "udp" {
+				wantMultiplexing = appctlpb.MultiplexingLevel_MULTIPLEXING_OFF
+			}
+			if profile.GetMultiplexing().GetLevel() != wantMultiplexing {
+				t.Fatal("TCP-capable profile can place new handshakes behind a shaped session")
+			}
 			if profile.GetUser().GetName() != "native-user" || profile.GetUser().GetPassword() != "fixture:p@ss/#?中文" || len(profile.GetUser().GetQuotas()) != 0 {
 				t.Fatal("native export lost credentials or injected server-side rolling quotas")
 			}
@@ -112,6 +119,9 @@ func TestMieruMihomoExportPreservesNativeTransportsAndHosts(t *testing.T) {
 					name += " (" + transport + ")"
 				}
 				want := map[string]any{"name": name, "type": "mieru", "server": "2001:db8::17", "port": 9443, "transport": transport, "username": "native-user", "password": "fixture-password", "udp": true}
+				if transport == "TCP" {
+					want["multiplexing"] = "MULTIPLEXING_OFF"
+				}
 				if !reflect.DeepEqual(proxies[i], want) {
 					t.Fatal("Mihomo export lost native endpoint/credentials or included unrelated Xray/rolling-quota fields")
 				}

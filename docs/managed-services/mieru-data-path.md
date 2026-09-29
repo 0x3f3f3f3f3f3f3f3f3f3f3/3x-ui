@@ -184,3 +184,14 @@ separate ledger totals, idle TCP socket reclamation and pending target dial
 cancellation. Backpressured rotation uses the same owned connection cleanup as
 disable and shutdown. See the [validation record](validation.md) for commands,
 observed failures, mutation checks and final verification results.
+
+## Managed client export scheduling
+
+TCP and TCP+UDP official profiles, and TCP Mihomo nodes, explicitly disable
+native connection multiplexing. The per-client shaper remains shared across
+all resulting connections. This avoids a new session's handshake waiting behind
+another session's buffered TCP payload during shaping, without growing queues
+or terminating the active flow. UDP-only exports retain native multiplexing.
+See [the compatibility decision and real test](mieru-integration-plan.md#tcp-client-scheduling-compatibility).
+Manually enabling TCP multiplexing retains the underlying head-of-line blocking
+behavior; it is not covered by a handshake-latency guarantee.

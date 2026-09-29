@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { genAllLinks, genInboundLinks } from '@/lib/xray/inbound-link';
 import { parseLinkParts } from '@/lib/xray/link-label';
 import { InboundSchema } from '@/schemas/api/inbound';
+import { genMieruLink, mieruConfigFromLink } from '@/lib/xray/mieru-link';
 
 describe('mieru share exports', () => {
   it.each(['tcp', 'udp', 'both'])(
@@ -29,6 +30,9 @@ describe('mieru share exports', () => {
       expect(decodeURIComponent(parsed.password)).toBe('fixture:p@ss/#?中文');
       expect(parsed.hostname).toBe('[2001:db8::17]');
       expect(parsed.searchParams.get('profile')).toBe('native profile');
+      expect(parsed.searchParams.get('multiplexing')).toBe(
+        network === 'udp' ? null : 'MULTIPLEXING_OFF',
+      );
       expect(parsed.searchParams.getAll('protocol')).toEqual(
         network === 'both' ? ['TCP', 'UDP'] : [network.toUpperCase()],
       );
@@ -37,11 +41,45 @@ describe('mieru share exports', () => {
       );
       expect(
         [...parsed.searchParams.keys()].every((key) =>
-          ['profile', 'protocol', 'port'].includes(key),
+          ['profile', 'protocol', 'port', 'multiplexing'].includes(key),
         ),
       ).toBe(true);
     },
   );
+
+  it.each(['tcp', 'udp', 'both'])(
+    'keeps %s scheduling in the downloaded official profile',
+    (network) => {
+      const link = genMieruLink('edge.example', 8443, network, 'native-user', 'password', 'native');
+      const config = mieruConfigFromLink(link);
+      expect(config).not.toBeNull();
+      const profile = JSON.parse(config!).profiles[0];
+      expect(profile.multiplexing).toEqual(
+        network === 'udp' ? undefined : { level: 'MULTIPLEXING_OFF' },
+      );
+    },
+  );
+
+  it('preserves explicit independent UDP connections', () => {
+    const config = mieruConfigFromLink(
+      'mierus://native-user:password@edge.example?profile=native&port=8443&protocol=UDP&multiplexing=MULTIPLEXING_OFF',
+    );
+    expect(config).not.toBeNull();
+    expect(JSON.parse(config!).profiles[0].multiplexing).toEqual({ level: 'MULTIPLEXING_OFF' });
+  });
+
+  it.each([
+    'MULTIPLEXING_LOW',
+    'MULTIPLEXING_HIGH',
+    'unknown',
+    'MULTIPLEXING_OFF&multiplexing=MULTIPLEXING_OFF',
+  ])('does not silently rewrite an unsupported multiplexing choice: %s', (level) => {
+    expect(
+      mieruConfigFromLink(
+        `mierus://native-user:password@edge.example?profile=native&port=8443&protocol=TCP&multiplexing=${level}`,
+      ),
+    ).toBeNull();
+  });
 
   it('uses a native public endpoint override without Xray TLS fields', () => {
     const inbound = InboundSchema.parse({
