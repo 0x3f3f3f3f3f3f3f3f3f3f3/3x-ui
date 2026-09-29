@@ -56,8 +56,8 @@ jobs:
         run: |
           set -o pipefail
           XRAY_E2E_BINARY="$PWD/build/custom-xray" XRAY_UPSTREAM_E2E_BINARY="$PWD/build/upstream-xray" XRAY_PRE_REVOCATION_E2E_BINARY="$PWD/build/pre-revocation-xray" \
-            go test -race ./internal/xray ./internal/web/runtime -run 'TestManagedProcess|TestManagedMutation|TestLocalRuntimeUsesPrivateControl|TestXrayAPI_E2E|TestExplicitControlEndpoint|TestPrivateControl' -count=1 -v | tee /tmp/policy-process.log
-          for test in TestManagedProcessNegotiatesAndSeedsBeforeOpeningListeners TestManagedProcessRejectsUnmodifiedCoreBeforeBusinessTraffic TestManagedProcessNegotiatesCredentialRevocationBeforePreparation TestManagedMutationRequiresCredentialRevocationBeforeHandlerChanges TestLocalRuntimeUsesPrivateControlForHandlersRoutingAndStats; do
+            go test -race ./internal/xray ./internal/web/runtime -run 'TestManagedProcess|TestManagedMutation|TestLocalRuntimeUsesPrivateControl|TestXrayAPI_E2E|TestExplicitControlEndpoint|TestPrivateControl|TestFinalTraffic|TestTrafficControl' -count=1 -v | tee /tmp/policy-process.log
+          for test in TestManagedProcessNegotiatesAndSeedsBeforeOpeningListeners TestManagedProcessRejectsUnmodifiedCoreBeforeBusinessTraffic TestManagedProcessNegotiatesCredentialRevocationBeforePreparation TestManagedMutationRequiresCredentialRevocationBeforeHandlerChanges TestLocalRuntimeUsesPrivateControlForHandlersRoutingAndStats TestFinalTrafficReplaysPendingThenSettlesFreshSnapshot TestFinalTrafficStartupCannotPinAnotherProcess TestFinalTrafficRejectsCancellationAfterPendingReplay TestFinalTrafficRejectsExhaustedSequenceBeforeDrain TestTrafficControlClientPinsEveryPageAndRejectsWrongPeer TestTrafficControlEndpointChangesRequireRestart; do
             grep -q -- "^--- PASS: $test " /tmp/policy-process.log
           done
       - name: SQLite policy persistence and Runtime client edits

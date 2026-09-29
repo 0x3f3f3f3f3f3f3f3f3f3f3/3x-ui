@@ -88,6 +88,7 @@ func ComputeHotDiff(oldCfg, newCfg *Config) (*HotDiff, bool) {
 		{"transport", oldCfg.Transport, newCfg.Transport},
 		{"policy", oldCfg.Policy, newCfg.Policy},
 		{"api", oldCfg.API, newCfg.API},
+		{"trafficControl", oldCfg.TrafficControl, newCfg.TrafficControl},
 		{"stats", oldCfg.Stats, newCfg.Stats},
 		{"reverse", oldCfg.Reverse, newCfg.Reverse},
 		{"fakedns", oldCfg.FakeDNS, newCfg.FakeDNS},

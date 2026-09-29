@@ -125,11 +125,16 @@ func NewTestProcess(xrayConfig *Config, configPath string) *Process {
 }
 
 type process struct {
-	trafficMu       sync.Mutex
-	trafficCursor   map[string]int64
-	trafficID       string
-	trafficSequence int64
-	trafficPending  *pendingTrafficBatch
+	trafficBootID       string
+	trafficEndpoint     string
+	trafficDraining     bool
+	trafficFinal        map[string]int64
+	trafficFinalSettled bool
+	trafficMu           sync.Mutex
+	trafficCursor       map[string]int64
+	trafficID           string
+	trafficSequence     int64
+	trafficPending      *pendingTrafficBatch
 
 	// mu guards the process lifecycle fields (cmd, done, exitErr) plus version,
 	// apiPort, and config, which are written by Start/startCommand/refreshVersion/
@@ -635,6 +640,10 @@ func (p *process) startConfig(startConfig *Config) (err error) {
 		}
 	}()
 
+	endpoint, err := trafficControlEndpoint(startConfig)
+	if err != nil {
+		return err
+	}
 	data, err := json.MarshalIndent(startConfig, "", "  ")
 	if err != nil {
 		return common.NewErrorf("Failed to generate XRAY configuration files: %v", err)
@@ -665,6 +674,14 @@ func (p *process) startConfig(startConfig *Config) (err error) {
 
 	p.refreshVersion()
 	p.refreshAPIPort()
+	if endpoint != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err := p.pinTrafficControl(ctx, endpoint)
+		cancel()
+		if err != nil {
+			return errors.Join(err, p.Stop())
+		}
+	}
 
 	return nil
 }
@@ -741,6 +758,9 @@ func (p *process) startCommand(cmd *exec.Cmd) error {
 	p.trafficID = ""
 	p.trafficSequence = 0
 	p.trafficPending = nil
+	p.trafficBootID, p.trafficEndpoint = "", ""
+	p.trafficDraining, p.trafficFinalSettled = false, false
+	p.trafficFinal = nil
 	attachChildLifetime(cmd)
 
 	go p.waitForCommand(cmd, done)

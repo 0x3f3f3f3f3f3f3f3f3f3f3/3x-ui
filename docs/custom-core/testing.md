@@ -883,3 +883,20 @@ lost the runner session after the panel stage; its complete log was audited and
 the remaining lint/build steps were run with persisted exit codes. Lint reports
 zero issues (29.81 s), panel build passes (8.23 s), and formatting plus all 18
 workflow shell blocks pass. No panel handoff is enabled by these tests.
+
+
+Process final-settlement candidate (2026-09-29): real child tests cover a lost SQL
+commit acknowledgement, replay before a fresh final delta, failed final commit
+retry with the same batch ID, child restart identity and unpinned refusal without
+closing traffic. A real unmodified second child previously pinned another core's
+socket; Unix peer-PID verification rejects it and leaves the owner healthy.
+Cancellation during pending replay and exhausted sequence checks occur before
+drain. Malformed pages, changed boots, wrong peers, duplicate counters, negative
+values and page limits are rejected. Endpoint changes fail hot-diff preflight and
+require restart; formatting-only changes do not.
+
+Focused race checks pass (2.925 s); final complete shuffled internal/xray race
+suite passes (18.514 s). Source review passes. Root gates also pass: internal/xray
+race (22.27 s including command overhead), complete panel suite (282.43 s), lint
+with zero issues (24.57 s) and panel build (8.19 s). Formatting and all 18 workflow
+shell blocks pass. This increment does not yet wire SQL service handoff.

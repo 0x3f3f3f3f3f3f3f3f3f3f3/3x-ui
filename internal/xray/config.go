@@ -9,6 +9,7 @@ import (
 // Config represents the complete Xray configuration structure.
 // It contains all sections of an Xray config file including inbounds, outbounds, routing, etc.
 type Config struct {
+	TrafficControl   json_util.RawMessage `json:"trafficControl,omitempty"`
 	LogConfig        json_util.RawMessage `json:"log"`
 	RouterConfig     json_util.RawMessage `json:"routing"`
 	DNSConfig        json_util.RawMessage `json:"dns,omitempty"`
@@ -30,6 +31,9 @@ type Config struct {
 
 // Equals compares two Config instances for deep equality.
 func (c *Config) Equals(other *Config) bool {
+	if !bytes.Equal(c.TrafficControl, other.TrafficControl) {
+		return false
+	}
 	if len(c.InboundConfigs) != len(other.InboundConfigs) {
 		return false
 	}

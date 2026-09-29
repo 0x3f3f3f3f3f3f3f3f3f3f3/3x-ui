@@ -30,15 +30,15 @@ type pendingTrafficBatch struct {
 func (p *Process) SettleTraffic(settle func(*TrafficBatch) error) ([]*Traffic, []*ClientTraffic, error) {
 	p.trafficMu.Lock()
 	defer p.trafficMu.Unlock()
+	if p.trafficDraining {
+		return nil, nil, ErrFinalTrafficPending
+	}
 	if !p.IsControlReady() {
 		return nil, nil, errors.New("xray control is not ready")
 	}
 	if p.trafficPending == nil {
-		if p.trafficSequence == math.MaxInt64 {
-			return nil, nil, errors.New("traffic batch sequence exhausted")
-		}
-		if p.trafficID == "" {
-			p.trafficID = uuid.NewString()
+		if err := p.ensureTrafficSequence(); err != nil {
+			return nil, nil, err
 		}
 		pending, err := p.prepareTrafficBatch()
 		if err != nil {
@@ -47,12 +47,9 @@ func (p *Process) SettleTraffic(settle func(*TrafficBatch) error) ([]*Traffic, [
 		p.trafficPending = pending
 	}
 	pending := p.trafficPending
-	if err := settle(&pending.batch); err != nil {
+	if err := p.commitTrafficPending(settle); err != nil {
 		return nil, nil, err
 	}
-	p.trafficCursor = pending.cursor
-	p.trafficSequence = pending.batch.Sequence
-	p.trafficPending = nil
 	return pending.batch.Traffics, pending.batch.ClientTraffics, nil
 }
 
@@ -68,23 +65,62 @@ func (p *Process) prepareTrafficBatch() (*pendingTrafficBatch, error) {
 	if err != nil {
 		return nil, err
 	}
-	cursor := make(map[string]int64, len(page.Stat))
+	counters := make(map[string]int64, len(page.Stat))
+	for _, stat := range page.Stat {
+		counters[stat.Name] = stat.Value
+	}
+	return p.trafficBatchFromCounters(counters, false)
+}
+
+func (p *Process) ensureTrafficSequence() error {
+	if p.trafficSequence == math.MaxInt64 {
+		return errors.New("traffic batch sequence exhausted")
+	}
+	if p.trafficID == "" {
+		p.trafficID = uuid.NewString()
+	}
+	return nil
+}
+
+func (p *Process) commitTrafficPending(settle func(*TrafficBatch) error) error {
+	pending := p.trafficPending
+	if err := settle(&pending.batch); err != nil {
+		return err
+	}
+	p.trafficCursor = pending.cursor
+	p.trafficSequence = pending.batch.Sequence
+	p.trafficPending = nil
+	return nil
+}
+
+func (p *Process) trafficBatchFromCounters(values map[string]int64, final bool) (*pendingTrafficBatch, error) {
+	if final {
+		for name, last := range p.trafficCursor {
+			if values[name] < last {
+				return nil, errors.New("final traffic counters are behind the child cursor")
+			}
+		}
+	}
+	cursor := make(map[string]int64, len(values))
 	inbounds, outbounds := make(map[string]*Traffic), make(map[string]*Traffic)
 	clients := make(map[string]*ClientTraffic)
-	for _, stat := range page.Stat {
-		last := p.trafficCursor[stat.Name]
-		if stat.Value < last {
+	for name, value := range values {
+		if final && value < 0 {
+			return nil, errors.New("negative final traffic counter")
+		}
+		last := p.trafficCursor[name]
+		if value < last {
 			last = 0
 		}
-		cursor[stat.Name] = stat.Value
-		delta := stat.Value - last
-		if matches := trafficRegex.FindStringSubmatch(stat.Name); len(matches) == 4 {
+		cursor[name] = value
+		delta := value - last
+		if matches := trafficRegex.FindStringSubmatch(name); len(matches) == 4 {
 			if matches[1] == "inbound" {
 				processTraffic(matches, delta, inbounds)
 			} else {
 				processTraffic(matches, delta, outbounds)
 			}
-		} else if matches := clientTrafficRegex.FindStringSubmatch(stat.Name); len(matches) == 3 {
+		} else if matches := clientTrafficRegex.FindStringSubmatch(name); len(matches) == 3 {
 			processClientTraffic(matches, delta, clients)
 		}
 	}

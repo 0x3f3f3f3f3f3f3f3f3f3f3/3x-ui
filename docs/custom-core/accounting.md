@@ -369,3 +369,31 @@ idle transport resource has exited.
 
 Panel boot pinning, final SQL receipt settlement and live legacy activation are
 still pending. The panel continues to refuse live legacy activation.
+
+
+## Process-owned final settlement
+
+An explicit panel `trafficControl` configuration is now retained and negotiated
+at child startup. Linux verifies SO_PEERCRED against the PID launched by the
+panel on every initial or replacement gRPC connection. The process pins the
+returned boot ID; a private socket path alone is not an ownership proof. Other
+platforms return an unsupported capability error. Changing this endpoint requires
+a core restart; JSON formatting alone does not.
+
+SettleFinalTraffic verifies the pinned capability, then replays any pending
+legacy batch with its original ID before requesting the final snapshot. Its fresh
+batch uses the advanced child cursor. Final counters behind that cursor are
+rejected rather than interpreted as a new counter generation. SQL failures retain
+the batch identity and frozen map; once cached, retrying that SQL commit does not
+need a live control connection. A successful final settlement is idempotent, and
+a new child receives a new boot and empty counter/receipt state.
+
+The traffic mutex protects negotiation, collection and final settlement. A final
+drain blocks ordinary polling from reading the old API. Cancellation after pending
+replay and exhausted batch sequences are rejected before issuing drain. The
+settlement callback must not call lifecycle methods; Stop remains a separate
+action after SQL success under the caller's lifecycle ownership.
+
+These process primitives do not yet provision private control automatically or
+connect the service SQL writer and activation flow. Ordinary live legacy-to-managed
+activation remains disabled pending those integrations.

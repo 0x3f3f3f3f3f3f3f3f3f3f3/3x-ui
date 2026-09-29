@@ -296,3 +296,11 @@ counter IO, and exposes bounded immutable final pages. Cancellation, failure,
 suites, race checks, lint and builds pass. Panel-owned boot pinning, atomic final
 settlement and activation
 integration remain required before enabling healthy live legacy handoff.
+
+
+Task 6 process settlement checkpoint: explicit private control pins Linux peer PID
+and boot at startup, and final settlement replays uncertain batches before a fresh
+frozen-counter delta. Retry IDs and snapshots survive SQL failures; each new child
+clears that state. Source review, complete internal/xray race and panel suites,
+lint and panel build pass. Automatic endpoint provisioning, shared SQL
+receipt service, pure activation preflight and lifecycle cutover are still open.

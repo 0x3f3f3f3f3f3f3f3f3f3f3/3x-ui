@@ -18,6 +18,10 @@ import (
 var ErrInvalidAPIEndpoint = errors.New("invalid local Xray control endpoint")
 
 func dialLocalControl(endpoint string) (*grpc.ClientConn, error) {
+	return dialLocalControlChecked(endpoint, nil)
+}
+
+func dialLocalControlChecked(endpoint string, checkPeer func(net.Conn) error) (*grpc.ClientConn, error) {
 	network := "tcp"
 	if filepath.IsAbs(endpoint) {
 		network = "unix"
@@ -43,7 +47,17 @@ func dialLocalControl(endpoint string) (*grpc.ClientConn, error) {
 	return grpc.NewClient("passthrough:///"+endpoint,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-			return dialer.DialContext(ctx, network, endpoint)
+			connection, err := dialer.DialContext(ctx, network, endpoint)
+			if err != nil {
+				return nil, err
+			}
+			if checkPeer != nil {
+				if err := checkPeer(connection); err != nil {
+					connection.Close()
+					return nil, err
+				}
+			}
+			return connection, nil
 		}))
 }
 
