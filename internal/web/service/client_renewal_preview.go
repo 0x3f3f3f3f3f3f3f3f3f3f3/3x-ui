@@ -31,7 +31,7 @@ type ClientRenewalPreview struct {
 
 func (s *ClientService) PreviewRenewal(request ClientRenewalPreviewRequest, settings *SettingService) (*ClientRenewalPreview, error) {
 	client := model.Client{Reset: request.Reset, ResetDay: request.ResetDay, ResetWeekday: request.ResetWeekday}
-	if err := validateClientRenewal(client); err != nil {
+	if err := validateClientSettings(client); err != nil {
 		return nil, err
 	}
 	if err := validateClientResetMax(request.ResetMax); err != nil {

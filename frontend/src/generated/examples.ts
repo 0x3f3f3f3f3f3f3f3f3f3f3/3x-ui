@@ -423,6 +423,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "keepAlive": null,
     "limitIp": 0,
     "password": "",
+    "policy": null,
     "preSharedKey": "",
     "privateKey": "",
     "publicKey": "",
@@ -496,6 +497,11 @@ export const EXAMPLES: Record<string, unknown> = {
     },
     "total": 2000
   },
+  "ClientPolicyOptions": {
+    "downloadBytesPerSecond": 0,
+    "multiplier": "",
+    "uploadBytesPerSecond": 0
+  },
   "ClientRecord": {
     "adTag": "",
     "allowedIPs": "",
@@ -503,6 +509,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "clientId": "",
     "comment": "",
     "createdAt": 0,
+    "desiredPolicyVersion": 0,
     "email": "",
     "enable": false,
     "expiryTime": 0,
@@ -514,6 +521,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "limitHwid": 0,
     "limitIp": 0,
     "password": "",
+    "policy": null,
     "preSharedKey": "",
     "privateKey": "",
     "publicKey": "",

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // droppedClientNeedsRestart is what restartXrayOnClientDisable asks for: the core
@@ -331,7 +333,7 @@ func (s *ClientService) AddInboundClient(inboundSvc *InboundService, data *model
 	if err != nil {
 		return false, err
 	}
-	if err := validateClientsRenewal(clients); err != nil {
+	if err := validateClientsSettings(clients); err != nil {
 		return false, err
 	}
 
@@ -664,7 +666,7 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 	if err != nil {
 		return false, err
 	}
-	if err := validateClientsRenewal(clients); err != nil {
+	if err := validateClientsSettings(clients); err != nil {
 		return false, err
 	}
 
@@ -717,6 +719,7 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 	if newClientId == "" || clientIndex == -1 {
 		return false, common.NewError("empty client ID")
 	}
+	policyOmitted := clients[0].Policy == nil
 	if strings.TrimSpace(clients[0].Email) == "" {
 		return false, common.NewError("client email is required")
 	}
@@ -816,6 +819,13 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 	}
 	if len(interfaceClients) > 0 {
 		if newMap, ok := interfaceClients[0].(map[string]any); ok {
+			wirePolicy := clients[0].Policy
+			if policyOmitted {
+				wirePolicy = oldClients[clientIndex].Policy
+			}
+			if wirePolicy != nil {
+				newMap["policy"] = wirePolicy
+			}
 			if preservedCreated == nil {
 				preservedCreated = time.Now().Unix() * 1000
 			}
@@ -918,6 +928,27 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 	// Persist client stats + inbound atomically, serialized against the traffic
 	// poll to avoid the cross-transaction lock-order deadlock (runSerializedTx).
 	if txErr := runSerializedTx(func(tx *gorm.DB) error {
+		if policyOmitted {
+			inherited := oldClients[clientIndex].Policy
+			var record model.ClientRecord
+			err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("email = ?", oldEmail).First(&record).Error
+			if err == nil {
+				inherited = record.Policy
+			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			clients[0].Policy, changedClients[0].Policy = inherited.Clone(), inherited.Clone()
+			entry := interfaceClients[0].(map[string]any)
+			delete(entry, "policy")
+			if inherited != nil {
+				entry["policy"] = inherited
+			}
+			newSettings, err = json.MarshalIndent(oldSettings, "", "  ")
+			if err != nil {
+				return err
+			}
+			oldInbound.Settings = string(newSettings)
+		}
 		// Same re-check-inside-the-writer rule as AddInboundClient (#6225):
 		// the pre-tx pass can race a concurrent writer on another inbound.
 		if oldInbound.Protocol == model.AmneziaWG {

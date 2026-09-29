@@ -81,7 +81,10 @@ func validateClientResetMax(resetMax int) error {
 	return nil
 }
 
-func validateClientRenewal(client model.Client) error {
+func validateClientSettings(client model.Client) error {
+	if err := client.Policy.Validate(); err != nil {
+		return err
+	}
 	if err := validateClientResetDay(client.ResetDay); err != nil {
 		return err
 	}
@@ -94,9 +97,9 @@ func validateClientRenewal(client model.Client) error {
 	return nil
 }
 
-func validateClientsRenewal(clients []model.Client) error {
+func validateClientsSettings(clients []model.Client) error {
 	for _, client := range clients {
-		if err := validateClientRenewal(client); err != nil {
+		if err := validateClientSettings(client); err != nil {
 			return err
 		}
 	}
@@ -159,7 +162,7 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 	if err := validateClientSubID(client.SubID); err != nil {
 		return false, err
 	}
-	if err := validateClientRenewal(client); err != nil {
+	if err := validateClientSettings(client); err != nil {
 		return false, err
 	}
 	if err := validateClientResetMax(client.ResetMax); err != nil {
@@ -613,7 +616,7 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 	if err := validateClientSubID(updated.SubID); err != nil {
 		return false, err
 	}
-	if err := validateClientRenewal(updated); err != nil {
+	if err := validateClientSettings(updated); err != nil {
 		return false, err
 	}
 	if err := validateClientResetMax(updated.ResetMax); err != nil {
@@ -756,33 +759,39 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 	if len(inboundIds) == 0 {
 		merged := *existing
 		applyClientRecordMerge(&merged, updated.ToRecord())
-		if err := database.GetDB().Model(&model.ClientRecord{}).
-			Where("id = ?", id).
-			Updates(map[string]any{
-				"sub_id":            merged.SubID,
-				"uuid":              merged.UUID,
-				"password":          merged.Password,
-				"auth":              merged.Auth,
-				"secret":            merged.Secret,
-				"flow":              merged.Flow,
-				"security":          merged.Security,
-				"wg_private_key":    merged.PrivateKey,
-				"wg_public_key":     merged.PublicKey,
-				"wg_allowed_ips":    merged.AllowedIPs,
-				"wg_pre_shared_key": merged.PreSharedKey,
-				"wg_keep_alive":     merged.KeepAlive,
-				"limit_ip":          merged.LimitIP,
-				"total_gb":          merged.TotalGB,
-				"expiry_time":       merged.ExpiryTime,
-				"tg_id":             merged.TgID,
-				"comment":           merged.Comment,
-				"reset":             merged.Reset,
-				"reset_day":         merged.ResetDay,
-				"reset_weekday":     merged.ResetWeekday,
-				"reset_max":         merged.ResetMax,
-				"traffic_reset":     merged.TrafficReset,
-				"traffic_reset_day": merged.TrafficResetDay,
-			}).Error; err != nil {
+		fields := map[string]any{
+			"sub_id":            merged.SubID,
+			"uuid":              merged.UUID,
+			"password":          merged.Password,
+			"auth":              merged.Auth,
+			"secret":            merged.Secret,
+			"flow":              merged.Flow,
+			"security":          merged.Security,
+			"wg_private_key":    merged.PrivateKey,
+			"wg_public_key":     merged.PublicKey,
+			"wg_allowed_ips":    merged.AllowedIPs,
+			"wg_pre_shared_key": merged.PreSharedKey,
+			"wg_keep_alive":     merged.KeepAlive,
+			"limit_ip":          merged.LimitIP,
+			"total_gb":          merged.TotalGB,
+			"expiry_time":       merged.ExpiryTime,
+			"tg_id":             merged.TgID,
+			"comment":           merged.Comment,
+			"reset":             merged.Reset,
+			"reset_day":         merged.ResetDay,
+			"reset_weekday":     merged.ResetWeekday,
+			"reset_max":         merged.ResetMax,
+			"traffic_reset":     merged.TrafficReset,
+			"traffic_reset_day": merged.TrafficResetDay,
+		}
+		if updated.Policy != nil {
+			fields["policy_upload_bytes_per_second"] = updated.Policy.UploadBytesPerSecond
+			fields["policy_download_bytes_per_second"] = updated.Policy.DownloadBytesPerSecond
+			fields["policy_multiplier"] = updated.Policy.Multiplier
+		}
+		if err := runSerializedTx(func(tx *gorm.DB) error {
+			return tx.Model(&model.ClientRecord{}).Where("id = ?", id).Updates(fields).Error
+		}); err != nil {
 			return needRestart, err
 		}
 	}
@@ -833,6 +842,9 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 	if err := database.GetDB().Model(&model.ClientRecord{}).
 		Where("id = ?", id).
 		UpdateColumn("updated_at", time.Now().UnixMilli()).Error; err != nil {
+		return needRestart, err
+	}
+	if err := reconcileLocalClientPolicy(existing.StableID); err != nil {
 		return needRestart, err
 	}
 	return needRestart, nil

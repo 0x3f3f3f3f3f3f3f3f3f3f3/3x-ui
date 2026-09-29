@@ -874,6 +874,8 @@ type ClientReverse struct {
 
 // Client represents a client configuration for Xray inbounds with traffic limits and settings.
 type Client struct {
+	Policy *ClientPolicyOptions `json:"policy,omitempty"`
+
 	ID         string         `json:"id,omitempty"`       // Unique client identifier
 	Security   string         `json:"security"`           // Security method (e.g., "auto", "aes-128-gcm")
 	Password   string         `json:"password,omitempty"` // Client password
@@ -917,6 +919,10 @@ type Client struct {
 }
 
 type ClientRecord struct {
+	DesiredPolicyVersion int64                `json:"desiredPolicyVersion,omitempty" gorm:"default:0;<-:create"`
+	PolicyFingerprint    string               `json:"-" gorm:"default:'';<-:create"`
+	Policy               *ClientPolicyOptions `json:"policy,omitempty" gorm:"embedded;embeddedPrefix:policy_"`
+
 	Id              int    `json:"id" gorm:"primaryKey;autoIncrement"`
 	StableID        string `json:"clientId" gorm:"column:stable_id;uniqueIndex;<-:create"`
 	Email           string `json:"email" gorm:"uniqueIndex;not null"`
@@ -1142,6 +1148,7 @@ func nonZeroKeepAlive(seconds int) *int {
 
 func (c *Client) ToRecord() *ClientRecord {
 	rec := &ClientRecord{
+		Policy:          c.Policy.Clone(),
 		Email:           c.Email,
 		SubID:           c.SubID,
 		UUID:            c.ID,
@@ -1201,6 +1208,7 @@ func splitWireguardAllowedIPs(csv string) []string {
 
 func (r *ClientRecord) ToClient() *Client {
 	c := &Client{
+		Policy:          r.Policy.Clone(),
 		ID:              r.UUID,
 		Email:           r.Email,
 		SubID:           r.SubID,

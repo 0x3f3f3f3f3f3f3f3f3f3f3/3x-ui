@@ -1314,7 +1314,7 @@ func (s *ClientService) bulkCreate(inboundSvc *InboundService, payloads []Client
 			skip(email, verr.Error())
 			continue
 		}
-		if verr := validateClientRenewal(client); verr != nil {
+		if verr := validateClientSettings(client); verr != nil {
 			skip(email, verr.Error())
 			continue
 		}

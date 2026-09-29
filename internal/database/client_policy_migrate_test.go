@@ -5,11 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
-	"github.com/mhsanaei/3x-ui/v3/internal/testpg"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
+	"github.com/mhsanaei/3x-ui/v3/internal/testpg"
 )
 
 func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
@@ -33,7 +34,7 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	clients := []model.ClientRecord{{Email: "one"}, {Email: "two"}}
+	clients := []model.ClientRecord{{Email: "one", Policy: &model.ClientPolicyOptions{UploadBytesPerSecond: 262144, DownloadBytesPerSecond: 1048576, Multiplier: "1.5"}, DesiredPolicyVersion: 7, PolicyFingerprint: "stored-policy-fingerprint"}, {Email: "two"}}
 	if err := src.Create(&clients).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -66,6 +67,9 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	if err := dst.First(&gotClient, clients[0].Id).Error; err != nil || gotClient.StableID != clients[0].StableID {
 		t.Fatal("identity migration lost stable mapping")
 	}
+	if gotClient.Policy == nil || *gotClient.Policy != *clients[0].Policy || gotClient.DesiredPolicyVersion != 7 || gotClient.PolicyFingerprint != "stored-policy-fingerprint" {
+		t.Fatalf("policy migration lost settings/version: %+v", gotClient)
+	}
 	if err := src.Migrator().DropTable(&model.ClientPolicyReceipt{}, &model.ClientPolicyTotal{}, &model.ClientPolicySource{}); err != nil {
 		t.Fatal(err)
 	}
@@ -74,6 +78,11 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	}
 	if err := src.Migrator().DropColumn(&model.ClientRecord{}, "StableID"); err != nil {
 		t.Fatal(err)
+	}
+	for _, column := range []string{"policy_upload_bytes_per_second", "policy_download_bytes_per_second", "policy_multiplier", "desired_policy_version", "policy_fingerprint"} {
+		if err := src.Migrator().DropColumn(&model.ClientRecord{}, column); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := MigrateData(path, os.Getenv("XUI_DB_DSN")); err != nil {
 		t.Fatalf("legacy cross-database migration: %v", err)
@@ -84,6 +93,9 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	}
 	if len(migrated) != 2 || migrated[0].StableID == "" || migrated[0].StableID == migrated[1].StableID {
 		t.Fatal("legacy clients have missing/shared identities")
+	}
+	if migrated[0].Policy != nil || migrated[0].DesiredPolicyVersion != 0 {
+		t.Fatal("legacy migration activated policy options or a version")
 	}
 	if src.Migrator().HasColumn(&model.ClientRecord{}, "StableID") {
 		t.Fatal("migration modified source schema")

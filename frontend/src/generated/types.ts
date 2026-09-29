@@ -419,6 +419,7 @@ export interface Client {
   keepAlive?: number | null;
   limitIp: number;
   password?: string;
+  policy?: ClientPolicyOptions | null;
   preSharedKey?: string;
   privateKey?: string;
   publicKey?: string;
@@ -454,6 +455,12 @@ export interface ClientPageResponse {
   total: number;
 }
 
+export interface ClientPolicyOptions {
+  downloadBytesPerSecond: number;
+  multiplier: string;
+  uploadBytesPerSecond: number;
+}
+
 export interface ClientRecord {
   adTag: string;
   allowedIPs: string;
@@ -461,6 +468,7 @@ export interface ClientRecord {
   clientId: string;
   comment: string;
   createdAt: number;
+  desiredPolicyVersion?: number;
   email: string;
   enable: boolean;
   expiryTime: number;
@@ -472,6 +480,7 @@ export interface ClientRecord {
   limitHwid: number;
   limitIp: number;
   password: string;
+  policy?: ClientPolicyOptions | null;
   preSharedKey: string;
   privateKey: string;
   publicKey: string;

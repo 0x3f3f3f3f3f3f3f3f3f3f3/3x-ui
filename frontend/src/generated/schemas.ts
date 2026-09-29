@@ -1725,6 +1725,14 @@ export const SCHEMAS: Record<string, unknown> = {
         "description": "Client password",
         "type": "string"
       },
+      "policy": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ClientPolicyOptions"
+          }
+        ],
+        "nullable": true
+      },
       "preSharedKey": {
         "type": "string"
       },
@@ -1894,6 +1902,27 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "ClientPolicyOptions": {
+    "properties": {
+      "downloadBytesPerSecond": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "multiplier": {
+        "type": "string"
+      },
+      "uploadBytesPerSecond": {
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "downloadBytesPerSecond",
+      "multiplier",
+      "uploadBytesPerSecond"
+    ],
+    "type": "object"
+  },
   "ClientRecord": {
     "properties": {
       "adTag": {
@@ -1912,6 +1941,10 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "string"
       },
       "createdAt": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "desiredPolicyVersion": {
         "format": "int64",
         "type": "integer"
       },
@@ -1948,6 +1981,14 @@ export const SCHEMAS: Record<string, unknown> = {
       },
       "password": {
         "type": "string"
+      },
+      "policy": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ClientPolicyOptions"
+          }
+        ],
+        "nullable": true
       },
       "preSharedKey": {
         "type": "string"

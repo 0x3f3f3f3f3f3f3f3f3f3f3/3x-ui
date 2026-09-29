@@ -170,3 +170,25 @@ XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race -p=1 ./internal/web/servi
 The CI jobs now build the custom binary and require the child-process bootstrap test to pass explicitly in both databases. Their GitHub execution is not claimed as local evidence. Full production activation and coordinated backup rollback fencing remain unfinished.
 
 The full panel `GOFLAGS=-p=1 GOTOOLCHAIN=go1.27.1 make test-go` passed after this change (service package 50.934 s). Focused `go vet -p=1 ./internal/web/runtime ./internal/web/service` also passed.
+
+## Database policy settings and live client edits — 2026-09-29
+
+The settings tests first demonstrated discarded JSON fields and accepted multiplier zero. Persistence then exposed the separate update-column list for clients without inbounds; that path now preserves an omitted policy and permits explicit unlimited rates/multiplier 1. An attached-client test independently reproduced settings loss during a legacy metadata edit; both the canonical record and inbound settings retain the values after the repair. Invalid rates and multipliers leave no created client row.
+
+Desired-policy tests start from an old-style client with unlimited rates/multiplier 1. Renaming/credential rotation preserves version 1; twelve concurrent preparations of a rate/multiplier change all return version 2. The real engine bills 10 bytes at multiplier 1 plus 20 bytes at multiplier 2 as exactly 50 bytes. Disable closes the existing session, and a subsequent quota increase preserves manual disable. A rejected two-client batch rolls back all desired-version changes. Removing the create-only ORM protections reproduces an ordinary account save rewinding the version to zero; the protections were restored.
+
+The child-process bootstrap test now includes a policy-edit subtest: after the prior 8492 billed bytes, a 65,536-byte echo at multiplier 2 contributes 262,144 billed bytes. Upload at 1 B/s holds the next 1024-byte echo; changing the existing client's rate to unlimited and multiplier to 0.5 releases it within two seconds and contributes exactly 1024 billed bytes. Final totals are 68,708 raw upload / 68,808 raw download / 271,660 billed. Disable closes that actual TCP connection; increasing quota leaves it disabled at version 5.
+
+Direct DB→Runtime→core tests passed under race on SQLite and PostgreSQL (4.218 s and 11.525 s). Replacing the test's manual Runtime call with the ordinary client-edit service first failed because the core retained its old quota. The service hook repaired it; the SQLite race run passed in 4.361 s. The updated full PostgreSQL/service regression is recorded at the commit gate below. SQLite→PostgreSQL migration of policy fields/version and the old-schema variant passed under race in 7.166 s, together with the PostgreSQL identity migration.
+
+```sh
+XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race -p=1 ./internal/web/service \
+  -run 'TestClientPolicy(Options|Omission|Desired|RuntimeBootstrap)' -count=1
+# Repeat with the isolated PostgreSQL environment for that database's evidence.
+```
+
+This proves the normal edit-service path for a client already activated in a managed process. Automatic initial activation, UI, all bulk and lifecycle entry points, period resets, first-use expiry, global budgets and backup rollback fencing are not established by this test.
+
+Additional regressions reproduced an omitted policy overwriting a concurrently committed edit and stale inbound settings overwriting the canonical policy. Policy omission now reads the locked authoritative row inside the serialized inbound transaction; detached-client edits update policy columns only when supplied. The SQLite race regression passed in 3.831 s before the final combined checks. The live edit/disable deadlines include time spent in the ordinary edit service. Restarting from the acknowledged configuration preserves disabled version 5 and 271,660 billed bytes; removing the snapshot update makes restart fail with a stale-policy error.
+
+Final commit gate: the combined adapter/Runtime/SQLite race checks passed (2.412 s / 1.290 s / 5.700 s), and the PostgreSQL settings/concurrency/real-child suite passed in 27.059 s. The full serial panel suite passed after the omission repair (service package 55.001 s). `make lint-go` with golangci-lint v2.14.0 reported zero issues. Frontend code generation, typecheck, lint and production build passed. The full frontend suite (`npm test -- --maxWorkers=1`) passed 174 files / 1743 tests in 427.86 s, including headless Chromium.

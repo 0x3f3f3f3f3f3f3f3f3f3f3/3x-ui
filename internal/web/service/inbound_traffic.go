@@ -550,7 +550,7 @@ func (s *InboundService) autoRenewClients(tx *gorm.DB, mutationBatch *trafficMut
 // happens to reuse an orphaned email still inherits that row's leftover
 // up/down, since nothing at this call site can tell the two cases apart.
 func (s *InboundService) AddClientStat(tx *gorm.DB, inboundId int, client *model.Client) error {
-	if err := validateClientRenewal(*client); err != nil {
+	if err := validateClientSettings(*client); err != nil {
 		return err
 	}
 	clientTraffic := xray.ClientTraffic{
@@ -571,7 +571,7 @@ func (s *InboundService) AddClientStat(tx *gorm.DB, inboundId int, client *model
 }
 
 func (s *InboundService) UpdateClientStat(tx *gorm.DB, email string, client *model.Client) error {
-	if err := validateClientRenewal(*client); err != nil {
+	if err := validateClientSettings(*client); err != nil {
 		return err
 	}
 	result := tx.Model(xray.ClientTraffic{}).

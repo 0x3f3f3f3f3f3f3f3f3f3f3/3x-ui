@@ -119,6 +119,9 @@ func initModels() error {
 	if err := migrateClientStableIDColumn(); err != nil {
 		return err
 	}
+	if err := migrateClientPolicyOptionsColumns(); err != nil {
+		return err
+	}
 	if err := migrateClientTrafficLastSubFetchColumn(); err != nil {
 		return err
 	}

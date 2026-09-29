@@ -440,6 +440,7 @@ export const ClientSchema = z.object({
   keepAlive: z.number().int().nullable().optional(),
   limitIp: z.number().int(),
   password: z.string().optional(),
+  policy: z.lazy(() => ClientPolicyOptionsSchema).nullable().optional(),
   preSharedKey: z.string().optional(),
   privateKey: z.string().optional(),
   publicKey: z.string().optional(),
@@ -478,6 +479,13 @@ export const ClientPageResponseSchema = z.object({
 });
 export type ClientPageResponse = z.infer<typeof ClientPageResponseSchema>;
 
+export const ClientPolicyOptionsSchema = z.object({
+  downloadBytesPerSecond: z.number().int(),
+  multiplier: z.string(),
+  uploadBytesPerSecond: z.number().int(),
+});
+export type ClientPolicyOptions = z.infer<typeof ClientPolicyOptionsSchema>;
+
 export const ClientRecordSchema = z.object({
   adTag: z.string(),
   allowedIPs: z.string(),
@@ -485,6 +493,7 @@ export const ClientRecordSchema = z.object({
   clientId: z.string(),
   comment: z.string(),
   createdAt: z.number().int(),
+  desiredPolicyVersion: z.number().int().optional(),
   email: z.string(),
   enable: z.boolean(),
   expiryTime: z.number().int(),
@@ -496,6 +505,7 @@ export const ClientRecordSchema = z.object({
   limitHwid: z.number().int(),
   limitIp: z.number().int(),
   password: z.string(),
+  policy: z.lazy(() => ClientPolicyOptionsSchema).nullable().optional(),
   preSharedKey: z.string(),
   privateKey: z.string(),
   publicKey: z.string(),

@@ -20,6 +20,9 @@ import (
 // those separately. Shared by SyncInbound (per-inbound persistence) and Update
 // (the no-attached-inbound fallback) so the two paths cannot diverge.
 func applyClientRecordMerge(row *model.ClientRecord, incoming *model.ClientRecord) {
+	if incoming.Policy != nil {
+		row.Policy = incoming.Policy.Clone()
+	}
 	if incoming.UUID != "" {
 		row.UUID = incoming.UUID
 	}
@@ -95,7 +98,7 @@ func (s *ClientService) ApplyInboundClientDelta(tx *gorm.DB, inboundId int, chan
 }
 
 func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients []model.Client, detachEmails []string, prune bool) error {
-	if err := validateClientsRenewal(clients); err != nil {
+	if err := validateClientsSettings(clients); err != nil {
 		return err
 	}
 	if tx == nil {

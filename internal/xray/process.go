@@ -317,6 +317,19 @@ func (p *Process) SetConfig(config *Config) {
 	p.config = config
 }
 
+// Preserve unrelated hot configuration changes when recording an acknowledged policy update.
+func (p *Process) CompareAndSetClientPolicy(previous, next []byte) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.config == nil || !bytes.Equal(p.config.ClientPolicy, previous) {
+		return false
+	}
+	snapshot := *p.config
+	snapshot.ClientPolicy = append(snapshot.ClientPolicy[:0:0], next...)
+	p.config = &snapshot
+	return true
+}
+
 // GetOnlineClients returns the union of locally-online clients and
 // node-online clients from every registered remote panel. Dedupes by
 // email so a client connected to both a local and a node-managed inbound
