@@ -32,8 +32,8 @@ type udpAssociation struct {
 	workers sync.WaitGroup
 }
 
-func (s *Server) serveUDP(conn net.Conn, destination Destination) {
-	flow, err := s.controller.Open(s.ctx, destination.PolicyID, conn)
+func (s *Server) serveUDP(ctx context.Context, conn net.Conn, destination Destination) {
+	flow, err := s.controller.Open(ctx, destination.PolicyID, conn)
 	if err != nil {
 		return
 	}

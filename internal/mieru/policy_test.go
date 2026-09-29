@@ -215,8 +215,8 @@ func (d *stalledReadDialer) DialContext(ctx context.Context, network, address st
 }
 
 func TestNativeShutdownReleasesBackpressuredAuthenticatedSessions(t *testing.T) {
-	for _, action := range []string{"shutdown", "disable"} {
-		t.Run(action, func(t *testing.T) { nativeBackpressure(t, action == "disable") })
+	for _, action := range []string{"shutdown", "disable", "rotate"} {
+		t.Run(action, func(t *testing.T) { nativeBackpressure(t, action) })
 	}
 }
 
@@ -265,7 +265,7 @@ func TestNativeOneWayUDPKeepsItsActiveTargetMapping(t *testing.T) {
 	}
 }
 
-func nativeBackpressure(t *testing.T, disable bool) {
+func nativeBackpressure(t *testing.T, action string) {
 	t.Helper()
 	db, ledger, controller := mieruDB(t)
 	record, user := mieruUser(t, db, ledger, controller, 1000)
@@ -326,16 +326,23 @@ func nativeBackpressure(t *testing.T, disable bool) {
 		previous = account.Down
 	}
 	start := time.Now()
-	if disable {
-		if err := db.Model(&record).Update("enable", false).Error; err != nil {
-			t.Fatal(err)
+	if action != "shutdown" {
+		if action == "disable" {
+			if err := db.Model(&record).Update("enable", false).Error; err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			user.Password = "rotated-backpressure-test"
+			if err := server.UpdateClients([]Client{user, other}); err != nil {
+				t.Fatal(err)
+			}
 		}
 		select {
 		case <-targetDone:
-			t.Logf("backpressured disabled target closed in %v", time.Since(start))
+			t.Logf("backpressured %s target closed in %v", action, time.Since(start))
 		case <-time.After(1250 * time.Millisecond):
 			_ = client.Stop()
-			t.Fatal("disabled client's blocked native Close prevented its target from closing")
+			t.Fatalf("%s client's blocked native Close prevented its target from closing", action)
 		}
 		independent := officialClient(t, server.Addresses()[0], other)
 		wireEcho(t, independent, nativeEcho(t, "tcp"), []byte("unaffected"))

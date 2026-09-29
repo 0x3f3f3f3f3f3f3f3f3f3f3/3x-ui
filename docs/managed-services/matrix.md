@@ -161,10 +161,11 @@ adapter and shared controller on SQLite, before public Runtime integration.
 | Whole-datagram fixed-point quota and bidirectional payload billing | V | 1.5x/0.5x exact counters; rejected reply sends/charges no prefix, smaller remaining packet succeeds; native rolling quota fields are empty |
 | Shared live duplex shaping across native listeners | V | Actual mixed streams/packets, two same-IP clients and two listeners, 32/64 KiB/s, unlimited baseline and live changes; receiver-observed packet flight is explicitly bounded in the test |
 | Quota, disable and owned shutdown | V | Existing TCP/UDP cutoff and server restart denial; malformed UDP cleanup, TCP backpressure, unrelated-user continuity and partial-start listener release |
+| Live native credential replacement | V | Official TCP/UDP clients; atomic invalid-batch rejection, unchanged sessions, rotation/removal/re-addition, empty set, delayed/cached authentication denial, exact policy-ID reassignment billing, pending dial cancellation and idle TCP socket reclamation |
 | Continuous one-way UDP target lifetime | V | Actual 31-second upload-only traffic retains one target source port and exact upload-only billing |
 | Internal authenticated Xray TCP/UDP routing / policy-aware bridge | V | Private policy-ID credentials, actual direct IPv4 peer replies, user/domain/IP/source/tag/network/port/priority/block/balancer exits; official mieru clients on both underlays, exact single billing and existing-flow revocation. Other outbounds, IPv6 and public Runtime remain open |
 | Public model/Runtime/API/UI/export/node/deployment integration | N | No public mieru service option or manager is claimed by this increment |
-| Native pre-accept resource stress, credential rotation, PostgreSQL adapter acceptance | N | Native queue peak-memory bounds, live credential generation handling and the adapter's second-dialect vertical remain open |
+| Native pre-accept resource stress, diagnostic reclamation, PostgreSQL adapter acceptance | N | Native queue peak-memory bounds, retained native per-generation diagnostic metric groups and the adapter's second-dialect vertical remain open |
 
 ## UDP core prerequisite evidence
 

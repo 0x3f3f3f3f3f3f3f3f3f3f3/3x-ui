@@ -130,9 +130,10 @@ func (l *ownedListener) Accept() (net.Conn, error) {
 
 type ownedStream struct {
 	net.Conn
-	owner *ownedListeners
-	once  sync.Once
-	err   error
+	owner    *ownedListeners
+	identity string
+	once     sync.Once
+	err      error
 }
 
 func (c *ownedStream) Close() error {
@@ -145,7 +146,7 @@ func (c *ownedStream) Close() error {
 	return c.err
 }
 
-func (l *ownedListeners) transportFor(session net.Conn) io.Closer {
+func (l *ownedListeners) transportFor(session net.Conn) *ownedStream {
 	if session.LocalAddr().Network() != "tcp" {
 		return nil
 	}
@@ -157,4 +158,25 @@ func (l *ownedListeners) transportFor(session net.Conn) io.Closer {
 		}
 	}
 	return nil
+}
+
+func (l *ownedListeners) identify(conn *ownedStream, identity string) {
+	if conn == nil {
+		return
+	}
+	l.mu.Lock()
+	conn.identity = identity
+	l.mu.Unlock()
+}
+
+func (l *ownedListeners) retired(clients map[string]*clientGeneration) map[*ownedStream]struct{} {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	retired := make(map[*ownedStream]struct{})
+	for conn := range l.conns {
+		if conn.identity != "" && clients[conn.identity] == nil {
+			retired[conn] = struct{}{}
+		}
+	}
+	return retired
 }

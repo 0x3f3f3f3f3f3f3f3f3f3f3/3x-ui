@@ -32,6 +32,24 @@ explicit policy-aware TCP/UDP connectors; never silently default to direct.
   underlay selection is distinct from TCP/UDP destination payload; test all four
   combinations. Native rolling `User.Quotas` stay empty; panel accounting is the
   sole billing authority. Diagnostic native counters are not charged again.
+- Credential replacements use an opaque native username per authentication
+  generation. The native `HashedPassword` override contains the official hash
+  of the external username and password, so existing official client configs
+  retain their wire behavior. The opaque identity maps to the stable panel
+  policy ID; it is not a new billing account or an exported username.
+- `Server.UpdateClients` validates a complete replacement before publication.
+  Unchanged clients retain their generation and sessions. Password, username or
+  policy-ID changes and removal cancel the retired generation, close its TCP
+  and UDP payload sessions and cancel pending target dials. An empty replacement
+  revokes everyone without replacing listeners; re-adding creates a new
+  generation. Delayed SOCKS handshakes and native cached ciphers cannot resolve
+  a retired identity to a replacement user's policy.
+- Retain the authenticated identity on owned TCP sockets after a logical session
+  ends, so rotation also releases idle cached underlays. Send logical close
+  notifications first, with a shared 100ms grace before aborting the captured
+  retired sockets. Capture exact sockets before asynchronous cleanup so a later
+  replacement cannot cause cleanup to close new users' connections. The shared
+  UDP listener stays open throughout credential changes.
 - The public server API parses requests inside `Accept` and does not return the
   accepted connection on parsing error. Use official `protocol.Mux` directly
   with an owned bounded request handler, retaining the actual wire engine.
@@ -73,6 +91,12 @@ explicit policy-aware TCP/UDP connectors; never silently default to direct.
   is 30 seconds, refreshed by uploads as well as downloads. Limits do not
   establish a complete peak-memory bound for native pre-accept queues; that
   resource stress acceptance remains open before public runtime integration.
+- The official native metrics registry retains diagnostic user groups and has
+  no removal API. Authentication generations therefore retain diagnostic groups
+  across rotations until process exit, although policy accounting remains
+  stable and single-owned. Bounding or reclaiming these native diagnostics,
+  together with pre-accept queue stress, remains required before public Runtime
+  activation; the hot-credential increment does not claim full resource bounds.
 - The existing SOCKS bridge is TCP-only and cannot be assumed to preserve UDP
   client identity. Add and actually verify an authenticated packet-capable
   bridge before claiming unified UDP routing. Full UI/API/runtime/deployment,
@@ -141,3 +165,12 @@ the panel policy controller remains the billing owner. Real core outbound
 counters independently verify the transferred payload, and enabling duplicate
 core user meters makes the integration test fail. Public service selection,
 Runtime reconciliation, exports, deployment and node integration remain open.
+
+The adapter now supports live credential replacement. Real official client
+tests cover unchanged users, atomic rejection of invalid replacement batches,
+rotation/removal/re-addition, an empty user set, delayed authentication, reuse of
+an already authenticated native transport, policy-ID reassignment with exact
+separate ledger totals, idle TCP socket reclamation and pending target dial
+cancellation. Backpressured rotation uses the same owned connection cleanup as
+disable and shutdown. See the [validation record](validation.md) for commands,
+observed failures, mutation checks and final verification results.

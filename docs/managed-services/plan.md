@@ -218,6 +218,14 @@ actual direct UDP peer metadata, real route/exit tests and official mieru client
 single-billing/revocation evidence. Public model/Runtime activation and the full
 outbound/platform/failure matrix remain open before the routing item is done.
 
+Native credential hot replacement now uses separate authentication generations
+over the official hashed-password interface. It preserves unchanged users,
+retires existing and delayed sessions of changed users, cancels pending target
+dials and releases their idle TCP underlays. Actual native tests cover both
+underlays and policy-ID reassignment without inherited accounting. Native
+diagnostic metric retention and pre-accept resource bounds remain explicit
+prerequisites to public activation, alongside the shared Runtime work above.
+
 ## Task 7: Snell v4/v5/v6 vertical integration
 
 Files: new `internal/snell`, backend asset manifest/installer, namespace bridge,

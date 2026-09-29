@@ -12,10 +12,8 @@ import (
 	"sync"
 	"time"
 
-	apicommon "github.com/enfein/mieru/v3/apis/common"
 	"github.com/enfein/mieru/v3/apis/constant"
 	apimodel "github.com/enfein/mieru/v3/apis/model"
-	"github.com/enfein/mieru/v3/pkg/appctl/appctlcommon"
 	"github.com/enfein/mieru/v3/pkg/appctl/appctlpb"
 	"github.com/enfein/mieru/v3/pkg/common"
 	"github.com/enfein/mieru/v3/pkg/protocol"
@@ -64,7 +62,7 @@ type DialFunc func(context.Context, Destination) (net.Conn, error)
 
 type Server struct {
 	tag        string
-	clients    map[string]Client
+	clients    map[string]*clientGeneration
 	users      map[string]*appctlpb.User
 	endpoints  []protocol.UnderlayProperties
 	controller *policyflow.Controller
@@ -84,17 +82,11 @@ func New(config Config, controller *policyflow.Controller, dial DialFunc) (*Serv
 	if controller == nil || dial == nil || strings.TrimSpace(config.InboundTag) == "" || len(config.Bindings) == 0 || len(config.Bindings) > 16 || len(config.Clients) == 0 {
 		return nil, ErrConfig
 	}
-	s := &Server{tag: config.InboundTag, controller: controller, dial: dial, clients: make(map[string]Client), users: make(map[string]*appctlpb.User), sessions: make(map[*managedSession]struct{})}
-	for _, client := range config.Clients {
-		user := &appctlpb.User{Name: &client.Username, Password: &client.Password}
-		if client.PolicyID == "" || strings.TrimSpace(client.Username) != client.Username || appctlcommon.ValidateServerConfigSingleUser(user) != nil {
-			return nil, ErrConfig
-		}
-		if _, found := s.clients[client.Username]; found {
-			return nil, ErrConfig
-		}
-		s.clients[client.Username], s.users[client.Username] = client, user
+	clients, err := validateClients(config.Clients)
+	if err != nil {
+		return nil, err
 	}
+	s := &Server{tag: config.InboundTag, controller: controller, dial: dial, sessions: make(map[*managedSession]struct{})}
 	seen := make(map[Binding]bool)
 	for _, binding := range config.Bindings {
 		address, err := netip.ParseAddrPort(binding.Address)
@@ -114,6 +106,7 @@ func New(config Config, controller *policyflow.Controller, dial DialFunc) (*Serv
 		s.endpoints = append(s.endpoints, endpoint)
 	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
+	s.replaceClients(clients)
 	return s, nil
 }
 
@@ -200,11 +193,7 @@ func (s *Server) serve() {
 	}
 }
 
-func (s *Server) handle(conn net.Conn) {
-	identity, ok := conn.(apicommon.UserContext)
-	if !ok {
-		return
-	}
+func (s *Server) handle(conn *managedSession) {
 	source, err := netip.ParseAddrPort(conn.RemoteAddr().String())
 	if err != nil {
 		return
@@ -217,8 +206,11 @@ func (s *Server) handle(conn net.Conn) {
 	}
 	_ = conn.SetReadDeadline(time.Time{})
 	// Native Accept can precede the segment worker that publishes the authenticated user.
-	client, ok := s.clients[identity.UserName()]
-	if !ok {
+	client := s.authenticatedClient(conn)
+	if client == nil {
+		if conn.transport != nil {
+			_ = conn.transport.Close()
+		}
 		return
 	}
 	d := Destination{PolicyID: client.PolicyID, InboundTag: s.tag, Source: source}
@@ -228,7 +220,7 @@ func (s *Server) handle(conn net.Conn) {
 		if !setTarget(&d, request.DstAddr) {
 			return
 		}
-		_ = s.controller.Proxy(s.ctx, client.PolicyID, conn, func(ctx context.Context) (io.ReadWriteCloser, error) {
+		_ = s.controller.Proxy(client.ctx, client.PolicyID, conn, func(ctx context.Context) (io.ReadWriteCloser, error) {
 			ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 			defer cancel()
 			target, err := s.dial(ctx, d)
@@ -243,7 +235,7 @@ func (s *Server) handle(conn net.Conn) {
 		})
 	case constant.Socks5UDPAssociateCmd:
 		d.Network = "udp"
-		s.serveUDP(conn, d)
+		s.serveUDP(client.ctx, conn, d)
 	}
 }
 

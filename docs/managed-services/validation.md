@@ -2608,3 +2608,112 @@ A final focused `go test -race -count=1 -run
 '^TestManagedCoreExitClosesExistingPacketFlowAndRefusesNewTarget$' -v
 ./internal/routedbridge` also passed against the final binary (1.150s, no skip
 or detected race). Log: `/tmp/3x-ui-managed-core-exit-race.log`.
+
+## Native mieru live credential replacement — 2026-09-29
+
+This increment changes the internal native adapter; public model, Runtime,
+API/UI/export, nodes and deployment remain open. The official v3.38.0 wire
+engine and previously pinned managed core binary are unchanged.
+
+Real client tests validate complete-batch credential replacement on both TCP
+and UDP underlays, preserving unchanged clients' existing TCP/UDP payload flows.
+They cover an invalid replacement batch, password rotation, removal/re-addition,
+revoking every user without rebinding the listeners, rejecting updates after
+shutdown, and pending or cached authentication. Reassigning the same external
+username/password to a new policy ID closes the old association: the old account
+retains 6 upload + 6 download bytes and 18 billed bytes at 1.5x; the new account
+receives 5 + 5 raw bytes and 5 billed bytes at 0.5x. Pending target dial contexts
+are cancelled, idle authenticated TCP sockets are reclaimed and an unrelated
+user's existing connection remains usable. Actual receive backpressure is
+established before the rotation cleanup test.
+
+Failure evidence preceded the final implementation:
+
+- The first test could not compile because `UpdateClients` did not exist.
+  The first implemented version passed real credential replacement.
+- A real idle-socket test then failed: two owned TCP sockets remained after
+  rotating the user whose logical flow had already ended. Retaining an opaque
+  authentication identity on owned sockets fixes targeted reclamation.
+- Immediately aborting a retired TCP socket before logical close notifications
+  caused a 2.155s cutoff, exceeding the unchanged 1.25s assertion. Native graceful
+  close can spend 1000 one-millisecond waits per session if the close message
+  cannot be sent. The final order starts logical closes, allows at most 100ms
+  for notifications, then aborts only the previously captured retired sockets.
+- The first cached-transport fixture used multiplex factor 1024, outside the
+  official configuration choices. A native traffic-threshold shift overflow
+  disabled TCP reuse. The fixture now uses official high factor 3 and requires
+  matching actual local endpoints before exercising cached authentication.
+- One repeated race invocation observed `io.ErrUnexpectedEOF` while reading a
+  revoked TCP handshake. The denial helper accepts this specific terminal EOF;
+  any complete SOCKS reply still fails, and independent target-dispatch count
+  must remain zero. No cutoff or rate tolerance changed.
+
+Four temporary Go source overlays were rejected by the real-client tests:
+username-only authentication returned successful SOCKS replies after retirement;
+ignoring a changed policy ID kept the old connection open; removing generation
+cancellation left TCP/UDP target dial contexts live; replacing `UpdateClients`
+with a no-op left the backpressured target active. Each failed its behavioral
+assertion, not compilation. Sources and logs were kept only under
+`/tmp/3x-ui-mieru-hot-mutants` and `/tmp/3x-ui-mieru-hot-mutant-*-final.log`.
+
+The corrected focused race command passed three complete repetitions:
+
+```sh
+go test -race ./internal/mieru \
+  -run '^TestNative(Credential|Rotation|PolicyReassignment|Shutdown)' \
+  -count=3 -shuffle=on -json
+```
+
+It passed **18 top-level and 33 subtest executions**, with zero skips, failures
+or detected races, in 39.991s. Log:
+`/tmp/3x-ui-mieru-hot-race-repeated.jsonl`.
+
+The complete native adapter race run also passed against the existing managed
+core, including its real TCP/UDP routing and single-billing integration:
+
+```sh
+XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+XUI_MANAGED_XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+go test -race -count=1 -shuffle=on -json ./internal/mieru
+```
+
+Result: **15 top-level and 17 subtests passed**, zero skipped or failed tests,
+no detected race, 83.406s. Log:
+`/tmp/3x-ui-mieru-hot-native-race.jsonl`.
+
+In the repeated local race run, rotation closed the existing TCP/UDP payload
+flows in 2.663–3.299ms; backpressured target cancellation took 0.738–1.183ms.
+These observed local timings are distinct from the unchanged 1.25s assertion
+bound and the 100ms TCP notification grace. They are not remote-network latency
+guarantees. Shared UDP listeners and unchanged clients stayed usable.
+
+Final whole-repository regression used the same pinned managed binary, owned
+OpenSSH and PostgreSQL fixtures as the preceding bridge milestone:
+
+```sh
+XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+XUI_MANAGED_XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+SSH_E2E_SERVER=/usr/sbin/sshd \
+XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' \
+LD_LIBRARY_PATH=/tmp/3x-ui-pg-tools/root/usr/lib/aarch64-linux-gnu \
+go test -p 1 -count=1 -shuffle=on -json ./...
+go build ./...
+golangci-lint run ./internal/mieru/...
+```
+
+All commands exited zero. From 01:33:10Z to 01:41:14Z, **52 test packages and
+2512 top-level tests passed; 18 top-level tests skipped**. There were 2509
+passing and 11 skipped subtests, seven packages without tests, and no failures.
+The complete top-level skip list is identical to the preceding bridge run's
+explicit list above; those environment/platform/scale conditions remain
+unverified, not passes. Native mieru took 74.417s and service tests 195.878s.
+Build passed; affected lint reported zero issues. Logs:
+`/tmp/3x-ui-mieru-hot-panel-full.jsonl`,
+`/tmp/3x-ui-mieru-hot-panel-build.log`,
+`/tmp/3x-ui-mieru-hot-panel-lint.log`.
+
+Go formatting, new comment-block limits, relative documentation links and Git
+whitespace checks passed. This increment changes no public API/model/migration
+or frontend files and makes no new full-frontend validation claim. Native
+pre-accept resource bounds, retained diagnostic group reclamation, public
+Runtime activation and the remaining original acceptance requirements stay open.

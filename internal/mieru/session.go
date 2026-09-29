@@ -1,7 +1,6 @@
 package mieru
 
 import (
-	"io"
 	"net"
 	"sync"
 	"time"
@@ -12,7 +11,7 @@ import (
 type managedSession struct {
 	net.Conn
 	server    *Server
-	transport io.Closer
+	transport *ownedStream
 	once      sync.Once
 	done      chan struct{}
 }
