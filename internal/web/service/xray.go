@@ -1199,6 +1199,9 @@ func (s *XrayService) GetXrayTraffic() ([]*xray.Traffic, []*xray.ClientTraffic, 
 	if len(process.GetConfig().ClientPolicy) != 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		err := pollLocalClientPolicyLedger(ctx, process)
+		if err == nil {
+			err = reconcileLocalClientPolicyResets(ctx, process)
+		}
 		cancel()
 		if err != nil {
 			logger.Warning("Failed to collect managed client ledger:", err)

@@ -60,24 +60,8 @@ func PrepareClientPolicyReset(instanceID, clientID, requestID string) (clientpol
 		if latest != nil && latest.InstanceID != instanceID {
 			return ErrClientPolicyLedger
 		}
-		var existing model.ClientPolicyReset
-		err = tx.First(&existing, "client_id = ? AND request_id = ?", clientID, requestID).Error
-		if err == nil {
-			if existing.InstanceID != instanceID {
-				return ErrClientPolicyLedger
-			}
-			policy, err = prepareClientPolicyRecord(tx, client, latest)
+		if err := validateLocalClientPolicyResetScope(tx, []string{clientID}); err != nil {
 			return err
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		var remote int64
-		if err := tx.Table("client_inbounds ci").Joins("JOIN inbounds i ON i.id = ci.inbound_id").Where("ci.client_id = ? AND i.node_id IS NOT NULL", client.Id).Count(&remote).Error; err != nil {
-			return err
-		}
-		if remote != 0 {
-			return ErrClientPolicyLedger
 		}
 		var receipts []model.ClientPolicyReceipt
 		if err := tx.Where("client_id = ?", clientID).Find(&receipts).Error; err != nil {
@@ -97,6 +81,18 @@ func PrepareClientPolicyReset(instanceID, clientID, requestID string) (clientpol
 		if total.RawUpload != receipt.RawUpload || total.RawDownload != receipt.RawDownload || total.BilledBytes != receipt.BilledBytes || total.UncertainBytes != receipt.UncertainBytes {
 			return ErrClientPolicyLedger
 		}
+		var existing model.ClientPolicyReset
+		err = tx.First(&existing, "client_id = ? AND request_id = ?", clientID, requestID).Error
+		if err == nil {
+			if existing.InstanceID != instanceID {
+				return ErrClientPolicyLedger
+			}
+			policy, err = prepareClientPolicyRecord(tx, client, latest)
+			return err
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
 		reset := model.ClientPolicyReset{ClientID: clientID, RequestID: requestID, InstanceID: instanceID, Epoch: receipt.Epoch, Sequence: receipt.Sequence, RawUpload: receipt.RawUpload, RawDownload: receipt.RawDownload, BilledBytes: receipt.BilledBytes, Remainder: receipt.Remainder, UncertainBytes: receipt.UncertainBytes}
 		policy, err = prepareClientPolicyRecord(tx, client, &reset)
 		if err != nil {
@@ -109,4 +105,15 @@ func PrepareClientPolicyReset(instanceID, clientID, requestID string) (clientpol
 		return clientpolicy.Policy{}, err
 	}
 	return policy, nil
+}
+
+func validateLocalClientPolicyResetScope(tx *gorm.DB, clientIDs []string) error {
+	var remote int64
+	if err := tx.Table("client_inbounds ci").Joins("JOIN clients c ON c.id = ci.client_id").Joins("JOIN inbounds i ON i.id = ci.inbound_id").Where("c.stable_id IN ? AND i.node_id IS NOT NULL", clientIDs).Count(&remote).Error; err != nil {
+		return err
+	}
+	if remote != 0 {
+		return ErrClientPolicyLedger
+	}
+	return nil
 }

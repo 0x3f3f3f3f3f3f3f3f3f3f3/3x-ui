@@ -203,4 +203,18 @@ func TestClientPolicyPollingRetriesCommittedTraffic(t *testing.T) {
 	if got := policyLedgerTotal(t, client.StableID); got.RawUpload != 2148 || got.RawDownload != 2248 || got.BilledBytes != 8492 {
 		t.Fatalf("cursor rejection discarded recoverable traffic: %+v", got)
 	}
+	lastID := state.Policies[len(state.Policies)-1].ClientID
+	if err := db.Model(&model.ClientRecord{}).Where("stable_id = ?", lastID).Update("enable", false).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PrepareClientPolicyReset(state.InstanceID, lastID, "last-batch-reset"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := (&XrayService{}).GetXrayTraffic(); err != nil {
+		t.Fatal(err)
+	}
+	last, err := api.GetClient(ctx, lastID)
+	if err != nil || last.Policy.Version != 2 || last.Policy.Enabled || last.Usage.BilledBytes != 0 {
+		t.Fatalf("polling skipped the pending reset in its last policy batch: %+v, %v", last, err)
+	}
 }

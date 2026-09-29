@@ -303,3 +303,17 @@ go test -race ./internal/database ./internal/web/service \
 ```
 
 This increment establishes SQL preparation and migration. Runtime application/retry, public reset/bulk/scheduled flows, period statistics and automatic activation remain open. No core, frontend or public HTTP schema changed, so the preceding core and frontend evidence was not rerun for this SQL-only increment.
+
+## Runtime reset and automatic retry — 2026-09-29
+
+The real-child reset test first reproduced a committed reset whose core remained at policy version 1 after normal polling. The repair checkpoints and settles before capture, commits the request before Runtime application, and retries pending resets from ordinary traffic polling. Losing the private control socket after SQL commit leaves a 32-byte boundary pending. Another 16 billed bytes arrive before recovery; polling applies version 2 with the original 32-byte boundary and 48 lifetime billed bytes.
+
+Further traffic and delayed requests preserve the latest window: request B captures 80 billed bytes at version 3; a later request A retry leaves B's boundary and all 92 billed bytes intact. A third reset carries manual disable and expiry into version 4, closes the actual TCP connection, and retains 23 upload / 23 download / 92 billed bytes across a child restart. Attempting a reset while stopped creates no request. An injected SQL insert failure returns its database error without an applicable reset; a concurrent Runtime ledger read inside the transaction verifies the RPC mutex was already released.
+
+Both explicit SQL retries and polling originally accepted a new remote attachment made after request creation. Failing regressions now verify rejection until that attachment is removed. Another regression reproduced an unrelated revoked client blocking a pending reset; only clients with reset records are inspected, and completed resets do not block another client's retry when their owner is later revoked.
+
+The 1001-client polling test additionally prepares a reset for the last configured client. Its next normal poll applies version 2 and the stored disable. Omitting the pre-reset checkpoint makes the real reset test fail on an unsettled receipt. Truncating reconciliation to the first 1000 clients leaves the last client at version 1 and fails the batch regression. Both mutations were restored before final checks.
+
+Final SQLite reset/desired/polling race checks passed in 20.456 s. PostgreSQL reset/desired/polling checks passed in 42.153 s before the scan-scope repair; final PostgreSQL reset/desired checks, including that repair and the real-child lifecycle, passed in 27.652 s. CI requires the real reset test's explicit PASS record in both database jobs. Full panel/lint results are recorded at the commit gate below. This increment changes service orchestration; public reset requests, period statistics and automatic managed activation remain open.
+
+The final complete panel suite passed with the current custom and unmodified core binaries enabled (service 60.446 s, Xray 14.729 s). Panel lint reported zero issues. Workflow YAML parsing and all shell-block syntax checks passed. No core, frontend or SQL schema changed in this runtime increment.

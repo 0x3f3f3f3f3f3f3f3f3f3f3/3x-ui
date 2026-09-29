@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -199,23 +200,39 @@ func TestClientPolicyResetInsertionFailureRollsBackVersion(t *testing.T) {
 }
 
 func TestClientPolicyResetRejectsSharedRemoteBudget(t *testing.T) {
-	id := resetLedgerFixture(t)
-	var client model.ClientRecord
-	if err := database.GetDB().First(&client, "stable_id = ?", id).Error; err != nil {
-		t.Fatal(err)
-	}
-	remote := mkInbound(t, 24199, model.Tunnel, `{ "address":"127.0.0.1", "port":9001 }`)
-	if err := database.GetDB().Model(remote).Update("node_id", 7).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := database.GetDB().Create(&model.ClientInbound{ClientId: client.Id, InboundId: remote.Id}).Error; err != nil {
-		t.Fatal(err)
-	}
-	if _, err := PrepareClientPolicyReset("core-a", id, "remote-request"); !errors.Is(err, ErrClientPolicyLedger) {
-		t.Fatalf("reset a global client without coordinated node budgets: %v", err)
-	}
-	if err := database.GetDB().First(&client, client.Id).Error; err != nil || client.DesiredPolicyVersion != 1 {
-		t.Fatalf("rejected reset changed version: %+v %v", client, err)
+	for _, test := range []struct {
+		name     string
+		prepared bool
+		version  int64
+	}{
+		{"new-request", false, 1}, {"retry-after-attachment", true, 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			id := resetLedgerFixture(t)
+			if test.prepared {
+				if _, err := PrepareClientPolicyReset("core-a", id, "remote-request"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var client model.ClientRecord
+			if err := database.GetDB().First(&client, "stable_id = ?", id).Error; err != nil {
+				t.Fatal(err)
+			}
+			remote := mkInbound(t, 24199, model.Tunnel, `{ "address":"127.0.0.1", "port":9001 }`)
+			if err := database.GetDB().Model(remote).Update("node_id", 7).Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := database.GetDB().Create(&model.ClientInbound{ClientId: client.Id, InboundId: remote.Id}).Error; err != nil {
+				t.Fatal(err)
+			}
+			policy, err := PrepareClientPolicyReset("core-a", id, "remote-request")
+			if !errors.Is(err, ErrClientPolicyLedger) || policy != (clientpolicy.Policy{}) {
+				t.Fatalf("reset a global client without coordinated node budgets: %+v %v", policy, err)
+			}
+			if err := database.GetDB().First(&client, client.Id).Error; err != nil || client.DesiredPolicyVersion != test.version {
+				t.Fatalf("rejected reset changed version: %+v %v", client, err)
+			}
+		})
 	}
 }
 
@@ -227,6 +244,42 @@ func TestClientPolicyResetFutureVersionFailsReconciliation(t *testing.T) {
 	}
 	if _, err := PrepareClientPolicies([]string{id}); !errors.Is(err, ErrClientPolicyLedger) {
 		t.Fatalf("policy version rollback concealed by reset: %v", err)
+	}
+}
+
+func TestClientPolicyResetPendingIgnoresUnrelatedRevokedClients(t *testing.T) {
+	for _, withReset := range []bool{false, true} {
+		t.Run(fmt.Sprintf("previous-reset-%t", withReset), func(t *testing.T) {
+			id := resetLedgerFixture(t)
+			if _, err := PrepareClientPolicyReset("core-a", id, "pending"); err != nil {
+				t.Fatal(err)
+			}
+			revokedID := policyLedgerClient(t, "unrelated-revoked", 0, 0)
+			if _, err := PrepareClientPolicies([]string{revokedID}); err != nil {
+				t.Fatal(err)
+			}
+			page := policyLedgerPage(revokedID, 2, 0, 0, 0)
+			if err := SettleClientPolicyLedger("core-a", 1, 1, page); err != nil {
+				t.Fatal(err)
+			}
+			if withReset {
+				if _, err := PrepareClientPolicyReset("core-a", revokedID, "already-applied"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			page = policyLedgerPage(revokedID, 3, 0, 0, 0)
+			page.Records[0].PolicyVersion = 2
+			page.Records[0].Revoked = true
+			if err := SettleClientPolicyLedger("core-a", 1, 2, page); err != nil {
+				t.Fatal(err)
+			}
+			pending, err := pendingClientPolicyResetIDs(database.GetDB(), "core-a", []clientpolicy.Policy{
+				{ClientID: id, Version: 1}, {ClientID: revokedID, Version: 2},
+			})
+			if err != nil || len(pending) != 1 || pending[0] != id {
+				t.Fatalf("unrelated revoked client blocked a pending reset: %v, %v", pending, err)
+			}
+		})
 	}
 }
 

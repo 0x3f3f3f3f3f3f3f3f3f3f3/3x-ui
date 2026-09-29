@@ -39,6 +39,15 @@ func PrepareClientPolicies(clientIDs []string) ([]clientpolicy.Policy, error) {
 		if err != nil {
 			return err
 		}
+		if len(resets) > 0 {
+			resetIDs := make([]string, 0, len(resets))
+			for id := range resets {
+				resetIDs = append(resetIDs, id)
+			}
+			if err := validateLocalClientPolicyResetScope(tx, resetIDs); err != nil {
+				return err
+			}
+		}
 		for _, client := range clients {
 			policy, err := prepareClientPolicyRecord(tx, client, resets[client.StableID])
 			if err != nil {
