@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	stderrors "errors"
 	"reflect"
 	"sync"
 
@@ -267,7 +268,10 @@ func (s *Instance) Type() interface{} {
 func (s *Instance) Close() error {
 	s.statusLock.Lock()
 	defer s.statusLock.Unlock()
+	return s.closeLocked()
+}
 
+func (s *Instance) closeLocked() error {
 	s.running = false
 
 	var errs []interface{}
@@ -386,17 +390,38 @@ func (s *Instance) GetFeature(featureType interface{}) features.Feature {
 	return getFeature(s.features, reflect.TypeOf(featureType))
 }
 
-// Start starts the Xray instance, including all registered features. When Start returns error, the state of the instance is unknown.
-// A Xray instance can be started only once. Upon closing, the instance is not guaranteed to start again.
-//
+// Start starts every feature, closing all resources if initialization fails.
+// A failed or closed instance must be replaced before retrying.
 // xray:api:stable
-func (s *Instance) Start() error {
+func (s *Instance) Start() (err error) {
 	s.statusLock.Lock()
 	defer s.statusLock.Unlock()
+	defer func() {
+		if err != nil {
+			err = stderrors.Join(err, s.closeLocked())
+		}
+	}()
 
+	var barrier features.Feature
+	for _, f := range s.features {
+		if candidate, ok := f.(features.StartupBarrier); ok && candidate.StartAfterFeatures() {
+			if barrier != nil {
+				return errors.New("multiple startup commit barriers are not supported")
+			}
+			barrier = f
+		}
+	}
 	s.running = true
 	for _, f := range s.features {
+		if f == barrier {
+			continue
+		}
 		if err := f.Start(); err != nil {
+			return err
+		}
+	}
+	if barrier != nil {
+		if err := barrier.Start(); err != nil {
 			return err
 		}
 	}

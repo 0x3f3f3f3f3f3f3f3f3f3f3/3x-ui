@@ -35,4 +35,6 @@ protoc --go_out=. --go_opt=paths=source_relative \
   app/clientpolicy/command/command.proto
 ```
 
-Remaining gates include production settlement scheduling, coordinated legacy cutover, restore fencing, whole configuration-start rollback, mass-client performance and protected local transport on Windows. Existing target metadata limitations remain: the pre-rewrite Tunnel target is not yet independently preserved.
+The core now closes all feature resources when startup fails. Durable policy configuration is committed last, after the other features have started. A listener conflict or a later feature failure therefore leaves the previously committed policy and usage intact. Only one durable startup commit barrier is allowed. If the final storage operation itself fails, the existing fail-closed storage/recovery rules apply; this is not a promise to reverse an ambiguously completed disk write.
+
+Remaining gates include production settlement scheduling, coordinated legacy cutover, restore fencing, mass-client performance and protected local transport on Windows. Existing target metadata limitations remain: the pre-rewrite Tunnel target is not yet independently preserved.

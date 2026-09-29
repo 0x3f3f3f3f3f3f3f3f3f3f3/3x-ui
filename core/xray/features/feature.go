@@ -10,3 +10,10 @@ type Feature interface {
 	common.HasType
 	common.Runnable
 }
+
+// StartupBarrier commits durable configuration only after every other feature has started.
+// An instance can have one such barrier; its Start must commit atomically or fail closed.
+type StartupBarrier interface {
+	Feature
+	StartAfterFeatures() bool
+}

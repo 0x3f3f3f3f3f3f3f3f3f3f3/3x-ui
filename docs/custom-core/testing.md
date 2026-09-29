@@ -132,3 +132,9 @@ XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race ./internal/xray ./interna
 ```
 
 This command passed (xray 3.047 s, runtime 1.296 s), including the actual binary's pre-existing TCP handler/routing integration. The binary was built from the managed source including the usage-seed RPC. Full panel `GOFLAGS=-p=1 GOTOOLCHAIN=go1.27.1 make test-go` and focused `go vet ./internal/xray ./internal/web/runtime ./internal/web/service` passed. These tests do not claim automatic policy activation, node-wide budgets or browser acceptance.
+
+## Core startup rollback — 2026-09-29
+
+`TestFailedCoreStartReleasesListenersAndKeepsCommittedPolicy` first reproduced a leaked TCP listener, a held durable-state lock and a falsely running instance after both a real Unix control-address conflict and an injected final-feature failure. Closing all features repaired the resource leaks but the final-feature case still persisted rejected version 2. Deferring the policy commit until the remaining features succeed repaired that second failure. Recovery preserves version 1, enabled state, multiplier 1 and the original 7 raw-upload / 7 billed bytes. The conflicting Unix socket owned by the test remains usable; the failed core's own socket is removed.
+
+The extra multiple-committer case fails when the single-barrier guard is temporarily removed. Restored code passes the focused race regression. The core/policy/control scoped race suite and focused vet passed. The full `go test -p=1 -shuffle=on -count=1 ./...` managed-core suite passed, including the scenarios package in 337.015 seconds. No test thresholds were changed.

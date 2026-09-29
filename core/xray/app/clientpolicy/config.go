@@ -49,7 +49,8 @@ func init() {
 	}))
 }
 
-func (*Engine) Type() interface{} { return (*Manager)(nil) }
+func (*Engine) Type() interface{}        { return (*Manager)(nil) }
+func (*Engine) StartAfterFeatures() bool { return true }
 func (e *Engine) Start() error {
 	e.startOnce.Do(func() {
 		e.startErr = e.ApplyBatch(e.initial)
