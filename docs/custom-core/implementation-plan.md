@@ -304,3 +304,11 @@ frozen-counter delta. Retry IDs and snapshots survive SQL failures; each new chi
 clears that state. Source review, complete internal/xray race and panel suites,
 lint and panel build pass. Automatic endpoint provisioning, shared SQL
 receipt service, pure activation preflight and lifecycle cutover are still open.
+
+
+Task 6 automatic control checkpoint: Linux ordinary custom children receive a
+per-child private control endpoint selected by a dedicated binary configuration
+hint. Numeric version parsing and older Custom/upstream startup remain intact.
+PID/boot verification is unchanged; runtime-only config and child-owned cleanup
+pass real process tests. Source review, full panel/race suites, lint and build pass.
+The shared SQL writer and live legacy activation integration remain open.

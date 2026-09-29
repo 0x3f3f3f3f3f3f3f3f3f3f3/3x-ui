@@ -900,3 +900,20 @@ suite passes (18.514 s). Source review passes. Root gates also pass: internal/xr
 race (22.27 s including command overhead), complete panel suite (282.43 s), lint
 with zero issues (24.57 s) and panel build (8.19 s). Formatting and all 18 workflow
 shell blocks pass. This increment does not yet wire SQL service handoff.
+
+
+Automatic control checkpoint (2026-09-29): initial real-process tests failed with
+no pinned boot and an invalid child reported as started. Focused race passed
+after provisioning. Review then exposed the shared Custom brand as an unsafe
+compatibility selector: its regression failed for an old Custom version. The
+new dedicated configuration-hint regression and core version test pass. Real
+new Custom, pre-control Custom and upstream binaries verify ordinary traffic,
+unsupported-drain refusal, unchanged desired config, new identity/directory on
+restart, failed-start cleanup and explicit-directory preservation. Full shuffled
+internal/xray race passes (19.112 s). Source review passes. Root full internal/xray race (34.84 s command time) and
+complete panel suite (308.33 s) pass. Lint initially caught an error-comparison
+style issue and octal formatting in the new test; after correction, focused race
+passes (1.590 s package time), lint reports zero issues, and panel build passes
+(8.26 s). Explicit Go formatting and all 18 workflow shell blocks pass.
+The version-output addition passes targeted core tests and builds;
+core data-path implementation is unchanged in this increment.

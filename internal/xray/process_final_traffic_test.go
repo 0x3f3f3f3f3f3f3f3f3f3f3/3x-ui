@@ -185,6 +185,11 @@ func TestFinalTrafficReplaysPendingThenSettlesFreshSnapshot(t *testing.T) {
 }
 
 func TestFinalTrafficRejectsUnpinnedChildWithoutClosing(t *testing.T) {
+	upstream := os.Getenv("XRAY_UPSTREAM_E2E_BINARY")
+	if upstream == "" {
+		t.Skip("set XRAY_UPSTREAM_E2E_BINARY to the unmodified core")
+	}
+	t.Setenv("XRAY_E2E_BINARY", upstream)
 	_, final, address := finalTrafficProcess(t, false)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()

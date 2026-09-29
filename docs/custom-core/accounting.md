@@ -397,3 +397,20 @@ action after SQL success under the caller's lifecycle ownership.
 These process primitives do not yet provision private control automatically or
 connect the service SQL writer and activation flow. Ordinary live legacy-to-managed
 activation remains disabled pending those integrations.
+
+
+## Automatic private traffic control
+
+On Linux, the panel adds a fresh private control socket to each child's runtime
+configuration when the binary's version output advertises the exact
+`Custom configuration: traffic-control-v1` line. This is a configuration hint,
+not authentication: startup still verifies the Unix peer PID and pins its boot
+ID, and final drain still requires the negotiated capability. Existing Custom
+builds and upstream cores without the hint keep ordinary startup; unsupported
+final settlement remains refused.
+
+The 0700 temporary directory belongs to one child. Its wait goroutine removes
+it before signaling exit; failures before launch clean it immediately. Explicit
+control paths remain caller-owned. The generated endpoint never changes the
+panel's desired configuration, exports or hot-diff comparison. Automatic control
+does not itself enable managed policy activation or service SQL handoff.

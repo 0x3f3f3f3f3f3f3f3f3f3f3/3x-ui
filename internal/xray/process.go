@@ -600,12 +600,18 @@ func (p *process) refreshAPIPort() {
 }
 
 // refreshVersion updates the version string by running the Xray binary with -version.
-func (p *process) refreshVersion() {
+func (p *process) refreshVersion() bool {
 	version := "Unknown"
+	supportsTrafficControl := false
 	ctx, cancel := context.WithTimeout(context.Background(), xrayVersionTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, GetBinaryPath(), "-version")
 	if data, err := cmd.Output(); err == nil {
+		for _, line := range bytes.Split(data, []byte("\n")) {
+			if bytes.Equal(bytes.TrimSpace(line), []byte("Custom configuration: traffic-control-v1")) {
+				supportsTrafficControl = true
+			}
+		}
 		if datas := bytes.Split(data, []byte(" ")); len(datas) > 1 {
 			version = string(datas[1])
 		}
@@ -613,6 +619,7 @@ func (p *process) refreshVersion() {
 	p.mu.Lock()
 	p.version = version
 	p.mu.Unlock()
+	return supportsTrafficControl
 }
 
 // Start launches the Xray process with the current configuration.
@@ -640,6 +647,15 @@ func (p *process) startConfig(startConfig *Config) (err error) {
 		}
 	}()
 
+	startConfig, ownedControlDir, err := automaticTrafficControl(startConfig, p.refreshVersion())
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if ownedControlDir != "" {
+			_ = os.RemoveAll(ownedControlDir)
+		}
+	}()
 	endpoint, err := trafficControlEndpoint(startConfig)
 	if err != nil {
 		return err
@@ -667,12 +683,11 @@ func (p *process) startConfig(startConfig *Config) (err error) {
 	cmd.Stdout = p.logWriter
 	cmd.Stderr = p.logWriter
 
-	err = p.startCommand(cmd)
+	err = p.startCommandOwned(cmd, ownedControlDir)
 	if err != nil {
 		return err
 	}
-
-	p.refreshVersion()
+	ownedControlDir = ""
 	p.refreshAPIPort()
 	if endpoint != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -735,6 +750,10 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) (err error) {
 var renameFile = os.Rename
 
 func (p *process) startCommand(cmd *exec.Cmd) error {
+	return p.startCommandOwned(cmd, "")
+}
+
+func (p *process) startCommandOwned(cmd *exec.Cmd, controlDir string) error {
 	p.trafficMu.Lock()
 	defer p.trafficMu.Unlock()
 
@@ -763,7 +782,7 @@ func (p *process) startCommand(cmd *exec.Cmd) error {
 	p.trafficFinal = nil
 	attachChildLifetime(cmd)
 
-	go p.waitForCommand(cmd, done)
+	go p.waitForCommand(cmd, done, controlDir)
 	return nil
 }
 
@@ -773,8 +792,11 @@ func (p *process) setExitErr(err error) {
 	p.mu.Unlock()
 }
 
-func (p *process) waitForCommand(cmd *exec.Cmd, done chan struct{}) {
+func (p *process) waitForCommand(cmd *exec.Cmd, done chan struct{}, controlDir string) {
 	defer close(done)
+	if controlDir != "" {
+		defer os.RemoveAll(controlDir)
+	}
 
 	err := cmd.Wait()
 	if err == nil || p.intentionalStop.Load() {

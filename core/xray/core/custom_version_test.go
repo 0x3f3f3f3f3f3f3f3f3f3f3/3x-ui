@@ -17,3 +17,12 @@ func TestCustomBinaryIdentifiesDistributionWithoutBreakingPanelVersionParser(t *
 		t.Fatalf("custom binary is indistinguishable from upstream: %q", line)
 	}
 }
+
+func TestCustomVersionAdvertisesPrivateTrafficConfiguration(t *testing.T) {
+	for _, line := range core.VersionStatement() {
+		if line == "Custom configuration: traffic-control-v1" {
+			return
+		}
+	}
+	t.Fatal("missing private traffic configuration hint")
+}
