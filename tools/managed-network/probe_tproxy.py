@@ -20,9 +20,72 @@ def run(*args, data=None):
     if p.returncode:
         raise RuntimeError(f'{args!r}: {p.stderr.strip()}')
     return p.stdout.strip()
+
+def external_ingress(report):
+    hold = 'import os,sys; print(os.readlink("/proc/self/ns/net"),flush=True); sys.stdin.read()'
+    peer = subprocess.Popen(['unshare', '--net', sys.executable, '-c', hold], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        namespace = peer.stdout.readline().strip()
+        assert namespace.startswith('net:[') and namespace != os.readlink('/proc/self/ns/net'), namespace
+        assert os.readlink(f'/proc/{peer.pid}/ns/net') == namespace, 'peer PID does not name its network namespace'
+        prefix = ['nsenter', '--target', str(peer.pid), '--net', '--']
+        run('ip', 'link', 'add', 'probe_a', 'type', 'veth', 'peer', 'name', 'probe_b')
+        run('ip', 'link', 'set', 'probe_b', 'netns', str(peer.pid))
+        run('ip', 'link', 'set', 'probe_a', 'up')
+        run(*prefix, 'ip', 'link', 'set', 'lo', 'up')
+        run(*prefix, 'ip', 'link', 'set', 'probe_b', 'up')
+        for family, local, remote, mask in [('-4', '10.203.0.1', '10.203.0.2', '24'), ('-6', 'fd00:3f::1', 'fd00:3f::2', '64')]:
+            flags = ['nodad'] if family == '-6' else []
+            run('ip', family, 'addr', 'add', local + '/' + mask, 'dev', 'probe_a', *flags)
+            run(*prefix, 'ip', family, 'addr', 'add', remote + '/' + mask, 'dev', 'probe_b', *flags)
+        for family, local, remote in [(socket.AF_INET, '10.203.0.1', '10.203.0.2'), (socket.AF_INET6, 'fd00:3f::1', 'fd00:3f::2')]:
+            for kind in [socket.SOCK_STREAM, socket.SOCK_DGRAM]:
+                code = '''import json,socket,sys
+family,kind=int(sys.argv[1]),int(sys.argv[2]);s=socket.socket(family,kind);s.settimeout(4)
+s.bind((sys.argv[3],28889))
+if kind==socket.SOCK_STREAM:s.listen(1)
+print('ready',flush=True)
+if kind==socket.SOCK_STREAM:
+ c,p=s.accept();c.settimeout(4);data=c.recv(100);c.sendall(data);c.close()
+else:
+ data,p=s.recvfrom(100);s.sendto(data,p)
+assert data==b'external-ingress-reply',data
+print(json.dumps({'observed_source':p[:2],'received_bytes':len(data)}),flush=True)
+s.close()
+'''
+                backend = subprocess.Popen(['setpriv', '--reuid=65534', '--regid=65534', '--clear-groups', sys.executable, '-c', code, str(family), str(kind), local], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                try:
+                    assert backend.stdout.readline().strip() == 'ready'
+                    client_code = '''import json,socket,sys
+s=socket.socket(int(sys.argv[1]),int(sys.argv[2]));s.settimeout(4);s.bind((sys.argv[3],0))
+s.connect((sys.argv[4],28889));s.sendall(b'external-ingress-reply');data=s.recv(100)
+assert data==b'external-ingress-reply',data
+print(json.dumps({'client_source':s.getsockname()[:2],'reply_peer':s.getpeername()[:2],'reply_bytes':len(data)}))
+s.close()
+'''
+                    client = subprocess.run([*prefix, sys.executable, '-c', client_code, str(family), str(kind), remote, local], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=6)
+                    out, err = backend.communicate(timeout=5)
+                    entry = {'family': 'IPv6' if family == socket.AF_INET6 else 'IPv4', 'transport': 'tcp' if kind == socket.SOCK_STREAM else 'udp', 'external_veth': True, 'client_exit': client.returncode, 'backend_exit': backend.returncode, 'client_error': client.stderr.strip(), 'backend_error': err.strip()}
+                    if out.strip():
+                        entry.update(json.loads(out))
+                    if client.stdout.strip():
+                        entry.update(json.loads(client.stdout))
+                    report['results'].append(entry)
+                    assert client.returncode == 0 and backend.returncode == 0, entry
+                    assert entry['observed_source'] == entry['client_source'], entry
+                    assert entry['observed_source'][0] == remote and entry['reply_peer'] == [local, 28889], entry
+                finally:
+                    if backend.poll() is None:
+                        backend.kill()
+                    backend.communicate(timeout=3)
+    finally:
+        if peer.poll() is None:
+            peer.kill()
+        peer.communicate(timeout=3)
+
 if len(sys.argv) == 1:
     ns = os.readlink('/proc/self/ns/net')
-    p = subprocess.Popen(['unshare', '--net', '--pid', '--fork', '--kill-child=SIGKILL', sys.executable, os.path.abspath(__file__), ns], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+    p = subprocess.Popen(['unshare', '--mount-proc', '--net', '--pid', '--fork', '--kill-child=SIGKILL', sys.executable, os.path.abspath(__file__), ns], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
     try:
         out, err = p.communicate(timeout=45)
     except subprocess.TimeoutExpired:
@@ -36,6 +99,7 @@ if len(sys.argv) == 1:
     print(err, end='', file=sys.stderr)
     sys.exit(p.returncode)
 assert len(sys.argv) == 2 and os.getpid() == 1, 'use the launcher; refuse non-isolated PID'
+assert open('/proc/self/stat').read().split()[0] == '1', 'refuse mismatched procfs PID namespace'
 assert os.readlink('/proc/self/ns/net') != sys.argv[1], 'refuse host network namespace'
 report = {'kernel': os.uname().release, 'machine': os.uname().machine, 'isolated_netns': True, 'versions': {}, 'results': []}
 for tool in ['nft', 'iptables', 'iptables-nft', 'iptables-legacy']:
@@ -53,6 +117,7 @@ for family, source, local in [('-4', '192.0.2.1', '0.0.0.0/0'), ('-6', '2001:db8
 rules = '''table inet xui_prereq {
  chain mark_output {
   type route hook output priority mangle; policy accept;
+  ct direction reply counter return
   meta skuid 65534 meta l4proto { tcp, udp } meta mark set 0x3f01 counter
  }
  chain transparent_input {
@@ -151,6 +216,7 @@ s.close()
                 if backend.poll() is None:
                     backend.kill()
                 backend.communicate(timeout=3)
+    external_ingress(report)
     report['rules'] = run('nft', 'list', 'table', 'inet', 'xui_prereq')
     invalid = '''add chain inet xui_prereq staged
 add rule inet xui_prereq absent counter
