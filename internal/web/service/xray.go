@@ -16,12 +16,14 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/amneziawg"
 	"github.com/mhsanaei/3x-ui/v3/internal/amneziawgnet"
 	"github.com/mhsanaei/3x-ui/v3/internal/config"
+	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/logger"
 	"github.com/mhsanaei/3x-ui/v3/internal/util/json_util"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 
 	"go.uber.org/atomic"
+	"gorm.io/gorm"
 )
 
 var (
@@ -83,7 +85,6 @@ func currentXrayProcess() *xray.Process {
 type XrayService struct {
 	inboundService InboundService
 	settingService SettingService
-	nodeService    NodeService
 	xrayAPI        xray.XrayAPI
 }
 
@@ -170,7 +171,11 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 }
 
 func (s *XrayService) getXrayConfig(managed bool) (*xray.Config, error) {
-	templateConfig, err := s.settingService.GetXrayConfigTemplate()
+	return s.getXrayConfigFromDB(managed, database.GetDB())
+}
+
+func (s *XrayService) getXrayConfigFromDB(managed bool, db *gorm.DB) (*xray.Config, error) {
+	templateConfig, err := s.settingService.getStringFromDB(db, "xrayTemplateConfig")
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +203,7 @@ func (s *XrayService) getXrayConfig(managed bool) (*xray.Config, error) {
 		_, _, _ = s.inboundService.AddTraffic(nil, nil)
 	}
 
-	inbounds, err := s.inboundService.GetAllInbounds()
+	inbounds, err := s.inboundService.getAllInboundsFromDB(db)
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +230,7 @@ func (s *XrayService) getXrayConfig(managed bool) (*xray.Config, error) {
 			}
 		}
 
-		dbClients, listErr := s.inboundService.clientService.ListForInbound(nil, inbound.Id)
+		dbClients, listErr := s.inboundService.clientService.ListForInbound(db, inbound.Id)
 		if listErr != nil {
 			return nil, listErr
 		}
@@ -316,7 +321,7 @@ func (s *XrayService) getXrayConfig(managed bool) (*xray.Config, error) {
 		}
 
 		if inboundCanHostFallbacks(inbound) {
-			fallbacks, fbErr := s.inboundService.fallbackService.BuildFallbacksJSON(nil, inbound.Id)
+			fallbacks, fbErr := s.inboundService.fallbackService.BuildFallbacksJSON(db, inbound.Id)
 			if fbErr != nil {
 				return nil, fbErr
 			}
@@ -403,7 +408,9 @@ func (s *XrayService) getXrayConfig(managed bool) (*xray.Config, error) {
 	// subscription service are kept stable across refreshes so that balancers and
 	// routing rules continue to work.
 	subSvc := &OutboundSubscriptionService{}
-	if prepend, appendList, err := subSvc.activeOutboundsSplit(); err == nil && (len(prepend) > 0 || len(appendList) > 0) {
+	if prepend, appendList, err := subSvc.activeOutboundsSplitFromDB(db); err != nil && managed {
+		return nil, err
+	} else if err == nil && (len(prepend) > 0 || len(appendList) > 0) {
 		mergeSubscriptionOutbounds(xrayConfig, prepend, appendList)
 	}
 
@@ -443,14 +450,20 @@ func (s *XrayService) getXrayConfig(managed bool) (*xray.Config, error) {
 
 	// Wire the panel's own HTTP traffic through the configured outbound, after
 	// the subscription merge so subscription outbound tags are valid targets.
-	if egressTag, err := s.settingService.GetPanelOutbound(); err != nil {
+	if egressTag, err := s.settingService.getStringFromDB(db, "panelOutbound"); err != nil {
+		if managed {
+			return nil, err
+		}
 		logger.Warning("read panelOutbound setting failed:", err)
 	} else if egressTag != "" {
 		injectPanelEgress(xrayConfig, egressTag)
 	}
 
-	nodes, err := s.nodeService.GetAll()
-	if err != nil {
+	var nodes []*model.Node
+	if err := db.Select("id", "enable", "outbound_tag").Order("id asc").Find(&nodes).Error; err != nil {
+		if managed {
+			return nil, err
+		}
 		logger.Warning("read nodes for egress injection failed:", err)
 	} else {
 		injectNodeEgresses(xrayConfig, nodes)

@@ -406,7 +406,10 @@ func (s *SettingService) ResetSettings() error {
 }
 
 func (s *SettingService) getSetting(key string) (*model.Setting, error) {
-	db := database.GetDB()
+	return s.getSettingFromDB(database.GetDB(), key)
+}
+
+func (s *SettingService) getSettingFromDB(db *gorm.DB, key string) (*model.Setting, error) {
 	setting := &model.Setting{}
 	err := db.Model(model.Setting{}).Where("key = ?", key).First(setting).Error
 	if err != nil {
@@ -432,7 +435,11 @@ func (s *SettingService) saveSetting(key string, value string) error {
 }
 
 func (s *SettingService) getString(key string) (string, error) {
-	setting, err := s.getSetting(key)
+	return s.getStringFromDB(database.GetDB(), key)
+}
+
+func (s *SettingService) getStringFromDB(db *gorm.DB, key string) (string, error) {
+	setting, err := s.getSettingFromDB(db, key)
 	if database.IsNotFound(err) {
 		value, ok := defaultValueMap[key]
 		if !ok {

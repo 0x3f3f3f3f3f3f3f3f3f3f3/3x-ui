@@ -16,6 +16,10 @@ import (
 
 // Versions describe enforcement fields, not account names or credentials; retries reuse the committed version.
 func PrepareClientPolicies(clientIDs []string) ([]clientpolicy.Policy, error) {
+	return prepareClientPolicies(clientIDs, nil)
+}
+
+func prepareClientPolicies(clientIDs []string, compiled map[string]model.ClientRecord) ([]clientpolicy.Policy, error) {
 	if len(clientIDs) == 0 || len(clientIDs) > 1000 {
 		return nil, clientpolicy.ErrInvalidPolicy
 	}
@@ -49,6 +53,9 @@ func PrepareClientPolicies(clientIDs []string) ([]clientpolicy.Policy, error) {
 			}
 		}
 		for _, client := range clients {
+			if prior, exists := compiled[client.StableID]; exists && (client.UUID != prior.UUID || client.Password != prior.Password || client.Email != prior.Email) {
+				return ErrManagedConfigStale
+			}
 			policy, err := prepareClientPolicyRecord(tx, client, resets[client.StableID])
 			if err != nil {
 				return err

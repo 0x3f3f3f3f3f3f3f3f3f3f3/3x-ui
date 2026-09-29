@@ -11,17 +11,145 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
 	command "github.com/xtls/xray-core/app/clientpolicy/command"
 	"github.com/xtls/xray-core/infra/conf"
+	"gorm.io/gorm"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	panelruntime "github.com/mhsanaei/3x-ui/v3/internal/web/runtime"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
+
+func TestClientPolicyConfigRejectsCredentialRotationDuringCompilation(t *testing.T) {
+	setupPolicyLedgerDB(t)
+	policyConfigTemplate(t)
+	client := model.Client{Email: "compiling-user", ID: "936997e1-3b0c-4de9-9eea-047ee5829d3e", SubID: "compiling-sub", Enable: true}
+	inbound := mkInbound(t, 24118, model.VLESS, `{"decryption":"none","clients":[]}`)
+	if err := (&ClientService{}).SyncInbound(nil, inbound.Id, []model.Client{client}); err != nil {
+		t.Fatal(err)
+	}
+	db := database.GetDB()
+	rotated := false
+	reads := 0
+	if err := db.Callback().Query().After("gorm:query").Register("test:rotate-after-credential-read", func(tx *gorm.DB) {
+		if !rotated && tx.Statement.Table == "clients" && strings.Contains(tx.Statement.SQL.String(), "flow_override AS flow_override") {
+			reads++
+			// The first read enriches the UI stats; the second feeds runtime credentials.
+			if reads != 2 {
+				return
+			}
+			rotated = true
+			if err := db.Model(&model.ClientRecord{}).Where("email = ?", client.Email).Update("uuid", "01dc4f70-3902-446a-98cb-c00992d1a6c5").Error; err != nil {
+				tx.AddError(err)
+			}
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Callback().Query().Remove("test:rotate-after-credential-read") })
+	if _, err := (&XrayService{}).GetManagedXrayConfig(policyConfigState(t)); !errors.Is(err, ErrManagedConfigStale) {
+		t.Fatalf("compiler bound a removed credential to current policy: rotated=%t error=%v", rotated, err)
+	}
+	if !rotated {
+		t.Fatal("fixture did not rotate the credential during compilation")
+	}
+	retried, err := (&XrayService{}).GetManagedXrayConfig(policyConfigState(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var accounts struct {
+		Clients []struct {
+			ID string `json:"id"`
+		} `json:"clients"`
+	}
+	if len(retried.InboundConfigs) != 1 {
+		t.Fatalf("retry lost the managed listener: %+v", retried.InboundConfigs)
+	}
+	if err := json.Unmarshal(retried.InboundConfigs[0].Settings, &accounts); err != nil || len(accounts.Clients) != 1 || accounts.Clients[0].ID != "01dc4f70-3902-446a-98cb-c00992d1a6c5" {
+		t.Fatalf("retry did not use the committed credential: %+v %v", accounts, err)
+	}
+}
+
+func TestClientPolicyConfigNeverMixesTunnelTargetAndReassignedOwner(t *testing.T) {
+	setupPolicyLedgerDB(t)
+	policyConfigTemplate(t)
+	cs := &ClientService{}
+	first := model.Client{Email: "first-target-owner", SubID: "first-target-sub", Enable: true}
+	second := model.ClientRecord{Email: "second-target-owner", SubID: "second-target-sub", Enable: true}
+	inbound := mkInbound(t, 24119, model.Tunnel, `{"network":"tcp","address":"127.0.0.1","port":1111}`)
+	if err := cs.SyncInbound(nil, inbound.Id, []model.Client{first}); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.GetDB().Create(&second).Error; err != nil {
+		t.Fatal(err)
+	}
+	before, err := cs.GetRecordByEmail(nil, first.Email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := cs.GetRecordByEmail(nil, second.Email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := database.GetDB()
+	reassigned := false
+	const callback = "test:reassign-after-listener-read"
+	if err := db.Callback().Query().After("gorm:query").Register(callback, func(tx *gorm.DB) {
+		if reassigned || tx.Statement.Table != "inbounds" {
+			return
+		}
+		reassigned = true
+		err := db.Transaction(func(change *gorm.DB) error {
+			if err := change.Model(&model.Inbound{}).Where("id = ?", inbound.Id).Update("settings", `{"network":"tcp","address":"127.0.0.1","port":2222}`).Error; err != nil {
+				return err
+			}
+			if err := change.Where("inbound_id = ?", inbound.Id).Delete(&model.ClientInbound{}).Error; err != nil {
+				return err
+			}
+			return change.Create(&model.ClientInbound{ClientId: after.Id, InboundId: inbound.Id}).Error
+		})
+		if err != nil {
+			tx.AddError(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Callback().Query().Remove(callback) })
+	candidate, err := (&XrayService{}).GetManagedXrayConfig(policyConfigState(t))
+	if !reassigned {
+		t.Fatal("fixture did not reassign the resource during compilation")
+	}
+	if err != nil && !errors.Is(err, ErrManagedConfigStale) {
+		t.Fatal(err)
+	}
+	var bound struct {
+		Port     int    `json:"port"`
+		ClientID string `json:"clientId"`
+	}
+	if err == nil {
+		if len(candidate.InboundConfigs) != 1 {
+			t.Fatalf("compiler lost the owned resource: %+v", candidate.InboundConfigs)
+		}
+		if err := json.Unmarshal(candidate.InboundConfigs[0].Settings, &bound); err != nil {
+			t.Fatal(err)
+		}
+		if (bound.Port != 1111 || bound.ClientID != before.StableID) && (bound.Port != 2222 || bound.ClientID != after.StableID) {
+			t.Fatalf("compiler granted one owner's resource to another identity: %+v; before=%s after=%s", bound, before.StableID, after.StableID)
+		}
+	}
+	latest, err := (&XrayService{}).GetManagedXrayConfig(policyConfigState(t))
+	if err != nil || len(latest.InboundConfigs) != 1 {
+		t.Fatalf("compiler did not release its old read view: %+v %v", latest, err)
+	}
+	if err := json.Unmarshal(latest.InboundConfigs[0].Settings, &bound); err != nil || bound.Port != 2222 || bound.ClientID != after.StableID {
+		t.Fatalf("new compilation did not observe the committed resource assignment: %+v %v", bound, err)
+	}
+}
 
 func policyConfigState(t *testing.T) *conf.ClientPolicyConfig {
 	t.Helper()

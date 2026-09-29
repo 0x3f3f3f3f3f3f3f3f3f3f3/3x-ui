@@ -543,7 +543,10 @@ func inboundMtprotoDomain(protocol string, settings string) string {
 
 // GetAllInbounds retrieves all inbounds with client stats.
 func (s *InboundService) GetAllInbounds() ([]*model.Inbound, error) {
-	db := database.GetDB()
+	return s.getAllInboundsFromDB(database.GetDB())
+}
+
+func (s *InboundService) getAllInboundsFromDB(db *gorm.DB) ([]*model.Inbound, error) {
 	var inbounds []*model.Inbound
 	err := db.Model(model.Inbound{}).Preload("ClientStats").Find(&inbounds).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {

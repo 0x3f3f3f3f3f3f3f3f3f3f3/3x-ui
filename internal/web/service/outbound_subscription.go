@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/logger"
@@ -556,7 +558,10 @@ func (s *OutboundSubscriptionService) AllActiveOutbounds() ([]any, error) {
 // placed AFTER. Within each group, subscriptions are ordered by Priority (then id)
 // so the admin can control the merged order.
 func (s *OutboundSubscriptionService) activeOutboundsSplit() (prepend []any, appendList []any, err error) {
-	db := database.GetDB()
+	return s.activeOutboundsSplitFromDB(database.GetDB())
+}
+
+func (s *OutboundSubscriptionService) activeOutboundsSplitFromDB(db *gorm.DB) (prepend []any, appendList []any, err error) {
 	var subs []*model.OutboundSubscription
 	if err := db.Where("enabled = ?", true).Order("priority asc, id asc").Find(&subs).Error; err != nil {
 		return nil, nil, err

@@ -1,7 +1,9 @@
 package service
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -16,6 +18,8 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
 
+var ErrManagedConfigStale = errors.New("managed configuration changed during compilation")
+
 // A candidate binds database identities before negotiated activation; it does not migrate legacy usage.
 func (s *XrayService) GetManagedXrayConfig(state *conf.ClientPolicyConfig) (*xray.Config, error) {
 	if state == nil || !filepath.IsAbs(state.StateFile) {
@@ -26,11 +30,18 @@ func (s *XrayService) GetManagedXrayConfig(state *conf.ClientPolicyConfig) (*xra
 	if _, err := policyState.Build(); err != nil {
 		return nil, err
 	}
-	cfg, err := s.getXrayConfig(true)
-	if err != nil {
-		return nil, err
-	}
-	bindings, records, err := localManagedInboundBindings()
+	var cfg *xray.Config
+	var bindings map[string][]model.ClientRecord
+	var records map[string]model.ClientRecord
+	err := readManagedConfigSnapshot(database.GetDB(), func(tx *gorm.DB) error {
+		var err error
+		cfg, err = s.getXrayConfigFromDB(true, tx)
+		if err != nil {
+			return err
+		}
+		bindings, records, err = localManagedInboundBindings(tx)
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +124,7 @@ func (s *XrayService) GetManagedXrayConfig(state *conf.ClientPolicyConfig) (*xra
 	}
 	policyState.Policies = nil
 	for _, batch := range chunkStrings(ids, 1000) {
-		policies, err := PrepareClientPolicies(batch)
+		policies, err := prepareClientPolicies(batch, records)
 		if err != nil {
 			return nil, err
 		}
@@ -126,10 +137,25 @@ func (s *XrayService) GetManagedXrayConfig(state *conf.ClientPolicyConfig) (*xra
 	return cfg, nil
 }
 
-func localManagedInboundBindings() (map[string][]model.ClientRecord, map[string]model.ClientRecord, error) {
+func readManagedConfigSnapshot(db *gorm.DB, read func(*gorm.DB) error) error {
+	if db.Name() != "sqlite" {
+		return db.Transaction(read, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	}
+	// SQLite's normal BeginTx uses the DSN's immediate write lock, even for read-only TxOptions.
+	return db.Connection(func(connection *gorm.DB) (err error) {
+		connection = connection.Session(&gorm.Session{NewDB: true})
+		if err := connection.Exec("BEGIN DEFERRED").Error; err != nil {
+			return err
+		}
+		defer func() { err = errors.Join(err, connection.Exec("ROLLBACK").Error) }()
+		return read(connection)
+	})
+}
+
+func localManagedInboundBindings(tx *gorm.DB) (map[string][]model.ClientRecord, map[string]model.ClientRecord, error) {
 	bindings := make(map[string][]model.ClientRecord)
 	records := make(map[string]model.ClientRecord)
-	err := database.GetDB().Transaction(func(tx *gorm.DB) error {
+	err := func() error {
 		var inbounds []model.Inbound
 		if err := tx.Select("id", "tag", "protocol").Where("node_id IS NULL AND enable = ?", true).Find(&inbounds).Error; err != nil {
 			return err
@@ -180,7 +206,7 @@ func localManagedInboundBindings() (map[string][]model.ClientRecord, map[string]
 			}
 		}
 		return nil
-	})
+	}()
 	return bindings, records, err
 }
 
@@ -219,6 +245,13 @@ func bindManagedInboundIdentity(inbound *xray.InboundConfig, records []model.Cli
 			record, exists := byEmail[email]
 			if !exists {
 				return fmt.Errorf("%w: account has no stored identity", xray.ErrClientPolicyCapability)
+			}
+			key, credential := "id", record.UUID
+			if inbound.Protocol == string(model.Trojan) || inbound.Protocol == string(model.Shadowsocks) {
+				key, credential = "password", record.Password
+			}
+			if supplied, _ := client[key].(string); supplied != credential {
+				return fmt.Errorf("%w: authenticated account changed", ErrManagedConfigStale)
 			}
 			if flow, _ := client["flow"].(string); strings.HasPrefix(flow, "xtls-rprx-vision") {
 				return fmt.Errorf("%w: managed Vision activation is not verified", xray.ErrClientPolicyCapability)

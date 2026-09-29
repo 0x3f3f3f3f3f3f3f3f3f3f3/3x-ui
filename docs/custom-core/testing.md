@@ -514,3 +514,27 @@ the core build, Go lint (zero issues), the complete shuffled panel suite
 (239.65 s wall) and panel build pass. The final complete shuffled core rerun
 also passes, including the repaired codecs and scenarios (343.209 s). The
 initial comparison-test failures remain recorded separately.
+
+## Coherent managed configuration reads — 2026-09-29
+
+Managed compilation reads settings, listeners, normalized credentials, fallback
+targets, subscription outbounds, node egress and trusted identity bindings from
+one database snapshot. PostgreSQL uses a read-only repeatable-read transaction.
+SQLite pins a connection and starts a deferred read transaction, avoiding the
+DSN's immediate write transaction mode. Policy preparation still locks current
+client rows and rejects credentials that changed after compilation.
+
+The concurrent owner/target regression initially produced the new owner with
+the old Tunnel target. It now accepts a coherent snapshot and requires the next
+compilation to observe the committed owner and target together. Omitting the
+SQLite read transaction or downgrading PostgreSQL to read committed reproduces
+the mixed configuration. A separate credential rotation regression checks the
+typed stale-candidate error and a successful fresh compilation.
+
+This seven-file compiler increment was verified independently at `56d0f622`,
+without ordinary activation changes. SQLite compiler/builder race checks
+(10.354 s), PostgreSQL compiler/desired-policy race checks (32.982 s), Go lint
+(zero issues), the complete shuffled panel suite (244.61 s wall) and panel
+build pass. Real-core checks use the credential-revocation build. A coherent
+candidate is not a complete database-to-runtime revision fence; concurrent
+mutation completion and cross-node enforcement remain separate work.
