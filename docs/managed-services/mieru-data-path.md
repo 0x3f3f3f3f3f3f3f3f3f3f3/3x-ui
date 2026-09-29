@@ -304,3 +304,22 @@ second client's probe arrive through the wrong exit. These are fresh-flow
 decisions after `SaveXraySetting` / `RestartXray(false)`; the result does not
 claim migration of an already-established flow to a different route or cover
 every available outbound protocol.
+
+## Linux panel process lifetime
+
+The Xray child now receives `SIGKILL` when its owning panel exits unexpectedly.
+A dedicated goroutine locks its operating system thread before starting the
+child and retains that thread through `Wait`. This matters because Linux's
+parent-death signal follows the creating thread, whose lifetime can otherwise
+end before the panel process. Existing process attributes are retained, and
+normal shutdown still uses the existing graceful-then-forced stop sequence.
+Windows retains its job-object ownership behavior.
+
+The actual panel executable is tested through authenticated HTTP APIs with
+official mieru clients, both database backends and both native underlays.
+After `SIGTERM` or `SIGKILL`, its native listener and the core API port must be
+reusable within two seconds of panel exit. Restarting the same executable and
+database preserves policy identity, rates, multiplier and settled usage. A
+depleted user remains denied while a healthy user's new TCP/UDP flows work.
+This checks process recovery and durable admission accounting; it does not
+assert that a UDP client detects a silent server death within two seconds.

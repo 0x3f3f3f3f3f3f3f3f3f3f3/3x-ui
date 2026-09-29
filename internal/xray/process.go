@@ -690,17 +690,25 @@ func (p *process) startCommand(cmd *exec.Cmd) error {
 	defer p.mu.Unlock()
 	p.intentionalStop.Store(false)
 
-	if err := cmd.Start(); err != nil {
+	done, started := make(chan struct{}), make(chan error)
+	go func() {
+		release := prepareChildLifetime(cmd)
+		defer release()
+		if err := cmd.Start(); err != nil {
+			started <- err
+			return
+		}
+		attachChildLifetime(cmd)
+		started <- nil
+		p.waitForCommand(cmd, done)
+	}()
+	if err := <-started; err != nil {
 		return err
 	}
 
-	attachChildLifetime(cmd)
 	p.cmd = cmd
-	p.done = make(chan struct{})
+	p.done = done
 	p.exitErr = nil
-	done := p.done
-
-	go p.waitForCommand(cmd, done)
 	return nil
 }
 

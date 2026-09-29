@@ -4246,3 +4246,103 @@ was corrected without changing assertions. `golangci-lint run
 ./internal/web/service` then reported **0 issues**
 (`mieru-public-routing-lint-final.log`). Only the new test and documentation
 changed; production build/full-suite evidence remains the preceding milestones.
+## Actual panel exit and persistent mieru enforcement (2026-09-29)
+
+`mieru_panel_process_linux_test.go` starts the actual panel executable, initializes
+its administrator with the CLI, and uses cookie/CSRF-authenticated HTTP APIs to
+create the inbound and update client policies. Only the isolated routing template
+and disabled subscription listeners are seeded before startup. Official mieru
+v3.38.0 API clients send TCP/UDP payload through the pinned managed core to actual
+echo targets. The matrix covers SQLite/PostgreSQL, native TCP/UDP, and
+`SIGTERM`/`SIGKILL` (eight leaf cases).
+
+The original panel failed the SQLite/TCP/SIGKILL case: its core API port remained
+bound beyond the predeclared two seconds after panel exit. That run failed in
+5.078s, before any production change (`mieru-panel-process-red.jsonl`). Linux had
+no child-lifetime attachment. The fix keeps `Start` and `Wait` on a dedicated,
+locked OS thread and configures the child's parent-death signal as `SIGKILL`.
+Other process attributes and the Windows job-object attachment are retained.
+
+This thread lifetime is necessary because the Linux signal follows the creating
+thread, not the final thread in the parent process; see the
+[Go issue](https://github.com/golang/go/issues/27505),
+[Linux manual](https://man7.org/linux/man-pages/man2/PR_SET_PDEATHSIG.2const.html),
+and [Go thread-lock contract](https://pkg.go.dev/runtime#LockOSThread).
+An additional real echo-child regression starts the child from a locked caller,
+waits for its listener, terminates that caller's OS thread, then exchanges data.
+A temporary Pdeathsig-only overlay failed with connection refused in 0.084s
+(`xray-naive-pdeathsig-ready-red.jsonl`). Initial fixture attempts used Go's
+initial thread, which the runtime parks instead of terminating; these were
+fixture failures, corrected by keeping that thread occupied and using another
+worker. The final test verifies that worker really disappears from `/proc`.
+
+The actual-panel test declares exit within five seconds, both listener ports
+reusable within two seconds after exit, HTTP readiness within 15 seconds, and
+native runtime recovery within five seconds of the authenticated HTTP check.
+The depleted user retains **44 up / 44 down / 176 billed** at 2x. The healthy
+user's original TCP/UDP flows still work after the other user's depletion;
+its pre-exit snapshot is **88 / 88 / 264** at 1.5x. After restarting the same
+database, both policies and usage snapshots compare exactly, the depleted
+credential remains denied, and new healthy flows bring its counters to
+**132 / 132 / 396**. Stored 64/32 KiB/s rates also survive; this is persistence
+evidence, not a new throughput measurement. UDP client-side silent-death
+detection is not assigned the server listener-release bound.
+
+```sh
+go build -p 1 -o /tmp/3x-ui-child-lifetime-panel .
+XUI_E2E_PANEL=/tmp/3x-ui-child-lifetime-panel \
+XUI_MANAGED_XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' \
+go test -p 1 -race -shuffle=on -count=1 -json \
+  -run '^TestMieruPanelProcessRestart' ./internal/web/service
+```
+
+The strengthened matrix passed **2 top-level / 12 subtests**, zero skips, in
+56.367s; 12 includes four underlay parent groups and eight leaf cases. The panel
+binary is a normal build; the test harness uses race instrumentation. Measured
+SIGKILL-to-panel-exit time was 5.720–8.304ms (four cases), graceful exit
+8.851ms–3.711s (12 stops including the recovered instances), and listener release
+107µs–10.777ms (16 stops). Native status checks reached running in
+258.092ms–1.294s. The initial, less strict matrix also passed in 47.702s before
+adding the explicit pre-exit healthy-flow exchange.
+
+Complete `internal/xray` race/shuffle regression passed **102 top-level / 81
+subtests**, zero skips, in 5.076s with `XRAY_E2E_BINARY` set to the pinned managed
+core. Logs under `/tmp/3x-ui-rate-trace/`: `mieru-panel-process-final.jsonl`,
+`xray-child-lifetime-green.jsonl` (six focused lifecycle tests, 2.790s), and
+`xray-child-lifetime-all-race.jsonl`. This is a scoped process-recovery fix;
+remaining native buffering, deployment, node and full-protocol requirements
+remain open.
+
+The affected Go lint command reported **0 issues**. Both cross-compilation
+commands completed successfully; they establish compilation, not runtime
+behavior on those operating systems:
+
+```sh
+golangci-lint run ./internal/xray/... ./internal/web/service/...
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go test -c ./internal/xray \
+  -o /tmp/3x-ui-rate-trace/xray-lifetime-windows.test.exe
+GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go test -c ./internal/xray \
+  -o /tmp/3x-ui-rate-trace/xray-lifetime-darwin.test
+```
+
+The final full-root backend regression completed with exit zero: **53 test
+packages, 2677 top-level / 4670 subtests passed**, **28 top-level / 14 subtest
+skips**, and seven packages without tests. There were no failures. All 42
+skipped names exactly match `admission-full-go.jsonl`; no skip was added or
+removed, and none counts as a pass. The service package took 612.085s and
+included both actual-panel database matrices. Command:
+
+```sh
+XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+XUI_MANAGED_XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+XUI_MIHOMO_E2E_BINARY=/tmp/3x-ui-mihomo-v1.19.30 \
+XUI_E2E_PANEL=/tmp/3x-ui-child-lifetime-panel \
+XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' \
+go test -p 1 -shuffle=on -count=1 -timeout=25m ./... -json
+```
+
+Log: `/tmp/3x-ui-rate-trace/xray-child-lifetime-full-go.jsonl`. No frontend
+source or assets changed in this increment, so frontend tests/build were not
+repeated. The separate Snell audit documentation committed during this run
+changed no Go source under test.

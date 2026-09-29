@@ -260,8 +260,8 @@ Public preview/preflight acceptance also has both-database/both-underlay
 evidence: saved previews do not replace the runtime, invalid routing is rejected
 before replacement, existing and fresh flows retain the working configuration,
 and restoring the template preserves exact billing. Destructive-preview and
-skipped-validation mutations fail. Post-stop rollback and panel-process recovery
-are still required.
+skipped-validation mutations fail. Post-stop rollback remains a separate
+acceptance requirement; actual panel-process recovery is recorded below.
 
 Public real routing now has 80 route-case observations across both databases,
 both native transports and both payload types: separate same-IP user exits,
@@ -269,6 +269,14 @@ domain/IP/source/inbound/network/port matching, deny priority and round-robin
 balancing. Independent target source addresses identify the selected outlet;
 blocked cases also require a healthy allowed control. Other outbound types,
 established-flow route migration and the remaining failure matrix stay open.
+
+Actual Linux panel-process recovery now has eight real-executable/API/client
+cases across both databases, both native transports and SIGTERM/SIGKILL.
+The original SIGKILL case exposed an orphaned core listener. A dedicated locked
+creator thread plus Linux parent-death signaling now ties the core to the panel
+without killing it when the API caller's thread exits. Exact saved policy/usage,
+depleted-user denial, healthy-user recovery and bounded port reuse are verified.
+This does not close the remaining buffering, node, packaging or full fault matrix.
 
 ## Task 7: Snell v4/v5/v6 vertical integration
 
