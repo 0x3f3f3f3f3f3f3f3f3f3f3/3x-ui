@@ -211,3 +211,18 @@ XRAY_E2E_BINARY="$PWD/build/custom-xray" XRAY_UPSTREAM_E2E_BINARY=/path/to/pinne
   -run '^TestManagedProcess|^TestLocalRuntimeUsesPrivateControl|^TestClientPolicyPolling' -count=1
 # Repeat TestClientPolicyPolling with the isolated PostgreSQL environment.
 ```
+
+## Listener removal and reassignment — 2026-09-29
+
+`TestTunnelRemovalDrainsOldTCPAndUDPSessionsBeforeReassignment` first failed because removing an inbound left its established TCP stream alive. The repair also drains UDP sessions: with only UDP cleanup removed, the regression fails with two remaining sessions instead of the single sibling listener. Restoring cleanup preserves that sibling and the previous owner's 312 upload / 312 download / 624 billed bytes; the replacement on the same port independently records 77 upload / 77 download / 154 billed bytes for the new owner.
+
+`TestLegacyTunnelRemovalClosesTCPAndUnixConnections` reproduced retained connections in both unmanaged transports before the repair. The combined real-socket removal tests passed twenty consecutive race runs (1.997 s). Focused dispatcher/policy race checks passed (1.027 s / 3.654 s), and focused vet passed. Runtime's existing private-control test now also asserts that deletion closes its established connection, not just the listening port. The complete core and Runtime regression results are recorded at the commit gate below.
+
+```sh
+(cd core/xray && go test -race -p=1 ./app/proxyman/inbound ./app/dispatcher ./testing/policy -count=1)
+go test -race -p=1 ./internal/web/runtime -run '^TestLocalRuntimeUsesPrivateControl' -count=1
+```
+
+These are core/Runtime removal checks, not evidence of completed panel ownership assignment or final legacy traffic handoff.
+
+Final removal gate: the full core suite passed, including protocol scenarios in 368.015 s. Private-control/real-child race checks passed for process (13.567 s), Runtime (1.297 s) and service (18.231 s), using a binary built from the removal patch; they include restart recovery and the 1001-client polling case. The complete serial panel suite passed (service 62.303 s), and panel lint reported zero issues. No frontend or database schema changed in this increment.

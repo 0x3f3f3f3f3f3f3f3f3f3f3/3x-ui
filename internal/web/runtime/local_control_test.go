@@ -135,6 +135,10 @@ func TestLocalRuntimeUsesPrivateControlForHandlersRoutingAndStats(t *testing.T) 
 	if err := local.DelInbound(ctx, ib); err != nil {
 		t.Fatal(err)
 	}
+	_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+	if _, err := conn.Read(reply); err == nil || os.IsTimeout(err) {
+		t.Fatalf("Runtime deletion retained the established Tunnel stream: %v", err)
+	}
 	if unexpected, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), time.Second); err == nil {
 		unexpected.Close()
 		t.Fatal("removed Tunnel still accepts connections")

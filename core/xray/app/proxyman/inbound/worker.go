@@ -35,6 +35,8 @@ type worker interface {
 }
 
 type tcpWorker struct {
+	connections workerConnections
+
 	address         net.Address
 	port            net.Port
 	proxy           proxy.Inbound
@@ -59,7 +61,11 @@ func getTProxyType(s *internet.MemoryStreamConfig) internet.SocketConfig_TProxyM
 }
 
 func (w *tcpWorker) callback(conn stat.Connection) {
-	ctx, cancel := context.WithCancel(w.ctx)
+	ctx, finish, accepted := w.connections.add(w.ctx, conn)
+	if !accepted {
+		return
+	}
+	defer finish()
 	sid := session.NewID()
 	ctx = c.ContextWithID(ctx, sid)
 
@@ -91,8 +97,6 @@ func (w *tcpWorker) callback(conn stat.Connection) {
 				}
 			}
 			if isLoopBack {
-				cancel()
-				conn.Close()
 				errors.LogError(ctx, errors.New("loopback connection detected"))
 				return
 			}
@@ -123,8 +127,6 @@ func (w *tcpWorker) callback(conn stat.Connection) {
 	if err := w.proxy.Process(ctx, net.Network_TCP, conn, w.dispatcher); err != nil {
 		errors.LogInfoInner(ctx, err, "connection ends")
 	}
-	cancel()
-	conn.Close()
 }
 
 func (w *tcpWorker) Proxy() proxy.Inbound {
@@ -149,6 +151,7 @@ func (w *tcpWorker) Start() error {
 }
 
 func (w *tcpWorker) Close() error {
+	w.connections.stop()
 	var errs []interface{}
 	if w.hub != nil {
 		if err := common.Close(w.hub); err != nil {
@@ -158,6 +161,7 @@ func (w *tcpWorker) Close() error {
 			errs = append(errs, err)
 		}
 	}
+	w.connections.running.Wait()
 	if len(errs) > 0 {
 		return errors.New("failed to close all resources").Base(errors.New(serial.Concat(errs...)))
 	}
@@ -179,12 +183,8 @@ type udpConn struct {
 	done             *done.Instance
 	uplink           stats.Counter
 	downlink         stats.Counter
-	inactive         bool
+	ctx              context.Context
 	cancel           context.CancelFunc
-}
-
-func (c *udpConn) setInactive() {
-	c.inactive = true
 }
 
 func (c *udpConn) updateActivity() {
@@ -270,8 +270,11 @@ type udpWorker struct {
 	uplinkCounter   stats.Counter
 	downlinkCounter stats.Counter
 
-	checker    *task.Periodic
-	activeConn map[connID]*udpConn
+	checker     *task.Periodic
+	activeConn  map[connID]*udpConn
+	closed      bool
+	sessions    sync.WaitGroup
+	packetsDone chan struct{}
 
 	ctx  context.Context
 	cone bool
@@ -280,6 +283,9 @@ type udpWorker struct {
 func (w *udpWorker) getConnection(id connID) (*udpConn, bool) {
 	w.Lock()
 	defer w.Unlock()
+	if w.closed {
+		return nil, false
+	}
 
 	if conn, found := w.activeConn[id]; found && !conn.done.Done() {
 		conn.updateActivity()
@@ -287,7 +293,9 @@ func (w *udpWorker) getConnection(id connID) (*udpConn, bool) {
 	}
 
 	pReader, pWriter := pipe.New(pipe.DiscardOverflow(), pipe.WithSizeLimit(16*1024))
+	ctx, cancel := context.WithCancel(w.ctx)
 	conn := &udpConn{
+		ctx: ctx, cancel: cancel,
 		reader: pReader,
 		writer: pWriter,
 		output: func(b []byte) (int, error) {
@@ -306,6 +314,7 @@ func (w *udpWorker) getConnection(id connID) (*udpConn, bool) {
 		downlink: w.downlinkCounter,
 	}
 	w.activeConn[id] = conn
+	w.sessions.Add(1)
 
 	conn.updateActivity()
 	return conn, false
@@ -322,6 +331,10 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 		b.UDP = &originalDest
 	}
 	conn, existing := w.getConnection(id)
+	if conn == nil {
+		b.Release()
+		return
+	}
 
 	// payload will be discarded in pipe is full.
 	conn.writer.WriteMultiBuffer(buf.MultiBuffer{b})
@@ -330,8 +343,8 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 		common.Must(w.checker.Start())
 
 		go func() {
-			ctx, cancel := context.WithCancel(w.ctx)
-			conn.cancel = cancel
+			defer w.sessions.Done()
+			ctx := conn.ctx
 			sid := session.NewID()
 			ctx = c.ContextWithID(ctx, sid)
 
@@ -362,22 +375,21 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 				errors.LogInfoInner(ctx, err, "connection ends")
 			}
 			conn.Close()
-			// conn not removed by checker TODO may be lock worker here is better
-			if !conn.inactive {
-				conn.setInactive()
-				w.removeConn(id)
-			}
+			w.removeConn(id, conn)
 		}()
 	}
 }
 
-func (w *udpWorker) removeConn(id connID) {
+func (w *udpWorker) removeConn(id connID, conn *udpConn) {
 	w.Lock()
-	delete(w.activeConn, id)
+	if w.activeConn[id] == conn {
+		delete(w.activeConn, id)
+	}
 	w.Unlock()
 }
 
 func (w *udpWorker) handlePackets() {
+	defer close(w.packetsDone)
 	receive := w.hub.Receive()
 	for payload := range receive {
 		w.callback(payload.Payload, payload.Source, payload.Target)
@@ -395,10 +407,7 @@ func (w *udpWorker) clean() error {
 
 	for addr, conn := range w.activeConn {
 		if nowSec-atomic.LoadInt64(&conn.lastActivityTime) > 2*60 {
-			if !conn.inactive {
-				conn.setInactive()
-				delete(w.activeConn, addr)
-			}
+			delete(w.activeConn, addr)
 			conn.Close()
 		}
 	}
@@ -426,13 +435,19 @@ func (w *udpWorker) Start() error {
 	}
 
 	w.hub = h
+	w.packetsDone = make(chan struct{})
 	go w.handlePackets()
 	return nil
 }
 
 func (w *udpWorker) Close() error {
 	w.Lock()
-	defer w.Unlock()
+	w.closed = true
+	connections := make([]*udpConn, 0, len(w.activeConn))
+	for _, conn := range w.activeConn {
+		connections = append(connections, conn)
+	}
+	w.Unlock()
 
 	var errs []interface{}
 
@@ -441,16 +456,23 @@ func (w *udpWorker) Close() error {
 			errs = append(errs, err)
 		}
 	}
+	if w.packetsDone != nil {
+		<-w.packetsDone
+	}
 
 	if w.checker != nil {
 		if err := w.checker.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
+	for _, conn := range connections {
+		conn.Close()
+	}
 
 	if err := common.Close(w.proxy); err != nil {
 		errs = append(errs, err)
 	}
+	w.sessions.Wait()
 
 	if len(errs) > 0 {
 		return errors.New("failed to close all resources").Base(errors.New(serial.Concat(errs...)))
@@ -467,6 +489,8 @@ func (w *udpWorker) Proxy() proxy.Inbound {
 }
 
 type dsWorker struct {
+	connections workerConnections
+
 	address         net.Address
 	proxy           proxy.Inbound
 	stream          *internet.MemoryStreamConfig
@@ -482,7 +506,11 @@ type dsWorker struct {
 }
 
 func (w *dsWorker) callback(conn stat.Connection) {
-	ctx, cancel := context.WithCancel(w.ctx)
+	ctx, finish, accepted := w.connections.add(w.ctx, conn)
+	if !accepted {
+		return
+	}
+	defer finish()
 	sid := session.NewID()
 	ctx = c.ContextWithID(ctx, sid)
 
@@ -508,10 +536,6 @@ func (w *dsWorker) callback(conn stat.Connection) {
 	if err := w.proxy.Process(ctx, net.Network_UNIX, conn, w.dispatcher); err != nil {
 		errors.LogInfoInner(ctx, err, "connection ends")
 	}
-	cancel()
-	if err := conn.Close(); err != nil {
-		errors.LogInfoInner(ctx, err, "failed to close connection")
-	}
 }
 
 func (w *dsWorker) Proxy() proxy.Inbound {
@@ -535,6 +559,7 @@ func (w *dsWorker) Start() error {
 }
 
 func (w *dsWorker) Close() error {
+	w.connections.stop()
 	var errs []interface{}
 	if w.hub != nil {
 		if err := common.Close(w.hub); err != nil {
@@ -544,6 +569,7 @@ func (w *dsWorker) Close() error {
 			errs = append(errs, err)
 		}
 	}
+	w.connections.running.Wait()
 	if len(errs) > 0 {
 		return errors.New("failed to close all resources").Base(errors.New(serial.Concat(errs...)))
 	}

@@ -94,6 +94,7 @@ Files: `internal/database/{db.go,model/*}`, `internal/web/{service,controller,ru
 - [ ] Bind existing client records to forwarding rules, node, ACL, outbounds and exclusive listener resources.
 - [ ] Extend Runtime lifecycle, batch operations and state/reason/statistics UI, API registry/codegen and all locale keys (English/Chinese translations).
 - [ ] Test wildcard/dual-stack/control-port collision, reassignment, reset/renew restrictions and active connection termination.
+- [x] Core prerequisite: drain established TCP/UDP/Unix connections on inbound removal; test same-port Tunnel reassignment and unaffected sibling listeners.
 - [ ] Test end-to-end DB → API → UI → generated config → measured traffic → durable events → statistics.
 
 ## Task 7: SSH inbound and outbound
