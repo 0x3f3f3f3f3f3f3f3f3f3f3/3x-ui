@@ -166,6 +166,10 @@ func RemoveIndex(s []any, index int) []any {
 
 // GetXrayConfig retrieves and builds the Xray configuration from settings and inbounds.
 func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
+	return s.getXrayConfig(false)
+}
+
+func (s *XrayService) getXrayConfig(managed bool) (*xray.Config, error) {
 	templateConfig, err := s.settingService.GetXrayConfigTemplate()
 	if err != nil {
 		return nil, err
@@ -190,7 +194,9 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 		return nil, err
 	}
 
-	_, _, _ = s.inboundService.AddTraffic(nil, nil)
+	if !managed {
+		_, _, _ = s.inboundService.AddTraffic(nil, nil)
+	}
 
 	inbounds, err := s.inboundService.GetAllInbounds()
 	if err != nil {
@@ -234,11 +240,11 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 		var wgPeers []any
 		for i := range dbClients {
 			c := dbClients[i]
-			if enable, exists := enableMap[c.Email]; exists && !enable {
+			if enable, exists := enableMap[c.Email]; !managed && exists && !enable {
 				logger.Infof("Remove Inbound User %s due to expiration or traffic limit", c.Email)
 				continue
 			}
-			if !c.Enable {
+			if !managed && !c.Enable {
 				continue
 			}
 			flow := c.Flow
