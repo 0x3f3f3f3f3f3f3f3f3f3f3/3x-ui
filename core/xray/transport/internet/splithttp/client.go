@@ -5,11 +5,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	gonet "net"
 	"net/http"
 	"net/http/httptrace"
 	"sync"
 	"sync/atomic"
 
+	"github.com/apernet/quic-go"
 	"github.com/apernet/quic-go/http3"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -34,6 +36,11 @@ type DefaultDialerClient struct {
 	transportConfig *Config
 	client          *http.Client
 	closed          atomic.Bool
+	dialAccess      sync.Mutex
+	pendingDial     *pendingDialGroup
+	closing         bool
+	dialGroups      map[*pendingDialGroup]struct{}
+	quicConnections map[*quic.Conn]struct{}
 	httpVersion     string
 	// pool of net.Conn, created using dialUploadConn
 	uploadRawPool  *sync.Pool
@@ -44,82 +51,102 @@ func (c *DefaultDialerClient) IsClosed() bool {
 	return c.closed.Load()
 }
 
-func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessionId string, body io.Reader, uploadOnly bool) (wrc io.ReadCloser, remoteAddr, localAddr net.Addr, err error) {
-	// this is done when the TCP/UDP connection to the server was established,
-	// and we can unblock the Dial function and print correct net addresses in
-	// logs
-	gotConn := done.New()
-	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
-		GotConn: func(connInfo httptrace.GotConnInfo) {
-			remoteAddr = connInfo.Conn.RemoteAddr()
-			localAddr = connInfo.Conn.LocalAddr()
-			gotConn.Close()
-		},
-	})
-
-	method := "GET" // stream-down
+func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessionId string, body io.Reader, uploadOnly bool) (io.ReadCloser, net.Addr, net.Addr, error) {
+	type addresses struct{ remote, local net.Addr }
+	connected := make(chan addresses, 1)
+	failed := make(chan error, 1)
+	ctx, cancel := context.WithCancel(ctx)
+	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{GotConn: func(info httptrace.GotConnInfo) {
+		select {
+		case connected <- addresses{info.Conn.RemoteAddr(), info.Conn.LocalAddr()}:
+		default:
+		}
+	}})
+	method := "GET"
 	if body != nil {
-		method = c.transportConfig.GetNormalizedUplinkHTTPMethod() // stream-up/one
+		method = c.transportConfig.GetNormalizedUplinkHTTPMethod()
 	}
-	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, body)
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
-		errors.LogInfoInner(ctx, err, "failed to create HTTP request for "+url)
+		cancel()
 		return nil, nil, nil, err
 	}
 	c.transportConfig.FillStreamRequest(req, sessionId, "")
-
-	wrc = &WaitReadCloser{wait: done.New()}
+	stream := &WaitReadCloser{wait: done.New(), cancel: cancel}
 	go func() {
-		resp, err := c.client.Do(req)
+		resp, err := c.doRequest(req)
 		if err != nil {
-			if !uploadOnly { // stream-down is enough
+			if !uploadOnly && ctx.Err() == nil {
 				c.closed.Store(true)
 				errors.LogInfoInner(ctx, err, "failed to "+method+" "+url)
 			}
-			gotConn.Close()
+			failed <- err
 			common.Close(body)
-			wrc.Close()
+			stream.Close()
 			return
 		}
 		if resp.StatusCode != 200 && !uploadOnly {
 			errors.LogInfo(ctx, "unexpected status ", resp.StatusCode)
 		}
-		if resp.StatusCode != 200 || uploadOnly { // stream-up
+		if resp.StatusCode != 200 || uploadOnly {
 			io.Copy(io.Discard, resp.Body)
-			resp.Body.Close() // if it is called immediately, the upload will be interrupted also
+			resp.Body.Close()
 			common.Close(body)
-			wrc.Close()
+			stream.Close()
 			return
 		}
-		wrc.(*WaitReadCloser).Set(resp.Body)
+		stream.Set(resp.Body)
 	}()
-
-	<-gotConn.Wait()
-	return
+	select {
+	case address := <-connected:
+		if err := ctx.Err(); err != nil {
+			stream.Close()
+			return nil, nil, nil, err
+		}
+		return stream, address.remote, address.local, nil
+	case err := <-failed:
+		stream.Close()
+		return nil, nil, nil, err
+	case <-ctx.Done():
+		stream.Close()
+		return nil, nil, nil, ctx.Err()
+	}
 }
 
 func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessionId string, seqStr string, payload buf.MultiBuffer) error {
 	method := c.transportConfig.GetNormalizedUplinkHTTPMethod()
-	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, nil)
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
 		return err
 	}
 	c.transportConfig.FillPacketRequest(req, sessionId, seqStr, payload)
 
 	if c.httpVersion != "1.1" {
-		resp, err := c.client.Do(req)
+		resp, err := c.doRequest(req)
 		if err != nil {
-			c.closed.Store(true)
+			if ctx.Err() == nil {
+				c.closed.Store(true)
+			}
 			return err
 		}
 
-		io.Copy(io.Discard, resp.Body)
 		defer resp.Body.Close()
+		if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+			return err
+		}
 
 		if resp.StatusCode != 200 {
 			return errors.New("bad status code:", resp.Status)
 		}
 	} else {
+		owned, release, err := c.beginRequestDial(ctx)
+		if err != nil {
+			return err
+		}
+		defer release()
+		ctx, finish := ownedDialContext(owned)
+		defer finish()
+		req = req.WithContext(ctx)
 		// stringify the entire HTTP/1.1 request so it can be
 		// safely retried. if instead req.Write is called multiple
 		// times, the body is already drained after the first
@@ -128,58 +155,91 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 		requestBuff.Grow(512 + int(req.ContentLength))
 		common.Must(req.Write(requestBuff))
 
-		var uploadConn any
-		var h1UploadConn *H1Conn
-
 		for {
-			uploadConn = c.uploadRawPool.Get()
-			newConnection := uploadConn == nil
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			pooled := c.uploadRawPool.Get()
+			newConnection := pooled == nil
+			var conn *H1Conn
 			if newConnection {
-				newConn, err := c.dialUploadConn(context.WithoutCancel(ctx))
+				raw, err := c.dialUploadConn(ctx)
 				if err != nil {
 					return err
 				}
-				h1UploadConn = NewH1Conn(newConn)
-				uploadConn = h1UploadConn
+				conn = NewH1Conn(raw)
 			} else {
-				h1UploadConn = uploadConn.(*H1Conn)
-
-				// TODO: Replace 0 here with a config value later
-				// Or add some other condition for optimization purposes
-				if h1UploadConn.UnreadedResponsesCount > 0 {
-					resp, err := http.ReadResponse(h1UploadConn.RespBufReader, req)
-					if err != nil {
-						c.closed.Store(true)
-						return fmt.Errorf("error while reading response: %s", err.Error())
-					}
-					io.Copy(io.Discard, resp.Body)
-					defer resp.Body.Close()
-					if resp.StatusCode != 200 {
-						return fmt.Errorf("got non-200 error response code: %d", resp.StatusCode)
-					}
-				}
+				conn = pooled.(*H1Conn)
 			}
-
-			_, err := h1UploadConn.Write(requestBuff.Bytes())
-			// if the write failed, we try another connection from
-			// the pool, until the write on a new connection fails.
-			// failed writes to a pooled connection are normal when
-			// the connection has been closed in the meantime.
+			retry, err := c.writeHTTP1Packet(ctx, conn, req, requestBuff.Bytes())
 			if err == nil {
+				c.uploadRawPool.Put(conn)
 				break
-			} else if newConnection {
+			}
+			_ = conn.Close()
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if !retry || newConnection {
 				return err
 			}
 		}
-
-		c.uploadRawPool.Put(uploadConn)
 	}
 
 	return nil
 }
 
-// HTTP/1.1 and HTTP/2 will close itself, we only handle HTTP/3 here
+func (c *DefaultDialerClient) writeHTTP1Packet(ctx context.Context, conn *H1Conn, req *http.Request, data []byte) (retry bool, err error) {
+	closed := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() {
+		_ = conn.Close()
+		close(closed)
+	})
+	defer func() {
+		if !stop() {
+			<-closed
+		}
+		if ctx.Err() != nil {
+			err = ctx.Err()
+		}
+	}()
+	if conn.UnreadedResponsesCount > 0 {
+		resp, err := http.ReadResponse(conn.RespBufReader, req)
+		if err != nil {
+			if ctx.Err() == nil {
+				c.closed.Store(true)
+			}
+			return false, fmt.Errorf("error while reading response: %w", err)
+		}
+		_, err = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			return false, err
+		}
+		if resp.StatusCode != 200 {
+			return false, fmt.Errorf("got non-200 error response code: %d", resp.StatusCode)
+		}
+	}
+	_, err = conn.Write(data)
+	return true, err
+}
+
+// Close cancels pending dials and owns QUIC connections independently of the HTTP cache.
 func (c *DefaultDialerClient) Close() error {
+	c.dialAccess.Lock()
+	c.closed.Store(true)
+	c.closing = true
+	for group := range c.dialGroups {
+		group.cancel(gonet.ErrClosed)
+	}
+	connections := make([]*quic.Conn, 0, len(c.quicConnections))
+	for conn := range c.quicConnections {
+		connections = append(connections, conn)
+	}
+	c.dialAccess.Unlock()
+	for _, conn := range connections {
+		_ = conn.CloseWithError(0, "XHTTP client closed")
+	}
 	transport := c.client.Transport
 	if h3Transport, ok := transport.(*http3.Transport); ok {
 		h3Transport.Close()
@@ -188,6 +248,7 @@ func (c *DefaultDialerClient) Close() error {
 }
 
 type WaitReadCloser struct {
+	cancel context.CancelFunc
 	wait   *done.Instance
 	reader atomic.Pointer[io.ReadCloser]
 }
@@ -214,6 +275,9 @@ func (w *WaitReadCloser) Read(b []byte) (int, error) {
 }
 
 func (w *WaitReadCloser) Close() error {
+	if w.cancel != nil {
+		w.cancel()
+	}
 	w.wait.Close()
 	if p := w.reader.Swap(nil); p != nil {
 		return (*p).Close()

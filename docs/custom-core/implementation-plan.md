@@ -267,3 +267,12 @@ race checks and complete regression gates pass after correcting a mux integratio
 test to inspect final sealed counters; testing.md records the initial failure
 and rerun. Manager lifecycle, remaining transport close gaps and boot-scoped final
 settlement remain open.
+
+
+Task 6 transport cancellation candidate: realm and HTTPUpgrade socket closure,
+XHTTP logical request ownership, shared HTTP/2/3 dial cancellation, raw H1 IO,
+TLS/QUIC error cleanup and explicit QUIC connection ownership have regression
+coverage. Source review found and resolved shared-client health, native retry,
+retired-generation ownership and late-result issues. Affected package race checks
+and complete core/panel gates, lint and builds pass. Manager lifecycle, idle raw
+pools, remaining transports and boot-scoped final settlement remain open.

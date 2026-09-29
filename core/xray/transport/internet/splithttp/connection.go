@@ -4,6 +4,9 @@ import (
 	"io"
 	"net"
 	"time"
+
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 )
 
 type splitConn struct {
@@ -27,17 +30,7 @@ func (c *splitConn) Close() error {
 		c.onClose()
 	}
 
-	err := c.writer.Close()
-	err2 := c.reader.Close()
-	if err != nil {
-		return err
-	}
-
-	if err2 != nil {
-		return err
-	}
-
-	return nil
+	return errors.Combine(common.Close(c.writer), common.Close(c.reader))
 }
 
 func (c *splitConn) LocalAddr() net.Addr {

@@ -114,12 +114,32 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 	}
 
 	transportConfig := streamSettings.ProtocolSettings.(*Config)
+	client := new(DefaultDialerClient)
 
-	dialContext := func(ctxInner context.Context) (net.Conn, error) {
-		conn, err := internet.DialSystem(ctxInner, dest, streamSettings.SocketSettings)
+	dialContext := func(ctxInner context.Context) (conn net.Conn, err error) {
+		ctxInner, finish := ownedDialContext(ctxInner)
+		defer finish()
+		defer func() { err = dialError(ctxInner, err) }()
+		conn, err = internet.DialSystem(ctxInner, dest, streamSettings.SocketSettings)
 		if err != nil {
 			return nil, err
 		}
+
+		raw := conn
+		closed := make(chan struct{})
+		stop := context.AfterFunc(ctxInner, func() { _ = raw.Close(); close(closed) })
+		defer func() {
+			if !stop() {
+				<-closed
+			}
+			if ctxInner.Err() != nil {
+				err = ctxInner.Err()
+			}
+			if err != nil {
+				_ = raw.Close()
+				conn = nil
+			}
+		}()
 
 		if streamSettings.TcpmaskManager != nil {
 			newConn, err := streamSettings.TcpmaskManager.WrapConnClient(conn)
@@ -142,6 +162,9 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 				}
 			} else {
 				conn = tls.Client(conn, gotlsConfig)
+				if err := conn.(*tls.Conn).HandshakeContext(ctxInner); err != nil {
+					return nil, err
+				}
 			}
 		}
 
@@ -194,7 +217,10 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 		transport = &http3.Transport{
 			QUICConfig:      quicConfig,
 			TLSClientConfig: gotlsConfig,
-			Dial: func(ctx context.Context, addr string, tlsCfg *gotls.Config, cfg *quic.Config) (*quic.Conn, error) {
+			Dial: func(ctx context.Context, addr string, tlsCfg *gotls.Config, cfg *quic.Config) (result *quic.Conn, err error) {
+				ctx, finish := ownedDialContext(ctx)
+				defer finish()
+				defer func() { err = dialError(ctx, err) }()
 				var pktConn net.PacketConn
 				var udpAddr *net.UDPAddr
 
@@ -231,9 +257,20 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 
 				conn, err := tr.DialEarly(ctx, udpAddr, tlsCfg, cfg)
 				if err != nil {
+					_ = tr.Close()
+					_ = pktConn.Close()
 					return nil, err
 				}
 				context.AfterFunc(conn.Context(), func() { tr.Close(); pktConn.Close() })
+				if err = ctx.Err(); err == nil {
+					err = client.ownQUICConnection(conn)
+				}
+				if err != nil {
+					_ = conn.CloseWithError(0, "XHTTP dial canceled")
+					_ = tr.Close()
+					_ = pktConn.Close()
+					return nil, err
+				}
 
 				switch quicParams.Congestion {
 				case "reno":
@@ -277,7 +314,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 		}
 	}
 
-	client := &DefaultDialerClient{
+	*client = DefaultDialerClient{
 		transportConfig: transportConfig,
 		client: &http.Client{
 			Transport: transport,
@@ -295,6 +332,17 @@ func init() {
 }
 
 func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
+	callerContext := ctx
+	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	stopInitialCancel := context.AfterFunc(callerContext, cancel)
+	ready := false
+	defer func() {
+		stopInitialCancel()
+		if !ready {
+			cancel()
+		}
+	}()
+
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
 
@@ -411,6 +459,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	conn := splitConn{
 		writer: writer,
 		onClose: func() {
+			cancel()
 			if closed.Add(1) > 1 {
 				return
 			}
@@ -423,6 +472,11 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		},
 	}
 
+	defer func() {
+		if !ready {
+			_ = conn.Close()
+		}
+	}()
 	var err error
 	if mode == "stream-one" {
 		requestURL.Path = transportConfiguration.GetNormalizedPath()
@@ -433,6 +487,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		if err != nil { // browser dialer only
 			return nil, err
 		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		ready = true
 		return stat.Connection(&conn), nil
 	} else { // stream-down
 		if xmuxClient2 != nil {
@@ -451,6 +509,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		if err != nil { // browser dialer only
 			return nil, err
 		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		ready = true
 		return stat.Connection(&conn), nil
 	}
 
@@ -541,6 +603,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 	}()
 
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	ready = true
 	return stat.Connection(&conn), nil
 }
 

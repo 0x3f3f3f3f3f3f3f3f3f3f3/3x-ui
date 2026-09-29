@@ -52,6 +52,16 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 		return nil, err
 	}
 
+	raw := pconn
+	stopCancel := context.AfterFunc(ctx, func() { _ = raw.Close() })
+	ready := false
+	defer func() {
+		stopCancel()
+		if !ready {
+			_ = raw.Close()
+		}
+	}()
+
 	if streamSettings.TcpmaskManager != nil {
 		newConn, err := streamSettings.TcpmaskManager.WrapConnClient(pconn)
 		if err != nil {
@@ -118,6 +128,10 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 		}
 	}
 
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	ready = true
 	return connRF, nil
 }
 

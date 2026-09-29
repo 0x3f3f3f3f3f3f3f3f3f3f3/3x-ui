@@ -819,3 +819,26 @@ shuffled panel suite (301.90 s). Lint reported zero issues (26.23 s); panel buil
 passed (9.20 s). Changed Go formatting, workflow YAML and all 18 shell blocks
 validate. CI includes VLESS outbound and WebSocket race coverage. Known manager
 and transport shutdown gaps and private boot-scoped handoff remain open.
+
+
+### Transport cancellation prerequisite
+
+Real UDP and unanswered HTTPUpgrade requests reproduced packet/socket retention
+before cancellation fixes. XHTTP tests exercise unanswered HTTP requests, raw H1
+dial/write/response waits, underlying production dial exit, explicit client Close,
+existing streams on an unhealthy client, and detached established connections.
+Real HTTP/3 tests cover two waiters with only the first canceled, native redial
+after the first connection closes, a retired dial followed by streaming upload,
+and closure of a successful QUIC connection absent from the HTTP cache.
+
+The shared-handshake, native-retry, client-admission and raw-packet-close cases
+failed before their fixes. Separate omission checks fail when removing upload
+body retention, failed QUIC socket cleanup or independent QUIC ownership. The
+failed-handshake test verifies that the UDP port can actually be rebound. The
+full affected-package shuffled race run passes for XHTTP (1.857 s), HTTPUpgrade
+(1.042 s) and realm (1.027 s). Complete root validation then passed: shuffled
+core suite 621.89 s (scenarios 333.183 s), custom build 7.16 s, expanded core race
+76.25 s, shuffled panel suite 292.74 s, lint zero issues 25.73 s and panel build
+8.24 s. Nine Go files are formatted; workflow YAML and all 18 shell blocks
+validate. The tests do not establish idle raw H1 pool or complete manager and
+transport drainage.

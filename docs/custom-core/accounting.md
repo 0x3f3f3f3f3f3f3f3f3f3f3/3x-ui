@@ -286,6 +286,35 @@ calls before that handshake finishes now return an explicit error instead of
 panicking through a nil embedded connection.
 
 This still does not expose a complete drain capability. Manager admission and
-removed-handler ownership, cancellation-insensitive transport handshakes, UDP-hop
-shutdown and underlying realm packet socket cleanup require further work.
+removed-handler ownership, remaining transport shutdown and UDP-hop closure
+require further work.
 Independent boot-scoped control and final panel settlement remain unimplemented.
+
+
+## Transport cancellation prerequisite
+
+Realm closes its underlying packet socket before waiting for workers, releasing
+blocked reads and the local port. HTTPUpgrade binds pending handshakes to their
+raw socket so cancellation stops unanswered upgrade requests.
+
+An XHTTP logical connection owns a cancelable lifetime after initial dialing;
+closing it cancels unanswered HTTP requests and packet IO. Established logical
+connections retain their previous independence from the initial caller context.
+HTTP/1.1 carries independent request ownership through net/http's detached dial
+context. HTTP/2 and HTTP/3 share pending establishment ownership until requests
+receive headers or finish, so canceling one request does not abort another's
+shared handshake. Explicit client closure cancels admitted dial groups. Raw H1
+packet IO joins that ownership; its cancellation callback is stopped or joined
+before a socket can return to the pool. Request cancellation does not mark the
+shared client unhealthy, and a non-reuse health flag does not disable existing
+logical streams.
+
+Retired shared-dial failures can retry before any connection was acquired,
+retaining an unopened upload body. Native HTTP transport retries keep their
+request ownership. TLS handshake errors close their raw sockets; failed QUIC
+dials close both transport and packet socket. Successful QUIC connections have
+explicit client ownership even if the HTTP transport loses its cache entry.
+
+This does not establish complete transport/handler drainage. Idle raw H1 pool
+ownership, browser-dialer/UDP-hop shutdown, manager lifecycle and independent
+boot-scoped final settlement remain open. No drain capability is advertised.

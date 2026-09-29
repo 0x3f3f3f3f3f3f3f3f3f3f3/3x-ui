@@ -23,7 +23,7 @@ jobs:
         run: go test -shuffle=on -count=1 ./...
       - name: Core race checks
         working-directory: core/xray
-        run: go test -race -count=1 ./app/clientpolicy/... ./app/commander ./app/dispatcher ./app/proxyman/inbound ./app/proxyman/outbound ./app/stats ./infra/conf ./proxy ./proxy/dokodemo ./proxy/vless/outbound ./proxy/wireguard ./common/buf ./common/mux ./common/protocol ./transport/internet/udp ./transport/internet/websocket ./testing/policy
+        run: go test -race -count=1 ./app/clientpolicy/... ./app/commander ./app/dispatcher ./app/proxyman/inbound ./app/proxyman/outbound ./app/stats ./infra/conf ./proxy ./proxy/dokodemo ./proxy/vless/outbound ./proxy/wireguard ./common/buf ./common/mux ./common/protocol ./transport/internet/udp ./transport/internet/websocket ./transport/internet/splithttp ./transport/internet/httpupgrade ./transport/internet/finalmask/realm ./testing/policy
       - name: Build custom core
         run: bash tools/build-custom-core.sh
       - name: Build missing credential capability fixture
