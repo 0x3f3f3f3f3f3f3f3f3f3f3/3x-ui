@@ -84,7 +84,7 @@ func templateListenerReservations(raw string) ([]*model.Inbound, error) {
 	return listeners, nil
 }
 
-func checkTemplatePortConflictTx(db *gorm.DB, inbound *model.Inbound) (*portConflictDetail, error) {
+func templateListenerReservationsTx(db *gorm.DB) ([]*model.Inbound, error) {
 	var setting model.Setting
 	err := db.Where("key = ?", "xrayTemplateConfig").First(&setting).Error
 	if database.IsNotFound(err) {
@@ -96,6 +96,14 @@ func checkTemplatePortConflictTx(db *gorm.DB, inbound *model.Inbound) (*portConf
 	if err != nil {
 		// Preserve the API reservation when recovering a malformed stored template.
 		listeners = []*model.Inbound{{Tag: "api", Listen: "127.0.0.1", Port: defaultXrayAPIPort}}
+	}
+	return listeners, nil
+}
+
+func checkTemplatePortConflictTx(db *gorm.DB, inbound *model.Inbound) (*portConflictDetail, error) {
+	listeners, err := templateListenerReservationsTx(db)
+	if err != nil {
+		return nil, err
 	}
 	for _, listener := range listeners {
 		if listener.Port != inbound.Port || !listenOverlaps(inboundBindAddr(listener), inboundBindAddr(inbound)) {

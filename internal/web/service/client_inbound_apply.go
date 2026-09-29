@@ -566,6 +566,11 @@ func (s *ClientService) prepareInboundClientAdd(inboundSvc *InboundService, data
 	// Persist client stats + inbound atomically, serialized against the traffic
 	// poll to avoid the cross-transaction lock-order deadlock (runSerializedTx).
 	persist := func(tx *gorm.DB) error {
+		if oldInbound.Protocol == model.AmneziaWG {
+			if err := lockListenerReservationsTx(tx); err != nil {
+				return err
+			}
+		}
 		if err := lockAttachmentOwnersTx(tx, clients, owners); err != nil {
 			return err
 		}
@@ -967,6 +972,9 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 		// Same re-check-inside-the-writer rule as AddInboundClient (#6225):
 		// the pre-tx pass can race a concurrent writer on another inbound.
 		if oldInbound.Protocol == model.AmneziaWG {
+			if err := lockListenerReservationsTx(tx); err != nil {
+				return err
+			}
 			txPortCtx, pErr := inboundSvc.loadPortConflictContext(tx)
 			if pErr != nil {
 				return pErr

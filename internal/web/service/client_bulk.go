@@ -1757,6 +1757,20 @@ func (s *ClientService) bulkSetEnableInboundClients(inboundSvc *InboundService, 
 	}
 
 	txErr := runSerializedTx(func(tx *gorm.DB) error {
+		if enable && oldInbound.Protocol == model.AmneziaWG {
+			if err := lockListenerReservationsTx(tx); err != nil {
+				return err
+			}
+			ctx, err := inboundSvc.loadPortConflictContext(tx)
+			if err != nil {
+				return err
+			}
+			for _, ch := range changed {
+				if err := inboundSvc.amneziaWGForwardedPortsConflict(ctx, &ch.client); err != nil {
+					return err
+				}
+			}
+		}
 		if e := commitInboundClientSettings(tx, oldInbound, prevSettings); e != nil {
 			return e
 		}

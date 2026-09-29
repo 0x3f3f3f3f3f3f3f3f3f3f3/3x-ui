@@ -4463,3 +4463,66 @@ during the run. The separately committed isolated-network probe and audit
 documentation changed no tested Go package. Frontend source/assets were unchanged
 and frontend verification was not repeated. This completes this scoped Linux
 TCP-loss fix; full Task 6 and the original multi-backend goal remain incomplete.
+
+## AWG forwarded-port reservations and concurrent public mutations
+
+Scope and RED cases are in [awg-port-reservations.md](awg-port-reservations.md).
+This covers fixed/template listeners, full inbound edit/enable, client
+add/edit/import and bulk enable; it does not implement first-class forwarding,
+peer-versus-peer ownership or AWG forwarded-payload policy.
+
+With isolated SQLite/PostgreSQL fixtures and the actual managed core paths:
+
+```sh
+XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' \
+XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+XUI_MANAGED_XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+go test -p 1 -race -shuffle=on -count=1 -timeout=25m -json \
+  -run 'Test.*(Port|AWG|Amnezia|Template|Portable|Import|Bulk.*Enable|Bulk.*Reenable|SetInboundEnable)' \
+  ./internal/web/service
+```
+
+Result: **180 top-level tests / 210 subtests passed**, no failures or skips,
+169.250s. Log: `/tmp/3x-ui-rate-trace/awg-reservations-final-related-race.jsonl`.
+The six new PostgreSQL concurrency cases observe the actual advisory wait,
+then reject the committed reservation. Import preserves retained accounting;
+bulk enable preserves all three disabled projections and succeeds after the
+reservation is removed.
+
+Staticcheck initially rejected the test dispatch's `if` chain with `QF1003`.
+It was changed to an equivalent tagged `switch`, then the final focused race
+rerun passed **3 top-level tests / 66 subtests**, no failures/skips, 67.944s:
+
+```sh
+go test -p 1 -race -count=1 -timeout=3m -json \
+  -run '^TestAWGClient(ForwardsRespectAdditionalReservations|ForwardMutationWaitsForReservation)' \
+  ./internal/web/service
+golangci-lint run ./internal/web/service/...
+go build -p 1 -o /tmp/3x-ui-awg-reservations-panel .
+```
+
+The same PostgreSQL environment was present. Final lint reported zero issues;
+the current normal panel binary built successfully.
+
+Final full-root regression exited zero: **53 test packages, 2681 top-level tests
+and 4740 subtests passed**, no failures, **28 top-level / 14 subtest skips**,
+seven packages without tests. All 42 skipped names exactly match the preceding
+`mieru-tcp-loss-full-go.jsonl`; none was added, removed or counted as a pass.
+The service package completed in 639.104s, including the new AWG matrix and
+the actual panel/core/mieru data paths.
+
+```sh
+XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+XUI_MANAGED_XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+XUI_MIHOMO_E2E_BINARY=/tmp/3x-ui-mihomo-v1.19.30 \
+XUI_E2E_PANEL=/tmp/3x-ui-awg-reservations-panel \
+XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' \
+XUI_E2E_PG_DSN='postgresql://nobody@127.0.0.1:55432/postgres?sslmode=disable' \
+go test -p 1 -shuffle=on -count=1 -timeout=25m ./... -json
+```
+
+Log: `/tmp/3x-ui-rate-trace/awg-reservations-full-go.jsonl`. No Go source or
+embedded frontend assets changed during this run. The separately committed
+network prerequisite probe and documentation changed no tested Go package.
+Frontend verification was not repeated because its source/assets were unchanged.
+This verifies the scoped reservation fix, not all Task 8 requirements.

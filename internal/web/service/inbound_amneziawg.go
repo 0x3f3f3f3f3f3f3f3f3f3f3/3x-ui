@@ -314,10 +314,11 @@ func (s *InboundService) normalizeAmneziaWGSettings(inbound *model.Inbound, oldS
 }
 
 // portConflictContext caches this host's listeners and managed reservations
-// so a multi-client save needs one query.
+// so a multi-client save does not repeat queries for each forwarded port.
 type portConflictContext struct {
-	webPort  int
-	inbounds []*model.Inbound
+	webPort      int
+	inbounds     []*model.Inbound
+	reservations []*model.Inbound
 }
 
 // Disabled managed inbounds keep their bridge reservations for re-enablement.
@@ -329,7 +330,22 @@ func (s *InboundService) loadPortConflictContext(db *gorm.DB) (portConflictConte
 	err := db.Model(model.Inbound{}).
 		Where("node_id IS NULL AND (enable = ? OR protocol IN ?)", true, []model.Protocol{model.SSH, model.Mieru, model.MTProto}).
 		Find(&ctx.inbounds).Error
-	return ctx, err
+	if err != nil {
+		return ctx, err
+	}
+	ctx.reservations, err = templateListenerReservationsTx(db)
+	if err != nil {
+		return ctx, err
+	}
+	upstreamPort, err := sshOutboundBridgePort()
+	if err != nil {
+		return ctx, err
+	}
+	ctx.reservations = append(ctx.reservations,
+		&model.Inbound{Tag: "ssh-upstream", Listen: "127.0.0.1", Port: upstreamPort},
+		&model.Inbound{Tag: "amneziawg-egress", Listen: "127.0.0.1", Port: amneziawgnet.EgressPort()},
+	)
+	return ctx, nil
 }
 
 // amneziaWGForwardedPortsConflict renders one client's ForwardedPorts collision,
@@ -372,6 +388,11 @@ func (s *InboundService) checkForwardedPortsConflict(ctx portConflictContext, fo
 	}
 	if ctx.webPort > 0 && amneziawg.ForwardedPortsInclude(forwardedPorts, ctx.webPort) {
 		return fmt.Sprintf("the panel's own port (%d)", ctx.webPort)
+	}
+	for _, reservation := range ctx.reservations {
+		if amneziawg.ForwardedPortsInclude(forwardedPorts, reservation.Port) && listenOverlaps(inboundBindAddr(&model.Inbound{}), inboundBindAddr(reservation)) {
+			return fmt.Sprintf("reserved listener %q (port %d)", reservation.Tag, reservation.Port)
+		}
 	}
 	for _, ib := range ctx.inbounds {
 		bridgePort, err := inboundRoutingBridgePort(ib)

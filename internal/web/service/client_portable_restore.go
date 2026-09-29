@@ -117,6 +117,13 @@ func (s *ClientService) importPortableClient(inboundSvc *InboundService, item Cl
 	}
 
 	err := runSerializedTx(func(tx *gorm.DB) error {
+		// Inbound saves reserve listeners before touching retained traffic rows.
+		// Imports must keep the same order across panel processes.
+		if slices.ContainsFunc(inbounds, func(inbound *model.Inbound) bool { return inbound.Protocol == model.AmneziaWG }) {
+			if err := lockListenerReservationsTx(tx); err != nil {
+				return err
+			}
+		}
 		var taken int64
 		if err := tx.Model(&model.ClientRecord{}).Where("LOWER(email) = ?", strings.ToLower(client.Email)).Count(&taken).Error; err != nil {
 			return err

@@ -1627,21 +1627,30 @@ func (s *InboundService) SetInboundEnable(id int, enable bool) (bool, error) {
 	}
 
 	db := database.GetDB()
-	// Enabling puts this row's ports into the running config, and the guards ran
-	// only if it was saved: a restored or hand-edited row reaches it unchecked.
-	if enable && inbound.NodeID == nil {
-		conflict, err := checkPortConflictTx(db, inbound, inbound.Id)
-		if err != nil {
-			return false, err
-		}
-		if conflict != nil {
-			return false, common.NewError(conflict.String())
-		}
-	}
 	if err := db.Transaction(func(tx *gorm.DB) error {
+		if enable && inbound.NodeID == nil {
+			if err := lockListenerReservationsTx(tx); err != nil {
+				return err
+			}
+			if err := tx.First(inbound, id).Error; err != nil {
+				return err
+			}
+			conflict, err := checkPortConflictTx(tx, inbound, inbound.Id)
+			if err != nil {
+				return err
+			}
+			if conflict != nil {
+				return common.NewError(conflict.String())
+			}
+		}
 		if err := tx.Model(model.Inbound{}).Where("id = ?", id).
 			Update("enable", enable).Error; err != nil {
 			return err
+		}
+		if enable && inbound.Protocol == model.AmneziaWG && inbound.NodeID == nil {
+			if err := s.checkAmneziaWGForwardedPorts(tx, inbound.Settings); err != nil {
+				return err
+			}
 		}
 		if inbound.NodeID != nil {
 			return (&NodeService{}).MarkNodeDirtyTx(tx, *inbound.NodeID)
@@ -1798,6 +1807,11 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		}
 		if conflict != nil {
 			return common.NewError(conflict.String())
+		}
+		if inbound.Protocol == model.AmneziaWG {
+			if err := s.checkAmneziaWGForwardedPorts(tx, inbound.Settings); err != nil {
+				return err
+			}
 		}
 		if err := s.updateClientTraffics(tx, oldInbound, inbound); err != nil {
 			return err

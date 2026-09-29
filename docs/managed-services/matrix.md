@@ -57,6 +57,11 @@ Single-user Shadowsocks modes must use explicit exclusive ownership instead of
 pretending a shared server credential identifies several independent users.
 Unauthenticated HTTP/SOCKS/TUN/forwarding requires owned resource bindings.
 
+AWG reservation safety has scoped service/database evidence in
+[awg-port-reservations.md](awg-port-reservations.md): fixed/template listener
+conflicts and transactional public mutations. This does not promote AWG's
+per-client shaping, billing or first-class forwarding coverage to V.
+
 ## New first-class services
 
 | Required capability | Snell v4 | Snell v5 | Snell v6 beta | SSH | mieru TCP | mieru UDP | TCP/UDP forwarding |
