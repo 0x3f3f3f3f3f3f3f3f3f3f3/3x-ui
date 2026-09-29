@@ -3603,3 +3603,115 @@ tests reported (`/tmp/3x-ui-rate-trace/multiplex-ui-full-test.log`). TypeScript,
 frontend lint, production frontend/panel builds, real browser/CLI and full
 subscription checks are recorded above. `git diff --check` passed. The original
 whole-task and remaining mieru acceptance requirements remain open.
+
+### Public mieru natural-quota acceptance
+
+The post-admission delivery diagnostic ran ten normal-build SQLite/UDP
+repetitions with the original public mixed-rate bounds and windows:
+`go test -p 1 -overlay=/tmp/3x-ui-rate-trace/overlay.json ./internal/web/service -run '^TestClientPolicyProductionSSHAndMieruShareRates$/udp$' -count=10 -json`.
+All ten top-level and ten underlay cases passed, with no skips, in 164.643s;
+log: `/tmp/3x-ui-rate-trace/udp-delivery-diagnostic.jsonl`. The overlay only adds
+trace events. This did not reproduce or explain the earlier 15-byte lower-bound
+failure; that observation remains open.
+
+`TestMieruInboundNaturalQuota` and its PostgreSQL counterpart exercise the
+normal service/Runtime, official mieru v3.38.0 client, native TCP/UDP underlays,
+and pinned managed Xray bridge. Each uses two persistent TCP payload flows and
+two persistent UDP associations belonging to one canonical client, competing
+for the same remaining quota. TCP profiles use the published
+`MULTIPLEXING_OFF` export setting. A separate authenticated client on the same
+loopback address must continue using its existing flows after exhaustion.
+
+The predeclared workload sends one unacknowledged echo block per flow: 16 KiB
+on each TCP connection and 8 KiB on each UDP association. Thus at most
+`2 * (2 * 16384 + 2 * 8192) = 98304` raw bytes can be admitted but absent from
+the independent upload-target plus download-client observations. This bound
+includes hidden buffers by limiting outstanding application data at its source;
+it does not establish the general unrestricted-sender buffer bound. Each case
+must admit exactly 8 MiB of additional raw payload, with literal quotas of
+4/8/12/16 MiB for multipliers 0.5/1/1.5/2. No percentage allowance is used for
+billing: billed bytes must equal quota exactly, with no fractional remainder.
+Both payload types must independently deliver at least 64 KiB.
+
+A 20ms ledger observer records the last known pre-exhaustion time. Every existing
+flow must end without a timeout within 1250ms of that conservative timestamp;
+new TCP/UDP admissions must fail. The test then restarts the actual core and
+checks that rejection and exact durable usage persist, while the unrelated
+client can reconnect. This is a core lifecycle restart, not a panel-process or
+host restart. Manual-disable/expiry combinations have separate coverage.
+
+Initial SQLite/TCP, multiplier 2: PASS in 6.804s; raw upload/download
+4202496/4186112 bytes, independently observed 4202496/4186112, billed delta
+16777216, zero flight difference and cutoff upper bound 16.600006ms. Removing
+only the canonical quota limit through a `/tmp` Go overlay made the unchanged
+case fail: `natural quota did not close all existing flows within 1250ms`
+(6.986s). Production source was never changed by this mutation. Logs:
+`natural-quota-first.log` and `natural-quota-mutation-red.log` under
+`/tmp/3x-ui-rate-trace/`. The complete dialect/underlay/multiplier race matrix
+is recorded below once terminal; no whole Task 6 completion follows from this
+bounded workload.
+
+Full natural-quota race matrix:
+
+```sh
+XUI_MANAGED_XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' \
+go test -race -p 1 ./internal/web/service \
+  -run '^TestMieruInboundNaturalQuota(_Postgres)?$' -count=1 -json
+```
+
+PASS, 157.077s: 2 top-level and 16 subtests, zero skips, no race report.
+Every case admitted exactly 8388608 additional raw bytes and reached its
+literal billed quota. Independent upload/download counts equaled admission
+counts in all sixteen cases: zero observed flight difference and zero billed
+overshoot. Conservative observed closure upper bounds ranged from 8.022482ms
+to 28.493029ms, below the predeclared 1250ms requirement. Existing unrelated
+flows survived each exhaustion; new exhausted-client TCP/UDP connections
+failed before and after the real core restart. Log:
+`/tmp/3x-ui-rate-trace/natural-quota-matrix.jsonl`.
+
+Additional public restriction and fault checks:
+
+```sh
+XUI_MANAGED_XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' \
+go test -race -p 1 ./internal/web/service \
+  -run '^TestMieruInbound(QuotaResetKeepsIndependentRestrictions(_Postgres)?|KilledCoreProtectsAndRecovers)$' \
+  -count=1 -json
+```
+
+PASS in 53.801s: 3 top-level / 6 subtests, zero skips or races. Both database
+engines and native underlays preserve manual disable and expiry across traffic
+reset and quota increase; explicitly enabling still-expired clients remains
+insufficient to reconnect. Extending expiry permits actual TCP/UDP exchanges.
+Automatic renewal resets durable accounting and extends expiry while retaining
+manual disable; explicit enable subsequently restores actual traffic.
+
+The Linux fault test identifies only the owned Xray child by its exact binary
+and unique temporary config path, sends SIGKILL, and checks its actual OS exit
+status. Both native underlays close old TCP/UDP payload flows within 1250ms,
+refuse new flows, and release the public listener. Restart recovers traffic
+without changing pre-crash raw/billed/remainder values. This expands the earlier
+SIGTERM-based `Process.Stop()` coverage; it does not claim panel-process or host
+restart validation. Log:
+`/tmp/3x-ui-rate-trace/mieru-restrictions-crash-first.jsonl`.
+
+Two additional `/tmp` mutations were rejected by the unchanged tests: disabling
+native runtime core-state reconciliation caused an old public TCP flow to time
+out instead of closing; copying the legacy reset auto-enable behavior into the
+managed reset path changed the canonical manual-disable flag. Both targeted
+cases failed as intended (2 top-level / 2 subtest failures, 8.308s), logged in
+`/tmp/3x-ui-rate-trace/mieru-state-mutations-red.jsonl`. Neither mutation changed
+repository source. Final restored-source public regression is recorded below.
+
+Final restored-source regression:
+`go test -race -p 1 ./internal/web/service -run '^TestMieruInbound' -count=1 -json`
+with the same managed-core and PostgreSQL environment passed in 261.488s:
+15 top-level / 43 subtests, zero skips, no race reports. This includes every
+existing public mieru fixture consumer and all new cases. In this run the
+sixteen quota cases again had exact independent receive counts, zero flight
+difference/overshoot, and closure bounds of 7.175717–32.881171ms. The affected
+`golangci-lint run ./internal/web/service/...` then passed with zero issues.
+Logs: `/tmp/3x-ui-rate-trace/mieru-public-acceptance-final.jsonl` and
+`mieru-quota-lint.log`. This increment changes test utilities, acceptance tests
+and evidence documents only; prior frontend/build evidence is unchanged.

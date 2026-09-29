@@ -82,6 +82,12 @@ instruction. They do not change the specified limits, units or acceptance scope.
   capability requirements, fork-safe package/install/upgrade, logs, restore and
   node recovery. Execute the remaining real route/rate/quota/auth/failure matrix
   for both underlays and both payload types, IPv4/IPv6 and supported DBs.
+- [x] Public bounded-workload natural quota: SQLite/PostgreSQL, both underlays,
+  four simultaneous TCP/UDP payload flows, 0.5/1/1.5/2x multipliers, independent
+  receive observations, same-IP peer continuity and core-restart denial. Reset,
+  quota increase and renewal preserve independent restrictions. Actual Linux
+  SIGKILL recovery has both-underlay evidence. Unrestricted buffers, full
+  sustained UDP shaping, panel-process restart and remaining fault cases stay open.
 - [ ] Run applicable complete backend/frontend/static/build checks, record skips
   separately, commit logical milestones, push the approved feature branch and
   independently verify its remote SHA. Keep unexecuted acceptance items open.

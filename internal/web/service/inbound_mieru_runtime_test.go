@@ -435,6 +435,13 @@ type productionMieruFixture struct {
 
 func newProductionMieruFixture(t *testing.T, underlay string) productionMieruFixture {
 	t.Helper()
+	return newProductionMieruFixtureWithTargets(t, underlay, func(t *testing.T) (net.Addr, net.Addr) {
+		return productionMieruEchoTarget(t, "tcp"), productionMieruEchoTarget(t, "udp")
+	})
+}
+
+func newProductionMieruFixtureWithTargets(t *testing.T, underlay string, targets func(*testing.T) (net.Addr, net.Addr)) productionMieruFixture {
+	t.Helper()
 	binary := os.Getenv("XUI_MANAGED_XRAY_E2E_BINARY")
 	if binary == "" {
 		t.Skip("set XUI_MANAGED_XRAY_E2E_BINARY for public mieru Runtime data paths")
@@ -446,7 +453,7 @@ func newProductionMieruFixture(t *testing.T, underlay string) productionMieruFix
 	if err := os.Symlink(binary, filepath.Join(binDir, xray.GetBinaryName())); err != nil {
 		t.Fatal(err)
 	}
-	tcpTarget, udpTarget := productionMieruEchoTarget(t, "tcp"), productionMieruEchoTarget(t, "udp")
+	tcpTarget, udpTarget := targets(t)
 	api := netip.MustParseAddrPort(productionSSHAddress(t))
 	template := map[string]any{
 		"log":      map[string]any{"loglevel": "warning"},
