@@ -119,3 +119,16 @@ Commit-gate checks: generated schemas/OpenAPI (also copied to the docs site), fr
 The first full panel `make test-go` run failed in the unchanged Discord test `TestGatewayRequestedHeartbeatDoesNotRaceTicker`; its 10 ms fixture heartbeat missed an ACK and closed the socket under concurrent package load. The test then passed 30 consecutive isolated runs. No Discord code, expected result or timing threshold was changed. A full `GOFLAGS=-p=1 make test-go` rerun is recorded separately below; the failed concurrent run is not a passing result.
 
 The full panel rerun `GOFLAGS=-p=1 GOTOOLCHAIN=go1.27.1 make test-go` passed. It includes the original Discord test unchanged. The isolated 30/30 pass plus the serial suite support scheduling contention as the explanation for the earlier parallel failure; no claim is made that the 10 ms fixture is load-independent.
+
+## Runtime private control transport — 2026-09-29
+
+`TestLocalRuntimeUsesPrivateControlForHandlersRoutingAndStats` first failed on the missing Runtime endpoint methods. It now runs a real managed core with only a private Unix control listener, adds an owned Tunnel through Local Runtime, echoes 256 bytes each way, reads exactly those inbound counters through StatsService, hot-applies a blocking route, and removes the listening resource. Fixture corrections supplied the required policy burst and enabled the router feature before the final successful run; the earlier fixture failures are not passing results.
+
+Safety tests reject non-loopback TCP, invalid ports, abstract Unix addresses, malformed explicit configuration, public socket/directory permissions and socket symlinks. Temporarily removing address/socket validation makes the tests fail; restoring validation passes. The tests also ensure an explicit invalid endpoint never falls back to a legacy API-tag inbound.
+
+```sh
+XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race ./internal/xray ./internal/web/runtime \
+  -run 'TestExplicitControlEndpoint|TestPrivateControl|TestLocalRuntimeUsesPrivateControl|TestGetTraffic|TestXrayAPI_E2E|TestClientPolicyAdapter' -count=1
+```
+
+This command passed (xray 3.047 s, runtime 1.296 s), including the actual binary's pre-existing TCP handler/routing integration. The binary was built from the managed source including the usage-seed RPC. Full panel `GOFLAGS=-p=1 GOTOOLCHAIN=go1.27.1 make test-go` and focused `go vet ./internal/xray ./internal/web/runtime ./internal/web/service` passed. These tests do not claim automatic policy activation, node-wide budgets or browser acceptance.

@@ -18,6 +18,7 @@ import (
 
 type LocalDeps struct {
 	APIPort        func() int
+	APIEndpoint    func() (string, error)
 	SetNeedRestart func()
 }
 
@@ -36,13 +37,22 @@ func (l *Local) withAPI(fn func(api *xray.XrayAPI) error) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	port := l.deps.APIPort()
-	if port <= 0 {
-		return errors.New("local xray is not running")
-	}
 	var api xray.XrayAPI
-	if err := api.Init(port); err != nil {
-		return err
+	if l.deps.APIEndpoint != nil {
+		endpoint, err := l.deps.APIEndpoint()
+		if err != nil {
+			return err
+		}
+		if err := api.InitEndpoint(endpoint); err != nil {
+			return err
+		}
+	} else {
+		if l.deps.APIPort == nil {
+			return errors.New("local xray is not running")
+		}
+		if err := api.Init(l.deps.APIPort()); err != nil {
+			return err
+		}
 	}
 	defer api.Close()
 	return fn(&api)

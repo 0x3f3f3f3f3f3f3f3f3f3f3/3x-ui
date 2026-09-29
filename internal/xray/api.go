@@ -36,7 +36,6 @@ import (
 	wireguard "github.com/xtls/xray-core/proxy/wireguard"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 )
 
@@ -92,11 +91,16 @@ func (x *XrayAPI) Init(apiPort int) error {
 	}
 
 	addr := fmt.Sprintf("127.0.0.1:%d", apiPort)
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	return x.InitEndpoint(addr)
+}
+
+func (x *XrayAPI) InitEndpoint(endpoint string) error {
+	conn, err := dialLocalControl(endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to connect to Xray API: %w", err)
 	}
 
+	x.Close()
 	x.grpcClient = conn
 	x.isConnected = true
 	if x.StatsLastValues == nil {

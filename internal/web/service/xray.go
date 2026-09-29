@@ -1188,8 +1188,7 @@ func (s *XrayService) GetXrayTraffic() ([]*xray.Traffic, []*xray.ClientTraffic, 
 		logger.Debug("Attempted to fetch Xray traffic, but Xray is not running:", err)
 		return nil, nil, err
 	}
-	apiPort := process.GetAPIPort()
-	if err := s.xrayAPI.Init(apiPort); err != nil {
+	if err := s.xrayAPI.InitProcess(process); err != nil {
 		logger.Debug("Failed to initialize Xray API:", err)
 		return nil, nil, err
 	}
@@ -1218,7 +1217,7 @@ func (s *XrayService) GetOnlineUsers() ([]xray.OnlineUser, bool, error) {
 	if process.OnlineAPISupport() == xray.OnlineAPIUnsupported {
 		return nil, false, nil
 	}
-	if err := s.xrayAPI.Init(process.GetAPIPort()); err != nil {
+	if err := s.xrayAPI.InitProcess(process); err != nil {
 		logger.Debug("Failed to initialize Xray API:", err)
 		return nil, false, err
 	}
@@ -1264,7 +1263,7 @@ func (s *XrayService) GetBalancersStatus(tags []string) ([]BalancerStatus, error
 		}
 		return statuses, nil
 	}
-	if err := s.xrayAPI.Init(process.GetAPIPort()); err != nil {
+	if err := s.xrayAPI.InitProcess(process); err != nil {
 		return nil, err
 	}
 	defer s.xrayAPI.Close()
@@ -1304,7 +1303,7 @@ func (s *XrayService) OverrideBalancer(tag, target string) error {
 			target = resolved
 		}
 	}
-	if err := s.xrayAPI.Init(process.GetAPIPort()); err != nil {
+	if err := s.xrayAPI.InitProcess(process); err != nil {
 		return err
 	}
 	defer s.xrayAPI.Close()
@@ -1354,7 +1353,7 @@ func (s *XrayService) TestRoute(req xray.RouteTestRequest) (*xray.RouteTestResul
 	if process == nil || !process.IsRunning() {
 		return nil, errors.New("xray is not running")
 	}
-	if err := s.xrayAPI.Init(process.GetAPIPort()); err != nil {
+	if err := s.xrayAPI.InitProcess(process); err != nil {
 		return nil, err
 	}
 	defer s.xrayAPI.Close()
@@ -1459,14 +1458,10 @@ func (s *XrayService) tryHotApply(process *xray.Process, newCfg *xray.Config) bo
 		return false
 	}
 
-	apiPort := process.GetAPIPort()
-	if apiPort <= 0 {
-		return false
-	}
 	// A dedicated client: s.xrayAPI may be in use by traffic polling on other
 	// service instances and is reset around restarts.
 	hotAPI := xray.XrayAPI{}
-	if err := hotAPI.Init(apiPort); err != nil {
+	if err := hotAPI.InitProcess(process); err != nil {
 		logger.Debug("hot apply: failed to init xray api:", err)
 		return false
 	}
@@ -1600,6 +1595,14 @@ func (s *XrayService) GetXrayAPIPort() int {
 		return 0
 	}
 	return process.GetAPIPort()
+}
+
+func (s *XrayService) GetXrayAPIEndpoint() (string, error) {
+	process := currentXrayProcess()
+	if process == nil || !process.IsRunning() {
+		return "", errors.New("local xray is not running")
+	}
+	return process.GetAPIEndpoint()
 }
 
 // IsNeedRestartAndSetFalse checks if restart is needed and resets the flag to false.
