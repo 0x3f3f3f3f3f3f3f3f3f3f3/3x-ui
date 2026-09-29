@@ -455,3 +455,15 @@ usage reconciliation is still required. An unsupported or unmetered legacy
 configuration also needs a separately verified migration. Automatic selection
 from ordinary client policy fields, generated Tunnel metering, complete UI state,
 all protocol ownership and general backup/restore fencing remain open.
+
+
+### Bounded SQL work within one receipt
+
+Legacy settlement bounds client-email lookup, first-use membership lookup,
+inbound loading and inbound saves to the existing 400-row SQL batch size. These
+batches share the original settlement transaction and final receipt; they are
+not independently committed. Email and inbound-ID deduplication occurs across
+the complete request. Duplicate input emails retain the prior last-delta rule,
+and each client row is updated once. First-use deadlines are computed once for
+the whole settlement, then applied to every linked inbound. Legacy orphan traffic
+rows retain their previous behavior and are not assigned an invented identity.

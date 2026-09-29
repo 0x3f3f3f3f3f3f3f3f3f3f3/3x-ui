@@ -155,11 +155,14 @@ func (s *InboundService) addClientTraffic(tx *gorm.DB, traffics []*xray.ClientTr
 	// shared row then carried the node inbound's id (AddClientStat used to use
 	// OnConflict DoNothing and never refreshed it; it now refreshes inbound_id on
 	// conflict, but this filter was removed rather than relying on that ordering).
-	err = tx.Model(xray.ClientTraffic{}).
-		Where("email IN (?)", emails).
-		Find(&dbClientTraffics).Error
-	if err != nil {
-		return err
+	slices.Sort(emails)
+	emails = slices.Compact(emails)
+	for _, part := range chunkStrings(emails, sqlInChunk) {
+		var rows []*xray.ClientTraffic
+		if err := tx.Where("email IN ?", part).Order("email").Find(&rows).Error; err != nil {
+			return err
+		}
+		dbClientTraffics = append(dbClientTraffics, rows...)
 	}
 
 	// Avoid empty slice error
@@ -254,22 +257,31 @@ func (s *InboundService) adjustTraffics(tx *gorm.DB, dbClientTraffics []*xray.Cl
 	// authoritative. client_traffics.inbound_id goes stale when an inbound is
 	// deleted and recreated, which would leave the negative expiry unconverted.
 	var inboundIds []int
-	err = tx.Table("client_inbounds").
-		Joins("JOIN clients ON clients.id = client_inbounds.client_id").
-		Where("clients.email IN (?)", delayedEmails).
-		Distinct().
-		Pluck("client_inbounds.inbound_id", &inboundIds).Error
-	if err != nil {
-		return nil, nil, err
+	for _, part := range chunkStrings(delayedEmails, sqlInChunk) {
+		var ids []int
+		err = tx.Table("client_inbounds").
+			Joins("JOIN clients ON clients.id = client_inbounds.client_id").
+			Where("clients.email IN ?", part).
+			Distinct().
+			Pluck("client_inbounds.inbound_id", &ids).Error
+		if err != nil {
+			return nil, nil, err
+		}
+		inboundIds = append(inboundIds, ids...)
 	}
+	slices.Sort(inboundIds)
+	inboundIds = slices.Compact(inboundIds)
 	if len(inboundIds) == 0 {
 		return dbClientTraffics, nil, nil
 	}
 
 	var inbounds []*model.Inbound
-	err = tx.Model(model.Inbound{}).Where("id IN (?)", inboundIds).Find(&inbounds).Error
-	if err != nil {
-		return nil, nil, err
+	for _, part := range chunkInts(inboundIds, sqlInChunk) {
+		var rows []*model.Inbound
+		if err := tx.Where("id IN ?", part).Order("id").Find(&rows).Error; err != nil {
+			return nil, nil, err
+		}
+		inbounds = append(inbounds, rows...)
 	}
 	for inbound_index := range inbounds {
 		settings, err := decodeTrafficLifecycleSettings(inbounds[inbound_index].Settings)
@@ -310,8 +322,10 @@ func (s *InboundService) adjustTraffics(tx *gorm.DB, dbClientTraffics []*xray.Cl
 		}
 	}
 
-	if err := tx.Save(inbounds).Error; err != nil {
-		return nil, nil, err
+	for part := range slices.Chunk(inbounds, sqlInChunk) {
+		if err := tx.Save(part).Error; err != nil {
+			return nil, nil, err
+		}
 	}
 	for _, ib := range inbounds {
 		if ib == nil {

@@ -954,3 +954,20 @@ fix passes lint with zero issues (31.11 s) and panel build (8.31 s). All 19
 changed Go files meet both repository import grouping and gofumpt; workflow YAML
 and all 19 embedded shell blocks validate. Source review found no blocker for
 this guarded handoff increment. Large SQL batch bounds remain separate work.
+
+
+SQL settlement scale candidate: 100001 legacy client traffic rows first failed
+with SQLite's `too many SQL variables`. Bounding the first read exposed the same
+failure in delayed-first-use membership lookup. A separate real client linked
+to 3001 listeners failed the original all-at-once inbound save. Bounded reads
+and saves preserve one outer transaction. Regression checks cover a failure on
+the final client UPDATE, rollback of all previous usage and receipt work, retry,
+a duplicate email crossing lookup batches, lost-ack receipt replay, exact row
+retention, and equal first-use deadlines in canonical and all listener settings.
+The isolated SQLite race candidate passed (38.307 s); after strengthening the
+late failure and duplicate checks, PostgreSQL race passed (66.923 s). Root
+focused SQLite race, including live handoff regression, passes (45.421 s package
+and 48.83 s command time). Complete root panel suite (300.03 s), lint with
+zero issues (26.96 s) and panel build (10.29 s) pass. Source review, Go
+formatting, workflow YAML and all 19 shell blocks pass. Both SQLite and
+PostgreSQL CI paths explicitly require the three new scale tests to pass.

@@ -323,3 +323,11 @@ restart after subsequent preparation failure. Unsupported/unmetered legacy
 configurations remain refused. Automatic policy selection, ordinary generated
 Tunnel metering, large SQL batch bounds, UI status and the remainder of the goal
 are still open. Final validation is recorded in testing.md.
+
+
+Task 6 SQL scale candidate: final settlement now uses bounded email, membership,
+inbound lookup and save batches inside one receipt transaction. Real 100001-user
+and 3001-listener limits have observed failing regressions and SQLite/PostgreSQL
+race coverage. Runtime and policy behavior are unchanged. Complete root panel,
+race, lint and build gates pass. Automatic selection, generated Tunnel metering
+and UI status are the next activation work.
