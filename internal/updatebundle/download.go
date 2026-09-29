@@ -45,52 +45,16 @@ func DownloadRelease(ctx context.Context, client *http.Client, tag, platform, pa
 }
 
 func downloadRelease(ctx context.Context, client *http.Client, api, tag, platform, parent string) (stage string, identity ReleaseIdentity, resultErr error) {
-	if client == nil {
-		return "", identity, errors.New("release download requires an HTTP client")
-	}
-	if tag != "" && !releaseTagPattern.MatchString(tag) {
-		return "", identity, errors.New("invalid selected release tag")
-	}
-	if _, err := releaseCoreName(platform); err != nil {
-		return "", identity, err
-	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	d := releaseDownloader{client: client, api: strings.TrimRight(api, "/") + "/repos/" + ReleaseRepository}
-	resource := "/releases/latest"
-	if tag != "" {
-		resource = "/releases/tags/" + url.PathEscape(tag)
-	}
-	var release releaseResponse
-	if err := d.metadata(ctx, resource, &release); err != nil {
-		return "", identity, err
-	}
-	if release.Draft == nil || release.Prerelease == nil || !releaseTagPattern.MatchString(release.Tag) {
-		return "", identity, errors.New("release metadata lacks a valid tag or publication status")
-	}
-	if *release.Draft {
-		return "", identity, errors.New("refusing draft release")
-	}
-	if tag == "" && *release.Prerelease {
-		return "", identity, errors.New("latest stable release is a prerelease")
-	}
-	if tag != "" && release.Tag != tag {
-		return "", identity, errors.New("release tag differs from the selection")
-	}
-	commit, err := d.tagCommit(ctx, release.Tag)
+	selected, err := d.selectRelease(ctx, tag, platform)
 	if err != nil {
 		return "", identity, err
 	}
-	identity = ReleaseIdentity{Repository: ReleaseRepository, Commit: commit, Tag: release.Tag, Platform: platform}
-	name := "x-ui-" + platform + ".tar.gz"
-	archive, err := selectReleaseAsset(release.Assets, name, defaultLimits().compressed)
-	if err != nil {
-		return "", identity, err
-	}
-	checksum, err := selectReleaseAsset(release.Assets, name+".sha256", 4096)
-	if err != nil {
-		return "", identity, fmt.Errorf("release checksum: %w", err)
-	}
+	identity = selected.identity
+	archive, checksum := selected.archive, selected.checksum
+	name := archive.Name
 	var sum bytes.Buffer
 	if err := d.asset(ctx, checksum, &sum); err != nil {
 		return "", identity, err
@@ -128,6 +92,70 @@ func downloadRelease(ctx context.Context, client *http.Client, api, tag, platfor
 		return stage, identity, err
 	}
 	return stage, identity, nil
+}
+
+type releaseSelection struct {
+	identity ReleaseIdentity
+	archive  releaseAsset
+	checksum releaseAsset
+}
+
+// ResolveReleaseIdentity selects the same published tag and archive metadata as
+// DownloadRelease without fetching asset bodies. Runtime compatibility still
+// requires the complete download, manifest and candidate preflight.
+func ResolveReleaseIdentity(ctx context.Context, client *http.Client, tag, platform string) (ReleaseIdentity, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	d := releaseDownloader{client: client, api: "https://api.github.com/repos/" + ReleaseRepository}
+	selected, err := d.selectRelease(ctx, tag, platform)
+	return selected.identity, err
+}
+
+func (d releaseDownloader) selectRelease(ctx context.Context, tag, platform string) (releaseSelection, error) {
+	if d.client == nil {
+		return releaseSelection{}, errors.New("release download requires an HTTP client")
+	}
+	if tag != "" && !releaseTagPattern.MatchString(tag) {
+		return releaseSelection{}, errors.New("invalid selected release tag")
+	}
+	if _, err := releaseCoreName(platform); err != nil {
+		return releaseSelection{}, err
+	}
+	resource := "/releases/latest"
+	if tag != "" {
+		resource = "/releases/tags/" + url.PathEscape(tag)
+	}
+	var release releaseResponse
+	if err := d.metadata(ctx, resource, &release); err != nil {
+		return releaseSelection{}, err
+	}
+	if release.Draft == nil || release.Prerelease == nil || !releaseTagPattern.MatchString(release.Tag) {
+		return releaseSelection{}, errors.New("release metadata lacks a valid tag or publication status")
+	}
+	if *release.Draft {
+		return releaseSelection{}, errors.New("refusing draft release")
+	}
+	if tag == "" && *release.Prerelease {
+		return releaseSelection{}, errors.New("latest stable release is a prerelease")
+	}
+	if tag != "" && release.Tag != tag {
+		return releaseSelection{}, errors.New("release tag differs from the selection")
+	}
+	commit, err := d.tagCommit(ctx, release.Tag)
+	if err != nil {
+		return releaseSelection{}, err
+	}
+	identity := ReleaseIdentity{Repository: ReleaseRepository, Commit: commit, Tag: release.Tag, Platform: platform}
+	name := "x-ui-" + platform + ".tar.gz"
+	archive, err := selectReleaseAsset(release.Assets, name, defaultLimits().compressed)
+	if err != nil {
+		return releaseSelection{}, err
+	}
+	checksum, err := selectReleaseAsset(release.Assets, name+".sha256", 4096)
+	if err != nil {
+		return releaseSelection{}, fmt.Errorf("release checksum: %w", err)
+	}
+	return releaseSelection{identity: identity, archive: archive, checksum: checksum}, nil
 }
 
 func validReleaseDigest(value string) bool {

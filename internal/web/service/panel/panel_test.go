@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/config"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/service"
+	"github.com/mhsanaei/3x-ui/v3/internal/updatebundle"
 )
 
 func TestIsNewerVersion(t *testing.T) {
@@ -95,57 +96,14 @@ func TestUpdateProxyEnvVars(t *testing.T) {
 	})
 }
 
-func TestExtractReleaseCommit(t *testing.T) {
-	full := "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b"
-	cases := []struct {
-		name    string
-		release service.Release
-		want    string
-	}{
-		{
-			name:    "from body marker",
-			release: service.Release{Body: "Rolling build\n\ncommit=" + full + "\nbuilt=2026-06-24T00:00:00Z"},
-			want:    full,
-		},
-		{
-			name:    "body marker is case-insensitive and wins over target",
-			release: service.Release{Body: "COMMIT=" + full, TargetCommitish: "deadbeef"},
-			want:    full,
-		},
-		{
-			name:    "fallback to target commit sha",
-			release: service.Release{Body: "no marker here", TargetCommitish: full},
-			want:    full,
-		},
-		{
-			name:    "branch target is not a commit",
-			release: service.Release{Body: "no marker", TargetCommitish: "main"},
-			want:    "",
-		},
-	}
-	for _, tc := range cases {
-		if got := extractReleaseCommit(&tc.release); got != tc.want {
-			t.Fatalf("%s: extractReleaseCommit = %q, want %q", tc.name, got, tc.want)
-		}
-	}
-}
-
-func TestCommitsEqual(t *testing.T) {
-	full := "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b"
-	cases := []struct {
-		a, b string
-		want bool
-	}{
-		{"1a2b3c4d", full, true},  // injected 8-char prefix matches full release sha
-		{full, "1a2b3c4d", true},  // order independent
-		{"1A2B3C4D", full, true},  // case insensitive
-		{"deadbeef", full, false}, // different commit
-		{"", full, false},         // empty current never matches
-		{"1a2b3c4d", "", false},   // empty latest never matches
-	}
-	for _, tc := range cases {
-		if got := commitsEqual(tc.a, tc.b); got != tc.want {
-			t.Fatalf("commitsEqual(%q, %q) = %v, want %v", tc.a, tc.b, got, tc.want)
+func TestDevUpdateInfoComparesFullTagCommit(t *testing.T) {
+	prefix := "1a2b3c4d"
+	latest := updatebundle.ReleaseIdentity{Commit: prefix + strings.Repeat("a", 32)}
+	for _, current := range []string{latest.Commit, prefix + strings.Repeat("b", 32), prefix, ""} {
+		info := makeDevUpdateInfo(config.ReleaseInfo{Commit: current, PanelVersion: "fixture-dev"}, latest)
+		want := current != latest.Commit
+		if info.UpdateAvailable != want || info.LatestCommit != prefix || info.CurrentCommit != shortCommit(current) || info.CurrentVersion != "fixture-dev" {
+			t.Fatalf("short display obscured full identity comparison: current=%s info=%+v", current, info)
 		}
 	}
 }
@@ -360,5 +318,19 @@ func TestGetUpdateStatus(t *testing.T) {
 	writeStatusFile(t, path, 1, "some-unrecognized-state")
 	if got := svc.GetUpdateStatus(); got.State != updateStatePending {
 		t.Fatalf("unrecognized state normalizes to pending: State = %q, want %q", got.State, updateStatePending)
+	}
+}
+
+func TestStartUpdateRejectsDockerBeforeLookingForHostTools(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux native updater gate")
+	}
+	t.Setenv("XUI_IN_DOCKER", "true")
+	t.Setenv("PATH", t.TempDir())
+	releaseUpdateSlot()
+	defer releaseUpdateSlot()
+	runID, err := (&PanelService{}).startUpdate(false)
+	if err == nil || runID != 0 || !strings.Contains(err.Error(), "container image") {
+		t.Fatalf("container update was not gated before host tools: %d, %v", runID, err)
 	}
 }

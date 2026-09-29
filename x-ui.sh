@@ -139,8 +139,26 @@ install() {
     fi
 }
 
+run_installed_updater() (
+    local tag="${1:-}" script
+    if [[ "$running_in_docker" == "true" ]]; then
+        LOGE "Update the managed fork container image through your container runtime."
+        return 1
+    fi
+    if ! script=$("${xui_folder}/x-ui" prepare-update); then
+        LOGE "Cannot prepare the installed release's verified updater."
+        return 1
+    fi
+    [[ "$script" == /* && "$script" != *$'\n'* && "${script##*/}" == 3x-ui-update-*.sh && -f "$script" && ! -L "$script" ]] || {
+        LOGE "The panel did not return a verified updater path."
+        return 1
+    }
+    trap 'rm -f -- "$script"' EXIT
+    XUI_UPDATE_TAG="$tag" bash "$script"
+)
+
 update() {
-    confirm "This function will update all x-ui components to the latest version, and the data will not be lost. Do you want to continue?" "y"
+    confirm "Update all x-ui components from the managed fork's latest stable release?" "y"
     if [[ $? != 0 ]]; then
         LOGE "Cancelled"
         if [[ $# == 0 ]]; then
@@ -148,15 +166,15 @@ update() {
         fi
         return 0
     fi
-    bash <(curl -Ls https://raw.githubusercontent.com/MHSanaei/3x-ui/main/update.sh)
-    if [[ $? == 0 ]]; then
-        LOGI "Update is complete, Panel has automatically restarted "
+    run_installed_updater || return $?
+    LOGI "Update is complete, Panel has automatically restarted "
+    if [[ $# == 0 ]]; then
         before_show_menu
     fi
 }
 
 update_dev() {
-    confirm "This will update x-ui to the latest DEV commit (the rolling 'dev-latest' build, not a stable release). Your data is preserved. Continue?" "y"
+    confirm "Update x-ui from the managed fork's rolling 'dev-latest' prerelease?" "y"
     if [[ $? != 0 ]]; then
         LOGE "Cancelled"
         if [[ $# == 0 ]]; then
@@ -166,9 +184,9 @@ update_dev() {
     fi
     # XUI_UPDATE_TAG tells update.sh to install the dev-latest pre-release
     # instead of the latest stable tag.
-    XUI_UPDATE_TAG="dev-latest" bash <(curl -Ls https://raw.githubusercontent.com/MHSanaei/3x-ui/main/update.sh)
-    if [[ $? == 0 ]]; then
-        LOGI "Dev update is complete, Panel has automatically restarted "
+    run_installed_updater "dev-latest" || return $?
+    LOGI "Dev update is complete, Panel has automatically restarted "
+    if [[ $# == 0 ]]; then
         before_show_menu
     fi
 }

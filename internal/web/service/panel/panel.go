@@ -3,13 +3,11 @@ package panel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -19,6 +17,7 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v3/internal/config"
 	"github.com/mhsanaei/3x-ui/v3/internal/logger"
+	"github.com/mhsanaei/3x-ui/v3/internal/updatebundle"
 	"github.com/mhsanaei/3x-ui/v3/internal/web/global"
 	"github.com/mhsanaei/3x-ui/v3/internal/web/service"
 )
@@ -29,7 +28,7 @@ type PanelService struct{}
 
 // PanelUpdateInfo contains the current and latest available panel versions.
 // On the dev channel the version fields carry a "dev+<sha>" label and the commit
-// fields hold the short SHAs that drive the update-available decision.
+// fields hold short display SHAs; full tag commits drive availability.
 type PanelUpdateInfo struct {
 	Channel         string `json:"channel"`
 	CurrentVersion  string `json:"currentVersion"`
@@ -40,8 +39,6 @@ type PanelUpdateInfo struct {
 }
 
 const (
-	panelUpdaterURL      = "https://raw.githubusercontent.com/MHSanaei/3x-ui/main/update.sh"
-	maxPanelUpdaterBytes = 2 << 20
 	// devReleaseTag is the fixed-tag rolling pre-release the CI force-moves to the
 	// newest main commit; the dev update channel installs from it.
 	devReleaseTag = "dev-latest"
@@ -66,8 +63,6 @@ type PanelUpdateStatus struct {
 	FinishedAt int64  `json:"finishedAt" example:"1735689612"`
 }
 
-var releaseCommitRegex = regexp.MustCompile(`(?i)commit=([0-9a-f]{7,40})`)
-
 // updateMu guards updateRunning/updateStarted/updateRunID/updatePID, which
 // stop a second self-update from launching while one is still in flight (two
 // concurrent update.sh runs would race each other extracting the release
@@ -91,6 +86,9 @@ var releaseCommitRegex = regexp.MustCompile(`(?i)commit=([0-9a-f]{7,40})`)
 // genuinely wedged run (alive but hung forever) can never lock out retries
 // permanently, even on the PID-tracked path.
 var (
+	ErrPanelUpdateInContainer = errors.New("update the managed fork container image through your container runtime")
+	ErrPanelUpdateSource      = errors.New("updater requires an unmodified panel with a known release source")
+
 	updateMu      sync.Mutex
 	updateRunning bool
 	updateStarted time.Time
@@ -162,22 +160,23 @@ func getDevUpdateInfo() (*PanelUpdateInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	latestCommit := extractReleaseCommit(release)
-	if latestCommit == "" {
-		return nil, fmt.Errorf("dev release commit is unknown")
+	current, err := config.GetReleaseInfo()
+	if err != nil {
+		return nil, err
 	}
-	currentCommit := config.GetBuildCommit()
-	return &PanelUpdateInfo{
-		Channel:         "dev",
-		CurrentVersion:  config.GetPanelVersion(),
-		CurrentCommit:   shortCommit(currentCommit),
-		LatestCommit:    shortCommit(latestCommit),
-		LatestVersion:   "dev+" + shortCommit(latestCommit),
-		UpdateAvailable: !commitsEqual(currentCommit, latestCommit),
-	}, nil
+	return makeDevUpdateInfo(current, *release), nil
 }
 
-// StartUpdate starts the official updater using this panel's own channel
+func makeDevUpdateInfo(current config.ReleaseInfo, latest updatebundle.ReleaseIdentity) *PanelUpdateInfo {
+	return &PanelUpdateInfo{
+		Channel: "dev", CurrentVersion: current.PanelVersion,
+		CurrentCommit: shortCommit(current.Commit), LatestCommit: shortCommit(latest.Commit),
+		LatestVersion:   "dev+" + shortCommit(latest.Commit),
+		UpdateAvailable: current.Commit != latest.Commit,
+	}
+}
+
+// StartUpdate starts the verified installed updater using this panel's channel
 // setting. Returns the run ID to pass to GetUpdateStatus so the caller can
 // tell this run's result apart from a stale one.
 func (s *PanelService) StartUpdate() (int64, error) {
@@ -227,13 +226,16 @@ func (s *PanelService) startUpdate(useDev bool) (int64, error) {
 	if runtime.GOOS != "linux" {
 		return 0, fmt.Errorf("panel web update is supported only on Linux installations")
 	}
+	if os.Getenv("XUI_IN_DOCKER") == "true" || containerMarkerExists("/.dockerenv") || containerMarkerExists("/run/.containerenv") {
+		return 0, ErrPanelUpdateInContainer
+	}
 
 	bash, err := exec.LookPath("bash")
 	if err != nil {
 		return 0, fmt.Errorf("bash is required to run the panel updater: %w", err)
 	}
 
-	scriptPath, err := downloadPanelUpdater()
+	scriptPath, err := preparePanelUpdater()
 	if err != nil {
 		return 0, err
 	}
@@ -371,49 +373,23 @@ func releaseUpdateSlot() {
 	updateMu.Unlock()
 }
 
-func downloadPanelUpdater() (string, error) {
-	client := (&service.SettingService{}).NewProxiedHTTPClient(15 * time.Second)
-	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, panelUpdaterURL, nil)
-	if reqErr != nil {
-		return "", fmt.Errorf("download panel updater: %w", reqErr)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("download panel updater: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("download panel updater: unexpected HTTP %d", resp.StatusCode)
-	}
+func containerMarkerExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
 
-	file, err := os.CreateTemp("", "3x-ui-update-*.sh")
+func preparePanelUpdater() (string, error) {
+	info, err := config.GetReleaseInfo()
 	if err != nil {
 		return "", err
 	}
-	path := file.Name()
-	ok := false
-	defer func() {
-		_ = file.Close()
-		if !ok {
-			_ = os.Remove(path)
-		}
-	}()
-
-	n, err := io.Copy(file, io.LimitReader(resp.Body, maxPanelUpdaterBytes+1))
-	if err != nil {
-		return "", fmt.Errorf("write panel updater: %w", err)
+	if info.Modified || info.Commit == "" {
+		return "", ErrPanelUpdateSource
 	}
-	if n == 0 {
-		return "", fmt.Errorf("panel updater download is empty")
-	}
-	if n > maxPanelUpdaterBytes {
-		return "", fmt.Errorf("panel updater exceeds %d bytes", maxPanelUpdaterBytes)
-	}
-	if err := file.Chmod(0o700); err != nil {
-		return "", err
-	}
-	ok = true
-	return path, nil
+	mainFolder, _ := resolveUpdateFolders()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return updatebundle.PrepareInstalledUpdater(ctx, mainFolder, os.TempDir(), info.Commit, info.Platform)
 }
 
 func fetchLatestPanelVersion() (string, error) {
@@ -421,64 +397,22 @@ func fetchLatestPanelVersion() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if release.TagName == "" {
-		return "", fmt.Errorf("latest panel release tag is empty")
-	}
-	return release.TagName, nil
+	return release.Tag, nil
 }
 
-// fetchPanelRelease fetches a release from GitHub. An empty tag resolves the
-// latest stable release; a non-empty tag (e.g. dev-latest) resolves that tag.
-func fetchPanelRelease(tag string) (*service.Release, error) {
-	url := "https://api.github.com/repos/MHSanaei/3x-ui/releases/latest"
-	if tag != "" {
-		url = "https://api.github.com/repos/MHSanaei/3x-ui/releases/tags/" + tag
-	}
-	client := (&service.SettingService{}).NewProxiedHTTPClient(10 * time.Second)
-	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
-	if reqErr != nil {
-		return nil, reqErr
-	}
-	resp, err := client.Do(req)
+// fetchPanelRelease uses the same fixed-fork tag resolver as the downloader.
+// Availability is metadata only; activation still requires runtime preflight.
+func fetchPanelRelease(tag string) (*updatebundle.ReleaseIdentity, error) {
+	info, err := config.GetReleaseInfo()
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API returned status %d: %s", resp.StatusCode, resp.Status)
-	}
-
-	var release service.Release
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+	client := (&service.SettingService{}).NewProxiedHTTPClient(10 * time.Second)
+	identity, err := updatebundle.ResolveReleaseIdentity(context.Background(), client, tag, info.Platform)
+	if err != nil {
 		return nil, err
 	}
-	return &release, nil
-}
-
-// extractReleaseCommit reads the build commit recorded in the dev release: first
-// the `commit=<sha>` marker the CI writes into the body, falling back to the
-// tag's target commit.
-func extractReleaseCommit(release *service.Release) string {
-	if m := releaseCommitRegex.FindStringSubmatch(release.Body); m != nil {
-		return strings.ToLower(m[1])
-	}
-	if isCommitSHA(release.TargetCommitish) {
-		return strings.ToLower(release.TargetCommitish)
-	}
-	return ""
-}
-
-func isCommitSHA(s string) bool {
-	s = strings.TrimSpace(s)
-	if len(s) < 7 || len(s) > 40 {
-		return false
-	}
-	for _, r := range s {
-		if (r < '0' || r > '9') && (r < 'a' || r > 'f') && (r < 'A' || r > 'F') {
-			return false
-		}
-	}
-	return true
+	return &identity, nil
 }
 
 func shortCommit(sha string) string {
@@ -487,20 +421,6 @@ func shortCommit(sha string) string {
 		return sha[:8]
 	}
 	return sha
-}
-
-// commitsEqual compares a short (injected) commit against a full release commit
-// by prefix, so an 8-char build stamp matches the 40-char release SHA.
-func commitsEqual(a, b string) bool {
-	a = strings.ToLower(strings.TrimSpace(a))
-	b = strings.ToLower(strings.TrimSpace(b))
-	if a == "" || b == "" {
-		return false
-	}
-	if len(a) > len(b) {
-		a, b = b, a
-	}
-	return strings.HasPrefix(b, a)
 }
 
 func resolveUpdateFolders() (string, string) {

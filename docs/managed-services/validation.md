@@ -4969,3 +4969,108 @@ program/DB transactional rollback, crash recovery, successful migration/health
 activation, first installer, menu/web update entry points, Docker/native foreign
 platform execution, and the separate Xray updater remain open. There was no
 host installation, service operation, release publication or image deployment.
+
+## Verified installed updater entry points (2026-09-29)
+
+The regular stable/dev menu updates and authenticated web update now prepare a
+verified local copy of the installed release's `update.sh`. They no longer fetch
+an upstream `main` updater. Preparation matches the compiled unmodified source
+and platform, checks the strict manifest and bounded script bytes/mode, and
+places the copy outside the installation. Runtime-generated files are allowed;
+fresh release verification still checks the full exact inventory.
+
+Version lookup now reuses the download selector's fixed-fork/full-tag resolver.
+Development availability compares full commits, even when their first eight
+characters are identical. The obsolete release-body/short-prefix parsing helpers
+and their tests were replaced by actual HTTP resolver tests and full-identity
+comparison tests; those old helper semantics are no longer used in production.
+
+The affected package race/shuffle run passed **76 top-level and 209 subtests**
+across the updater library/tools and panel service, with **zero skips**. The
+normal-binary root CLI and controller run passed **10 top-level and 13 subtests**;
+its **one skip** is the existing `TestUpdatePanel_UnsupportedPlatformReturnsNoRunId`
+non-Linux test running on Linux. Real managed/stock cores, standalone metadata,
+preparation without database side effects and cancellation cleanup were exercised.
+No skipped test is counted as a pass.
+
+The shared manifest parser retained all existing strict-inventory tests. New
+installed-file tests cover runtime files/symlinks, preserved runtime content,
+installation rename after preparation, source/platform/tag mismatch, missing or
+changed scripts, executable mode, oversized scripts, symlinked inputs, canceled
+contexts and in-installation staging parents (including aliases). API/CLI tests
+first failed before the new functions/command existed. The Docker guard first
+failed because the implementation looked for host tools before rejecting the
+container; it now rejects before that lookup.
+
+The actual-process probe has additional modes:
+
+```sh
+# Use a normal native panel, not a race/test binary.
+sudo python3 tools/managed-release/probe_update.py --menu \
+  --helper /trusted/tools/update-stage --panel /trusted/clean-source-panel \
+  --managed-core /trusted/managed-xray --stock-core /trusted/stock-xray
+sudo python3 tools/managed-release/probe_update.py --web \
+  --helper /trusted/tools/update-stage --panel /trusted/clean-source-panel \
+  --managed-core /trusted/managed-xray --stock-core /trusted/stock-xray
+```
+
+**Three menu cases passed**: stable and dev requests reached only the correct
+fork helper channel, reported invalid-download failure with nonzero exit status,
+and removed the private script copy; a changed installed updater was refused
+before any download. The old menu's real failure reproduction showed an upstream
+raw-script request and exit status zero despite the failed download. The first
+chroot fixture lacked `/dev/fd`; after adding its private-proc symlink, the
+reproduction exercised the intended upstream request rather than that fixture
+omission. Old file hashes and DB sentinels remained intact.
+
+**Four authenticated web cases passed** using the actual native panel, an owned
+SQLite database, a synthetic administrator API token and real loopback HTTP
+inside each guarded chroot. Stable/dev requests launched the actual detached
+updater, and polling returned the same run ID with the expected failed download.
+The live panel stayed running, old program/core/unit/menu hashes were unchanged,
+and an existing database setting survived. Changed-script and Docker requests
+were rejected before launch, with no download or status-file creation. English,
+Chinese and existing English fallback responses were checked for the container
+message. A separate actually modified-source build, despite its explicit full
+commit stamp, was also rejected through the authenticated API before launch.
+
+The web fixture initially lacked Python's lazily loaded IDNA codec inside the
+chroot; codecs are now loaded before entering the guarded root. All HTTP,
+package-manager, service and download operations remain confined to the owned
+fixture; no host deployment or network rules are involved. A localization test
+first reproduced a Chinese failure title with an untranslated new detail; the
+new error messages now have explicit English/Chinese entries and use the
+repository's normal fallback. Failed starts also use the existing failure title.
+
+Normal pre-commit fixtures use `-buildvcs=false` and an explicit `f` repeated 40
+times source declaration; they are execution fixtures, not source attestation.
+The modified-source probe uses `-buildvcs=true` against the actually dirty tree.
+Building the full panel with `CGO_ENABLED=0` failed at the existing SQLite backup
+API; the normal CGo build succeeded. The independent update helper remains a
+static build. Actual published-release acceptance and foreign-platform runtime
+execution are not established by these probes.
+
+Logs under `/tmp/3x-ui-rate-trace/`: `installed-updater-api-red.log`,
+`installed-updater-cli-red.jsonl`, `installed-updater-container-red.jsonl`,
+`installed-updater-menu-source-red.log`, `installed-updater-resolver-red.log`,
+`installed-updater-full-commit-red.log`, `installed-updater-final-focused.jsonl`,
+`installed-updater-final-root-controller.jsonl`,
+`installed-updater-menu-green.jsonl`, `installed-updater-web-localized-green.jsonl`,
+`installed-updater-web-dirty-localized-green.jsonl`, `installed-updater-localization-red.jsonl`
+and `installed-updater-final-lint.log`.
+
+Final repository-wide Go lint reported zero issues. The independent helper built
+with CGo disabled for native Linux arm64, Windows amd64 and Darwin arm64; the
+foreign binaries were compiled only. Shell syntax, Python syntax and both changed
+translation JSON files also passed validation. Prettier was not available in the
+frontend toolchain; its attempted check did not run. The repository's frontend
+formatter is oxfmt, with existing checks scoped to frontend sources/tools.
+The rebuilt final helper also passed all nine actual isolated archive/bootstrap/
+preflight cases, including managed-core acceptance followed by a failed service
+stop with old files preserved (`installed-updater-final-archive-probe.jsonl`).
+
+This validates preparation and failure handling through the regular menu/web
+entry points. First installation, menu refresh/legacy paths, independent core
+updates, successful upgrade activation, consistent SQLite/PostgreSQL backup,
+crash recovery and transactional program/database rollback remain open. The
+other outstanding protocol/policy acceptance items are unchanged.

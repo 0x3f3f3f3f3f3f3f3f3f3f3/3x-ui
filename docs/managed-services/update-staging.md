@@ -5,8 +5,9 @@ directory. Its optional download mode selects this fork's release and tag commit
 `--preflight` executes the verified candidate's managed-core check. The helper
 does not stop services, replace an installation or migrate a database. `update.sh`
 now runs these checks before dependencies, service stop or program replacement.
-First installation, menu/web-updater integration and transactional program/DB
-rollback remain required work; preflight alone does not make activation atomic.
+The regular menu and web updates use the verified installed updater. First
+installation, menu refresh/legacy installation and transactional program/DB
+rollback remain unfinished; preflight alone does not make activation atomic.
 
 Build and run:
 
@@ -132,10 +133,10 @@ fails before the command prints a staging directory; it removes that stage.
 Running without the release flags still performs structural staging only.
 
 The full-inventory check is for an assembled or freshly staged bundle. Runtime
-files added to an installed directory are not release members. The installer
-and web updater still need integration that respects this distinction, binds
-scripts/helpers to the selected release, preserves runtime state and restores
-the old program/database on failed activation. The ABI values are declarations;
+files added to an installed directory are not release members. Preparing the
+installed updater verifies its individual manifest entry while permitting
+runtime files. Activation still needs to preserve runtime state and restore
+the old program/database on failure. The ABI values are declarations;
 the runtime check below verifies the candidate panel and managed core before
 activation. No complete fork-safe update claim follows from the manifest alone.
 
@@ -184,7 +185,7 @@ fail at its unchanged 2-second deadline; restoring it passes.
 
 This command does not start the candidate web service, migrate or restore a
 database, validate every user configuration, replace an installed directory or
-prove a packaged image works. First installation, menu/web-updater integration
+prove a packaged image works. First installation, menu refresh/legacy paths
 and safe activation with program/database rollback remain unfinished work.
 
 ## Fork download and updater preparation
@@ -210,8 +211,9 @@ asset IDs, support GitHub asset redirects, and check exact length and digest.
 The sidecar must name the selected archive and agree with its API digest. Full
 manifest identity/inventory verification follows extraction. A moving rolling
 tag whose asset identity differs fails; there is no upstream or unchecked
-fallback. Metadata is bounded to 1 MiB, the sidecar to 4096 bytes, and the whole
-download to five minutes. Transfer failure, cancellation, validation failure and
+fallback. Metadata is bounded to 1 MiB and the sidecar to 4096 bytes. Network requests
+share a five-minute context deadline; local file I/O uses the staging cancellation
+semantics above. Transfer failure, cancellation, validation failure and
 failed candidate preflight remove the owned download/stage directories.
 
 `--preflight` requires complete release verification. It invokes that stage's
@@ -236,3 +238,44 @@ For an administrator-controlled offline archive, the same script accepts
 commit and hashes must come from a trusted release channel. This mode still
 performs full inventory and actual runtime preflight. It is not an unchecked
 recovery bypass and does not establish trust in a locally supplied hash.
+
+## Installed updater and entry points
+
+`x-ui prepare-update` copies the installed `update.sh` to a private executable
+temporary file outside the installation directory and prints that path. It
+runs before business database/service-environment loading, requires a known
+unmodified compiled source, and checks the installed manifest's repository,
+full commit and platform against the running panel. The script must be a regular
+executable file with the exact recorded length and SHA256, bounded to 2 MiB.
+A staging parent inside the installation, including a symlink alias, is refused.
+The caller removes the copied script after use.
+
+This is an individual installed-file check: generated runtime configurations,
+certificate directories and other runtime files are permitted and untouched.
+Fresh release staging still requires its complete exact inventory. Neither
+check protects against a hostile administrator rewriting trusted local files.
+
+The regular `x-ui update` and `x-ui update-dev` menu commands use this copied
+script. Failures return nonzero and clean up the copy; an unsuccessful download
+is no longer reported as a successful menu update. The authenticated web updater
+uses the same library operation, retains its run-ID/status polling contract,
+and refuses host-style updates in Docker/container installations. Containers
+must be updated through their image/runtime workflow. Container and unverified
+build messages have English/Chinese translations and use the existing English
+fallback for other languages.
+
+Stable and development version queries use this fork's tag resolver. Development
+availability compares full source commits; short display hashes and release-body
+markers do not determine equality. Metadata lookup does not download or execute
+the candidate and is not evidence of its runtime compatibility.
+
+The legacy installer, menu refresh/legacy-version routes, separate core updater,
+and safe activation/rollback are still open. Do not use those unchanged paths
+as evidence that all distribution and recovery routes are fork-safe.
+
+中文说明：常规菜单更新和网页更新已改用已安装发布包内、经过清单校验的
+更新脚本。脚本会复制到安装目录之外；运行时配置等额外文件不会因此被拒绝或
+修改。下载、完整文件校验和真实受管核心预检均在依赖安装与停服之前完成。
+网页更新在容器内会明确拒绝，并提示通过镜像更新；来源未知或带源码修改标记的
+构建也不能启动自动更新。首次安装、菜单自身刷新/旧版本安装、独立核心更新和
+失败后的程序及数据库事务回滚仍未完成，不能将上述检查视为完整升级回滚保证。

@@ -31,6 +31,10 @@ func runReleaseCommand(args []string, out io.Writer) (bool, error) {
 	switch args[0] {
 	case "release-info":
 		return true, writeReleaseInfo(args[1:], out)
+	case "prepare-update":
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return true, prepareInstalledUpdate(ctx, args[1:], out)
 	case "verify-release":
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
@@ -38,6 +42,34 @@ func runReleaseCommand(args []string, out io.Writer) (bool, error) {
 	default:
 		return false, nil
 	}
+}
+
+func prepareInstalledUpdate(ctx context.Context, args []string, out io.Writer) error {
+	if len(args) != 0 {
+		return errors.New("prepare-update does not accept arguments")
+	}
+	if runtime.GOOS != "linux" {
+		return errors.New("installed updater preparation requires Linux")
+	}
+	info, err := config.GetReleaseInfo()
+	if err != nil {
+		return err
+	}
+	if info.Modified || info.Commit == "" {
+		return errors.New("updater requires an unmodified panel with a known release source")
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	path, err := updatebundle.PrepareInstalledUpdater(ctx, filepath.Dir(executable), os.TempDir(), info.Commit, info.Platform)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(out, path); err != nil {
+		return errors.Join(err, os.Remove(path))
+	}
+	return nil
 }
 
 func writeReleaseInfo(args []string, out io.Writer) error {

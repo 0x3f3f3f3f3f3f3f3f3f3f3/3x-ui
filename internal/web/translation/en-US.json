@@ -219,6 +219,8 @@
       "panelUpdateDialog": "Do you really want to update the panel?",
       "panelUpdateDialogDesc": "This will update 3X-UI to #version# and restart the panel service.",
       "panelUpdateStartedPopover": "Panel update started",
+      "panelUpdateContainer": "update the managed fork container image through your container runtime",
+      "panelUpdateUnverifiedSource": "updater requires an unmodified panel with a known release source",
       "panelUpdateFailedTitle": "Panel update failed",
       "panelUpdateFailedDesc": "The update did not finish successfully. Check the server logs, or run 'x-ui update' from the command line.",
       "panelUpdateUnknownTitle": "Couldn't confirm the update finished",

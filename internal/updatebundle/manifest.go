@@ -167,6 +167,29 @@ func VerifyManifest(ctx context.Context, directory string, expected ReleaseIdent
 		return nil, err
 	}
 	defer root.Close()
+	manifest, err := readReleaseManifest(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	if manifest.Identity != expected {
+		return nil, errors.New("release identity differs from the selected repository/commit/tag/platform")
+	}
+	files, err := releaseInventory(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	if len(files) != len(manifest.Files) {
+		return nil, errors.New("release inventory contains missing or unlisted files")
+	}
+	for name, want := range manifest.Files {
+		if files[name] != want {
+			return nil, fmt.Errorf("release file differs from its manifest: %q", name)
+		}
+	}
+	return manifest, nil
+}
+
+func readReleaseManifest(ctx context.Context, root *os.Root) (*ReleaseManifest, error) {
 	info, err := root.Lstat(ManifestName)
 	if err != nil {
 		return nil, err
@@ -197,21 +220,6 @@ func VerifyManifest(ctx context.Context, directory string, expected ReleaseIdent
 	}
 	if err := manifest.validate(); err != nil {
 		return nil, err
-	}
-	if manifest.Identity != expected {
-		return nil, errors.New("release identity differs from the selected repository/commit/tag/platform")
-	}
-	files, err := releaseInventory(ctx, root)
-	if err != nil {
-		return nil, err
-	}
-	if len(files) != len(manifest.Files) {
-		return nil, errors.New("release inventory contains missing or unlisted files")
-	}
-	for name, want := range manifest.Files {
-		if files[name] != want {
-			return nil, fmt.Errorf("release file differs from its manifest: %q", name)
-		}
 	}
 	return &manifest, nil
 }

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -231,7 +232,23 @@ func (a *ServerController) updatePanel(c *gin.Context) {
 	if err == nil {
 		obj = gin.H{"runId": strconv.FormatInt(runID, 10)}
 	}
-	jsonMsgObj(c, I18nWeb(c, "pages.index.panelUpdateStartedPopover"), obj, err)
+	messageKey := "pages.index.panelUpdateStartedPopover"
+	if err != nil {
+		messageKey = "pages.index.panelUpdateFailedTitle"
+		var errorKey string
+		switch {
+		case errors.Is(err, panel.ErrPanelUpdateInContainer):
+			errorKey = "pages.index.panelUpdateContainer"
+		case errors.Is(err, panel.ErrPanelUpdateSource):
+			errorKey = "pages.index.panelUpdateUnverifiedSource"
+		}
+		if errorKey != "" {
+			if translated := I18nWeb(c, errorKey); translated != "" {
+				err = errors.New(translated)
+			}
+		}
+	}
+	jsonMsgObj(c, I18nWeb(c, messageKey), obj, err)
 }
 
 // getUpdateStatus reports the outcome of the most recently launched panel

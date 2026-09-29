@@ -99,3 +99,12 @@ BusyBox and Linux namespace/mount privileges. See
 for its invocation and scope. It exercises the whole `update.sh` in owned
 chroots, including real candidate preflight and service-stop refusal; it does
 not yet validate successful activation or program/database rollback.
+
+`probe_update.py --menu` exercises the actual stable/dev menu commands and a
+modified installed script. `--web` starts an actual panel with an owned SQLite
+database in the private chroot, uses an ephemeral administrator token, checks
+HTTP update/status run IDs and verifies early rejection for changed scripts and
+containers. A deliberately dirty native build can be checked with
+`--web --dirty-source-rejection`. These modes keep validation failures away from
+host services and check that the existing panel/data survive; they do not yet
+exercise successful activation or schema rollback.

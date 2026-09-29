@@ -363,3 +363,40 @@ func TestDownloadReleaseDoesNotExposeProxyCredentials(t *testing.T) {
 	}
 	requirePreserved(t, parent)
 }
+
+func TestResolveReleaseIdentityUsesTagReferenceWithoutDownloading(t *testing.T) {
+	for _, mode := range []string{"latest", "explicit", "annotated-redirect"} {
+		t.Run(mode, func(t *testing.T) {
+			archive, identity := downloadArchiveFixture(t)
+			fixture := downloadServer(t, mode, archive, identity)
+			fixture.Close()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.Contains(r.URL.Path, "/releases/assets/") {
+					http.Error(w, "identity lookup must not download", http.StatusBadRequest)
+					return
+				}
+				fixture.Config.Handler.ServeHTTP(w, r)
+			}))
+			defer server.Close()
+			client := server.Client()
+			transport := client.Transport
+			client.Transport = downloadRoundTripper(func(r *http.Request) (*http.Response, error) {
+				if r.URL.Scheme != "https" || r.URL.Host != "api.github.com" {
+					return nil, errors.New("unexpected release API")
+				}
+				redirected := r.Clone(r.Context())
+				redirected.URL.Scheme = "http"
+				redirected.URL.Host = strings.TrimPrefix(server.URL, "http://")
+				return transport.RoundTrip(redirected)
+			})
+			tag := identity.Tag
+			if mode == "latest" {
+				tag = ""
+			}
+			got, err := ResolveReleaseIdentity(t.Context(), client, tag, identity.Platform)
+			if err != nil || got != identity {
+				t.Fatalf("wrong full tag identity: %+v, %v", got, err)
+			}
+		})
+	}
+}

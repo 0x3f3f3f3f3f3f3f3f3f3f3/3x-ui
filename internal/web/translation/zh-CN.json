@@ -219,6 +219,8 @@
       "panelUpdateDialog": "您确定要更新面板吗？",
       "panelUpdateDialogDesc": "这将把 3X-UI 更新到 #version# 并重启面板服务。",
       "panelUpdateStartedPopover": "已开始更新面板",
+      "panelUpdateContainer": "请通过容器运行时更新此 fork 的镜像",
+      "panelUpdateUnverifiedSource": "自动更新要求面板来自已知且未修改的发布源码",
       "panelUpdateFailedTitle": "面板更新失败",
       "panelUpdateFailedDesc": "更新未成功完成。请检查服务器日志，或在命令行运行「x-ui update」。",
       "panelUpdateUnknownTitle": "无法确认更新是否已完成",
