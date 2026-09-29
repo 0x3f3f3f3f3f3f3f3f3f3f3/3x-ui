@@ -6,7 +6,7 @@ This is the initial source-audit matrix, not a support announcement. `E/U` = exi
 
 | Protocol/path | Inbound/outbound baseline | Client lifecycle / export | Unified stable ID/rate/billing/quota/live close | Required evidence |
 | --- | --- | --- | --- | --- |
-| VLESS | E/U both | private Runtime credential rotation I/V; full lifecycle/export E/U | I/V scoped TCP/UDP/Mux identity, shared rate/billing/live close; production activation N | Vision, complete account lifecycle, independent client regression |
+| VLESS | E/U both | private Runtime credential rotation and scoped ordinary local edits I/V; full lifecycle/export incomplete | I/V scoped TCP/UDP/Mux identity, shared rate/billing/live close and explicit managed local startup; automatic cutover N | Vision, complete account lifecycle, independent client regression |
 | VMess | E/U both | E/U | I/V scoped TCP/UDP/Mux identity, shared rate/billing/live close; production activation N | complete account lifecycle and independent client regression |
 | Trojan | E/U both | E/U | I/V scoped TCP/UDP/Mux identity, shared rate/billing/live close; production activation N | fallback and complete account lifecycle |
 | Shadowsocks/2022 | E/U both | E/U | classic AEAD TCP/UDP/Mux scoped I/V; 2022 managed identity N | other cipher variants, 2022 user-update isolation/relay, complete lifecycle |
@@ -15,7 +15,7 @@ This is the initial source-audit matrix, not a support announcement. `E/U` = exi
 | Hysteria2 | E/U both | E/U | N | QUIC/mux/UDP and auth updates |
 | WireGuard | E/U both | E/U | N | per-peer identity, IP/payload accounting distinction |
 | TUN | E/U inbound | no account auth; resource identity required | N | packet semantics, route and owner mapping |
-| Tunnel/dokodemo-door | E/U inbound; NA outbound (listener adapter) | database owner attach/rename/reassignment I/V; live service/UI lifecycle N | I/V for scoped Tunnel/local persistence/SQL settlement tests; production Runtime activation N | TCP/UDP, all routing modes, owner lifecycle, shared policy |
+| Tunnel/dokodemo-door | E/U inbound; NA outbound (listener adapter) | database and scoped ordinary Runtime owner lifecycle I/V; complete UI/unowned-rule migration N | I/V for scoped Tunnel/local persistence/SQL settlement and explicit managed local startup; automatic cutover N | TCP/UDP, all routing modes, owner lifecycle, shared policy |
 | Snell v4 | N both | N | N | official Surge interoperability + independent outbound test |
 | Snell v5 | N both | N | N | v4-like paths separately, QUIC Proxy Mode mandatory |
 | Snell v6 beta | N both | N | N | fixed beta client/server, shaping modes, TCP/UDP/reuse |
@@ -107,3 +107,15 @@ operator edits and manual disable, and normal polling applies the absolute
 deadline. Real Tunnel/child-restart and SQLite/PostgreSQL checks are recorded in
 testing.md. Ordinary managed startup, global allocation and remaining protocol
 adapters are still unfinished.
+
+
+Ordinary managed lifecycle increment: explicit managed templates now use the normal
+restart and local mutation entrypoints. Real VLESS/Tunnel fixtures verify shared
+identity, sibling-flow preservation, credential/listener removal ordering,
+control/compiler/bind-conflict failures, stopped-core queuing, live-legacy refusal
+without preparation side effects and Reverse clearing. SQLite/PostgreSQL exercise
+single/bulk error propagation, writer reentry and stale traffic plans. The full
+independent gate and original configuration scale cases pass (testing.md).
+This scoped evidence does not complete automatic activation, healthy legacy
+handoff, permanent deletion tombstones, all protocol lifecycle combinations,
+complete UI application status, backup rollback fencing or global node budgets.

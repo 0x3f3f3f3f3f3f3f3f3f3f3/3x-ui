@@ -141,6 +141,9 @@ func (s *ClientService) BulkAttach(inboundSvc *InboundService, emails []string, 
 		return inboundApplyOutcome{needRestart: nr, err: err}
 	})
 	for i, out := range attachResults {
+		if out.needRestart {
+			needRestart = true
+		}
 		err := out.err
 		if attachPanics[i] != nil {
 			// The apply may already have committed, so ask for the restart the
@@ -151,9 +154,6 @@ func (s *ClientService) BulkAttach(inboundSvc *InboundService, emails []string, 
 		if err != nil {
 			recordErr("inbound %d: %v", attachIds[i], err)
 			continue
-		}
-		if out.needRestart {
-			needRestart = true
 		}
 		for _, c := range attachClients[i] {
 			result.Attached = append(result.Attached, c.Email)
@@ -251,6 +251,9 @@ func (s *ClientService) BulkDetach(inboundSvc *InboundService, emails []string, 
 		return inboundApplyOutcome{needRestart: nr, err: err}
 	})
 	for i, out := range detachResults {
+		if out.needRestart {
+			needRestart = true
+		}
 		err := out.err
 		if detachPanics[i] != nil {
 			// See BulkAttach: a panicking apply may already have committed.
@@ -263,9 +266,6 @@ func (s *ClientService) BulkDetach(inboundSvc *InboundService, emails []string, 
 				emailFailed[strings.ToLower(rec.Email)] = true
 			}
 			continue
-		}
-		if out.needRestart {
-			needRestart = true
 		}
 	}
 
@@ -829,6 +829,13 @@ func (s *ClientService) bulkAdjustInboundClients(
 				res.perEmailSkipped[email] = txErr.Error()
 			}
 		}
+	} else if handled, err := inboundSvc.reconcileManagedChange(oldInbound); handled {
+		res.needRestart = err != nil
+		if err != nil {
+			for email := range foundEmails {
+				res.perEmailSkipped[email] = err.Error()
+			}
+		}
 	} else {
 		if adTagChanged && oldInbound.Protocol == model.MTProto && oldInbound.NodeID == nil {
 			inboundSvc.applyLocalMtproto(oldInbound.Id)
@@ -1202,6 +1209,13 @@ func (s *ClientService) bulkDelInboundClients(
 		for email := range wantedEmails {
 			if _, skip := res.perEmailSkipped[email]; !skip {
 				res.perEmailSkipped[email] = txErr.Error()
+			}
+		}
+	} else if handled, err := inboundSvc.reconcileManagedChange(oldInbound); handled {
+		if err != nil {
+			res.needRestart = true
+			for email := range wantedEmails {
+				res.perEmailSkipped[email] = err.Error()
 			}
 		}
 	} else if oldInbound.NodeID == nil {
@@ -1800,6 +1814,16 @@ func (s *ClientService) bulkSetEnableInboundClients(inboundSvc *InboundService, 
 	if txErr != nil {
 		for _, ch := range changed {
 			res.perEmailSkipped[ch.email] = txErr.Error()
+		}
+		return res
+	}
+
+	if handled, err := inboundSvc.reconcileManagedChange(oldInbound); handled {
+		if err != nil {
+			res.needRestart = true
+			for _, ch := range changed {
+				res.perEmailSkipped[ch.email] = err.Error()
+			}
 		}
 		return res
 	}

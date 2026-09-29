@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 )
 
 type LocalDeps struct {
+	ManagedChange  func(context.Context) (bool, error)
 	APIPort        func() int
 	APIEndpoint    func() (string, error)
 	SetNeedRestart func()
@@ -25,6 +27,22 @@ type LocalDeps struct {
 type Local struct {
 	deps LocalDeps
 	mu   sync.Mutex
+}
+
+var ErrManagedApply = errors.New("managed configuration was saved but not applied")
+
+func (l *Local) ReconcileManagedChange(ctx context.Context) (bool, error) {
+	if l.deps.ManagedChange == nil {
+		return false, nil
+	}
+	handled, err := l.deps.ManagedChange(ctx)
+	if err != nil {
+		if l.deps.SetNeedRestart != nil {
+			l.deps.SetNeedRestart()
+		}
+		return true, fmt.Errorf("%w: %w", ErrManagedApply, err)
+	}
+	return handled, nil
 }
 
 func NewLocal(deps LocalDeps) *Local {
@@ -58,7 +76,10 @@ func (l *Local) withAPI(fn func(api *xray.XrayAPI) error) error {
 	return fn(&api)
 }
 
-func (l *Local) AddInbound(_ context.Context, ib *model.Inbound) error {
+func (l *Local) AddInbound(ctx context.Context, ib *model.Inbound) error {
+	if handled, err := l.ReconcileManagedChange(ctx); handled || err != nil {
+		return err
+	}
 	if ib.Protocol == model.MTProto {
 		inst, ok := mtproto.InstanceFromInbound(ib)
 		if !ok {
@@ -111,7 +132,10 @@ func (l *Local) AddInbound(_ context.Context, ib *model.Inbound) error {
 	})
 }
 
-func (l *Local) DelInbound(_ context.Context, ib *model.Inbound) error {
+func (l *Local) DelInbound(ctx context.Context, ib *model.Inbound) error {
+	if handled, err := l.ReconcileManagedChange(ctx); handled || err != nil {
+		return err
+	}
 	if ib.Protocol == model.MTProto {
 		mtproto.GetManager().Remove(ib.Id)
 		return nil
@@ -136,6 +160,9 @@ func (l *Local) DelInbound(_ context.Context, ib *model.Inbound) error {
 }
 
 func (l *Local) UpdateInbound(ctx context.Context, oldIb, newIb *model.Inbound) error {
+	if handled, err := l.ReconcileManagedChange(ctx); handled || err != nil {
+		return err
+	}
 	if oldIb.Protocol == model.MTProto || newIb.Protocol == model.MTProto {
 		return l.updateMtprotoInbound(ctx, oldIb, newIb)
 	}
@@ -258,7 +285,10 @@ func (l *Local) updateTuicInbound(ctx context.Context, oldIb, newIb *model.Inbou
 	return tuic.GetManager().Ensure(inst)
 }
 
-func (l *Local) AddUser(_ context.Context, ib *model.Inbound, userMap map[string]any) error {
+func (l *Local) AddUser(ctx context.Context, ib *model.Inbound, userMap map[string]any) error {
+	if handled, err := l.ReconcileManagedChange(ctx); handled || err != nil {
+		return err
+	}
 	if ib.Protocol == model.MTProto || ib.Protocol == model.AmneziaWG || ib.Protocol == model.TUIC {
 		return nil
 	}
@@ -267,7 +297,10 @@ func (l *Local) AddUser(_ context.Context, ib *model.Inbound, userMap map[string
 	})
 }
 
-func (l *Local) RemoveUser(_ context.Context, ib *model.Inbound, email string) error {
+func (l *Local) RemoveUser(ctx context.Context, ib *model.Inbound, email string) error {
+	if handled, err := l.ReconcileManagedChange(ctx); handled || err != nil {
+		return err
+	}
 	if ib.Protocol == model.MTProto || ib.Protocol == model.AmneziaWG || ib.Protocol == model.TUIC {
 		return nil
 	}
@@ -277,6 +310,9 @@ func (l *Local) RemoveUser(_ context.Context, ib *model.Inbound, email string) e
 }
 
 func (l *Local) AddClient(ctx context.Context, ib *model.Inbound, client model.Client) error {
+	if handled, err := l.ReconcileManagedChange(ctx); handled || err != nil {
+		return err
+	}
 	if !client.Enable {
 		return nil
 	}
@@ -313,6 +349,9 @@ func (l *Local) DeleteClient(context.Context, string) error {
 }
 
 func (l *Local) UpdateUser(ctx context.Context, ib *model.Inbound, oldEmail string, payload model.Client) error {
+	if handled, err := l.ReconcileManagedChange(ctx); handled || err != nil {
+		return err
+	}
 	if oldEmail != "" {
 		if err := l.RemoveUser(ctx, ib, oldEmail); err != nil && !strings.Contains(err.Error(), "not found") {
 			return err

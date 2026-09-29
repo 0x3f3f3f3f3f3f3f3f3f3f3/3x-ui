@@ -633,3 +633,58 @@ in both database jobs and `TestClientPolicyLocalReservationSerializesAgainstRemo
 in PostgreSQL. Existing conflicting topologies restored through a whole-database
 backup still require validation; this increment does not implement global leases,
 remote budget coordination or automatic managed activation.
+
+
+### Ordinary managed startup, mutations and traffic writer boundaries
+
+The normal restart entrypoint now supports an explicit managed template. Real
+child-process fixtures cover VLESS creation/rotation, shared Tunnel ownership,
+sibling-flow preservation, listener changes, stopped-core queuing and exact
+ledger recovery. Removal precedes policy grants; RPC barriers first reproduced
+an obsolete binding becoming active during a grant. Core protocol identity,
+authenticated revocation and scoped-close capabilities are checked before hot
+bootstrap. Missing each capability first reached preparation incorrectly; the
+fixed path rejects it with zero preparation calls.
+
+Review regressions reproduced and repaired live legacy refusal after reserving
+a desired version, post-commit bind-conflict leaving old access active, reset
+reentering its SQL writer, Reverse clearing after configuration application, and
+BulkDelete hiding a failed application when canonical links and Settings had
+drifted. A real HandlerService read verifies Reverse removal. Reverse-tagged
+inbounds retain the existing full-restart rule. A further cross-protocol RED
+showed an ordinary Trojan edit clearing the shared VLESS Reverse; explicit early
+clearing is now limited to VLESS.
+
+Traffic tests delay an old renewal across disable, inbound disable/delete and
+credential rotation. They also block Runtime application while concurrent inbound
+mutations attempt to proceed. Removing the shared lock fails all four overlap
+cases. A 1001-client batch initially made 2002 reads and 1001 managed reconciles;
+reads are now bounded and the batch reconciles once. WireGuard peers retain their
+own inbound addresses/PSKs. Config export leaves pending lifecycle maintenance
+for polling; restart performs maintenance before taking its global lock. Both
+ordinary lifecycle and single-client reset callbacks run outside the SQL writer.
+
+Independent final verification used Go 1.27.1 on the recorded ARM64 host, the
+credential-revocation custom binary and unchanged upstream binary. SQLite service
+races passed in 31.927 s package time; PostgreSQL in 165.057 s. Runtime/API races
+passed in 1.294/13.728 s. Staticcheck required only an equivalent switch in a test;
+final lint reported zero issues. The complete shuffled panel suite passed in
+246.52 s wall time and the panel build in 7.88 s. Source review found no remaining
+blocker within this increment.
+
+The unchanged PostgreSQL `TestGetXrayConfigScale` race test passed all original
+10,000/100,000-client single/spread50 cases in 728.111 s package time (746.18 s
+wall). Mean configuration generation was 8.911/8.806 s at 10,000 clients and
+86.439/87.335 s at 100,000 clients, respectively; each case builds three times.
+These are instrumented regression measurements, not production throughput claims.
+CI now requires explicit PASS records for 23 ordinary lifecycle/writer cases in
+both database jobs. Workflow YAML and all 16 shell blocks pass syntax checks.
+
+For reproduction, set `XRAY_E2E_BINARY` to the current custom build and run the
+`Ordinary managed lifecycle and writer boundaries` command from
+`.github/workflows/custom-core.yml`. PostgreSQL additionally sets `XUI_DB_TYPE`
+and a dedicated `XUI_DB_DSN`. The full gate uses `make test-go`,
+`golangci-lint run`, `go build ./...`, and the original scale test with a 25-minute
+suite deadline. No frontend or production core source changed in this increment.
+Healthy legacy drain/settlement, automatic selection, permanent identity deletion,
+full UI status and restore/global-budget fencing remain separate unfinished work.

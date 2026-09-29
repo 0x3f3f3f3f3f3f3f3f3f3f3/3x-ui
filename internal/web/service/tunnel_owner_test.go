@@ -99,6 +99,24 @@ func TestTunnelOwnerCreateAndReplacePreservesClientRecords(t *testing.T) {
 	if links := linksOf(t, inbound.Id); len(links) != 1 || links[newOwner.Id].ClientId != newOwner.Id {
 		t.Fatalf("rejected replacement changed the owner: %+v", links)
 	}
+	replacement.Settings = clientsSettings(t, nil)
+	updated, _, err := inboundService.UpdateInbound(&replacement)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Enable {
+		t.Fatal("removing the owner returned an enabled anonymous listener")
+	}
+	var stored model.Inbound
+	if err := database.GetDB().First(&stored, inbound.Id).Error; err != nil || stored.Enable || len(linksOf(t, inbound.Id)) != 0 {
+		t.Fatalf("owner removal left the forwarding resource active: %+v %v", stored, err)
+	}
+	for _, record := range []*model.ClientRecord{oldOwner, newOwner} {
+		preserved, err := cs.GetRecordByEmail(nil, record.Email)
+		if err != nil || preserved.StableID != record.StableID {
+			t.Fatalf("removing listener ownership deleted its reusable account: %+v %v", preserved, err)
+		}
+	}
 }
 
 func TestTunnelOwnerRejectsAmbiguousMembershipBeforeWriting(t *testing.T) {

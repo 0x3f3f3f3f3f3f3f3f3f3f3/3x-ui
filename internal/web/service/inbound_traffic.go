@@ -29,24 +29,27 @@ const depletedClientsClause = "reset = 0 and reset_day = 0 and reset_weekday = 0
 
 func (s *InboundService) AddTraffic(inboundTraffics []*xray.Traffic, clientTraffics []*xray.ClientTraffic) (needRestart bool, clientsDisabled bool, err error) {
 	var disabledNodeIDs []int
-	var remotePlans []trafficInboundUpdatePlan
+	var batch *trafficMutationBatch
 	err = submitTrafficWrite(func() error {
 		var inner error
-		needRestart, clientsDisabled, disabledNodeIDs, remotePlans, inner = s.addTrafficLocked(inboundTraffics, clientTraffics)
+		needRestart, clientsDisabled, disabledNodeIDs, batch, inner = s.addTrafficLocked(inboundTraffics, clientTraffics)
 		return inner
 	})
 	if err != nil {
 		return
 	}
-	// Off the serial writer: a hanging node must not stall traffic accounting.
-	needRestart = s.applyTrafficRemotePlans(remotePlans) || needRestart
+	// Runtime preparation can submit its own SQL work; release the writer first.
+	needRestart = s.applyTrafficMutationBatch(batch) || needRestart
+	if batch != nil {
+		needRestart = s.applyTrafficRemotePlans(batch.remotePlans) || needRestart
+	}
 	if len(disabledNodeIDs) > 0 {
 		s.restartRemoteNodesOnDisable(disabledNodeIDs)
 	}
 	return
 }
 
-func (s *InboundService) addTrafficLocked(inboundTraffics []*xray.Traffic, clientTraffics []*xray.ClientTraffic) (bool, bool, []int, []trafficInboundUpdatePlan, error) {
+func (s *InboundService) addTrafficLocked(inboundTraffics []*xray.Traffic, clientTraffics []*xray.ClientTraffic) (bool, bool, []int, *trafficMutationBatch, error) {
 	db := database.GetDB()
 	// Commit durable traffic before best-effort lifecycle maintenance so helper
 	// failures cannot discard usage already reported by Xray.
@@ -103,8 +106,7 @@ func (s *InboundService) addTrafficLocked(inboundTraffics []*xray.Traffic, clien
 		logger.Warning("traffic lifecycle maintenance failed after traffic commit:", err)
 		return false, false, nil, nil, nil
 	}
-	needRestart = needRestart || s.applyTrafficMutationBatch(batch)
-	return needRestart, clientsDisabled, disabledNodeIDs, batch.remotePlans, nil
+	return needRestart, clientsDisabled, disabledNodeIDs, batch, nil
 }
 
 func (s *InboundService) addInboundTraffic(tx *gorm.DB, traffics []*xray.Traffic) error {
@@ -685,12 +687,21 @@ func (s *InboundService) ResetClientTraffic(id int, clientEmail string) (needRes
 
 func (s *InboundService) resetLegacyClientTraffic(id int, clientEmail, expectedClientID string) (needRestart bool, err error) {
 	var resetInbound *model.Inbound
+	var reenablePlan *trafficLocalApplyPlan
 	err = submitTrafficWrite(func() error {
 		var inner error
-		needRestart, resetInbound, inner = s.resetClientTrafficLocked(id, clientEmail, expectedClientID)
+		reenablePlan, resetInbound, inner = s.resetClientTrafficLocked(id, clientEmail, expectedClientID)
 		return inner
 	})
 	if err == nil {
+		if reenablePlan != nil {
+			if handled, applyErr := s.reconcileManagedChange(resetInbound); handled || applyErr != nil {
+				needRestart, err = applyErr != nil, applyErr
+			} else if applyErr := s.applyTrafficLocalPlans(id, []trafficLocalApplyPlan{*reenablePlan}); applyErr != nil {
+				needRestart = true
+				logger.Debug("Error in enabling client due to reset traffic:", applyErr)
+			}
+		}
 		s.resetMtprotoClientQuota(clientEmail)
 		if resetInbound != nil && resetInbound.NodeID != nil {
 			// Attempted whatever the node's status: nothing replays a reset, so a
@@ -710,33 +721,32 @@ func (s *InboundService) resetLegacyClientTraffic(id int, clientEmail, expectedC
 	return
 }
 
-func (s *InboundService) resetClientTrafficLocked(id int, clientEmail, expectedClientID string) (bool, *model.Inbound, error) {
-	needRestart := false
+func (s *InboundService) resetClientTrafficLocked(id int, clientEmail, expectedClientID string) (*trafficLocalApplyPlan, *model.Inbound, error) {
 	var reenablePlan *trafficLocalApplyPlan
 	var reenableNodeID *int
 
 	traffic, err := s.GetClientTrafficByEmail(clientEmail)
 	if err != nil {
-		return false, nil, err
+		return nil, nil, err
 	}
 
 	if !traffic.Enable {
 		inbound, err := s.GetInbound(id)
 		if err != nil {
-			return false, nil, err
+			return nil, nil, err
 		}
 		clients, err := s.GetClients(inbound)
 		if err != nil {
-			return false, nil, err
+			return nil, nil, err
 		}
 		for _, client := range clients {
-			if client.Email == clientEmail && client.Enable {
+			if client.Email == clientEmail && client.Enable && inbound.Enable {
 				cipher := ""
 				if string(inbound.Protocol) == "shadowsocks" {
 					var oldSettings map[string]any
 					err = json.Unmarshal([]byte(inbound.Settings), &oldSettings)
 					if err != nil {
-						return false, nil, err
+						return nil, nil, err
 					}
 					cipher, _ = oldSettings["method"].(string)
 				}
@@ -768,7 +778,7 @@ func (s *InboundService) resetClientTrafficLocked(id int, clientEmail, expectedC
 	now := time.Now().UnixMilli()
 	inbound, err := s.GetInbound(id)
 	if err != nil {
-		return false, nil, err
+		return nil, nil, err
 	}
 	if err := db.Transaction(func(tx *gorm.DB) error {
 		if err := prepareLegacyClientTrafficReset(tx, clientEmail, expectedClientID); err != nil {
@@ -799,22 +809,10 @@ func (s *InboundService) resetClientTrafficLocked(id int, clientEmail, expectedC
 		}
 		return nil
 	}); err != nil {
-		return false, nil, err
+		return nil, nil, err
 	}
 
-	if reenablePlan != nil {
-		rt, err := s.runtimeFor(&reenablePlan.inbound)
-		if err != nil {
-			needRestart = true
-		} else if err := rt.AddUser(context.Background(), &reenablePlan.inbound, reenablePlan.client); err != nil {
-			logger.Debug("Error in enabling client on", rt.Name(), ":", err)
-			needRestart = true
-		} else {
-			logger.Debug("Client enabled on", rt.Name(), "due to reset traffic:", clientEmail)
-		}
-	}
-
-	return needRestart, inbound, nil
+	return reenablePlan, inbound, nil
 }
 
 func (s *InboundService) ResetAllTraffics() error {

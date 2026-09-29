@@ -199,10 +199,6 @@ func (s *XrayService) getXrayConfigFromDB(managed bool, db *gorm.DB) (*xray.Conf
 		return nil, err
 	}
 
-	if !managed {
-		_, _, _ = s.inboundService.AddTraffic(nil, nil)
-	}
-
 	inbounds, err := s.inboundService.getAllInboundsFromDB(db)
 	if err != nil {
 		return nil, err
@@ -1414,6 +1410,17 @@ func (s *XrayService) TestRoute(req xray.RouteTestRequest) (*xray.RouteTestResul
 // routing rules/balancers are hot-reloadable); only changes the core cannot
 // take at runtime — or a force request — stop and restart the process.
 func (s *XrayService) RestartXray(isForce bool) error {
+	if !isForce && isManuallyStopped.Load() {
+		return nil
+	}
+	// Lifecycle Runtime calls can reconcile managed configuration and acquire lock.
+	needRestart, _, err := s.inboundService.AddTraffic(nil, nil)
+	if needRestart {
+		s.SetToNeedRestart()
+	}
+	if err != nil {
+		return err
+	}
 	lock.Lock()
 	defer lock.Unlock()
 	logger.Debug("restart Xray, force:", isForce)
@@ -1421,6 +1428,14 @@ func (s *XrayService) RestartXray(isForce bool) error {
 		return nil
 	}
 	isManuallyStopped.Store(false)
+
+	managed, err := s.managedPolicyRequested()
+	if err != nil {
+		return err
+	}
+	if managed {
+		return s.restartManagedXrayLocked(isForce)
+	}
 
 	xrayConfig, err := s.GetXrayConfig()
 	if err != nil {

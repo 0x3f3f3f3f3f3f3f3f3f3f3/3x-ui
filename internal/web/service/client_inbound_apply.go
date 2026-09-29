@@ -208,6 +208,14 @@ func (s *ClientService) delInboundClients(inboundSvc *InboundService, inboundId 
 		return needRestart, txErr
 	}
 
+	if handled, err := inboundSvc.reconcileManagedChange(oldInbound); handled {
+		return err != nil, err
+	}
+
+	if oldInbound.Protocol == model.Tunnel && oldInbound.NodeID == nil {
+		return stopOwnedTunnelListener(inboundSvc, oldInbound)
+	}
+
 	// Resolve the node push plan once for the whole batch instead of per email.
 	var nodeRt runtime.Runtime
 	nodePush := false
@@ -581,6 +589,10 @@ func (s *ClientService) AddInboundClient(inboundSvc *InboundService, data *model
 		return nil
 	}); txErr != nil {
 		return false, txErr
+	}
+
+	if handled, err := inboundSvc.reconcileManagedChange(oldInbound); handled {
+		return err != nil, err
 	}
 
 	// Apply to the running runtime after commit — outside the serialized writer
@@ -1040,12 +1052,21 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 		if err := s.ApplyInboundClientDelta(tx, oldInbound.Id, changedClients, detachEmails); err != nil {
 			return err
 		}
+		if oldInbound.Protocol == model.VLESS && (clients[0].Reverse == nil || strings.TrimSpace(clients[0].Reverse.Tag) == "") {
+			if err := tx.Model(&model.ClientRecord{}).Where("email = ?", clients[0].Email).Update("reverse", "").Error; err != nil {
+				return err
+			}
+		}
 		if oldInbound.NodeID != nil {
 			return (&NodeService{}).MarkNodeDirtyTx(tx, *oldInbound.NodeID)
 		}
 		return nil
 	}); txErr != nil {
 		return false, txErr
+	}
+
+	if handled, err := inboundSvc.reconcileManagedChange(oldInbound); handled {
+		return err != nil, err
 	}
 
 	// Apply to the running runtime after the DB is committed — outside the
@@ -1063,6 +1084,9 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 			} else {
 				if oldClients[clientIndex].Enable {
 					err1 := rt.RemoveUser(context.Background(), oldInbound, oldEmail)
+					if errors.Is(err1, runtime.ErrManagedApply) {
+						return true, err1
+					}
 					if err1 == nil {
 						logger.Debug("Old client deleted on", rt.Name(), ":", oldEmail)
 						// The API removal is enough only while the client is re-added; a
@@ -1096,6 +1120,9 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 						"keepAlive":    keepAliveStr(clients[0].KeepAliveSeconds()),
 						"reverse":      clients[0].Reverse,
 					})
+					if errors.Is(err1, runtime.ErrManagedApply) {
+						return true, err1
+					}
 					if err1 == nil {
 						logger.Debug("Client edited on", rt.Name(), ":", clients[0].Email)
 					} else {
@@ -1235,13 +1262,23 @@ func (s *ClientService) DelInboundClientByEmail(inboundSvc *InboundService, inbo
 		return false, txErr
 	}
 
+	if handled, err := inboundSvc.reconcileManagedChange(oldInbound); handled {
+		return err != nil, err
+	}
+
 	// Apply the runtime delete after commit — outside the serialized writer so a
 	// slow node call can't stall traffic accounting. Independent of emailShared:
 	// Xray users are keyed by inbound tag, so the user must be removed from this
 	// inbound's runtime even when the same email survives in another inbound.
 	if len(email) > 0 {
 		if oldInbound.NodeID == nil {
-			if oldInbound.Protocol == model.MTProto {
+			if oldInbound.Protocol == model.Tunnel {
+				var err error
+				needRestart, err = stopOwnedTunnelListener(inboundSvc, oldInbound)
+				if err != nil {
+					return true, err
+				}
+			} else if oldInbound.Protocol == model.MTProto {
 				// mtg serves the full secret set, so any client delete re-applies
 				// it (removing the last client stops the sidecar) regardless of the
 				// client's enable state.

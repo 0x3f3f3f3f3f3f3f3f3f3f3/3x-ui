@@ -106,7 +106,8 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 			return s.syncInboundClients(tx, inboundId, clients, detachEmails, prune)
 		})
 	}
-	if err := validateTunnelOwnerLinks(tx, inboundId, clients, detachEmails, prune); err != nil {
+	removedTunnelOwner, err := validateTunnelOwnerLinks(tx, inboundId, clients, detachEmails, prune)
+	if err != nil {
 		return err
 	}
 
@@ -227,7 +228,13 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 		wantedIds = append(wantedIds, id)
 	}
 
-	return s.reconcileInboundLinks(tx, inboundId, wantedFlow, wantedIds, detachEmails, prune)
+	if err := s.reconcileInboundLinks(tx, inboundId, wantedFlow, wantedIds, detachEmails, prune); err != nil {
+		return err
+	}
+	if removedTunnelOwner {
+		return tx.Model(&model.Inbound{}).Where("id = ?", inboundId).Update("enable", false).Error
+	}
+	return nil
 }
 
 // reconcileInboundLinks writes only the client_inbounds rows that differ. prune

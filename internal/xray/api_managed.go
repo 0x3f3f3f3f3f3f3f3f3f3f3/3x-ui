@@ -2,15 +2,58 @@ package xray
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"slices"
 
 	policycommand "github.com/xtls/xray-core/app/clientpolicy/command"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/proxy/dokodemo"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
+
+// ManagedHotDiffCapabilities checks the same account adapters used by handler RPCs before preparation.
+func ManagedHotDiffCapabilities(diff *HotDiff) ([]string, error) {
+	required := make(map[string]bool)
+	if len(diff.RemovedUsers) > 0 {
+		required["inbound-scoped-session-close-v1"] = true
+		required["authenticated-credential-revocation-v1"] = true
+	}
+	for _, inbound := range diff.AddedInbounds {
+		var config conf.InboundDetourConfig
+		if err := json.Unmarshal(inbound, &config); err != nil {
+			return nil, err
+		}
+		compiled, err := config.Build()
+		if err != nil {
+			return nil, err
+		}
+		proxy, err := compiled.ProxySettings.GetInstance()
+		if err != nil {
+			return nil, err
+		}
+		if err := managedIdentityCapabilities(proxy.ProtoReflect(), required); err != nil {
+			return nil, err
+		}
+	}
+	for _, user := range diff.AddedUsers {
+		id, _ := user.User["clientId"].(string)
+		if id == "" {
+			continue
+		}
+		account, err := buildUserAccount(user.Protocol, user.User)
+		if err != nil {
+			return nil, err
+		}
+		if err := managedIdentityCapabilities((&protocol.User{ClientId: id, Account: account}).ProtoReflect(), required); err != nil {
+			return nil, err
+		}
+	}
+	return slices.Sorted(maps.Keys(required)), nil
+}
 
 func (x *XrayAPI) requireManagedControl(ctx context.Context, required []string) error {
 	if !filepath.IsAbs(x.endpoint) || x.grpcClient == nil {

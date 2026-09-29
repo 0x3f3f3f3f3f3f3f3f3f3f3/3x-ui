@@ -212,3 +212,23 @@ Version-checked SQL settlement converts the duration atomically and normal
 polling applies the absolute expiry without changing manual restrictions or
 lifetime usage. Next: ordinary managed activation, historical counter handoff
 and configuration/lifecycle fences; Task 6 remains open.
+
+
+Ordinary managed lifecycle candidate (2026-09-29): normal RestartXray and local
+client/inbound mutation paths now route an explicitly managed configuration
+through private capability negotiation, durable preparation and canonical
+configuration reconciliation. Hot changes revoke removed credentials/listeners
+before granting updated policy. Post-commit compilation or bind-conflict failure
+closes the old managed process; a manual invalid-candidate restart preserves it.
+Traffic lifecycle and single-client reset Runtime calls run outside the SQL
+writer; delayed legacy plans revalidate current bindings and credentials under
+the inbound mutation lock. Config export does not consume lifecycle maintenance.
+
+The focused fault, real-child, Reverse and writer regressions pass and source
+review found no remaining blocker in this increment. The isolated SQLite/PostgreSQL race, Runtime/API race, lint, full panel, build
+and original 10,000/100,000-client configuration gates passed; this checkpoint
+does not mark task 6 complete. Automatic selection
+from client policy, healthy legacy drain/settlement, permanent client deletion
+revocation, UI application status, complete restore fencing and global budgets
+remain open. A running legacy process is rejected before policy preparation
+until its final accounting boundary can be proven.

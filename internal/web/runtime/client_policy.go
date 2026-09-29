@@ -124,32 +124,36 @@ func (l *Local) StartManagedProcess(ctx context.Context, process *xray.Process, 
 		if err != nil {
 			return err
 		}
-		if bootstrap == nil || len(bootstrap.Initializations) > 100000 {
-			return errors.New("invalid managed policy bootstrap")
-		}
 		l.mu.Lock()
 		defer l.mu.Unlock()
-		if _, err := api.ReadLedger(ctx, bootstrap.AfterSequence, 1); err != nil {
-			return fmt.Errorf("core is behind the panel ledger: %w", err)
+		return initializeManagedClients(ctx, api, bootstrap)
+	})
+}
+
+func initializeManagedClients(ctx context.Context, api *xray.ClientPolicyAPI, bootstrap *ManagedPolicyBootstrap) error {
+	if bootstrap == nil || len(bootstrap.Initializations) > 100000 {
+		return errors.New("invalid managed policy bootstrap")
+	}
+	if _, err := api.ReadLedger(ctx, bootstrap.AfterSequence, 1); err != nil {
+		return fmt.Errorf("core is behind the panel ledger: %w", err)
+	}
+	for _, request := range bootstrap.Initializations {
+		if request == nil || request.Policy == nil || request.Usage == nil {
+			return errors.New("managed policy initialization requires policy and usage")
 		}
-		for _, request := range bootstrap.Initializations {
-			if request == nil || request.Policy == nil || request.Usage == nil {
-				return errors.New("managed policy initialization requires policy and usage")
-			}
-			current, err := api.GetClient(ctx, request.Policy.ClientId)
-			if status.Code(err) == codes.NotFound {
-				if err := api.Initialize(ctx, request.Policy, request.Usage); err != nil {
-					return err
-				}
-				continue
-			}
-			if err != nil {
+		current, err := api.GetClient(ctx, request.Policy.ClientId)
+		if status.Code(err) == codes.NotFound {
+			if err := api.Initialize(ctx, request.Policy, request.Usage); err != nil {
 				return err
 			}
-			if current.Usage == nil || current.Usage.RawUpload < request.Usage.RawUpload || current.Usage.RawDownload < request.Usage.RawDownload || current.Usage.BilledBytes < request.Usage.BilledBytes {
-				return errors.New("core usage is behind the historical initialization seed")
-			}
+			continue
 		}
-		return nil
-	})
+		if err != nil {
+			return err
+		}
+		if current.Usage == nil || current.Usage.RawUpload < request.Usage.RawUpload || current.Usage.RawDownload < request.Usage.RawDownload || current.Usage.BilledBytes < request.Usage.BilledBytes {
+			return errors.New("core usage is behind the historical initialization seed")
+		}
+	}
+	return nil
 }

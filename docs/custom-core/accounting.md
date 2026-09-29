@@ -167,3 +167,37 @@ edits and node snapshots. It does not implement a global budget or global rate
 limit, repair conflicting topologies imported through a whole-database restore,
 or provide a general SQL-to-runtime revision fence. Cross-node managed policy
 allocation remains unfinished and is explicitly rejected at this boundary.
+
+
+## Ordinary managed configuration application
+
+An explicit `clientPolicy` template or an already activated local source selects
+the managed restart path. Preparation uses the server-owned state directory;
+a missing or incompatible private capability fails before usage initialization
+and before business listeners open. A running legacy process is refused before
+creating that state or reserving desired versions. A proven final legacy drain
+is still required before an automatic live cutover can be enabled.
+
+For a running managed process, local client/inbound operations commit their SQL
+changes and then compile the current canonical configuration under the service
+restart lock. Compatible changes remove obsolete credentials and listeners
+before applying grants, then add the new handlers. Required protocol identity,
+credential revocation and scoped-close capabilities are checked before bootstrap.
+Reverse-tagged clients retain the existing full-restart boundary.
+
+A manual restart with an invalid candidate keeps the known running process.
+After an authorization change has committed, compilation or bind validation
+failure stops the old managed process and reports the application error. Partial
+RPC changes and failed changes that could retain old access also stop it. A
+manually stopped process queues configuration changes without starting itself.
+Permanent client identity revocation is separate unfinished work; removing a
+binding is not claimed to be a durable deletion tombstone.
+
+Traffic lifecycle maintenance returns work from the serial SQL writer before
+calling Runtime. Legacy work then re-reads current inbound/client bindings and
+credentials under the inbound mutation lock, preserving per-inbound WireGuard
+peer fields. Batch processing bounds database reads and performs one managed
+reconcile per traffic batch. Single-client traffic reset follows the same writer
+boundary and does not add a user to a disabled inbound. Configuration export is
+read-only with respect to lifecycle maintenance; ordinary restart performs that
+maintenance before acquiring the global restart lock.

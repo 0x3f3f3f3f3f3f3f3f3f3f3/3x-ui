@@ -1,0 +1,84 @@
+package service
+
+import (
+	"errors"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/mhsanaei/3x-ui/v3/internal/database"
+	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
+	panelruntime "github.com/mhsanaei/3x-ui/v3/internal/web/runtime"
+	"github.com/mhsanaei/3x-ui/v3/internal/xray"
+)
+
+func TestTrafficLegacyRuntimePreparationRunsOutsideSerialWriter(t *testing.T) {
+	for _, mode := range []struct {
+		name    string
+		restart bool
+	}{{"restart-off", false}, {"restart-on", true}} {
+		t.Run(mode.name, func(t *testing.T) { checkTrafficLegacyRuntimePreparation(t, mode.restart) })
+	}
+}
+
+func checkTrafficLegacyRuntimePreparation(t *testing.T, restart bool) {
+	t.Helper()
+	setupPolicyLedgerDB(t)
+	setRestartOnClientDisable(t, restart)
+	StartTrafficWriter()
+	t.Cleanup(StopTrafficWriter)
+	previous := panelruntime.GetManager()
+	panelruntime.SetManager(nil)
+	t.Cleanup(func() { panelruntime.SetManager(previous) })
+	cs, is := &ClientService{}, &InboundService{}
+	ib := mkInbound(t, 24563, model.VLESS, `{"decryption":"none","clients":[]}`)
+	client := model.Client{Email: "traffic-reentry", SubID: "reentry-sub", ID: "936997e1-3b0c-4de9-9eea-047ee5829d3e", Enable: true, TotalGB: 100}
+	if _, err := cs.Create(is, &ClientCreatePayload{Client: client, InboundIds: []int{ib.Id}}); err != nil {
+		t.Fatal(err)
+	}
+	record, err := cs.GetRecordByEmail(nil, client.Email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Int32
+	var blocked atomic.Bool
+	nested := make(chan error, 1)
+	panelruntime.SetManager(panelruntime.NewManager(panelruntime.LocalDeps{
+		APIEndpoint: func() (string, error) {
+			calls.Add(1)
+			go func() {
+				policies, err := PrepareClientPolicies([]string{record.StableID})
+				if err == nil && (len(policies) != 1 || policies[0].Enabled) {
+					err = errors.New("runtime observed policy before disable committed")
+				}
+				nested <- err
+			}()
+			select {
+			case err := <-nested:
+				return "", errors.Join(errors.New("test control endpoint unavailable"), err)
+			case <-time.After(time.Second):
+				blocked.Store(true)
+				return "", errors.New("runtime callback waits on its own SQL writer")
+			}
+		},
+	}))
+	_, disabled, err := is.AddTraffic(nil, []*xray.ClientTraffic{{Email: client.Email, Up: 100}})
+	if blocked.Load() {
+		select {
+		case <-nested:
+		case <-time.After(5 * time.Second):
+			t.Fatal("queued preparation did not recover after callback returned")
+		}
+		t.Error("runtime preparation occupied the serial writer while waiting for policy preparation")
+	}
+	if err != nil || !disabled || calls.Load() != 1 {
+		t.Fatalf("traffic disable: disabled=%t calls=%d err=%v", disabled, calls.Load(), err)
+	}
+	var total xray.ClientTraffic
+	if err := database.GetDB().Where("email = ?", client.Email).First(&total).Error; err != nil {
+		t.Fatal(err)
+	}
+	if total.Up != 100 || total.Enable {
+		t.Fatalf("traffic or disable did not commit: %+v", total)
+	}
+}

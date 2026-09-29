@@ -1354,9 +1354,6 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	if err != nil {
 		return inbound, false, err
 	}
-	if postCommitApply != nil {
-		postCommitApply()
-	}
 
 	// A routed mtproto inbound is not an Xray inbound itself, so the runtime
 	// push above only (re)starts the mtg sidecar. The egress SOCKS bridge lives
@@ -1365,7 +1362,14 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		needRestart = true
 	}
 
-	return inbound, needRestart, err
+	handled, applyErr := s.reconcileManagedChange(inbound)
+	if applyErr != nil {
+		needRestart = true
+	}
+	if !handled && postCommitApply != nil {
+		postCommitApply()
+	}
+	return inbound, needRestart, applyErr
 }
 
 func (s *InboundService) DelInbound(id int) (bool, error) {
@@ -1379,6 +1383,7 @@ func (s *InboundService) DelInbound(id int) (bool, error) {
 // delInbound deletes the central row and returns the node push instead of running
 // it, so a bulk delete can fan the pushes out once every row is gone.
 func (s *InboundService) delInbound(id int) (bool, func(), error) {
+	defer lockInbound(id).Unlock()
 	db := database.GetDB()
 
 	needRestart := false
@@ -1458,9 +1463,6 @@ func (s *InboundService) delInbound(id int) (bool, func(), error) {
 	}); err != nil {
 		return needRestart, nil, err
 	}
-	if postCommitApply != nil {
-		postCommitApply()
-	}
 	if loadErr == nil && ib.Tag != "" {
 		if routingChanged, syncErr := (&XraySettingService{}).RemoveInboundTagReferences(ib.Tag); syncErr != nil {
 			logger.Warning("DelInbound: sync routing on inbound delete failed:", syncErr)
@@ -1483,7 +1485,14 @@ func (s *InboundService) delInbound(id int) (bool, func(), error) {
 	if mtprotoRoutesThroughXray(&ib) {
 		needRestart = true
 	}
-	return needRestart, nodePush, nil
+	handled, applyErr := s.reconcileManagedChange(&ib)
+	if applyErr != nil {
+		needRestart = true
+	}
+	if !handled && postCommitApply != nil {
+		postCommitApply()
+	}
+	return needRestart, nodePush, applyErr
 }
 
 type BulkDelInboundResult struct {
@@ -1601,6 +1610,7 @@ func (s *InboundService) SetInboundSubSortIndex(id int, index int) error {
 }
 
 func (s *InboundService) SetInboundEnable(id int, enable bool) (bool, error) {
+	defer lockInbound(id).Unlock()
 	inbound, err := s.GetInbound(id)
 	if err != nil {
 		return false, err
@@ -1634,6 +1644,9 @@ func (s *InboundService) SetInboundEnable(id int, enable bool) (bool, error) {
 		return false, err
 	}
 	inbound.Enable = enable
+	if handled, err := s.reconcileManagedChange(inbound); handled {
+		return err != nil, err
+	}
 
 	needRestart := false
 	rt, push, _, perr := s.nodePushPlan(inbound)
@@ -1685,6 +1698,7 @@ func (s *InboundService) SetInboundEnable(id int, enable bool) (bool, error) {
 }
 
 func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, bool, error) {
+	defer lockInbound(inbound.Id).Unlock()
 	legacyShareAddr := legacyMtprotoShareAddr(inbound)
 	inbound.TrafficResetDay = normalizeTrafficResetDay(inbound.TrafficResetDay)
 	// Normalize streamSettings based on protocol
@@ -1900,6 +1914,23 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		oldInbound.Tag = resolvedTag
 		inbound.Tag = oldInbound.Tag
 
+		if err := tx.Save(oldInbound).Error; err != nil {
+			return err
+		}
+		newClients, gcErr := s.GetClients(oldInbound)
+		if gcErr != nil {
+			return gcErr
+		}
+		if err := s.clientService.SyncInbound(tx, oldInbound.Id, newClients); err != nil {
+			return err
+		}
+		if oldInbound.Protocol == model.Tunnel {
+			if err := tx.Select("enable").First(oldInbound, oldInbound.Id).Error; err != nil {
+				return err
+			}
+			inbound.Enable = oldInbound.Enable
+		}
+
 		if oldInbound.NodeID == nil {
 			rt, push, _, perr := s.nodePushPlan(oldInbound)
 			if perr != nil {
@@ -1968,16 +1999,6 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 			}
 		}
 
-		if err := tx.Save(oldInbound).Error; err != nil {
-			return err
-		}
-		newClients, gcErr := s.GetClients(oldInbound)
-		if gcErr != nil {
-			return gcErr
-		}
-		if err := s.clientService.SyncInbound(tx, oldInbound.Id, newClients); err != nil {
-			return err
-		}
 		if oldInbound.NodeID != nil {
 			if err := (&NodeService{}).MarkNodeDirtyTx(tx, *oldInbound.NodeID); err != nil {
 				return err
@@ -1994,9 +2015,6 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	if txErr != nil {
 		return inbound, false, txErr
 	}
-	if postCommitApply != nil {
-		postCommitApply()
-	}
 	// After the rename is committed, point any routing rules / loopback outbounds
 	// in xrayTemplateConfig at the new tag (oldInbound.Tag now holds the resolved
 	// new tag; tag holds the pre-edit one). Done post-commit so a sync failure
@@ -2008,7 +2026,14 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 			needRestart = true
 		}
 	}
-	return inbound, needRestart, nil
+	handled, applyErr := s.reconcileManagedChange(inbound)
+	if applyErr != nil {
+		needRestart = true
+	}
+	if !handled && postCommitApply != nil {
+		postCommitApply()
+	}
+	return inbound, needRestart, applyErr
 }
 
 // A node mirrors this payload into its own DB, so every client must survive:
