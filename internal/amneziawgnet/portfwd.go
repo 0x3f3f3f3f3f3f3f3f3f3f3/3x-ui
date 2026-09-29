@@ -1,24 +1,5 @@
-// Phase 3.6: per-client port-forwarding. A real Go listener bound to each
-// forwarded external port relays into the peer's own tunnel-internal
-// address via a direct gonet dial -- the mirror image of
-// AttachTCPForwarder/AttachUDPHandler (which relay FROM the tunnel TO the
-// real world), and this path's replacement for the retired kernel-module
-// architecture's PostUp/PostDown iptables DNAT rules: there's no real OS
-// network interface here for DNAT to rewrite packets on, the same root
-// reason Phase 3.5's IPv6 alias mechanism couldn't reuse NDP-proxy either.
-//
-// Deliberately dials straight into the gVisor stack rather than relaying
-// through Xray's own SOCKS5 inbound the way the outbound direction does
-// (relay.go): Xray runs as a genuinely separate OS process
-// (internal/xray/process.go), so it has no visibility into this process's
-// private, in-memory netstack at all -- a tunnel-internal address like
-// 10.8.1.5:8080 has no route from Xray's own freedom outbound; only code
-// holding the actual *stack.Stack can reach it. Accepted consequence:
-// forwarded-port bytes don't appear in Xray's per-email stats/quota
-// counters. This undercounts, it doesn't bypass enforcement -- a
-// depleted/disabled client's peer is dropped from the interface's peer list
-// entirely by DesiredAmneziaWGInstances, which tears its forwards down too
-// as a side effect of Reconcile's own diff below.
+// Host listeners forward through the private netstack to their owning peer.
+// Forwarded payload is not yet metered or shaped by the unified client policy.
 package amneziawgnet
 
 import (
@@ -300,8 +281,11 @@ func tunnelFullAddress(addr netip.Addr, port int) tcpip.FullAddress {
 // tcpForwardListener is one open host-facing TCP listener for a single
 // portForwardKey.
 type tcpForwardListener struct {
-	ln      net.Listener
-	closing chan struct{}
+	ln     net.Listener
+	ctx    context.Context
+	cancel context.CancelFunc
+	mu     sync.Mutex
+	conns  map[net.Conn]struct{}
 }
 
 // listenPortForwardTCP opens a host-facing TCP listener on key.port and
@@ -317,7 +301,8 @@ func listenPortForwardTCP(gstack *stack.Stack, inboundID int, key portForwardKey
 		logger.Warningf("amneziawgnet: port-forward: inbound %d peer %q: listen tcp :%d: %v", inboundID, key.email, key.port, err)
 		return nil
 	}
-	l := &tcpForwardListener{ln: ln, closing: make(chan struct{})}
+	ctx, cancel := context.WithCancel(context.Background())
+	l := &tcpForwardListener{ln: ln, ctx: ctx, cancel: cancel, conns: make(map[net.Conn]struct{})}
 	logger.Infof("amneziawgnet: port-forward: inbound %d peer %q: listening tcp :%d", inboundID, key.email, key.port)
 	go l.acceptLoop(gstack, inboundID, key, target)
 	return l
@@ -328,40 +313,66 @@ func (l *tcpForwardListener) acceptLoop(gstack *stack.Stack, inboundID int, key 
 		conn, err := l.ln.Accept()
 		if err != nil {
 			select {
-			case <-l.closing:
+			case <-l.ctx.Done():
 				return // intentional shutdown, not a real accept error
 			default:
 			}
 			logger.Warningf("amneziawgnet: port-forward: inbound %d peer %q: accept tcp :%d: %v", inboundID, key.email, key.port, err)
 			return
 		}
-		go relayTCPForward(gstack, conn, inboundID, key, target)
+		l.mu.Lock()
+		if l.ctx.Err() != nil {
+			l.mu.Unlock()
+			conn.Close()
+			return
+		}
+		l.conns[conn] = struct{}{}
+		l.mu.Unlock()
+		go func() {
+			defer func() {
+				l.mu.Lock()
+				delete(l.conns, conn)
+				l.mu.Unlock()
+			}()
+			relayTCPForward(l.ctx, gstack, conn, inboundID, key, target)
+		}()
 	}
 }
 
-func relayTCPForward(gstack *stack.Stack, conn net.Conn, inboundID int, key portForwardKey, target portForwardTargetFunc) {
+func relayTCPForward(ctx context.Context, gstack *stack.Stack, conn net.Conn, inboundID int, key portForwardKey, target portForwardTargetFunc) {
 	defer conn.Close()
 	addr, ok := target(key.email)
 	if !ok {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), portForwardDialTimeout)
+	dialCtx, cancel := context.WithTimeout(ctx, portForwardDialTimeout)
 	defer cancel()
-	tunnelConn, err := gonet.DialContextTCP(ctx, gstack, tunnelFullAddress(addr, key.port), tunnelNetwork(addr))
+	tunnelConn, err := gonet.DialContextTCP(dialCtx, gstack, tunnelFullAddress(addr, key.port), tunnelNetwork(addr))
 	if err != nil {
-		logger.Warningf("amneziawgnet: port-forward: inbound %d peer %q: dial tunnel %s:%d: %v", inboundID, key.email, addr, key.port, err)
+		if ctx.Err() == nil {
+			logger.Warningf("amneziawgnet: port-forward: inbound %d peer %q: dial tunnel %s:%d: %v", inboundID, key.email, addr, key.port, err)
+		}
 		return
 	}
 	defer tunnelConn.Close()
+	stopClose := context.AfterFunc(ctx, func() {
+		conn.Close()
+		tunnelConn.Close()
+	})
+	defer stopClose()
 
 	pipeBothWays(conn, tunnelConn)
 }
 
-// Close stops accepting new connections. Already-relaying connections are
-// left to finish on their own -- there's no shared state to tear down early
-// for, and an abrupt cut would just look like a network error to whichever
-// external client was mid-transfer.
+// Close cancels pending dials and closes accepted streams on this listener.
 func (l *tcpForwardListener) Close() {
-	close(l.closing)
+	l.cancel()
 	l.ln.Close()
+	l.mu.Lock()
+	conns := l.conns
+	l.conns = make(map[net.Conn]struct{})
+	l.mu.Unlock()
+	for conn := range conns {
+		conn.Close()
+	}
 }

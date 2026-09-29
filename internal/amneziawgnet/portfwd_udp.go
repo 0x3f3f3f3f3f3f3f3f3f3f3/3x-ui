@@ -38,6 +38,7 @@ type udpForwardListener struct {
 	pc net.PacketConn
 
 	mu       sync.Mutex
+	closed   bool
 	sessions map[netip.AddrPort]*udpForwardSession
 }
 
@@ -70,6 +71,10 @@ func (l *udpForwardListener) readLoop(gstack *stack.Stack, inboundID int, key po
 		}
 
 		l.mu.Lock()
+		if l.closed {
+			l.mu.Unlock()
+			return
+		}
 		sess, exists := l.sessions[src]
 		l.mu.Unlock()
 
@@ -86,6 +91,11 @@ func (l *udpForwardListener) readLoop(gstack *stack.Stack, inboundID int, key po
 			}
 			sess = &udpForwardSession{conn: conn}
 			l.mu.Lock()
+			if l.closed {
+				l.mu.Unlock()
+				conn.Close()
+				return
+			}
 			l.sessions[src] = sess
 			l.mu.Unlock()
 			go l.pump(src, sess)
@@ -126,13 +136,18 @@ func (l *udpForwardListener) pump(src netip.AddrPort, sess *udpForwardSession) {
 // Close tears down every open session and the underlying socket.
 func (l *udpForwardListener) Close() {
 	l.mu.Lock()
+	if l.closed {
+		l.mu.Unlock()
+		return
+	}
+	l.closed = true
 	sessions := l.sessions
 	l.sessions = map[netip.AddrPort]*udpForwardSession{}
 	l.mu.Unlock()
+	l.pc.Close()
 	for _, sess := range sessions {
 		sess.conn.Close()
 	}
-	l.pc.Close()
 }
 
 // udpAddrPort extracts a netip.AddrPort from a net.Addr returned by

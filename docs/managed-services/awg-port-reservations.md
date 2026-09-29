@@ -137,15 +137,42 @@ go test -p 1 -race -count=1 -timeout=3m -run '^TestAWGForward' ./internal/web/se
 
 Validation of the complete follow-up is recorded in [validation.md](validation.md).
 
+## Revoking existing forwarded connections
+
+A separate lifecycle follow-up closes streams belonging to a removed TCP
+forward. Each listener owns a cancellation context and its accepted sockets.
+Removal cancels pending tunnel dials and closes both sides of established
+relays. The dial timeout remains separate from the established stream's
+lifetime. Repeated listener/set closure is safe.
+
+UDP listeners now record closure under the session mutex. The receive loop
+checks it both before resolving a new target and before publishing a dialed
+session, so a concurrent close cannot be followed by a newly retained flow.
+
+The regression uses an actual amneziawg-go client/server and a service on the
+client's netstack. It removes only one forward while retaining the peer and
+another forward: the old TCP stream must close, UDP must continue, and a
+restored TCP rule must accept new traffic. Another test closes a TCP listener
+while its tunnel dial is pending. The UDP race uses a real socket and a
+target-resolution barrier, then joins the receive loop before inspecting
+remaining sessions. All three exposed the old behavior before the changes.
+
+Xray runs in a separate process and cannot directly reach the peer's address
+inside this private gVisor network stack. The existing forward therefore dials
+that stack directly with gonet, bypassing Xray's per-email statistics. Removing
+a depleted peer can revoke its connections, but forwarded bytes themselves do
+not currently advance its quota. The lifecycle regression passed as recorded
+in [validation.md](validation.md); it does not add accounting, shaping or quota
+admission.
+
 ## Remaining boundaries
 
 Public AWG create/edit currently reject node assignment. A remote-node test
 experiment therefore did not describe a supported AWG operation and was
 removed; node integration remains an open requirement.
 
-Runtime listener failure reporting, revocation of established forwarded flows,
-forward-field edit/attachment consistency and AWG forwarded-payload policy
-enforcement require follow-up. These save-path checks do not prove
+Runtime listener failure reporting, forward-field edit/attachment consistency
+and AWG forwarded-payload policy enforcement require follow-up. These checks do not prove
 wire interoperability, bandwidth shaping, accounting or quota cutoff. General
 first-class forwarding, kernel forwarding/offload and firewall coexistence
 also remain unimplemented or unverified as recorded in the plan.

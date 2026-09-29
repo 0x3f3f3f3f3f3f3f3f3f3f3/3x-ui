@@ -4598,3 +4598,60 @@ Log: `/tmp/3x-ui-rate-trace/awg-peer-full-go.jsonl`. No Go source or embedded
 frontend assets changed during the run. Frontend checks were not repeated for
 this backend-only change. The full task remains incomplete; this evidence
 covers the resource-ownership follow-up, not AWG payload policy enforcement.
+
+## AWG forward revocation and close races
+
+This lifecycle follow-up retains the peer/device while removing one of its
+forwarding rules. Before the fix, the real encrypted TCP path delivered another
+byte after removal, a pending tunnel dial left its external socket open past
+the two-second read deadline, and an observed UDP target-resolution race
+published one session after close. The focused RED run failed all three
+selected top-level tests; the unrelated UDP and restored-TCP controls passed.
+Log: `/tmp/3x-ui-rate-trace/awg-forward-lifecycle-native-red.jsonl`, 5.062s.
+
+After the listener ownership/cancellation and UDP publication guards, focused
+race validation passed **3 top-level tests / 3 subtests**, no skips, 6.396s.
+The pending-dial case completed in 0.02s. The encrypted rule-removal subtest
+completed in under the test logger's 0.01s resolution; UDP continuity and fresh
+TCP restoration also passed. These observations concern local fixture cleanup,
+not a universal network latency or payload quota bound. Log:
+`/tmp/3x-ui-rate-trace/awg-forward-lifecycle-native-first-green.jsonl`.
+
+Explicit set closure and repeated-close controls were added after that run.
+Complete affected race checks passed: **207 top-level / 146 subtests** across
+`amneziawg`, `amneziawgnet` and `web/runtime` (1.263s, 24.520s, 2.781s), and
+**86 top-level / 151 subtests** in the AWG service regression (136.875s). No
+tests skipped. Logs: `awg-forward-close-native-race.jsonl` and
+`awg-forward-close-service-race.jsonl` in `/tmp/3x-ui-rate-trace/`.
+
+The first lint run stopped the pipeline on three `errorlint` findings in test
+error assertions; the build/full-root run had not started. The assertions now
+use `errors.As`, and their absolute two-second deadline starts before
+`Close`/`Reconcile`, including the operation itself. The old file header's
+misleading enforcement claim was also corrected; runtime logic was unchanged
+by these follow-ups.
+
+Fresh focused race validation passed **3 top-level / 3 subtests**, no skips,
+6.108s. Final lint reported **0 issues** and the normal panel build succeeded:
+
+```sh
+go test -p 1 -race -count=1 -timeout=45s -json \
+  -run '^TestPortForward(RoundTripTCPAndUDP|UDPCloseDuringTargetResolution|TCPCloseCancelsPendingTunnelDial)$' \
+  ./internal/amneziawgnet
+golangci-lint run --timeout=5m ./...
+go build -p 1 -o /tmp/3x-ui-awg-forward-close-panel .
+```
+
+Logs: `awg-forward-close-final-focused-race.jsonl`,
+`awg-forward-close-final-lint.log`, `awg-forward-close-build.log` in the same
+directory. Full-root validation with that panel exited zero: **53 test packages,
+2694 top-level tests and 4809 subtests passed**, no failures. **28 top-level and
+14 subtests skipped**; all 42 names exactly match `awg-peer-full-go.jsonl`.
+Seven packages have no tests. The service package completed in 657.608s.
+
+The command and local dependencies match the preceding ownership regression,
+with `XUI_E2E_PANEL=/tmp/3x-ui-awg-forward-close-panel`. Full log:
+`/tmp/3x-ui-rate-trace/awg-forward-close-full-go.jsonl`. No Go source or embedded
+frontend assets changed during the run. Frontend checks were not repeated for
+this backend-only change. This evidence covers connection revocation and
+closure; AWG payload accounting, shaping and quota admission remain open.

@@ -424,4 +424,44 @@ primed:
 	if string(gotUDP) != wantUDP {
 		t.Errorf("UDP round trip = %q, want %q", gotUDP, wantUDP)
 	}
+
+	// Keep the peer and UDP rule alive while revoking only this TCP listener.
+	t.Run("revoke-established-tcp", func(t *testing.T) {
+		reduced := inst
+		reduced.Peers = append([]amneziawg.Peer(nil), inst.Peers...)
+		reduced.Peers[0].ForwardedPorts = fmt.Sprint(udpPort)
+		deadline := time.Now().Add(2 * time.Second)
+		set.Reconcile(reduced)
+		_ = tcpConn.SetWriteDeadline(deadline)
+		_, _ = tcpConn.Write([]byte("after-revoke"))
+		requireForwardTCPClosedBy(t, tcpConn, deadline)
+	})
+	t.Run("unrelated-udp-continues", func(t *testing.T) {
+		_ = udpConn.SetDeadline(time.Now().Add(2 * time.Second))
+		if _, err := udpConn.Write([]byte(wantUDP)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.ReadFull(udpConn, gotUDP); err != nil || string(gotUDP) != wantUDP {
+			t.Fatalf("TCP rule removal disturbed UDP forward: %q %v", gotUDP, err)
+		}
+	})
+	t.Run("restore-tcp-rule", func(t *testing.T) {
+		set.Reconcile(inst)
+		fresh, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", tcpPort), time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer fresh.Close()
+		_ = fresh.SetDeadline(time.Now().Add(2 * time.Second))
+		if _, err := fresh.Write([]byte(wantTCP)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.ReadFull(fresh, gotTCP); err != nil || string(gotTCP) != wantTCP {
+			t.Fatalf("restored rule did not forward fresh TCP traffic: %q %v", gotTCP, err)
+		}
+		deadline := time.Now().Add(2 * time.Second)
+		set.Close()
+		set.Close()
+		requireForwardTCPClosedBy(t, fresh, deadline)
+	})
 }
