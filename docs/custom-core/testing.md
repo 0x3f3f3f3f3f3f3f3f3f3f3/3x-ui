@@ -538,3 +538,30 @@ without ordinary activation changes. SQLite compiler/builder race checks
 build pass. Real-core checks use the credential-revocation build. A coherent
 candidate is not a complete database-to-runtime revision fence; concurrent
 mutation completion and cross-node enforcement remain separate work.
+
+## Negotiating authenticated revocation before activation — 2026-09-29
+
+Managed VLESS, VMess, Trojan and Shadowsocks users now require the protocol's
+trusted-identity capability, `authenticated-credential-revocation-v1` and
+`inbound-scoped-session-close-v1`. Both user and listener additions reject a
+missing capability before changing handlers. Process startup collects the same
+requirements from the compiled listeners and checks them before usage
+preparation. Generic ledger reads and unmanaged handler mutations retain their
+existing capability requirements.
+
+Eight negative adapter cases initially changed handlers without one of the two
+revocation capabilities. They now reject without a handler call; four matching
+positive cases preserve the authenticated client identity. A real older custom
+core initially entered the startup preparation callback. Startup now rejects it
+before preparation and leaves no business listener. The current core reaches
+preparation, and existing Tunnel seed, restart and control tests still pass.
+
+CI builds an additional test core using a Go overlay that removes only the
+revocation capability advertisement. `XRAY_PRE_REVOCATION_E2E_BINARY` selects
+this negative fixture; its source is not installed or shipped. The workflow's
+actual fixture build and shell syntax checks pass.
+
+This increment was checked independently at `c1fbc8a6`, without ordinary
+activation changes: adapter/process and Runtime race checks pass (31.13 s wall),
+Go lint reports zero issues, the complete shuffled panel suite passes
+(256.34 s wall), and the panel builds. The production core source is unchanged.

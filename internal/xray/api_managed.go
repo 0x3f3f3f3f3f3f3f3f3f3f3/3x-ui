@@ -32,30 +32,34 @@ func (x *XrayAPI) requireManagedControl(ctx context.Context, required []string) 
 	return nil
 }
 
-func managedUserCapability(accountType string) (string, error) {
+func managedUserCapabilities(accountType string) ([]string, error) {
+	var capability string
 	switch accountType {
 	case "xray.proxy.vless.Account":
-		return "trusted-vless-client-id-v1", nil
+		capability = "trusted-vless-client-id-v1"
 	case "xray.proxy.vmess.Account":
-		return "trusted-vmess-client-id-v1", nil
+		capability = "trusted-vmess-client-id-v1"
 	case "xray.proxy.trojan.Account":
-		return "trusted-trojan-client-id-v1", nil
+		capability = "trusted-trojan-client-id-v1"
 	case legacyShadowsocksAccountType:
-		return "trusted-shadowsocks-aead-client-id-v1", nil
+		capability = "trusted-shadowsocks-aead-client-id-v1"
 	default:
-		return "", fmt.Errorf("%w: managed account adapter is not implemented for %q", ErrClientPolicyCapability, accountType)
+		return nil, fmt.Errorf("%w: managed account adapter is not implemented for %q", ErrClientPolicyCapability, accountType)
 	}
+	return []string{capability, "authenticated-credential-revocation-v1", "inbound-scoped-session-close-v1"}, nil
 }
 
 func managedIdentityCapabilities(message protoreflect.Message, required map[string]bool) error {
 	switch value := message.Interface().(type) {
 	case *protocol.User:
 		if value.GetClientId() != "" {
-			capability, err := managedUserCapability(value.Account.GetType())
+			capabilities, err := managedUserCapabilities(value.Account.GetType())
 			if err != nil {
 				return err
 			}
-			required[capability] = true
+			for _, capability := range capabilities {
+				required[capability] = true
+			}
 		}
 		return nil
 	case *dokodemo.Config:

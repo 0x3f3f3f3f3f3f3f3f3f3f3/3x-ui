@@ -26,6 +26,22 @@ jobs:
         run: go test -race -count=1 ./app/clientpolicy/... ./app/commander ./app/dispatcher ./app/proxyman/inbound ./infra/conf ./proxy/dokodemo ./common/protocol ./transport/internet/udp ./testing/policy
       - name: Build custom core
         run: bash tools/build-custom-core.sh
+      - name: Build missing credential capability fixture
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          source = Path("core/xray/app/clientpolicy/command/command.go").resolve()
+          fixture = Path(os.environ["RUNNER_TEMP"]) / "policy-capability-fixture"
+          fixture.mkdir(exist_ok=True)
+          text = source.read_text()
+          capability = ', "authenticated-credential-revocation-v1"'
+          assert text.count(capability) == 1
+          replacement = fixture / "command.go"
+          replacement.write_text(text.replace(capability, "", 1))
+          (fixture / "overlay.json").write_text(json.dumps({"Replace": {str(source): str(replacement)}}))
+          PY
+          go -C core/xray build -overlay="$RUNNER_TEMP/policy-capability-fixture/overlay.json" -o "$PWD/build/pre-revocation-xray" ./main
       - name: Build panel against same managed source
         run: make dist-stub && go build ./...
       - name: Panel policy SQLite and adapter race checks
@@ -37,9 +53,9 @@ jobs:
       - name: Runtime transport and negotiated process activation
         run: |
           set -o pipefail
-          XRAY_E2E_BINARY="$PWD/build/custom-xray" XRAY_UPSTREAM_E2E_BINARY="$PWD/build/upstream-xray" \
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" XRAY_UPSTREAM_E2E_BINARY="$PWD/build/upstream-xray" XRAY_PRE_REVOCATION_E2E_BINARY="$PWD/build/pre-revocation-xray" \
             go test -race ./internal/xray ./internal/web/runtime -run 'TestManagedProcess|TestManagedMutation|TestLocalRuntimeUsesPrivateControl|TestXrayAPI_E2E|TestExplicitControlEndpoint|TestPrivateControl' -count=1 -v | tee /tmp/policy-process.log
-          for test in TestManagedProcessNegotiatesAndSeedsBeforeOpeningListeners TestManagedProcessRejectsUnmodifiedCoreBeforeBusinessTraffic TestLocalRuntimeUsesPrivateControlForHandlersRoutingAndStats; do
+          for test in TestManagedProcessNegotiatesAndSeedsBeforeOpeningListeners TestManagedProcessRejectsUnmodifiedCoreBeforeBusinessTraffic TestManagedProcessNegotiatesCredentialRevocationBeforePreparation TestManagedMutationRequiresCredentialRevocationBeforeHandlerChanges TestLocalRuntimeUsesPrivateControlForHandlersRoutingAndStats; do
             grep -q -- "^--- PASS: $test " /tmp/policy-process.log
           done
       - name: SQLite policy persistence and Runtime client edits

@@ -102,7 +102,7 @@ func TestManagedMutationRequiresCapabilitiesBeforeChangingHandlers(t *testing.T)
 }
 
 func TestManagedMutationPreservesStableUserIdentity(t *testing.T) {
-	caps := &policycommand.Capabilities{ApiVersion: 1, InstanceId: "node", Epoch: 1, Capabilities: []string{"trusted-tunnel-client-id-v1", "trusted-vless-client-id-v1", "shared-directional-rate-v1", "fixed-point-billing-v1", "live-session-control-v1", "local-durable-reservations-v1", "committed-cumulative-ledger-v1", "create-only-usage-seed-v1"}}
+	caps := &policycommand.Capabilities{ApiVersion: 1, InstanceId: "node", Epoch: 1, Capabilities: []string{"trusted-tunnel-client-id-v1", "trusted-vless-client-id-v1", "authenticated-credential-revocation-v1", "inbound-scoped-session-close-v1", "shared-directional-rate-v1", "fixed-point-billing-v1", "live-session-control-v1", "local-durable-reservations-v1", "committed-cumulative-ledger-v1", "create-only-usage-seed-v1"}}
 	api, probe := managedMutationAPI(t, caps, false)
 	user := map[string]any{"email": "display-name", "id": "936997e1-3b0c-4de9-9eea-047ee5829d3e", "clientId": "owner"}
 	if err := api.AddUser("vless", "owned", user); err != nil {
@@ -145,7 +145,7 @@ func TestManagedMutationRejectsMissingProtocolCapabilityAndUnsupportedAccount(t 
 }
 
 func TestManagedMutationRequiresPrivateControl(t *testing.T) {
-	caps := &policycommand.Capabilities{ApiVersion: 1, InstanceId: "node", Epoch: 1, Capabilities: []string{"trusted-tunnel-client-id-v1", "trusted-vless-client-id-v1", "shared-directional-rate-v1", "fixed-point-billing-v1", "live-session-control-v1", "local-durable-reservations-v1", "committed-cumulative-ledger-v1", "create-only-usage-seed-v1"}}
+	caps := &policycommand.Capabilities{ApiVersion: 1, InstanceId: "node", Epoch: 1, Capabilities: []string{"trusted-tunnel-client-id-v1", "trusted-vless-client-id-v1", "authenticated-credential-revocation-v1", "inbound-scoped-session-close-v1", "shared-directional-rate-v1", "fixed-point-billing-v1", "live-session-control-v1", "local-durable-reservations-v1", "committed-cumulative-ledger-v1", "create-only-usage-seed-v1"}}
 	api, probe := managedMutationAPI(t, caps, true)
 	if err := api.AddUser("vless", "owned", map[string]any{"email": "managed", "id": "936997e1-3b0c-4de9-9eea-047ee5829d3e", "clientId": "owner"}); !errors.Is(err, ErrClientPolicyCapability) {
 		t.Fatalf("managed mutation accepted a TCP control endpoint: %v", err)

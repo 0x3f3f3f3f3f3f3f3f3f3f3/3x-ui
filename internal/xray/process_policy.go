@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -50,8 +51,19 @@ func (p *Process) StartManaged(ctx context.Context, prepare func(context.Context
 	if !services["clientpolicyservicev1"] || !services["handlerservice"] {
 		return fmt.Errorf("%w: policy and handler services are required", ErrClientPolicyCapability)
 	}
-	if _, err := validate.Build(); err != nil {
+	compiled, err := validate.Build()
+	if err != nil {
 		return fmt.Errorf("managed configuration validation: %w", err)
+	}
+	required := make(map[string]bool)
+	for _, inbound := range compiled.Inbound {
+		proxy, err := inbound.ProxySettings.GetInstance()
+		if err != nil {
+			return err
+		}
+		if err := managedIdentityCapabilities(proxy.ProtoReflect(), required); err != nil {
+			return err
+		}
 	}
 	bootstrap := *desired
 	bootstrap.InboundConfigs = nil
@@ -79,6 +91,12 @@ func (p *Process) StartManaged(ctx context.Context, prepare func(context.Context
 		return err
 	}
 	defer policyAPI.Close()
+	capabilities := policyAPI.Capabilities().Capabilities
+	for name := range required {
+		if !slices.Contains(capabilities, name) {
+			return fmt.Errorf("%w: missing %s", ErrClientPolicyCapability, name)
+		}
+	}
 	if err := prepare(ctx, policyAPI); err != nil {
 		return err
 	}

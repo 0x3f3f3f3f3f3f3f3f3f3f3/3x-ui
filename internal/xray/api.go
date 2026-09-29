@@ -727,9 +727,9 @@ func (x *XrayAPI) AddUser(Protocol string, inboundTag string, user map[string]an
 	if err != nil {
 		return err
 	}
-	var capability string
+	var capabilities []string
 	if clientID != "" {
-		capability, err = managedUserCapability(account.GetType())
+		capabilities, err = managedUserCapabilities(account.GetType())
 		if err != nil {
 			return err
 		}
@@ -746,7 +746,7 @@ func (x *XrayAPI) AddUser(Protocol string, inboundTag string, user map[string]an
 	ctx, cancel := context.WithTimeout(context.Background(), handlerRPCTimeout)
 	defer cancel()
 	if clientID != "" {
-		if err := x.requireManagedControl(ctx, []string{capability}); err != nil {
+		if err := x.requireManagedControl(ctx, capabilities); err != nil {
 			return err
 		}
 	}
