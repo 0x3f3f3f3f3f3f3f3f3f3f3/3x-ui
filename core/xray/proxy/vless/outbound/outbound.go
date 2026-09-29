@@ -5,6 +5,8 @@ import (
 	"context"
 	gotls "crypto/tls"
 	"encoding/base64"
+	goerrors "errors"
+	gonet "net"
 	"reflect"
 	"strings"
 	"sync"
@@ -56,9 +58,12 @@ type Handler struct {
 	encryption    *encryption.ClientInstance
 	reverse       *Reverse
 
-	testpre  uint32
-	initpre  sync.Once
-	preConns chan *ConnExpire
+	testpre    uint32
+	preAccess  sync.Mutex
+	preClosed  bool
+	preConns   chan *ConnExpire
+	preContext context.Context
+	preCancel  context.CancelFunc
 }
 
 type ConnExpire struct {
@@ -135,13 +140,78 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 
 // Close implements common.Closable.Close().
 func (h *Handler) Close() error {
-	if h.preConns != nil {
-		close(h.preConns)
+	h.preAccess.Lock()
+	h.preClosed = true
+	cancel := h.preCancel
+	h.preAccess.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 	if h.reverse != nil {
 		return h.reverse.Close()
 	}
 	return nil
+}
+
+func (h *Handler) preConnect(ctx context.Context, dialer internet.Dialer) (stat.Connection, error) {
+	h.preAccess.Lock()
+	if h.preClosed {
+		h.preAccess.Unlock()
+		return nil, gonet.ErrClosed
+	}
+	if h.preConns == nil {
+		h.preConns = make(chan *ConnExpire)
+		h.preContext, h.preCancel = context.WithCancel(xctx.ContextWithID(context.Background(), session.NewID()))
+		for range h.testpre {
+			go h.runPreConnect(h.preContext, h.preCancel, h.preConns, dialer)
+		}
+	}
+	poolCtx, connections := h.preContext, h.preConns
+	h.preAccess.Unlock()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-poolCtx.Done():
+			return nil, gonet.ErrClosed
+		case available := <-connections:
+			if poolCtx.Err() != nil {
+				_ = available.Conn.Close()
+				return nil, gonet.ErrClosed
+			}
+			if time.Now().Before(available.Expire) {
+				return available.Conn, nil
+			}
+			_ = available.Conn.Close()
+		}
+	}
+}
+
+func (h *Handler) runPreConnect(ctx context.Context, cancel context.CancelFunc, connections chan<- *ConnExpire, dialer internet.Dialer) {
+	for ctx.Err() == nil {
+		conn, err := dialer.Dial(ctx, h.server.Destination)
+		if err != nil {
+			if goerrors.Is(err, gonet.ErrClosed) || goerrors.Is(err, context.Canceled) {
+				cancel()
+				return
+			}
+			errors.LogWarningInner(ctx, err, "pre-connect failed")
+		} else {
+			select {
+			case connections <- &ConnExpire{Conn: conn, Expire: time.Now().Add(2 * time.Minute)}:
+			case <-ctx.Done():
+				_ = conn.Close()
+				return
+			}
+		}
+		timer := time.NewTimer(200 * time.Millisecond)
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		}
+	}
 }
 
 // Process implements proxy.Outbound.Process().
@@ -157,34 +227,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	var conn stat.Connection
 
 	if h.testpre > 0 && h.reverse == nil {
-		h.initpre.Do(func() {
-			h.preConns = make(chan *ConnExpire)
-			for range h.testpre { // TODO: randomize
-				go func() {
-					defer func() { recover() }()
-					ctx := xctx.ContextWithID(context.Background(), session.NewID())
-					for {
-						conn, err := dialer.Dial(ctx, rec.Destination)
-						if err != nil {
-							errors.LogWarningInner(ctx, err, "pre-connect failed")
-							continue
-						}
-						h.preConns <- &ConnExpire{Conn: conn, Expire: time.Now().Add(time.Minute * 2)} // TODO: customize & randomize
-						time.Sleep(time.Millisecond * 200)                                             // TODO: customize & randomize
-					}
-				}()
-			}
-		})
-		for {
-			connTime := <-h.preConns
-			if connTime == nil {
-				return errors.New("closed handler").AtWarning()
-			}
-			if time.Now().Before(connTime.Expire) {
-				conn = connTime.Conn
-				break
-			}
-			connTime.Conn.Close()
+		var err error
+		conn, err = h.preConnect(ctx, dialer)
+		if err != nil {
+			return err
 		}
 	}
 

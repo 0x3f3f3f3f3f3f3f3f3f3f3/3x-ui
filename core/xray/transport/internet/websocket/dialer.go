@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -24,7 +25,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	if streamSettings.ProtocolSettings.(*Config).Ed > 0 {
 		ctx, cancel := context.WithCancel(ctx)
 		conn = &delayDialConn{
-			dialed:         make(chan bool, 1),
+			dialed:         make(chan struct{}),
 			cancel:         cancel,
 			ctx:            ctx,
 			dest:           dest,
@@ -166,75 +167,145 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 }
 
 type delayDialConn struct {
-	net.Conn
+	access         sync.Mutex
+	writeAccess    sync.Mutex
+	conn           net.Conn
 	closed         bool
-	dialed         chan bool
+	closeOnce      sync.Once
+	closeErr       error
+	dialed         chan struct{}
 	cancel         context.CancelFunc
 	ctx            context.Context
 	dest           net.Destination
 	streamSettings *internet.MemoryStreamConfig
 }
 
-// LocalAddr returns nil until the deferred WebSocket dial has completed.
-// Without this method, Go promotes LocalAddr from the embedded net.Conn; the
-// embedded interface is nil before the first Write, so the promoted call panics.
 func (d *delayDialConn) LocalAddr() net.Addr {
-	if d.Conn == nil {
+	d.access.Lock()
+	defer d.access.Unlock()
+	if d.conn == nil {
 		return nil
 	}
-	return d.Conn.LocalAddr()
+	return d.conn.LocalAddr()
 }
 
-// RemoteAddr returns nil until the deferred WebSocket dial has completed.
-// See LocalAddr for why an explicit method is required here.
 func (d *delayDialConn) RemoteAddr() net.Addr {
-	if d.Conn == nil {
+	d.access.Lock()
+	defer d.access.Unlock()
+	if d.conn == nil {
 		return nil
 	}
-	return d.Conn.RemoteAddr()
+	return d.conn.RemoteAddr()
 }
 
 func (d *delayDialConn) Write(b []byte) (int, error) {
+	d.writeAccess.Lock()
+	defer d.writeAccess.Unlock()
+	d.access.Lock()
 	if d.closed {
+		d.access.Unlock()
 		return 0, io.ErrClosedPipe
 	}
-	if d.Conn == nil {
+	conn := d.conn
+	d.access.Unlock()
+	if conn == nil {
 		ed := b
 		if len(ed) > int(d.streamSettings.ProtocolSettings.(*Config).Ed) {
 			ed = nil
 		}
 		var err error
-		if d.Conn, err = dialWebSocket(d.ctx, d.dest, d.streamSettings, ed); err != nil {
-			d.Close()
+		conn, err = dialWebSocket(d.ctx, d.dest, d.streamSettings, ed)
+		if err != nil {
+			_ = d.Close()
 			return 0, errors.New("failed to dial WebSocket").Base(err)
 		}
-		d.dialed <- true
+		d.access.Lock()
+		if d.closed {
+			d.access.Unlock()
+			_ = conn.Close()
+			return 0, io.ErrClosedPipe
+		}
+		d.conn = conn
+		close(d.dialed)
+		d.access.Unlock()
 		if ed != nil {
 			return len(ed), nil
 		}
 	}
-	return d.Conn.Write(b)
+	return conn.Write(b)
 }
 
 func (d *delayDialConn) Read(b []byte) (int, error) {
+	d.access.Lock()
 	if d.closed {
+		d.access.Unlock()
 		return 0, io.ErrClosedPipe
 	}
-	if d.Conn == nil {
+	conn := d.conn
+	d.access.Unlock()
+	if conn == nil {
 		select {
 		case <-d.ctx.Done():
-			return 0, io.ErrUnexpectedEOF
+			return 0, io.ErrClosedPipe
 		case <-d.dialed:
 		}
+		d.access.Lock()
+		if d.closed {
+			d.access.Unlock()
+			return 0, io.ErrClosedPipe
+		}
+		conn = d.conn
+		d.access.Unlock()
 	}
-	return d.Conn.Read(b)
+	return conn.Read(b)
 }
 
 func (d *delayDialConn) Close() error {
-	d.closed = true
-	d.cancel()
-	if d.Conn == nil {
-		return nil
+	d.closeOnce.Do(func() {
+		d.access.Lock()
+		d.closed = true
+		conn := d.conn
+		d.access.Unlock()
+		d.cancel()
+		if conn != nil {
+			d.closeErr = conn.Close()
+		}
+	})
+	return d.closeErr
+}
+
+func (d *delayDialConn) SetDeadline(t time.Time) error {
+	d.access.Lock()
+	defer d.access.Unlock()
+	if d.closed {
+		return io.ErrClosedPipe
 	}
-	return d.Conn.Close()
+	if d.conn == nil {
+		return errors.New("WebSocket handshake has not completed")
+	}
+	return d.conn.SetDeadline(t)
+}
+
+func (d *delayDialConn) SetReadDeadline(t time.Time) error {
+	d.access.Lock()
+	defer d.access.Unlock()
+	if d.closed {
+		return io.ErrClosedPipe
+	}
+	if d.conn == nil {
+		return errors.New("WebSocket handshake has not completed")
+	}
+	return d.conn.SetReadDeadline(t)
+}
+
+func (d *delayDialConn) SetWriteDeadline(t time.Time) error {
+	d.access.Lock()
+	defer d.access.Unlock()
+	if d.closed {
+		return io.ErrClosedPipe
+	}
+	if d.conn == nil {
+		return errors.New("WebSocket handshake has not completed")
+	}
+	return d.conn.SetWriteDeadline(t)
 }

@@ -120,6 +120,9 @@ func isPacketReader(reader io.Reader) bool {
 // NewReader creates a new Reader.
 // The Reader instance doesn't take the ownership of reader.
 func NewReader(reader io.Reader) Reader {
+	if conn, ok := reader.(*stat.CounterConnection); ok && conn.ReadCounter == nil {
+		reader = conn.Connection
+	}
 	if mr, ok := reader.(Reader); ok {
 		return mr
 	}
@@ -178,6 +181,9 @@ func isPacketWriter(writer io.Writer) bool {
 
 // NewWriter creates a new Writer.
 func NewWriter(writer io.Writer) Writer {
+	if conn, ok := writer.(*stat.CounterConnection); ok && conn.WriteCounter == nil {
+		writer = conn.Connection
+	}
 	if mw, ok := writer.(Writer); ok {
 		return mw
 	}

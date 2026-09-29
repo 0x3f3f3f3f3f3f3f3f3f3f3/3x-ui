@@ -258,3 +258,12 @@ Write/Read methods now participate in the counter boundary. Focused race tests,
 source review, full core/panel suites, lint and builds pass. Expanded race checks
 also exposed and verified a fix for an existing outbound tag-cache race. Ordinary outbound
 socket cancellation and the remaining handoff integration are still open.
+
+Task 6 ordinary outbound candidate: handlers own direct dispatch/dial contexts
+and returned sockets, reject admission after Close and clean up normal/late
+connections. Native buffer adaptations remain intact. Reviewed VLESS preconnect
+and delayed WebSocket shutdown defects have regression fixes. Scoped package
+race checks and complete regression gates pass after correcting a mux integration
+test to inspect final sealed counters; testing.md records the initial failure
+and rerun. Manager lifecycle, remaining transport close gaps and boot-scoped final
+settlement remain open.

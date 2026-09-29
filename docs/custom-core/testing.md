@@ -784,3 +784,38 @@ outbound and mux packages in race checks.
 
 Normal outbound socket cancellation, boot-scoped private control and panel final
 settlement remain required work before exposing a drain capability.
+
+### Ordinary outbound ownership prerequisite
+
+Real TCP sockets and VMess UDP first reproduced active sockets surviving Close.
+Additional regressions reproduced a closed handler reaching its dialer, admitted
+dispatch/dial contexts surviving closure, and late dial results being published.
+The candidate cancels those contexts, closes tracked sockets and rejects queued
+dispatches. Omitting the close callback leaves connection/task records behind;
+normal socket closure now releases both. Previous dial tests used an unopened
+port and asserted wrapper types despite failed IO; they now transfer real bytes
+with accounting enabled/disabled and verify exact counters.
+
+Tracking initially removed no-counter readv and MultiBuffer datagram metadata;
+real TCP and pipe-backed connection regressions verify both remain intact.
+Review found VLESS preconnect retrying a permanently closed owner and deferred
+WebSocket publishing after closure. Both failed before their fixes. The WebSocket
+test pauses a real successful handshake immediately before publication; the late
+socket now closes. Pre-handshake deadline calls previously panicked and now
+return an explicit error. Real VLESS with two preconnections transfers TCP/UDP and
+returns stable final counters after handler closure.
+
+The isolated full-package Go 1.27.1 race run passed for outbound (11.100 s), buffer
+(1.789 s), VLESS outbound (1.044 s), WebSocket (1.052 s) and policy integration
+(13.857 s). Record release and queued-dispatch race checks passed separately
+(1.059 s). The complete shuffled core run passed every package except policy
+integration (653.72 s wall time, scenarios 343.862 s). Its mux test asserted a live
+counter immediately after the echo, before the sender had necessarily recorded
+its write. All three lifecycle integration tests now assert the final sealed
+snapshot; removing the byte Write fix still fails both TCP and UDP accounting.
+The full policy package rerun passed (11.619 s), and the expanded core race gate
+passed (67.69 s wall time). The custom core built (17.73 s) and passed the complete
+shuffled panel suite (301.90 s). Lint reported zero issues (26.23 s); panel build
+passed (9.20 s). Changed Go formatting, workflow YAML and all 18 shell blocks
+validate. CI includes VLESS outbound and WebSocket race coverage. Known manager
+and transport shutdown gaps and private boot-scoped handoff remain open.

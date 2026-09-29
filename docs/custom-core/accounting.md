@@ -269,3 +269,23 @@ must cancel all IO owners before waiting, including idle observer/WireGuard
 and raw sockets. Independent private control, boot-scoped acknowledgement, final
 panel settlement and healthy legacy cutover remain unimplemented. Ordinary
 managed activation still rejects a running legacy core before preparation.
+
+## Ordinary outbound ownership prerequisite
+
+An outbound handler now rejects new Dial/Dispatch after Close, cancels admitted
+direct dispatches and pending dials, and closes returned sockets. A dial finishing
+after closure closes its result instead of publishing it. Normal connection Close
+releases its tracking records. The existing CounterConnection wrapper retains
+raw/Vision unwrapping; buffer adapters unwrap directions without a counter so
+readv and MultiBuffer UDP destinations retain their previous behavior.
+
+VLESS preconnection workers now have a cancelable pool, stop on closed ownership,
+and close connections they cannot hand off. Deferred WebSocket handshake results
+are published under the same lock as closure; a late result is closed. Deadline
+calls before that handshake finishes now return an explicit error instead of
+panicking through a nil embedded connection.
+
+This still does not expose a complete drain capability. Manager admission and
+removed-handler ownership, cancellation-insensitive transport handshakes, UDP-hop
+shutdown and underlying realm packet socket cleanup require further work.
+Independent boot-scoped control and final panel settlement remain unimplemented.

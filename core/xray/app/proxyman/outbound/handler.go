@@ -6,6 +6,8 @@ import (
 	goerrors "errors"
 	"io"
 	"math/big"
+	gonet "net"
+	"sync"
 
 	"github.com/xtls/xray-core/common/dice"
 
@@ -55,6 +57,12 @@ func getStatCounter(v *core.Instance, tag string) (stats.Counter, stats.Counter)
 
 // Handler implements outbound.Handler.
 type Handler struct {
+	lifecycleAccess sync.Mutex
+	closed          bool
+	closeOnce       sync.Once
+	closeErr        error
+	tasks           map[*handlerTask]struct{}
+	connections     map[*stat.CounterConnection]struct{}
 	tag             string
 	senderSettings  *proxyman.SenderConfig
 	streamSettings  *internet.MemoryStreamConfig
@@ -176,6 +184,12 @@ func (h *Handler) Tag() string {
 
 // Dispatch implements proxy.Outbound.Dispatch.
 func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
+	if h.isClosed() {
+		session.SubmitOutboundErrorToOriginator(ctx, gonet.ErrClosed)
+		common.Interrupt(link.Reader)
+		common.Interrupt(link.Writer)
+		return
+	}
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 	content := session.ContentFromContext(ctx)
@@ -236,7 +250,17 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 		}
 	}
 out:
-	err := h.proxy.Process(ctx, link, h)
+	ctx, finish, err := h.beginTask(ctx)
+	if err != nil {
+		session.SubmitOutboundErrorToOriginator(ctx, err)
+		common.Interrupt(link.Reader)
+		common.Interrupt(link.Writer)
+		return
+	}
+	defer finish()
+	stopInterrupt := context.AfterFunc(ctx, func() { common.Interrupt(link.Reader); common.Interrupt(link.Writer) })
+	defer stopInterrupt()
+	err = h.proxy.Process(ctx, link, h)
 	var errC error
 	if err != nil {
 		errC = errors.Cause(err)
@@ -266,6 +290,10 @@ func (h *Handler) DestIpAddress() net.IP {
 
 // Dial implements internet.Dialer.
 func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connection, error) {
+	ctx, finish, err := h.beginTask(ctx)
+	if err != nil {
+		return nil, err
+	}
 	if h.senderSettings != nil && h.senderSettings.Via != nil {
 		outbounds := session.OutboundsFromContext(ctx)
 		ob := outbounds[len(outbounds)-1]
@@ -273,8 +301,14 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 	}
 
 	conn, err := internet.Dial(ctx, dest, h.streamSettings)
-	conn = h.getStatCouterConnection(conn)
-	return conn, err
+	if err != nil {
+		if conn != nil {
+			_ = conn.Close()
+		}
+		finish()
+		return nil, err
+	}
+	return h.trackConnection(conn, finish)
 }
 
 func (h *Handler) SetOutboundGateway(ctx context.Context, ob *session.Outbound) {
@@ -306,17 +340,6 @@ func (h *Handler) SetOutboundGateway(ctx context.Context, ob *session.Outbound) 
 	}
 }
 
-func (h *Handler) getStatCouterConnection(conn stat.Connection) stat.Connection {
-	if h.uplinkCounter != nil || h.downlinkCounter != nil {
-		return &stat.CounterConnection{
-			Connection:   conn,
-			ReadCounter:  h.downlinkCounter,
-			WriteCounter: h.uplinkCounter,
-		}
-	}
-	return conn
-}
-
 // GetOutbound implements proxy.GetOutbound.
 func (h *Handler) GetOutbound() proxy.Outbound {
 	return h.proxy
@@ -324,12 +347,16 @@ func (h *Handler) GetOutbound() proxy.Outbound {
 
 // Start implements common.Runnable.
 func (h *Handler) Start() error {
+	if h.isClosed() {
+		return gonet.ErrClosed
+	}
 	return nil
 }
 
 // Close implements common.Closable.
 func (h *Handler) Close() error {
-	return errors.Combine(common.Close(h.mux), common.Close(h.xudp), common.Close(h.proxy))
+	h.closeOnce.Do(h.closeLifetime)
+	return h.closeErr
 }
 
 // SenderSettings implements outbound.Handler.

@@ -2,6 +2,7 @@ package stat
 
 import (
 	"net"
+	"sync"
 
 	"github.com/xtls/xray-core/features/stats"
 )
@@ -14,6 +15,24 @@ type CounterConnection struct {
 	Connection
 	ReadCounter  stats.Counter
 	WriteCounter stats.Counter
+	onClose      func()
+	closeOnce    sync.Once
+	closeErr     error
+}
+
+func NewCounterConnection(conn Connection, read, write stats.Counter, onClose func()) *CounterConnection {
+	return &CounterConnection{Connection: conn, ReadCounter: read, WriteCounter: write, onClose: onClose}
+}
+
+func (c *CounterConnection) Close() error {
+	if c.onClose == nil {
+		return c.Connection.Close()
+	}
+	c.closeOnce.Do(func() {
+		defer c.onClose()
+		c.closeErr = c.Connection.Close()
+	})
+	return c.closeErr
 }
 
 func (c *CounterConnection) Read(b []byte) (int, error) {

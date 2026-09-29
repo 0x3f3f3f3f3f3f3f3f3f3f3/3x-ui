@@ -3,6 +3,8 @@ package outbound_test
 import (
 	"context"
 	"fmt"
+	"io"
+	gonet "net"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,8 +19,8 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/outbound"
+	featurestats "github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy/freedom"
-	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 func TestInterfaces(t *testing.T) {
@@ -28,62 +30,68 @@ func TestInterfaces(t *testing.T) {
 
 const xrayKey core.XrayKey = 1
 
-func TestOutboundWithoutStatCounter(t *testing.T) {
-	config := &core.Config{
-		App: []*serial.TypedMessage{
-			serial.ToTypedMessage(&stats.Config{}),
-			serial.ToTypedMessage(&policy.Config{
-				System: &policy.SystemPolicy{
-					Stats: &policy.SystemPolicy_Stats{
-						InboundUplink: true,
-					},
-				},
-			}),
-		},
-	}
-
-	v, _ := core.New(config)
-	v.AddFeature(outbound.Manager(new(Manager)))
-	ctx := context.WithValue(context.Background(), xrayKey, v)
-	ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{{}})
-	h, _ := NewHandler(ctx, &core.OutboundHandlerConfig{
-		Tag:           "tag",
-		ProxySettings: serial.ToTypedMessage(&freedom.Config{FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}}}),
-	})
-	conn, _ := h.(*Handler).Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), 13146))
-	_, ok := conn.(*stat.CounterConnection)
-	if ok {
-		t.Errorf("Expected conn to not be CounterConnection")
-	}
-}
-
-func TestOutboundWithStatCounter(t *testing.T) {
-	config := &core.Config{
-		App: []*serial.TypedMessage{
-			serial.ToTypedMessage(&stats.Config{}),
-			serial.ToTypedMessage(&policy.Config{
-				System: &policy.SystemPolicy{
-					Stats: &policy.SystemPolicy_Stats{
-						OutboundUplink:   true,
-						OutboundDownlink: true,
-					},
-				},
-			}),
-		},
-	}
-
-	v, _ := core.New(config)
-	v.AddFeature(outbound.Manager(new(Manager)))
-	ctx := context.WithValue(context.Background(), xrayKey, v)
-	ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{{}})
-	h, _ := NewHandler(ctx, &core.OutboundHandlerConfig{
-		Tag:           "tag",
-		ProxySettings: serial.ToTypedMessage(&freedom.Config{FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}}}),
-	})
-	conn, _ := h.(*Handler).Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), 13146))
-	_, ok := conn.(*stat.CounterConnection)
-	if !ok {
-		t.Errorf("Expected conn to be CounterConnection")
+func TestOutboundWithAndWithoutStatCounters(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprint(enabled), func(t *testing.T) {
+			v, err := core.New(&core.Config{App: []*serial.TypedMessage{
+				serial.ToTypedMessage(&stats.Config{}),
+				serial.ToTypedMessage(&policy.Config{System: &policy.SystemPolicy{Stats: &policy.SystemPolicy_Stats{OutboundUplink: enabled, OutboundDownlink: enabled}}}),
+			}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer v.Close()
+			ctx := context.WithValue(context.Background(), xrayKey, v)
+			ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{{}})
+			h, err := NewHandler(ctx, &core.OutboundHandlerConfig{Tag: "tag", ProxySettings: serial.ToTypedMessage(&freedom.Config{FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}}})})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer h.Close()
+			listener, err := gonet.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer listener.Close()
+			conn, err := h.(*Handler).Dial(ctx, net.TCPDestination(net.LocalHostIP, net.Port(listener.Addr().(*gonet.TCPAddr).Port)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.Close()
+			peer, err := listener.Accept()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer peer.Close()
+			_ = conn.SetDeadline(time.Now().Add(time.Second))
+			_ = peer.SetDeadline(time.Now().Add(time.Second))
+			if _, err := conn.Write([]byte("abc")); err != nil {
+				t.Fatal(err)
+			}
+			payload := make([]byte, 3)
+			if _, err := io.ReadFull(peer, payload); err != nil || string(payload) != "abc" {
+				t.Fatalf("uplink transfer = %q %v", payload, err)
+			}
+			if _, err := peer.Write([]byte("xyz")); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := io.ReadFull(conn, payload); err != nil || string(payload) != "xyz" {
+				t.Fatalf("downlink transfer = %q %v", payload, err)
+			}
+			manager := v.GetFeature(featurestats.ManagerType()).(*stats.Manager)
+			for _, direction := range []string{"uplink", "downlink"} {
+				counter := manager.GetCounter("outbound>>>tag>>>traffic>>>" + direction)
+				if !enabled {
+					if counter != nil {
+						t.Fatalf("disabled %s accounting registered a counter", direction)
+					}
+					continue
+				}
+				if counter == nil || counter.Value() != 3 {
+					t.Fatalf("enabled %s accounting did not count exactly three bytes: %v", direction, counter)
+				}
+			}
+		})
 	}
 }
 
