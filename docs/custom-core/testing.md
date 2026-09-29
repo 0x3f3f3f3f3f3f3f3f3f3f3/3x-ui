@@ -432,3 +432,15 @@ both real custom/upstream binaries passes (235.74 s wall time; service 71.562 s,
 Xray 14.710 s), followed by `go build ./...` and `make gen-check`. Workflow YAML,
 all 11 shell blocks and whitespace checks pass. This final panel run also
 includes the separately committed exhausted-renewal selection regression.
+
+## Exhausted renewal selection — 2026-09-29
+
+The normal real-core renewal test now removes its control socket after all
+remaining expired clients have exhausted their allowed renewals. It first
+failed because polling still tried to checkpoint those clients. Due selection
+now joins the canonical allowance with the traffic row's used count before any
+RPC; a missing traffic row remains eligible for the existing validation error.
+All normal, SQL-failure and control-loss renewal cases pass under race on SQLite
+(4.459 s) and PostgreSQL (8.412 s). The complete panel/lint/build/generation gate
+above includes this fix. No quota, renewal count or lifetime counter is reset
+by the selection change.

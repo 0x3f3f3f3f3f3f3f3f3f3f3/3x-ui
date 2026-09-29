@@ -34,7 +34,11 @@ func renewLocalClientPolicies(ctx context.Context, process *xray.Process) error 
 			ids[i] = policy.ClientID
 		}
 		var due []string
-		if err := database.GetDB().WithContext(ctx).Model(&model.ClientRecord{}).Where("stable_id IN ? AND expiry_time > 0 AND expiry_time <= ? AND (reset > 0 OR reset_day > 0 OR reset_weekday > 0)", ids, now).Pluck("stable_id", &due).Error; err != nil {
+		if err := database.GetDB().WithContext(ctx).Table("clients c").
+			Joins("LEFT JOIN client_traffics ct ON ct.email = c.email").
+			Where("c.stable_id IN ? AND c.expiry_time > 0 AND c.expiry_time <= ? AND (c.reset > 0 OR c.reset_day > 0 OR c.reset_weekday > 0)", ids, now).
+			Where("c.reset_max <= 0 OR COALESCE(ct.reset_count, 0) < c.reset_max").
+			Pluck("c.stable_id", &due).Error; err != nil {
 			return err
 		}
 		if len(due) == 0 {

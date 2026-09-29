@@ -265,4 +265,15 @@ func testClientPolicyRenewal(t *testing.T, mode string) {
 			t.Fatalf("renewal did not preserve exact configuration: %+v", client)
 		}
 	}
+	if mode == "normal" {
+		if err := os.Rename(socket, socket+".hidden"); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = os.Rename(socket+".hidden", socket) }()
+		idleCtx, idleCancel := context.WithTimeout(ctx, 250*time.Millisecond)
+		defer idleCancel()
+		if err := renewLocalClientPolicies(idleCtx, process); err != nil {
+			t.Fatalf("exhausted renewal allowances still required a core checkpoint: %v", err)
+		}
+	}
 }
