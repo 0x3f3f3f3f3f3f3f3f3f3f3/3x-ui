@@ -1,6 +1,6 @@
 --- /dev/null
 +++ b/managed_resources.go
-@@ -0,0 +1,283 @@
+@@ -0,0 +1,350 @@
 +package protocol
 +
 +import (
@@ -46,6 +46,7 @@
 +type sessionResource struct {
 +	owner        *serverResources
 +	user         string
++	nextDeliver  uint32
 +	deliveryMu   sync.Mutex
 +	released     bool
 +	receiveBytes atomic.Int64
@@ -256,6 +257,19 @@
 +	return t.tr.Len()+segments <= t.cap && (t.byteLimit == 0 || t.bufferedBytes+payloadBytes <= t.byteLimit)
 +}
 +
++func (s *Session) managedReceiveWindow() int {
++	s.recvBuf.mu.Lock()
++	defer s.recvBuf.mu.Unlock()
++	s.recvQueue.mu.Lock()
++	defer s.recvQueue.mu.Unlock()
++	limits := s.resource.owner.limits
++	staged := len(s.recvChan)
++	segments := min(limits.QueueSegments-s.recvBuf.tr.Len()-s.recvQueue.tr.Len()-staged, cap(s.recvChan)-staged)
++	payloadBytes := limits.QueueBytes - s.recvBuf.bufferedBytes - s.recvQueue.bufferedBytes - int(s.resource.receiveBytes.Load())
++	// Reserve an MTU of byte capacity per credit, including space for a reordered fragment.
++	return max(0, min(segments, payloadBytes/max(1, s.mtu)))
++}
++
 +func (s *Session) queueManagedPacketSegment(seg *segment) error {
 +	s.requestPacketAck()
 +	seq, _ := seg.Seq()
@@ -263,16 +277,69 @@
 +	if seq < next {
 +		return nil
 +	}
-+	if seq == next && s.recvQueue.Insert(seg) {
++	if seq == next && seq == s.resource.nextDeliver && s.recvQueue.Insert(seg) {
 +		s.nextRecv.Add(1)
-+	} else if !s.recvBuf.Insert(seg) {
++		s.resource.nextDeliver++
++	} else if !s.recvBuf.insertManagedReordered(seg) {
 +		return nil
 +	}
++	// Acknowledge retained contiguous data even while application delivery is blocked.
++	// Otherwise the sender repeatedly retransmits it and backs off during shaping.
++	s.recvBuf.Ascend(func(held *segment) bool {
++		seq, _ := held.Seq()
++		next := s.nextRecv.Load()
++		if seq < next {
++			return true
++		}
++		if seq != next {
++			return false
++		}
++		s.nextRecv.Add(1)
++		return true
++	})
 +	if err := s.moveRecvBufToRecvQueue(); err != nil {
 +		return err
 +	}
 +	s.requestPacketAck()
 +	return nil
++}
++
++// Keep the earliest unacknowledged fragments when a bounded receiver is full.
++// Rejecting an earlier retransmission behind later data can strand the stream.
++func (t *segmentTree) insertManagedReordered(seg *segment) bool {
++	t.checkNil(seg)
++	t.checkSeq(seg)
++	t.checkProtocolType(seg)
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	if _, found := t.tr.Get(seg); found {
++		return true
++	}
++	segments, payloadBytes := t.tr.Len()+1, t.bufferedBytes+len(seg.payload)
++	fits := func() bool { return segments <= t.cap && (t.byteLimit == 0 || payloadBytes <= t.byteLimit) }
++	if !fits() {
++		t.tr.Descend(func(last *segment) bool {
++			if !segmentLessFunc(seg, last) {
++				return false
++			}
++			segments--
++			payloadBytes -= len(last.payload)
++			return !fits()
++		})
++		if !fits() {
++			return false
++		}
++	}
++	for t.tr.Len()+1 > segments {
++		last, _ := t.tr.DeleteMax()
++		t.bufferedBytes -= len(last.payload)
++		t.resources.adjustBytes(-len(last.payload))
++	}
++	t.tr.ReplaceOrInsert(seg)
++	t.bufferedBytes += len(seg.payload)
++	t.resources.adjustBytes(len(seg.payload))
++	t.notifyNotEmpty()
++	return true
 +}
 +
 +func drainManagedQueue[T any](queue <-chan T) {
@@ -286,12 +353,14 @@
 +}
 --- /dev/null
 +++ b/managed_resources_test.go
-@@ -0,0 +1,130 @@
+@@ -0,0 +1,342 @@
 +package protocol
 +
 +import (
 +	"bytes"
++	"context"
 +	"errors"
++	"fmt"
 +	"io"
 +	"net"
 +	"testing"
@@ -301,6 +370,216 @@
 +	"github.com/enfein/mieru/v3/pkg/common"
 +	"github.com/enfein/mieru/v3/pkg/protocol/serveruser"
 +)
++
++func TestManagedPacketWindowRetainsEveryPromisedFragment(t *testing.T) {
++	testManagedPacketWindow(t, false)
++}
++
++func TestManagedPacketWindowSurvivesInputSchedulingDelay(t *testing.T) {
++	testManagedPacketWindow(t, true)
++}
++
++func TestManagedPacketOverloadRetainsEarlierRetransmission(t *testing.T) {
++	for _, segments := range []int{64, 256} {
++		t.Run(fmt.Sprintf("segments-%d", segments), func(t *testing.T) {
++			mux := NewMux(false)
++			t.Cleanup(func() { _ = mux.Close() })
++			if err := mux.SetServerLimits(ServerLimits{Sessions: 1, SessionsPerUser: 1, QueueSegments: segments, QueueBytes: 128 << 10, DisableUserMetrics: true}); err != nil {
++				t.Fatal(err)
++			}
++			base := mux.newServerUnderlay(1400, nil)
++			session := base.newServerSession(1, serveruser.BuildPolicies(rawUserMap("ordered", "password"))["ordered"])
++			if session == nil {
++				t.Fatal("fixture failed to allocate a session")
++			}
++			t.Cleanup(func() { base.discardServerSession(session) })
++			session.transportProtocol = common.PacketTransport
++			capacity := min(segments, 128)
++			fragment := func(seq int) *segment {
++				return testDataSegment(1, uint32(seq), bytes.Repeat([]byte{byte(seq)}, 1024), common.PacketTransport)
++			}
++			for seq := range 2*capacity + 1 {
++				if seq == capacity {
++					continue
++				}
++				if err := session.queueManagedPacketSegment(fragment(seq)); err != nil {
++					t.Fatal(err)
++				}
++			}
++			if session.recvQueue.Len() != capacity || session.recvBuf.Len() != capacity {
++				t.Fatal("fixture did not fill both bounded receive queues")
++			}
++			if err := session.queueManagedPacketSegment(fragment(capacity)); err != nil {
++				t.Fatal(err)
++			}
++			ctx, cancel := context.WithCancel(t.Context())
++			done := make(chan error, 1)
++			go func() { done <- session.runInputLoop(ctx) }()
++			t.Cleanup(func() { cancel(); <-done })
++			payload := make([]byte, 2*capacity*1024)
++			for received := 0; received < len(payload); {
++				_ = session.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
++				n, err := session.Read(payload[received:])
++				received += n
++				if err != nil {
++					t.Fatalf("earlier retransmission was discarded behind later fragments: read %d/%d bytes: %v", received, len(payload), err)
++				}
++			}
++			for seq := range 2 * capacity {
++				if !bytes.Equal(payload[seq*1024:(seq+1)*1024], fragment(seq).payload) {
++					t.Fatalf("fragment %d was lost, duplicated or reordered", seq)
++				}
++			}
++			if stats := mux.ServerResourceStats(); stats.BufferedBytes != 0 || stats.PeakBufferedBytes > int64(2*capacity*1024) {
++				t.Fatalf("priority recovery exceeded or retained queue payload: %+v", stats)
++			}
++		})
++	}
++}
++
++func testManagedPacketWindow(t *testing.T, staged bool) {
++	t.Helper()
++	mux := NewMux(false)
++	t.Cleanup(func() { _ = mux.Close() })
++	if err := mux.SetServerLimits(ServerLimits{Sessions: 1, SessionsPerUser: 1, QueueSegments: 256, QueueBytes: 128 << 10, DisableUserMetrics: true}); err != nil {
++		t.Fatal(err)
++	}
++	base := mux.newServerUnderlay(1400, nil)
++	session := base.newServerSession(1, serveruser.BuildPolicies(rawUserMap("window", "password"))["window"])
++	if session == nil {
++		t.Fatal("fixture failed to allocate the authenticated session")
++	}
++	t.Cleanup(func() { base.discardServerSession(session) })
++	session.transportProtocol = common.PacketTransport
++	window := session.receiveWindowSize()
++	if window <= 0 {
++		t.Fatal("an empty receiver must allow the sender to make progress")
++	}
++	payload := bytes.Repeat([]byte{42}, 1312)
++	for seq := range window {
++		fragment := testDataSegment(1, uint32(seq), payload, common.PacketTransport)
++		if staged {
++			if !base.deliverManagedSegment(session, fragment) {
++				t.Fatal("active underlay refused the receiver's advertised packet")
++			}
++		} else if err := session.queueManagedPacketSegment(fragment); err != nil {
++			t.Fatal(err)
++		}
++	}
++	ctx, cancel := context.WithCancel(t.Context())
++	done := make(chan error, 1)
++	go func() { done <- session.runInputLoop(ctx) }()
++	t.Cleanup(func() { cancel(); <-done })
++	received := 0
++	buffer := make([]byte, 32<<10)
++	for received < window*len(payload) {
++		_ = session.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
++		n, err := session.Read(buffer)
++		received += n
++		if err != nil {
++			t.Fatalf("receiver promised %d fragments but retained only %d/%d bytes: %v", window, received, window*len(payload), err)
++		}
++		if !bytes.Equal(buffer[:n], bytes.Repeat([]byte{42}, n)) {
++			t.Fatal("advertised-window payload was corrupted")
++		}
++	}
++}
++
++func TestManagedPacketAckCoversOnlyRetainedContiguousData(t *testing.T) {
++	for _, gap := range []bool{false, true} {
++		t.Run(fmt.Sprintf("gap-%t", gap), func(t *testing.T) {
++			session, readAck := managedPacketWire(t)
++			deliver := func(seq int) {
++				t.Helper()
++				if err := session.queueManagedPacketSegment(testDataSegment(1, uint32(seq), make([]byte, 1024), common.PacketTransport)); err != nil {
++					t.Fatal(err)
++				}
++			}
++			for seq := range 257 {
++				if (gap && seq == 128) || (!gap && seq == 256) {
++					continue
++				}
++				deliver(seq)
++			}
++			deliver(0)
++			deliver(257)
++			assertAck := func(expected uint32) {
++				t.Helper()
++				session.ackDeadline.Store(0)
++				session.runOutputOncePacket()
++				ack := readAck()
++				if ack.unAckSeq != expected || ack.windowSize != 0 {
++					t.Fatalf("full receiver acknowledged next=%d window=%d, want retained contiguous next=%d window=0", ack.unAckSeq, ack.windowSize, expected)
++				}
++			}
++			if gap {
++				assertAck(128)
++				deliver(128)
++			}
++			assertAck(256)
++		})
++	}
++}
++
++func managedPacketWire(t *testing.T) (*Session, func() *dataAckStruct) {
++	t.Helper()
++	mux := NewMux(false)
++	t.Cleanup(func() { _ = mux.Close() })
++	if err := mux.SetServerLimits(ServerLimits{Sessions: 1, SessionsPerUser: 1, QueueSegments: 256, QueueBytes: 128 << 10, DisableUserMetrics: true}); err != nil {
++		t.Fatal(err)
++	}
++	wire, receiver, block := newTestPacketSession(t)
++	base := mux.newServerUnderlay(1400, nil)
++	session := base.newServerSession(1, serveruser.BuildPolicies(rawUserMap("window", "password"))["window"])
++	if session == nil {
++		t.Fatal("fixture failed to allocate the authenticated session")
++	}
++	t.Cleanup(func() { base.discardServerSession(session) })
++	underlay := wire.conn.(*PacketUnderlay)
++	underlay.isClient = false
++	underlay.sessionMap.Store(session.id, session)
++	session.block.Store(&underlay.block)
++	session.conn, session.remoteAddr = underlay, receiver.LocalAddr()
++	session.transportProtocol = common.PacketTransport
++	session.forwardStateTo(sessionEstablished)
++	return session, func() *dataAckStruct {
++		t.Helper()
++		_ = receiver.SetReadDeadline(time.Now().Add(time.Second))
++		packet := make([]byte, 65535)
++		n, _, err := receiver.ReadFrom(packet)
++		if err != nil {
++			t.Fatal(err)
++		}
++		return decryptDataAckForTest(t, block, packet[:n])
++	}
++}
++
++func TestManagedPacketOutputRefreshesQueuedAndRetransmittedWindow(t *testing.T) {
++	session, readAck := managedPacketWire(t)
++	reply := testDataSegment(1, 0, []byte("queued reply"), common.PacketTransport)
++	reply.metadata.(*dataAckStruct).protocol = uint8(dataServerToClient)
++	reply.metadata.(*dataAckStruct).windowSize = uint16(session.receiveWindowSize())
++	if !session.sendQueue.Insert(reply) {
++		t.Fatal("reply could not be queued")
++	}
++	for seq := range 99 {
++		if !session.recvQueue.Insert(testDataSegment(1, uint32(seq), make([]byte, 1312), common.PacketTransport)) {
++			t.Fatal("fixture failed to exhaust receive byte capacity")
++		}
++	}
++	session.runOutputOncePacket()
++	if window := readAck().windowSize; window != 0 {
++		t.Fatalf("queued reply reopened a full receive window with %d stale credits", window)
++	}
++	session.recvQueue.DeleteAll()
++	reply.txTime = time.Now().Add(-time.Second).UnixMicro()
++	reply.txTimeout = time.Millisecond
++	session.nextRetransmissionTime.Store(0)
++	session.runOutputOncePacket()
++	if window := readAck().windowSize; window == 0 {
++		t.Fatal("retransmitted reply kept the empty receiver's stale zero window")
++	}
++}
 +
 +func TestManagedClosedUnderlayRejectsAnAllocatedSession(t *testing.T) {
 +	for _, network := range []string{"tcp", "udp"} {
@@ -693,7 +972,19 @@
  		}
  
  		// Deliver the segment to recvBuf.
-@@ -1397,6 +1439,10 @@
+@@ -1319,6 +1361,11 @@
+ 			return fmt.Errorf("TCPUnderlay.writeOneSegment() failed: %v", err)
+ 		}
+ 	case common.PacketTransport:
++		if s.resource != nil {
++			if metadata, ok := seg.metadata.(*dataAckStruct); ok {
++				metadata.windowSize = uint16(s.receiveWindowSize())
++			}
++		}
+ 		err := s.conn.(*PacketUnderlay).writeOneSegment(seg, remoteAddr)
+ 		if err != nil {
+ 			if !stderror.IsNotReady(err) {
+@@ -1397,6 +1444,10 @@
  
  	// Don't clear receive buf and queue, because read is allowed after
  	// the session is closed.
@@ -704,21 +995,23 @@
  	s.sendQueue.DeleteAll()
  	s.sendBuf.DeleteAll()
  	s.forwardStateTo(sessionClosed)
-@@ -1413,7 +1459,11 @@
+@@ -1413,6 +1464,9 @@
  
  // receiveWindowSize determines how many more packets this session can receive.
  func (s *Session) receiveWindowSize() int {
--	return mathext.Max(0, segmentTreeCapacity-s.recvBuf.Len()-s.recvQueue.Len())
-+	capacity := segmentTreeCapacity
 +	if s.resource != nil {
-+		capacity = s.resource.owner.limits.QueueSegments
++		return s.managedReceiveWindow()
 +	}
-+	return mathext.Max(0, capacity-s.recvBuf.Len()-s.recvQueue.Len())
+ 	return mathext.Max(0, segmentTreeCapacity-s.recvBuf.Len()-s.recvQueue.Len())
  }
  
- // waitForRecvQueueSpace returns true when the recv queue has empty space.
-@@ -1445,7 +1495,7 @@
+@@ -1443,9 +1497,12 @@
+ 		}
+ 
  		nextRecv := s.nextRecv.Load()
++		if s.resource != nil {
++			nextRecv = s.resource.nextDeliver
++		}
  		seg, deleted := s.recvBuf.DeleteMinIf(func(iter *segment) bool {
  			seq, _ := iter.Seq()
 -			return seq <= nextRecv
@@ -726,6 +1019,19 @@
  		})
  		if seg == nil || !deleted {
  			return nil
+@@ -1461,7 +1518,11 @@
+ 			}
+ 			return nil
+ 		}
+-		s.nextRecv.Add(1)
++		if s.resource != nil {
++			s.resource.nextDeliver++
++		} else {
++			s.nextRecv.Add(1)
++		}
+ 
+ 		// Update remote window size.
+ 		das, ok := seg.metadata.(*dataAckStruct)
 --- a/underlay_base.go
 +++ b/underlay_base.go
 @@ -60,7 +60,11 @@

@@ -48,6 +48,16 @@ remain separately capped at 256 by the adapter.
 TCP receive queues apply backpressure. UDP overload discards unacknowledged
 native segments for retransmission without blocking the shared UDP socket;
 ordered delivery and read-triggered window updates preserve application payload.
+Managed receive credits account for byte capacity, segment capacity and staging
+slots. Queued and retransmitted replies refresh those credits when sent. A full
+reordering buffer retains earlier fragments by evicting later ones; it never
+acknowledges an evicted fragment. This prevents later data from repeatedly
+excluding the retransmission needed to close an earlier sequence gap.
+Acknowledgment advances across safely retained contiguous fragments even when
+application delivery is blocked. A separate delivery cursor preserves read
+order; acknowledgments never cover a hole or a discarded fragment. This avoids
+repeated retransmission and exponential backoff of data already held by a
+receiver whose application is deliberately shaped.
 Session startup is serialized with underlay shutdown. Finished workers clear
 owned buffers and remove session metadata before releasing the admission slot.
 Closing the mux waits for native session and accept workers.

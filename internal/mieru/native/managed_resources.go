@@ -43,6 +43,7 @@ type serverResources struct {
 type sessionResource struct {
 	owner        *serverResources
 	user         string
+	nextDeliver  uint32
 	deliveryMu   sync.Mutex
 	released     bool
 	receiveBytes atomic.Int64
@@ -253,6 +254,19 @@ func (t *segmentTree) canFit(segments, payloadBytes int) bool {
 	return t.tr.Len()+segments <= t.cap && (t.byteLimit == 0 || t.bufferedBytes+payloadBytes <= t.byteLimit)
 }
 
+func (s *Session) managedReceiveWindow() int {
+	s.recvBuf.mu.Lock()
+	defer s.recvBuf.mu.Unlock()
+	s.recvQueue.mu.Lock()
+	defer s.recvQueue.mu.Unlock()
+	limits := s.resource.owner.limits
+	staged := len(s.recvChan)
+	segments := min(limits.QueueSegments-s.recvBuf.tr.Len()-s.recvQueue.tr.Len()-staged, cap(s.recvChan)-staged)
+	payloadBytes := limits.QueueBytes - s.recvBuf.bufferedBytes - s.recvQueue.bufferedBytes - int(s.resource.receiveBytes.Load())
+	// Reserve an MTU of byte capacity per credit, including space for a reordered fragment.
+	return max(0, min(segments, payloadBytes/max(1, s.mtu)))
+}
+
 func (s *Session) queueManagedPacketSegment(seg *segment) error {
 	s.requestPacketAck()
 	seq, _ := seg.Seq()
@@ -260,16 +274,69 @@ func (s *Session) queueManagedPacketSegment(seg *segment) error {
 	if seq < next {
 		return nil
 	}
-	if seq == next && s.recvQueue.Insert(seg) {
+	if seq == next && seq == s.resource.nextDeliver && s.recvQueue.Insert(seg) {
 		s.nextRecv.Add(1)
-	} else if !s.recvBuf.Insert(seg) {
+		s.resource.nextDeliver++
+	} else if !s.recvBuf.insertManagedReordered(seg) {
 		return nil
 	}
+	// Acknowledge retained contiguous data even while application delivery is blocked.
+	// Otherwise the sender repeatedly retransmits it and backs off during shaping.
+	s.recvBuf.Ascend(func(held *segment) bool {
+		seq, _ := held.Seq()
+		next := s.nextRecv.Load()
+		if seq < next {
+			return true
+		}
+		if seq != next {
+			return false
+		}
+		s.nextRecv.Add(1)
+		return true
+	})
 	if err := s.moveRecvBufToRecvQueue(); err != nil {
 		return err
 	}
 	s.requestPacketAck()
 	return nil
+}
+
+// Keep the earliest unacknowledged fragments when a bounded receiver is full.
+// Rejecting an earlier retransmission behind later data can strand the stream.
+func (t *segmentTree) insertManagedReordered(seg *segment) bool {
+	t.checkNil(seg)
+	t.checkSeq(seg)
+	t.checkProtocolType(seg)
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if _, found := t.tr.Get(seg); found {
+		return true
+	}
+	segments, payloadBytes := t.tr.Len()+1, t.bufferedBytes+len(seg.payload)
+	fits := func() bool { return segments <= t.cap && (t.byteLimit == 0 || payloadBytes <= t.byteLimit) }
+	if !fits() {
+		t.tr.Descend(func(last *segment) bool {
+			if !segmentLessFunc(seg, last) {
+				return false
+			}
+			segments--
+			payloadBytes -= len(last.payload)
+			return !fits()
+		})
+		if !fits() {
+			return false
+		}
+	}
+	for t.tr.Len()+1 > segments {
+		last, _ := t.tr.DeleteMax()
+		t.bufferedBytes -= len(last.payload)
+		t.resources.adjustBytes(-len(last.payload))
+	}
+	t.tr.ReplaceOrInsert(seg)
+	t.bufferedBytes += len(seg.payload)
+	t.resources.adjustBytes(len(seg.payload))
+	t.notifyNotEmpty()
+	return true
 }
 
 func drainManagedQueue[T any](queue <-chan T) {

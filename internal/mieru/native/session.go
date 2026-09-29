@@ -1361,6 +1361,11 @@ func (s *Session) output(seg *segment, remoteAddr net.Addr) error {
 			return fmt.Errorf("TCPUnderlay.writeOneSegment() failed: %v", err)
 		}
 	case common.PacketTransport:
+		if s.resource != nil {
+			if metadata, ok := seg.metadata.(*dataAckStruct); ok {
+				metadata.windowSize = uint16(s.receiveWindowSize())
+			}
+		}
 		err := s.conn.(*PacketUnderlay).writeOneSegment(seg, remoteAddr)
 		if err != nil {
 			if !stderror.IsNotReady(err) {
@@ -1459,11 +1464,10 @@ func (s *Session) sendWindowSize() int {
 
 // receiveWindowSize determines how many more packets this session can receive.
 func (s *Session) receiveWindowSize() int {
-	capacity := segmentTreeCapacity
 	if s.resource != nil {
-		capacity = s.resource.owner.limits.QueueSegments
+		return s.managedReceiveWindow()
 	}
-	return mathext.Max(0, capacity-s.recvBuf.Len()-s.recvQueue.Len())
+	return mathext.Max(0, segmentTreeCapacity-s.recvBuf.Len()-s.recvQueue.Len())
 }
 
 // waitForRecvQueueSpace returns true when the recv queue has empty space.
@@ -1493,6 +1497,9 @@ func (s *Session) moveRecvBufToRecvQueue() error {
 		}
 
 		nextRecv := s.nextRecv.Load()
+		if s.resource != nil {
+			nextRecv = s.resource.nextDeliver
+		}
 		seg, deleted := s.recvBuf.DeleteMinIf(func(iter *segment) bool {
 			seq, _ := iter.Seq()
 			return seq < nextRecv || (seq == nextRecv && s.recvQueue.canFit(1, len(iter.payload)))
@@ -1511,7 +1518,11 @@ func (s *Session) moveRecvBufToRecvQueue() error {
 			}
 			return nil
 		}
-		s.nextRecv.Add(1)
+		if s.resource != nil {
+			s.resource.nextDeliver++
+		} else {
+			s.nextRecv.Add(1)
+		}
 
 		// Update remote window size.
 		das, ok := seg.metadata.(*dataAckStruct)
