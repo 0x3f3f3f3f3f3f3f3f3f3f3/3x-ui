@@ -483,6 +483,8 @@
         "autoOutboundsInterfaceTooltip": "Giden trafik için fiziksel arabirim. Tespit için 'auto' kullanın; Otomatik sistem yönlendirmeleri açıkken otomatik etkinleşir.",
         "rewriteAddress": "Adresi Yeniden Yaz",
         "rewritePort": "Port'u Yeniden Yaz",
+        "mieruTransport": "mieru aktarımı",
+        "mieruTransportDesc": "İstemci ile sunucu arasındaki aktarım. Her seçenek hem TCP hem de UDP proxy trafiğini destekler.",
         "allowedNetwork": "İzin Verilen Ağ",
         "followRedirect": "Yönlendirmeleri İzle",
         "accounts": "Hesaplar",
@@ -715,8 +717,8 @@
       },
       "sniffingDestOverride": "Hedef geçersiz kılma",
       "advancedTitle": "Gelişmiş Ayarlar",
-      "sshRuntime": {
-        "label": "SSH runtime: {state}",
+      "managedRuntime": {
+        "label": "{protocol} runtime: {state}",
         "disabled": "Disabled",
         "idle": "Idle",
         "pending": "Pending",
@@ -724,25 +726,32 @@
         "protected": "Protected",
         "unsupported": "Unsupported",
         "unavailable": "Unavailable",
-        "connections": "Authenticated SSH connections: {count}",
-        "explanation": "SSH listener status. Client quota and expiry restrictions still apply. Each authenticated SSH connection counts once, even with multiple forwarding channels.",
-        "awaitingConfiguration": "Waiting for the SSH configuration to be applied.",
-        "remoteUnavailable": "Remote SSH runtime observation is not yet supported.",
-        "awaitingDisable": "Waiting for the running SSH listener to stop.",
+        "connections": "Authenticated {protocol} connections: {count}",
+        "explanation": "{protocol} listener status. Client quota and expiry restrictions still apply. Each authenticated {protocol} connection counts once, even with multiple forwarding channels.",
+        "awaitingConfiguration": "Waiting for the {protocol} configuration to be applied.",
+        "remoteUnavailable": "Remote {protocol} runtime observation is not yet supported.",
+        "awaitingDisable": "Waiting for the running {protocol} listener to stop.",
         "noClients": "This inbound has no enabled clients.",
         "awaitingClients": "Waiting for the client changes to reach the running listener.",
         "waitingForRouter": "Waiting for the applied routing configuration and a running core.",
         "ratePolicyUnavailable": "Client rate policies are unavailable. The listener is protected.",
         "accountingUnavailable": "Client accounting policies are unavailable. The listener is protected.",
-        "listenerStopped": "The SSH listener stopped. Recovery is pending.",
+        "listenerStopped": "The {protocol} listener stopped. Recovery is pending.",
         "credentialsUnavailable": "Client credentials could not be applied.",
         "routingUnavailable": "The authenticated routing path is unavailable.",
-        "invalidConfiguration": "The stored SSH server configuration is invalid.",
-        "listenerUnavailable": "SSH listener unavailable. Check the listening address and port.",
-        "unknownReason": "Further runtime details are unavailable. Check service logs."
+        "invalidConfiguration": "The stored {protocol} server configuration is invalid.",
+        "listenerUnavailable": "{protocol} listener unavailable. Check the listening address and port.",
+        "unknownReason": "Further runtime details are unavailable. Check service logs.",
+        "sessions": "Kimliği doğrulanmış mieru oturumları: {count}",
+        "mieruExplanation": "mieru dinleyicisinin durumu. İstemci kotası ve sona erme kısıtları geçerlidir. Her izin verilen TCP oturumu veya UDP ilişkilendirmesi, aktarım çoklamasından bağımsız olarak bir kez sayılır."
       }
     },
     "clients": {
+      "mieruUsernameInvalid": "mieru kullanıcı adı, başında veya sonunda boşluk olmadan 1–64 UTF-8 baytı içermelidir.",
+      "mieruPasswordInvalid": "mieru parolaları 1–64 UTF-8 baytı içermelidir.",
+      "mieruPasswordDesc": "Yerel mieru kimlik doğrulama parolası. İstemci e-postası kullanıcı adıdır.",
+      "managedLocalOnly": "Yönetilen istemciler şu anda yalnızca yerel SSH veya mieru gelen bağlantılarını destekler.",
+      "managedLimitsUnavailable": "SSH ve mieru bağlantılarında IP ve cihaz sayısı sınırları henüz uygulanmadı. Trafik kotası, sona erme ve trafik politikaları kullanılabilir.",
       "tabBasics": "Temel",
       "tabCredentials": "Kimlik Bilgileri",
       "tabLinks": "Bağlantılar",
@@ -1039,12 +1048,14 @@
         "reversePort": "Remote listen port",
         "addReverse": "Authorize remote listener",
         "removeReverse": "Revoke remote listener",
-        "localOnly": "SSH clients currently require local SSH inbounds only.",
         "exportTitle": "OpenSSH configuration",
         "exportUnavailable": "Cannot export SSH: the host public key, address, port or username is missing or invalid. Check the inbound and client settings.",
         "exportHelp": "Download both files into one folder and run SSH from that folder. The known_hosts file pins this server’s actual public key; download it again after an intentional host-key change.",
-        "runHelp": "Replace the private-key path with your own matching client key. This example opens TCP SOCKS on loopback only. Use -L for a permitted target, or -R for an explicitly authorized remote listener. SSH nodes are not included in proxy subscription formats.",
-        "limitsUnavailable": "SSH connection IP and device-count limits are not yet implemented. Traffic quota, expiry and traffic policies are available."
+        "runHelp": "Replace the private-key path with your own matching client key. This example opens TCP SOCKS on loopback only. Use -L for a permitted target, or -R for an explicitly authorized remote listener. SSH nodes are not included in proxy subscription formats."
+      },
+      "mieru": {
+        "download": "mieru JSON indir",
+        "exportHelp": "Bu dosyayı resmi mieru istemcisiyle içe aktarın. SOCKS vekili 127.0.0.1:1080 üzerinde dinler. Mihomo abonelikleri mieru destekler; Xray JSON ve eski Clash desteklemez."
       }
     },
     "groups": {

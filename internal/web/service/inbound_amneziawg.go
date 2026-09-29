@@ -313,22 +313,21 @@ func (s *InboundService) normalizeAmneziaWGSettings(inbound *model.Inbound, oldS
 	return nil
 }
 
-// portConflictContext caches what checkForwardedPortsConflict needs — the panel's
-// own port and this host's enabled rows — so one save costs one query, not N.
+// portConflictContext caches this host's listeners and managed reservations
+// so a multi-client save needs one query.
 type portConflictContext struct {
 	webPort  int
 	inbounds []*model.Inbound
 }
 
-// loadPortConflictContext loads the panel's own port and every enabled inbound
-// hosted on THIS panel: a node-hosted one listens on that node's host, not here.
+// Disabled managed inbounds keep their bridge reservations for re-enablement.
 func (s *InboundService) loadPortConflictContext(db *gorm.DB) (portConflictContext, error) {
 	var ctx portConflictContext
 	if webPort, err := (&SettingService{}).GetPort(); err == nil {
 		ctx.webPort = webPort
 	}
 	err := db.Model(model.Inbound{}).
-		Where("enable = ? AND node_id IS NULL", true).
+		Where("node_id IS NULL AND (enable = ? OR protocol IN ?)", true, []model.Protocol{model.SSH, model.Mieru, model.MTProto}).
 		Find(&ctx.inbounds).Error
 	return ctx, err
 }
@@ -375,6 +374,16 @@ func (s *InboundService) checkForwardedPortsConflict(ctx portConflictContext, fo
 		return fmt.Sprintf("the panel's own port (%d)", ctx.webPort)
 	}
 	for _, ib := range ctx.inbounds {
+		bridgePort, err := inboundRoutingBridgePort(ib)
+		if err != nil {
+			return fmt.Sprintf("invalid managed bridge reservation on inbound #%d", ib.Id)
+		}
+		if bridgePort != 0 && amneziawg.ForwardedPortsInclude(forwardedPorts, bridgePort) {
+			return fmt.Sprintf("inbound '%s' (#%d)'s managed bridge port (%d)", ib.Tag, ib.Id, bridgePort)
+		}
+		if !ib.Enable && bridgePort != 0 {
+			continue
+		}
 		if amneziawg.ForwardedPortsInclude(forwardedPorts, ib.Port) {
 			name := ib.Remark
 			if name == "" {

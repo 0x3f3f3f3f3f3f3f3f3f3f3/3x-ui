@@ -76,7 +76,7 @@ func snapshotSSHRuntime(db *gorm.DB) map[int]sshRuntimeObservation {
 	process := currentXrayProcess()
 	matched := false
 	if process != nil && process.IsRunning() {
-		fingerprint := sshConfigFingerprint(process.GetConfig())
+		fingerprint := managedConfigFingerprint(process.GetConfig())
 		matched = fingerprint == manager.expected || fingerprint == manager.pending
 	}
 	observed := make(map[int]sshRuntimeObservation, len(manager.entries))

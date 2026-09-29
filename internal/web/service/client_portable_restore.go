@@ -28,9 +28,6 @@ func (s *ClientService) importPortableClient(inboundSvc *InboundService, item Cl
 		return false, false, fmt.Errorf("invalid portable quota")
 	}
 	if item.Policy != nil {
-		if client.SSH == nil {
-			return false, false, ErrClientPolicyUnsupported
-		}
 		if item.Traffic == nil {
 			return false, false, fmt.Errorf("portable policy requires a traffic snapshot")
 		}
@@ -75,19 +72,32 @@ func (s *ClientService) importPortableClient(inboundSvc *InboundService, item Cl
 		}
 	}()
 
+	managed := client.SSH != nil || item.Policy != nil
 	inbounds := make([]*model.Inbound, 0, len(ids))
 	for _, id := range ids {
 		inbound, err := inboundSvc.GetInbound(id)
 		if err != nil {
 			return false, false, err
 		}
-		if client.SSH != nil && (inbound.Protocol != model.SSH || inbound.NodeID != nil) {
-			return false, false, ErrClientPolicyUnsupported
-		}
+		managed = managed || inbound.Protocol == model.SSH || inbound.Protocol == model.Mieru
 		if err := s.fillProtocolDefaults(client, inbound); err != nil {
 			return false, false, err
 		}
 		inbounds = append(inbounds, inbound)
+	}
+	if managed {
+		for _, inbound := range inbounds {
+			if inbound.NodeID != nil || (inbound.Protocol != model.SSH && inbound.Protocol != model.Mieru) {
+				return false, false, ErrClientPolicyUnsupported
+			}
+			if inbound.Protocol == model.SSH {
+				if _, err := sshClientBinding(*client, uuid.NewString()); err != nil {
+					return false, false, ErrClientPolicyUnsupported
+				}
+			} else if _, err := mieruClientBinding(*client, uuid.NewString()); err != nil {
+				return false, false, err
+			}
+		}
 	}
 	adds := make([]*preparedInboundClientAdd, 0, len(ids))
 	applies := make([]inboundApply, 0, len(ids))
@@ -144,7 +154,7 @@ func (s *ClientService) importPortableClient(inboundSvc *InboundService, item Cl
 		if err := s.setClientLimitHwidByEmailTx(tx, client.Email, item.LimitHwid); err != nil {
 			return err
 		}
-		return restorePortableTrafficTx(tx, inboundSvc, item)
+		return restorePortableTrafficTx(tx, inboundSvc, item, managed)
 	})
 	if err != nil {
 		return false, false, err
@@ -177,19 +187,21 @@ func releaseRetainedPortableTrafficTx(tx *gorm.DB, email string) error {
 }
 
 // Only import's freshly created, uncommitted identity may initialize this ledger.
-func restorePortableTrafficTx(tx *gorm.DB, inboundSvc *InboundService, item ClientCreatePayload) error {
+func restorePortableTrafficTx(tx *gorm.DB, inboundSvc *InboundService, item ClientCreatePayload, managed bool) error {
 	if item.Traffic != nil {
 		if err := applyPortableTraffic(tx, inboundSvc, item); err != nil {
 			return err
 		}
 	}
-	if item.Client.SSH != nil {
+	if managed {
 		var record model.ClientRecord
 		if err := tx.Where("email = ?", item.Client.Email).First(&record).Error; err != nil {
 			return err
 		}
-		if _, err := sshClientBinding(*record.ToClient(), record.PolicyID); err != nil {
-			return err
+		if item.Client.SSH != nil {
+			if _, err := sshClientBinding(*record.ToClient(), record.PolicyID); err != nil {
+				return err
+			}
 		}
 		if len(item.InboundIds) == 0 && item.Traffic == nil {
 			if err := inboundSvc.AddClientStat(tx, 0, &item.Client); err != nil {

@@ -221,24 +221,36 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 	if err := s.reconcileInboundLinks(tx, inboundId, wantedFlow, wantedIds, detachEmails, prune); err != nil {
 		return err
 	}
-	hasSSH := false
+	hasManaged := false
 	newIDs := make(map[int]bool)
 	for _, record := range toCreate {
 		newIDs[record.Id] = true
-		hasSSH = hasSSH || record.SSHConfig != ""
+		hasManaged = hasManaged || record.SSHConfig != ""
 	}
 	for _, record := range existing {
-		hasSSH = hasSSH || record.SSHConfig != ""
+		hasManaged = hasManaged || record.SSHConfig != ""
 	}
-	if !hasSSH && len(wantedIds) > 0 {
+	if !hasManaged && len(wantedIds) > 0 {
 		var count int64
-		if err := tx.Model(&model.Inbound{}).Where("id = ? AND protocol = ?", inboundId, model.SSH).Count(&count).Error; err != nil {
+		if err := tx.Model(&model.Inbound{}).Where("id = ? AND protocol IN ?", inboundId, []model.Protocol{model.SSH, model.Mieru}).Count(&count).Error; err != nil {
 			return err
 		}
-		hasSSH = count > 0
+		hasManaged = count > 0
 	}
-	if hasSSH {
-		return reconcileSSHUsageTx(tx, wantedIds, newIDs)
+	if !hasManaged {
+		for _, part := range chunkInts(wantedIds, sqlInChunk) {
+			var count int64
+			if err := tx.Model(&model.ClientRecord{}).Joins("JOIN client_usage_accounts a ON a.policy_id = clients.policy_id").Where("clients.id IN ?", part).Count(&count).Error; err != nil {
+				return err
+			}
+			if count > 0 {
+				hasManaged = true
+				break
+			}
+		}
+	}
+	if hasManaged {
+		return reconcileManagedUsageTx(tx, wantedIds, newIDs)
 	}
 	return nil
 }

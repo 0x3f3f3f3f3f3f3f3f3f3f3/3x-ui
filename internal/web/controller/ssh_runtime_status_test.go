@@ -18,6 +18,15 @@ import (
 )
 
 func TestSSHRuntimeStatusHTTPAuthorizationAndOwnerIsolation(t *testing.T) {
+	testManagedRuntimeStatusHTTP(t, model.SSH, "/panel/api/inbounds/ssh/status", "authenticatedConnections")
+}
+
+func TestMieruRuntimeStatusHTTPAuthorizationAndOwnerIsolation(t *testing.T) {
+	testManagedRuntimeStatusHTTP(t, model.Mieru, "/panel/api/inbounds/mieru/status", "authenticatedSessions")
+}
+
+func testManagedRuntimeStatusHTTP(t *testing.T, protocol model.Protocol, path, countField string) {
+	t.Helper()
 	authEngine, auth := newAPIAuthTestEngine(t)
 	engine := gin.New()
 	engine.Use(sessions.Sessions("3x-ui", cookie.NewStore([]byte("ssh-status-test-secret"))))
@@ -39,8 +48,8 @@ func TestSSHRuntimeStatusHTTPAuthorizationAndOwnerIsolation(t *testing.T) {
 		c.Status(http.StatusOK)
 	})
 	rows := []*model.Inbound{
-		{UserId: owner.Id, Protocol: model.SSH, Enable: true, Tag: "status-owner", Settings: `{"hostKey":"PRIVATE KEY must not be read"}`},
-		{UserId: other.Id, Protocol: model.SSH, Enable: true, Tag: "status-other"},
+		{UserId: owner.Id, Protocol: protocol, Enable: true, Tag: "status-owner", Settings: `{"hostKey":"PRIVATE KEY must not be read","password":"private-native-password"}`},
+		{UserId: other.Id, Protocol: protocol, Enable: true, Tag: "status-other"},
 		{UserId: owner.Id, Protocol: model.VLESS, Enable: true, Tag: "status-native"},
 	}
 	for _, inbound := range rows {
@@ -67,7 +76,6 @@ func TestSSHRuntimeStatusHTTPAuthorizationAndOwnerIsolation(t *testing.T) {
 		engine.ServeHTTP(w, req)
 		return w
 	}
-	const path = "/panel/api/inbounds/ssh/status"
 	if w := request(path, "", nil); w.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous request status = %d, want 401: %s", w.Code, w.Body.String())
 	}
@@ -96,10 +104,10 @@ func TestSSHRuntimeStatusHTTPAuthorizationAndOwnerIsolation(t *testing.T) {
 			t.Fatalf("owner status response = %d %s", w.Code, w.Body.String())
 		}
 		status := envelope.Obj[0]
-		if len(status) != 4 || status["inboundId"] != float64(inboundID) || status["state"] != "idle" || status["reason"] != "no enabled clients" || status["authenticatedConnections"] != float64(0) {
+		if len(status) != 4 || status["inboundId"] != float64(inboundID) || status["state"] != "idle" || status["reason"] != "no enabled clients" || status[countField] != float64(0) {
 			t.Fatalf("wrong owner or unexpected status fields: %s", w.Body.String())
 		}
-		if strings.Contains(w.Body.String(), "PRIVATE KEY") {
+		if strings.Contains(w.Body.String(), "PRIVATE KEY") || strings.Contains(w.Body.String(), "private-native-password") {
 			t.Fatal("status response exposed stored credentials")
 		}
 	}

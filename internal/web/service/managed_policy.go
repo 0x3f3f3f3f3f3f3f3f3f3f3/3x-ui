@@ -1,11 +1,16 @@
 package service
 
 import (
+	"context"
+	"slices"
 	"sync"
+	"time"
 
 	"gorm.io/gorm"
 
+	"github.com/mhsanaei/3x-ui/v3/internal/clientpolicy"
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
+	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/policyflow"
 )
 
@@ -49,4 +54,28 @@ func (lease *managedPolicyLease) Close() {
 			delete(managedPolicyOwners.byDB, lease.db)
 		}
 	})
+}
+
+func loadManagedClientPolicies(ctx context.Context, db *gorm.DB, ids []string) (map[string]model.ClientPolicySettings, error) {
+	slices.Sort(ids)
+	ids = slices.Compact(ids)
+	policies := make(map[string]model.ClientPolicySettings, len(ids))
+	ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+	for _, part := range chunkStrings(ids, sqlInChunk) {
+		var rows []model.ClientPolicySettings
+		if err := db.WithContext(ctx).Where("policy_id IN ?", part).Find(&rows).Error; err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			if row.Scope != "local" {
+				return nil, ErrClientPolicyUnsupported
+			}
+			if row.UploadBps < 0 || row.UploadBps > clientpolicy.MaxRate || row.DownloadBps < 0 || row.DownloadBps > clientpolicy.MaxRate {
+				return nil, clientpolicy.ErrInvalidRate
+			}
+			policies[row.PolicyID] = row
+		}
+	}
+	return policies, nil
 }

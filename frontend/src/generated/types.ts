@@ -910,6 +910,13 @@ export interface MLKEM768Response {
   seed: string;
 }
 
+export interface MieruRuntimeStatus {
+  authenticatedSessions: number;
+  inboundId: number;
+  reason: string;
+  state: string;
+}
+
 export interface Msg {
   msg: string;
   obj: unknown;

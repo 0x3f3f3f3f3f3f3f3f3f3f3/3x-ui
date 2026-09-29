@@ -10,9 +10,12 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v3/internal/amneziawg"
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
+	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/sshoutbound"
 	"github.com/mhsanaei/3x-ui/v3/internal/util/common"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
+
+	"gorm.io/gorm"
 )
 
 // XraySettingService provides business logic for Xray configuration management.
@@ -45,7 +48,14 @@ func (s *XraySettingService) SaveXraySetting(newXraySettings string) error {
 	if spelled, changed, err := database.RewriteDNSOutboundQTypeZero(newXraySettings); err == nil && changed {
 		newXraySettings = spelled
 	}
-	return s.saveSetting("xrayTemplateConfig", newXraySettings)
+	return runSerializedTx(func(tx *gorm.DB) error {
+		if err := checkTemplateReservationsTx(tx, newXraySettings); err != nil {
+			return err
+		}
+		return tx.Where("key = ?", "xrayTemplateConfig").
+			Assign(model.Setting{Value: newXraySettings}).
+			FirstOrCreate(&model.Setting{Key: "xrayTemplateConfig"}).Error
+	})
 }
 
 func (s *XraySettingService) CheckXrayConfig(XrayTemplateConfig string) error {

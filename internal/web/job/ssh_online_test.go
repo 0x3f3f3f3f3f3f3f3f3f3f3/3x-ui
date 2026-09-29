@@ -23,10 +23,19 @@ import (
 )
 
 func TestSSHSourceCollectionDoesNotQueueHostWideIPBans(t *testing.T) {
+	testManagedSourceDoesNotQueueHostWideIPBans(t, model.SSH)
+}
+
+func TestMieruSourceCollectionDoesNotQueueHostWideIPBans(t *testing.T) {
+	testManagedSourceDoesNotQueueHostWideIPBans(t, model.Mieru)
+}
+
+func testManagedSourceDoesNotQueueHostWideIPBans(t *testing.T, protocol model.Protocol) {
+	t.Helper()
 	setupIntegrationDB(t)
 	const email = "ssh-source-only"
 	inbound := seedLinkedInboundWithClient(t, "ssh-ip-source", email, 1)
-	if err := database.GetDB().Model(inbound).Update("protocol", model.SSH).Error; err != nil {
+	if err := database.GetDB().Model(inbound).Update("protocol", protocol).Error; err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now().Unix()
@@ -34,10 +43,10 @@ func TestSSHSourceCollectionDoesNotQueueHostWideIPBans(t *testing.T) {
 	observed := map[string]map[string]int64{email: {"203.0.113.10": now - 1, "203.0.113.11": now}}
 	NewCheckClientIpJob().processObserved(observed, true, true)
 	if _, err := os.Stat(readIpLimitLogPath()); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("SSH source collection queued an unscoped host IP ban: stat error=%v", err)
+		t.Fatalf("managed source collection queued an unscoped host IP ban: stat error=%v", err)
 	}
 	if got := ipSet(readClientIps(t, email)); !reflect.DeepEqual(got, observed[email]) {
-		t.Fatalf("collection lost an SSH source: %v, want %v", got, observed[email])
+		t.Fatalf("collection lost a managed source: %v, want %v", got, observed[email])
 	}
 }
 

@@ -2,6 +2,7 @@ package mieru
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"sync"
@@ -13,6 +14,7 @@ type ownedListeners struct {
 	closers   []io.Closer
 	conns     map[*ownedStream]struct{}
 	closed    bool
+	failed    func()
 }
 
 func (l *ownedListeners) Listen(ctx context.Context, network, address string) (net.Listener, error) {
@@ -32,7 +34,7 @@ func (l *ownedListeners) ListenPacket(ctx context.Context, network, address stri
 	if err != nil {
 		return nil, err
 	}
-	owned := &ownedPacket{PacketConn: conn}
+	owned := &ownedPacket{PacketConn: conn, owner: l}
 	if !l.keep(conn.LocalAddr(), owned) {
 		return nil, ErrClosed
 	}
@@ -65,7 +67,7 @@ func (l *ownedListeners) close() {
 	}
 }
 
-func (l *ownedListeners) closeStreams() {
+func (l *ownedListeners) stopAccepting() {
 	l.mu.Lock()
 	l.closed = true
 	var closers []io.Closer
@@ -73,9 +75,6 @@ func (l *ownedListeners) closeStreams() {
 		if _, ok := closer.(net.Listener); ok {
 			closers = append(closers, closer)
 		}
-	}
-	for conn := range l.conns {
-		closers = append(closers, conn)
 	}
 	l.mu.Unlock()
 	for _, closer := range closers {
@@ -91,25 +90,50 @@ type ownedListener struct {
 }
 
 func (l *ownedListener) Close() error {
-	l.once.Do(func() { l.err = l.Listener.Close() })
+	l.once.Do(func() {
+		l.err = l.Listener.Close()
+		l.owner.fail()
+	})
 	return l.err
 }
 
 type ownedPacket struct {
 	net.PacketConn
-	once sync.Once
-	err  error
+	owner *ownedListeners
+	once  sync.Once
+	err   error
 }
 
 func (c *ownedPacket) Close() error {
-	c.once.Do(func() { c.err = c.PacketConn.Close() })
+	c.once.Do(func() {
+		c.err = c.PacketConn.Close()
+		c.owner.fail()
+	})
 	return c.err
+}
+
+func (l *ownedListeners) fail() {
+	if l != nil && l.failed != nil {
+		l.failed()
+	}
+}
+
+func (c *ownedPacket) ReadFrom(p []byte) (int, net.Addr, error) {
+	n, peer, err := c.PacketConn.ReadFrom(p)
+	if err != nil {
+		var failure net.Error
+		if !errors.As(err, &failure) || !failure.Timeout() {
+			c.owner.fail()
+		}
+	}
+	return n, peer, err
 }
 
 func (l *ownedListener) Accept() (net.Conn, error) {
 	for {
 		conn, err := l.Listener.Accept()
 		if err != nil {
+			l.owner.fail()
 			return nil, err
 		}
 		l.owner.mu.Lock()

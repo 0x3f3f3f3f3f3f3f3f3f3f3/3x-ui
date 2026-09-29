@@ -13,7 +13,7 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
 
-func reconcileSSHUsageTx(tx *gorm.DB, ids []int, newIDs map[int]bool) error {
+func reconcileManagedUsageTx(tx *gorm.DB, ids []int, newIDs map[int]bool) error {
 	for _, part := range chunkInts(ids, sqlInChunk) {
 		var records []model.ClientRecord
 		if err := tx.Where("id IN ?", part).Order("id").Find(&records).Error; err != nil {
@@ -25,26 +25,34 @@ func reconcileSSHUsageTx(tx *gorm.DB, ids []int, newIDs map[int]bool) error {
 				Where("ci.client_id = ?", record.Id).Find(&inbounds).Error; err != nil {
 				return err
 			}
-			hasSSH, unsupported := false, false
+			hasSSH, hasMieru, unsupported := false, false, false
 			for _, inbound := range inbounds {
 				hasSSH = hasSSH || inbound.Protocol == model.SSH
-				unsupported = unsupported || inbound.Protocol != model.SSH || inbound.NodeID != nil
+				hasMieru = hasMieru || inbound.Protocol == model.Mieru
+				unsupported = unsupported || (inbound.Protocol != model.SSH && inbound.Protocol != model.Mieru) || inbound.NodeID != nil
 			}
 			owned, err := clientHasUsageAccount(tx, record.Email)
 			if err != nil {
 				return err
 			}
-			if !hasSSH && !owned {
+			if !hasSSH && !hasMieru && !owned {
 				continue
 			}
 			if unsupported {
-				return errors.New("this SSH client's policy cannot yet be enforced across its other protocol or remote attachments")
+				return errors.New("this managed client's policy cannot yet be enforced across its other protocol or remote attachments")
 			}
 			if !owned && !newIDs[record.Id] {
-				return errors.New("existing clients require accounting migration before SSH attachment")
+				return errors.New("existing clients require accounting migration before managed protocol attachment")
 			}
-			if _, err := sshClientBinding(*record.ToClient(), record.PolicyID); err != nil {
-				return err
+			if hasSSH {
+				if _, err := sshClientBinding(*record.ToClient(), record.PolicyID); err != nil {
+					return err
+				}
+			}
+			if hasMieru {
+				if _, err := mieruClientBinding(*record.ToClient(), record.PolicyID); err != nil {
+					return err
+				}
 			}
 			if err := database.NewClientUsageLedger(tx).Ensure(tx.Statement.Context, record.PolicyID); err != nil {
 				return err
@@ -54,7 +62,7 @@ func reconcileSSHUsageTx(tx *gorm.DB, ids []int, newIDs map[int]bool) error {
 	return nil
 }
 
-func startManagedSSHClient(ctx context.Context, policyID string) error {
+func startManagedClient(ctx context.Context, policyID string) error {
 	ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()
 	var client model.ClientRecord
@@ -86,7 +94,7 @@ func startManagedSSHClient(ctx context.Context, policyID string) error {
 		}
 		now := time.Now().UnixMilli()
 		if client.ExpiryTime < now-math.MaxInt64 {
-			return errors.New("SSH first-use expiry duration overflows")
+			return errors.New("managed client first-use expiry duration overflows")
 		}
 		expiry := now - client.ExpiryTime
 		if err := tx.Model(&client).Updates(map[string]any{"expiry_time": expiry, "updated_at": now}).Error; err != nil {

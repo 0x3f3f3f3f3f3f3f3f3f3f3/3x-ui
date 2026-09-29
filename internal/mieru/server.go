@@ -44,9 +44,10 @@ type Client struct {
 type Binding struct{ Network, Address string }
 
 type Config struct {
-	InboundTag string
-	Bindings   []Binding
-	Clients    []Client
+	InboundTag    string
+	Bindings      []Binding
+	Clients       []Client
+	Authenticated func(context.Context, string) error
 }
 
 type Destination struct {
@@ -62,21 +63,22 @@ type Destination struct {
 type DialFunc func(context.Context, Destination) (net.Conn, error)
 
 type Server struct {
-	tag        string
-	clients    map[string]*clientGeneration
-	users      map[string]*appctlpb.User
-	endpoints  []protocol.UnderlayProperties
-	controller *policyflow.Controller
-	dial       DialFunc
-	ctx        context.Context
-	cancel     context.CancelFunc
-	lifecycle  sync.Mutex
-	mux        *protocol.Mux
-	started    bool
-	listeners  ownedListeners
-	mu         sync.Mutex
-	sessions   map[*managedSession]struct{}
-	workers    sync.WaitGroup
+	tag           string
+	clients       map[string]*clientGeneration
+	users         map[string]*appctlpb.User
+	endpoints     []protocol.UnderlayProperties
+	controller    *policyflow.Controller
+	dial          DialFunc
+	authenticated func(context.Context, string) error
+	ctx           context.Context
+	cancel        context.CancelFunc
+	lifecycle     sync.Mutex
+	mux           *protocol.Mux
+	started       bool
+	listeners     ownedListeners
+	mu            sync.Mutex
+	sessions      map[*managedSession]struct{}
+	workers       sync.WaitGroup
 }
 
 func New(config Config, controller *policyflow.Controller, dial DialFunc) (*Server, error) {
@@ -87,7 +89,7 @@ func New(config Config, controller *policyflow.Controller, dial DialFunc) (*Serv
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{tag: config.InboundTag, controller: controller, dial: dial, sessions: make(map[*managedSession]struct{})}
+	s := &Server{tag: config.InboundTag, controller: controller, dial: dial, authenticated: config.Authenticated, sessions: make(map[*managedSession]struct{})}
 	seen := make(map[Binding]bool)
 	for _, binding := range config.Bindings {
 		address, err := netip.ParseAddrPort(binding.Address)
@@ -107,6 +109,7 @@ func New(config Config, controller *policyflow.Controller, dial DialFunc) (*Serv
 		s.endpoints = append(s.endpoints, endpoint)
 	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
+	s.listeners.failed = s.cancel
 	s.replaceClients(clients)
 	return s, nil
 }
@@ -145,12 +148,16 @@ func (s *Server) Addresses() []net.Addr {
 	return append([]net.Addr(nil), s.listeners.addresses...)
 }
 
+func (s *Server) Done() <-chan struct{} {
+	return s.ctx.Done()
+}
+
 func (s *Server) Close() error {
 	s.lifecycle.Lock()
 	s.cancel()
 	mux := s.mux
 	s.lifecycle.Unlock()
-	s.listeners.closeStreams()
+	s.listeners.stopAccepting()
 	for _, conn := range s.closeSessions() {
 		<-conn.done
 	}
@@ -219,6 +226,11 @@ func (s *Server) handle(conn *managedSession) {
 		}
 		return
 	}
+	if s.authenticated != nil {
+		if err := s.authenticated(client.ctx, client.PolicyID); err != nil {
+			return
+		}
+	}
 	d := Destination{PolicyID: client.PolicyID, InboundTag: s.tag, Source: source}
 	switch request.Command {
 	case constant.Socks5ConnectCmd:
@@ -236,6 +248,10 @@ func (s *Server) handle(conn *managedSession) {
 			if err := writeReply(conn); err != nil {
 				_ = target.Close()
 				return nil, err
+			}
+			if !s.admitSession(conn) {
+				_ = target.Close()
+				return nil, ErrClosed
 			}
 			return target, nil
 		})

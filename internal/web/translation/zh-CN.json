@@ -503,6 +503,8 @@
         "autoOutboundsInterfaceTooltip": "出站流量的物理接口。使用 'auto' 进行检测;设置 Auto system routes 时自动启用。",
         "rewriteAddress": "重写地址",
         "rewritePort": "重写端口",
+        "mieruTransport": "mieru 传输方式",
+        "mieruTransportDesc": "客户端与服务器之间的传输方式。每种方式均支持代理 TCP 和 UDP 流量。",
         "allowedNetwork": "允许的网络",
         "followRedirect": "跟随重定向",
         "accounts": "账户",
@@ -715,8 +717,8 @@
       },
       "sniffingDestOverride": "目标覆盖",
       "advancedTitle": "高级设置",
-      "sshRuntime": {
-        "label": "SSH 运行状态：{state}",
+      "managedRuntime": {
+        "label": "{protocol} 运行状态：{state}",
         "disabled": "已禁用",
         "idle": "空闲",
         "pending": "等待应用",
@@ -724,25 +726,32 @@
         "protected": "受保护",
         "unsupported": "暂不支持",
         "unavailable": "状态不可用",
-        "connections": "已认证的 SSH 连接数：{count}",
-        "explanation": "SSH 监听器的实际状态。客户端仍受额度与到期限制。同一 SSH 连接即使包含多个转发通道，也只计为一个已认证连接。",
-        "awaitingConfiguration": "等待应用 SSH 配置。",
-        "remoteUnavailable": "暂不支持查询远端 SSH 的运行状态。",
-        "awaitingDisable": "等待正在运行的 SSH 监听器停止。",
+        "connections": "已认证的 {protocol} 连接数：{count}",
+        "explanation": "{protocol} 监听器的实际状态。客户端仍受额度与到期限制。同一 {protocol} 连接即使包含多个转发通道，也只计为一个已认证连接。",
+        "awaitingConfiguration": "等待应用 {protocol} 配置。",
+        "remoteUnavailable": "暂不支持查询远端 {protocol} 的运行状态。",
+        "awaitingDisable": "等待正在运行的 {protocol} 监听器停止。",
         "noClients": "此入站没有已启用的客户端。",
         "awaitingClients": "等待将客户端变更应用到正在运行的监听器。",
         "waitingForRouter": "等待应用路由配置并启动核心。",
         "ratePolicyUnavailable": "客户端限速策略不可用，监听器已进入保护状态。",
         "accountingUnavailable": "客户端计费策略不可用，监听器已进入保护状态。",
-        "listenerStopped": "SSH 监听器已停止，等待恢复。",
+        "listenerStopped": "{protocol} 监听器已停止，等待恢复。",
         "credentialsUnavailable": "无法应用客户端认证凭据。",
         "routingUnavailable": "经过身份认证的路由路径不可用。",
-        "invalidConfiguration": "已保存的 SSH 服务端配置无效。",
-        "listenerUnavailable": "SSH 监听器不可用，请检查监听地址和端口。",
-        "unknownReason": "详细运行状态暂不可用，请检查服务日志。"
+        "invalidConfiguration": "已保存的 {protocol} 服务端配置无效。",
+        "listenerUnavailable": "{protocol} 监听器不可用，请检查监听地址和端口。",
+        "unknownReason": "详细运行状态暂不可用，请检查服务日志。",
+        "sessions": "已认证的 mieru 会话：{count}",
+        "mieruExplanation": "mieru 监听状态。客户端流量额度和到期限制仍然生效。每个获准的 TCP 会话或 UDP 关联计数一次，不按复用的底层连接计数。"
       }
     },
     "clients": {
+      "mieruUsernameInvalid": "mieru 用户名须为 1–64 个 UTF-8 字节，且不能有首尾空白。",
+      "mieruPasswordInvalid": "mieru 密码须为 1–64 个 UTF-8 字节。",
+      "mieruPasswordDesc": "原生 mieru 认证密码，客户端邮箱用作用户名。",
+      "managedLocalOnly": "受管客户端目前仅支持绑定本地 SSH 或 mieru 入站。",
+      "managedLimitsUnavailable": "SSH 和 mieru 的连接 IP 与设备数量限制尚未实现。流量额度、到期时间及流量策略可用。",
       "tabBasics": "基本",
       "tabCredentials": "凭据",
       "tabLinks": "链接",
@@ -1039,12 +1048,14 @@
         "reversePort": "远程监听端口",
         "addReverse": "授权远程监听",
         "removeReverse": "撤销远程监听",
-        "localOnly": "SSH 客户端目前只能绑定本机 SSH 入站。",
         "exportTitle": "OpenSSH 配置",
         "exportUnavailable": "无法导出 SSH：主机公钥、地址、端口或用户名缺失或无效，请检查入站和客户端设置。",
         "exportHelp": "将两个文件下载到同一目录，并从该目录运行 SSH。known_hosts 文件固定信任此服务端的真实公钥；主动更换主机密钥后需重新下载。",
-        "runHelp": "将私钥路径替换为与已登记公钥对应的客户端私钥。示例仅在回环地址开放 TCP SOCKS。可使用 -L 访问已许可目标，或使用 -R 创建已明确授权的远程监听。SSH 节点不包含在代理订阅格式中。",
-        "limitsUnavailable": "SSH 连接的 IP 和设备数量限制尚未实现，目前只能在此配置流量额度、到期与流量策略。"
+        "runHelp": "将私钥路径替换为与已登记公钥对应的客户端私钥。示例仅在回环地址开放 TCP SOCKS。可使用 -L 访问已许可目标，或使用 -R 创建已明确授权的远程监听。SSH 节点不包含在代理订阅格式中。"
+      },
+      "mieru": {
+        "download": "下载 mieru JSON",
+        "exportHelp": "使用官方 mieru 客户端导入此文件，SOCKS 代理监听 127.0.0.1:1080。Mihomo 订阅支持 mieru；Xray JSON 和旧版 Clash 不支持 mieru。"
       }
     },
     "groups": {

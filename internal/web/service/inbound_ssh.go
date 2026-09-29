@@ -86,9 +86,11 @@ func normalizeSSHInbound(inbound *model.Inbound, previous string) error {
 	if inbound.Port < 1 || inbound.Port > 65535 {
 		return errors.New("invalid SSH listener port")
 	}
-	if inbound.Listen != "" && net.ParseIP(strings.Trim(inbound.Listen, "[]")) == nil {
+	listen, validListen := canonicalManagedListen(inbound.Listen)
+	if !validListen {
 		return errors.New("SSH listen address must be a literal IP")
 	}
+	inbound.Listen = listen
 	for _, client := range settings.Clients {
 		if _, err := sshClientBinding(client, uuid.NewString()); err != nil {
 			return err

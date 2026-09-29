@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"net/netip"
-	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -16,13 +15,11 @@ import (
 	"golang.org/x/crypto/ssh"
 	"gorm.io/gorm"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/clientpolicy"
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/logger"
 	"github.com/mhsanaei/3x-ui/v3/internal/policyflow"
 	"github.com/mhsanaei/3x-ui/v3/internal/routedbridge"
-	"github.com/mhsanaei/3x-ui/v3/internal/sshoutbound"
 	"github.com/mhsanaei/3x-ui/v3/internal/sshtunnel"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
@@ -57,7 +54,7 @@ type sshRuntimeEntry struct {
 	serveDone   <-chan error
 }
 
-func sshConfigFingerprint(v any) [32]byte {
+func managedConfigFingerprint(v any) [32]byte {
 	data, _ := json.Marshal(v)
 	return sha256.Sum256(data)
 }
@@ -141,9 +138,8 @@ func sshRuntimeClients(db *gorm.DB, inboundID int) ([]sshtunnel.Client, []routed
 }
 
 type sshRuntimePlan struct {
-	entries   map[int]*sshRuntimeEntry
-	configs   map[int]sshtunnel.Config
-	outbounds []sshoutbound.Outbound
+	entries map[int]*sshRuntimeEntry
+	configs map[int]sshtunnel.Config
 }
 
 func buildManagedSSH(cfg *xray.Config, inbounds []*model.Inbound) (*sshRuntimePlan, error) {
@@ -176,7 +172,7 @@ func buildManagedSSH(cfg *xray.Config, inbounds []*model.Inbound) (*sshRuntimePl
 			return nil, err
 		}
 		plan.entries[inbound.Id] = entry
-		plan.configs[inbound.Id] = sshtunnel.Config{InboundTag: inbound.Tag, HostKey: hostKey, Clients: clients, Authenticated: startManagedSSHClient}
+		plan.configs[inbound.Id] = sshtunnel.Config{InboundTag: inbound.Tag, HostKey: hostKey, Clients: clients, Authenticated: startManagedClient}
 	}
 	sshRuntimeState.Lock()
 	if sshRuntimeState.compiledDB == db {
@@ -191,7 +187,7 @@ func buildManagedSSH(cfg *xray.Config, inbounds []*model.Inbound) (*sshRuntimePl
 }
 
 func compiledSSHEntry(db *gorm.DB, inbound *model.Inbound, settings sshInboundSettings, bindings []routedbridge.ClientBinding) (*sshRuntimeEntry, error) {
-	fingerprint := sshConfigFingerprint([]any{inbound.Tag, sshListenAddress(inbound), settings.HostKey, settings.BridgePort, bindings})
+	fingerprint := managedConfigFingerprint([]any{inbound.Tag, sshListenAddress(inbound), settings.HostKey, settings.BridgePort, bindings})
 	sshRuntimeState.Lock()
 	defer sshRuntimeState.Unlock()
 	if m := sshRuntimeState.manager; m != nil && m.db == db {
@@ -229,7 +225,7 @@ func stageSSHRuntime(cfg *xray.Config) func() {
 	if m == nil {
 		return func() {}
 	}
-	fingerprint := sshConfigFingerprint(cfg)
+	fingerprint := managedConfigFingerprint(cfg)
 	m.mu.Lock()
 	m.pending = fingerprint
 	m.mu.Unlock()
@@ -260,7 +256,7 @@ func (plan *sshRuntimePlan) apply(cfg *xray.Config) {
 		entry.config = plan.configs[id]
 		entry.suspended = false
 	}
-	m.expected = sshConfigFingerprint(cfg)
+	m.expected = managedConfigFingerprint(cfg)
 	m.pending = [32]byte{}
 }
 
@@ -284,7 +280,7 @@ func (m *sshRuntimeManager) reconcile(ctx context.Context) {
 	process := currentXrayProcess()
 	matched := false
 	if process != nil && process.IsRunning() {
-		fingerprint := sshConfigFingerprint(process.GetConfig())
+		fingerprint := managedConfigFingerprint(process.GetConfig())
 		matched = fingerprint == m.expected || fingerprint == m.pending
 	}
 	if !matched {
@@ -380,27 +376,7 @@ func (m *sshRuntimeManager) loadClientPolicies(ctx context.Context) (map[string]
 			}
 		}
 	}
-	slices.Sort(ids)
-	ids = slices.Compact(ids)
-	policies := make(map[string]model.ClientPolicySettings, len(ids))
-	ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
-	defer cancel()
-	for _, part := range chunkStrings(ids, sqlInChunk) {
-		var rows []model.ClientPolicySettings
-		if err := m.db.WithContext(ctx).Where("policy_id IN ?", part).Find(&rows).Error; err != nil {
-			return nil, err
-		}
-		for _, row := range rows {
-			if row.Scope != "local" {
-				return nil, ErrClientPolicyUnsupported
-			}
-			if row.UploadBps < 0 || row.UploadBps > clientpolicy.MaxRate || row.DownloadBps < 0 || row.DownloadBps > clientpolicy.MaxRate {
-				return nil, clientpolicy.ErrInvalidRate
-			}
-			policies[row.PolicyID] = row
-		}
-	}
-	return policies, nil
+	return loadManagedClientPolicies(ctx, m.db, ids)
 }
 
 func NotifySSHChange(inboundID int, full bool) error {

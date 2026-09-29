@@ -875,7 +875,7 @@ export const InboundSchema = z.object({
   nodeId: z.number().int().nullable().optional(),
   originNodeGuid: z.string().optional(),
   port: z.number().int().min(0).max(65535),
-  protocol: z.enum(['vmess', 'vless', 'trojan', 'shadowsocks', 'wireguard', 'hysteria', 'http', 'mixed', 'tunnel', 'tun', 'mtproto', 'amneziawg', 'tuic', 'ssh']),
+  protocol: z.enum(['vmess', 'vless', 'trojan', 'shadowsocks', 'wireguard', 'hysteria', 'http', 'mixed', 'tunnel', 'tun', 'mtproto', 'amneziawg', 'tuic', 'ssh', 'mieru']),
   remark: z.string(),
   settings: z.unknown(),
   shareAddr: z.string(),
@@ -968,6 +968,14 @@ export const MLKEM768ResponseSchema = z.object({
   seed: z.string(),
 });
 export type MLKEM768Response = z.infer<typeof MLKEM768ResponseSchema>;
+
+export const MieruRuntimeStatusSchema = z.object({
+  authenticatedSessions: z.number().int(),
+  inboundId: z.number().int(),
+  reason: z.string(),
+  state: z.string(),
+});
+export type MieruRuntimeStatus = z.infer<typeof MieruRuntimeStatusSchema>;
 
 export const MsgSchema = z.object({
   msg: z.string(),

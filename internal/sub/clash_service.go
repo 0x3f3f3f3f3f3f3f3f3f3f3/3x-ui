@@ -328,6 +328,9 @@ func fallbackProxyName(proxy map[string]any, idx int) string {
 }
 
 func (s *SubClashService) getProxies(subReq *SubService, inbound *model.Inbound, client model.Client, host string) []map[string]any {
+	if inbound.Protocol == model.Mieru {
+		return subReq.genMieruMihomoProxies(inbound, client)
+	}
 	stream := s.streamData(inbound.StreamSettings)
 	// For node-managed inbounds the Clash proxy "server" must be the
 	// node's address, not the request host. resolveInboundAddress handles

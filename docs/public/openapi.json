@@ -3632,7 +3632,8 @@
               "mtproto",
               "amneziawg",
               "tuic",
-              "ssh"
+              "ssh",
+              "mieru"
             ],
             "example": "vless",
             "type": "string"
@@ -3993,6 +3994,32 @@
         "required": [
           "client",
           "seed"
+        ],
+        "type": "object"
+      },
+      "MieruRuntimeStatus": {
+        "properties": {
+          "authenticatedSessions": {
+            "example": 2,
+            "type": "integer"
+          },
+          "inboundId": {
+            "example": 1,
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "state": {
+            "example": "running",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authenticatedSessions",
+          "inboundId",
+          "reason",
+          "state"
         ],
         "type": "object"
       },
@@ -5957,6 +5984,53 @@
                   "obj": [
                     {
                       "authenticatedConnections": 2,
+                      "inboundId": 1,
+                      "reason": "",
+                      "state": "running"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/inbounds/mieru/status": {
+      "get": {
+        "tags": [
+          "Inbounds"
+        ],
+        "summary": "Read the authenticated user’s mieru inbound runtime states.",
+        "operationId": "get_panel_api_inbounds_mieru_status",
+        "description": "Does not apply configuration. Admin token or panel session required; monitor and node-sync tokens are denied. States: disabled, idle (no enabled clients), pending, running, protected, unsupported (remote mieru). Running means the native listener serves against the applied router; it does not establish target reachability or client quota eligibility. authenticatedSessions counts admitted TCP proxy sessions and UDP associations, excluding incomplete authentication and rejected requests. Several sessions may share an underlying native transport. reason contains a sanitized diagnostic. Returns [] when no mieru inbounds belong to the user.",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MieruRuntimeStatus"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": [
+                    {
+                      "authenticatedSessions": 2,
                       "inboundId": 1,
                       "reason": "",
                       "state": "running"

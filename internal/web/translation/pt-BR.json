@@ -504,6 +504,8 @@
         "autoOutboundsInterfaceTooltip": "Interface física para tráfego de saída. Use 'auto' para detecção; auto-habilitado quando Auto system routes está ativo.",
         "rewriteAddress": "Reescrever endereço",
         "rewritePort": "Reescrever porta",
+        "mieruTransport": "Transporte mieru",
+        "mieruTransportDesc": "Transporte entre o cliente e o servidor. Todas as opções suportam tráfego de proxy TCP e UDP.",
         "allowedNetwork": "Rede permitida",
         "followRedirect": "Seguir redirect",
         "accounts": "Contas",
@@ -715,8 +717,8 @@
       },
       "sniffingDestOverride": "Substituição de destino",
       "advancedTitle": "Configurações avançadas",
-      "sshRuntime": {
-        "label": "SSH runtime: {state}",
+      "managedRuntime": {
+        "label": "{protocol} runtime: {state}",
         "disabled": "Disabled",
         "idle": "Idle",
         "pending": "Pending",
@@ -724,25 +726,32 @@
         "protected": "Protected",
         "unsupported": "Unsupported",
         "unavailable": "Unavailable",
-        "connections": "Authenticated SSH connections: {count}",
-        "explanation": "SSH listener status. Client quota and expiry restrictions still apply. Each authenticated SSH connection counts once, even with multiple forwarding channels.",
-        "awaitingConfiguration": "Waiting for the SSH configuration to be applied.",
-        "remoteUnavailable": "Remote SSH runtime observation is not yet supported.",
-        "awaitingDisable": "Waiting for the running SSH listener to stop.",
+        "connections": "Authenticated {protocol} connections: {count}",
+        "explanation": "{protocol} listener status. Client quota and expiry restrictions still apply. Each authenticated {protocol} connection counts once, even with multiple forwarding channels.",
+        "awaitingConfiguration": "Waiting for the {protocol} configuration to be applied.",
+        "remoteUnavailable": "Remote {protocol} runtime observation is not yet supported.",
+        "awaitingDisable": "Waiting for the running {protocol} listener to stop.",
         "noClients": "This inbound has no enabled clients.",
         "awaitingClients": "Waiting for the client changes to reach the running listener.",
         "waitingForRouter": "Waiting for the applied routing configuration and a running core.",
         "ratePolicyUnavailable": "Client rate policies are unavailable. The listener is protected.",
         "accountingUnavailable": "Client accounting policies are unavailable. The listener is protected.",
-        "listenerStopped": "The SSH listener stopped. Recovery is pending.",
+        "listenerStopped": "The {protocol} listener stopped. Recovery is pending.",
         "credentialsUnavailable": "Client credentials could not be applied.",
         "routingUnavailable": "The authenticated routing path is unavailable.",
-        "invalidConfiguration": "The stored SSH server configuration is invalid.",
-        "listenerUnavailable": "SSH listener unavailable. Check the listening address and port.",
-        "unknownReason": "Further runtime details are unavailable. Check service logs."
+        "invalidConfiguration": "The stored {protocol} server configuration is invalid.",
+        "listenerUnavailable": "{protocol} listener unavailable. Check the listening address and port.",
+        "unknownReason": "Further runtime details are unavailable. Check service logs.",
+        "sessions": "Sessões mieru autenticadas: {count}",
+        "mieruExplanation": "Estado do listener mieru. As cotas e a validade do cliente continuam sendo aplicadas. Cada sessão TCP ou associação UDP permitida é contada uma vez, independentemente da multiplexação do transporte."
       }
     },
     "clients": {
+      "mieruUsernameInvalid": "O usuário mieru deve ter 1–64 bytes UTF-8, sem espaços no início ou no fim.",
+      "mieruPasswordInvalid": "A senha mieru deve ter 1–64 bytes UTF-8.",
+      "mieruPasswordDesc": "Senha de autenticação nativa do mieru. O email do cliente é o nome de usuário.",
+      "managedLocalOnly": "Clientes gerenciados atualmente exigem apenas inbounds SSH ou mieru locais.",
+      "managedLimitsUnavailable": "Os limites de IPs e dispositivos para SSH e mieru ainda não foram implementados. Cotas de tráfego, validade e políticas de tráfego estão disponíveis.",
       "tabBasics": "Básico",
       "tabCredentials": "Credenciais",
       "tabLinks": "Links",
@@ -1039,12 +1048,14 @@
         "reversePort": "Remote listen port",
         "addReverse": "Authorize remote listener",
         "removeReverse": "Revoke remote listener",
-        "localOnly": "SSH clients currently require local SSH inbounds only.",
         "exportTitle": "OpenSSH configuration",
         "exportUnavailable": "Cannot export SSH: the host public key, address, port or username is missing or invalid. Check the inbound and client settings.",
         "exportHelp": "Download both files into one folder and run SSH from that folder. The known_hosts file pins this server’s actual public key; download it again after an intentional host-key change.",
-        "runHelp": "Replace the private-key path with your own matching client key. This example opens TCP SOCKS on loopback only. Use -L for a permitted target, or -R for an explicitly authorized remote listener. SSH nodes are not included in proxy subscription formats.",
-        "limitsUnavailable": "SSH connection IP and device-count limits are not yet implemented. Traffic quota, expiry and traffic policies are available."
+        "runHelp": "Replace the private-key path with your own matching client key. This example opens TCP SOCKS on loopback only. Use -L for a permitted target, or -R for an explicitly authorized remote listener. SSH nodes are not included in proxy subscription formats."
+      },
+      "mieru": {
+        "download": "Baixar JSON do mieru",
+        "exportHelp": "Importe este arquivo com o cliente oficial do mieru. O proxy SOCKS escuta em 127.0.0.1:1080. Assinaturas Mihomo suportam mieru; Xray JSON e Clash antigo não suportam mieru."
       }
     },
     "groups": {

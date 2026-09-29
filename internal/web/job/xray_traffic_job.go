@@ -131,6 +131,11 @@ func (j *XrayTrafficJob) Run() {
 		logger.Warning("get online SSH clients failed:", sshErr)
 	}
 	onlineUsers = append(onlineUsers, sshUsers...)
+	mieruUsers, mieruTags, mieruErr := j.inboundService.GetLocalMieruOnlineUsers()
+	if mieruErr != nil {
+		logger.Warning("get online mieru clients failed:", mieruErr)
+	}
+	onlineUsers = append(onlineUsers, mieruUsers...)
 	idleOnline := make([]string, 0, len(onlineUsers))
 	for _, u := range onlineUsers {
 		if !deltaActive[u.Email] {
@@ -155,6 +160,7 @@ func (j *XrayTrafficJob) Run() {
 		}
 	}
 	activeInboundTags = append(activeInboundTags, sshTags...)
+	activeInboundTags = append(activeInboundTags, mieruTags...)
 	j.inboundService.RefreshLocalOnlineClients(activeEmails, activeInboundTags)
 
 	if !websocket.HasClients() {

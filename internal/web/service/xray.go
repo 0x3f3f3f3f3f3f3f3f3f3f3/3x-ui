@@ -168,7 +168,7 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 	return cfg, err
 }
 
-func (s *XrayService) buildXrayConfig() (*xray.Config, *sshRuntimePlan, error) {
+func (s *XrayService) buildXrayConfig() (*xray.Config, *managedRuntimePlan, error) {
 	templateConfig, err := s.settingService.GetXrayConfigTemplate()
 	if err != nil {
 		return nil, nil, err
@@ -206,7 +206,7 @@ func (s *XrayService) buildXrayConfig() (*xray.Config, *sshRuntimePlan, error) {
 		if inbound.NodeID != nil {
 			continue
 		}
-		if inbound.Protocol == model.MTProto || inbound.Protocol == model.AmneziaWG || inbound.Protocol == model.TUIC || inbound.Protocol == model.SSH {
+		if inbound.Protocol == model.MTProto || inbound.Protocol == model.AmneziaWG || inbound.Protocol == model.TUIC || inbound.Protocol == model.SSH || inbound.Protocol == model.Mieru {
 			continue
 		}
 		settings := map[string]any{}
@@ -457,12 +457,15 @@ func (s *XrayService) buildXrayConfig() (*xray.Config, *sshRuntimePlan, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	plan, err := buildManagedSSH(xrayConfig, inbounds)
+	sshPlan, err := buildManagedSSH(xrayConfig, inbounds)
 	if err != nil {
 		return nil, nil, err
 	}
-	plan.outbounds = outbounds
-	return xrayConfig, plan, nil
+	mieruPlan, err := buildManagedMieru(xrayConfig, inbounds)
+	if err != nil {
+		return nil, nil, err
+	}
+	return xrayConfig, &managedRuntimePlan{ssh: sshPlan, mieru: mieruPlan, outbounds: outbounds}, nil
 }
 
 // PanelEgressInboundTag is the tag of the loopback SOCKS inbound injected into
@@ -1389,12 +1392,12 @@ func (s *XrayService) RestartXray(isForce bool) error {
 	}
 	isManuallyStopped.Store(false)
 
-	xrayConfig, sshPlan, err := s.buildXrayConfig()
+	xrayConfig, managedPlan, err := s.buildXrayConfig()
 	if err != nil {
 		xrayState.holdBack(err.Error())
 		return err
 	}
-	stagedOutbounds, err := prepareManagedSSHOutbounds(sshPlan.outbounds)
+	stagedOutbounds, err := prepareManagedSSHOutbounds(managedPlan.outbounds)
 	if err != nil {
 		xrayState.holdBack(err.Error())
 		return err
@@ -1402,36 +1405,37 @@ func (s *XrayService) RestartXray(isForce bool) error {
 	if stagedOutbounds != nil {
 		defer stagedOutbounds.Rollback()
 	}
-	applySSH := func() {
+	applyManaged := func() {
 		if stagedOutbounds != nil {
 			stagedOutbounds.Commit()
 		}
-		sshPlan.apply(xrayConfig)
+		managedPlan.apply(xrayConfig)
 	}
 
 	process := currentXrayProcess()
 	configUnchanged := process != nil && process.IsRunning() && process.GetConfig().Equals(xrayConfig)
 	if !isForce && configUnchanged && !isNeedXrayRestart.Load() {
-		applySSH()
+		applyManaged()
 		xrayState.holdBack("")
 		logger.Debug("It does not need to restart Xray")
 		return nil
 	}
-	if stagedOutbounds != nil || len(sshPlan.entries) > 0 {
+	if stagedOutbounds != nil || managedPlan.hasServices() {
 		if err := xray.ValidateConfig(xrayConfig); err != nil {
 			xrayState.holdBack(err.Error())
 			return err
 		}
 	}
-	if stagedOutbounds != nil {
+	requiresReady := stagedOutbounds != nil || len(managedPlan.mieru.entries) > 0
+	if requiresReady {
 		if _, err := sshCoreAPIAddress(xrayConfig); err != nil {
 			xrayState.holdBack(err.Error())
 			return err
 		}
 	}
 	var previousConfig *xray.Config
-	releaseSSH := stageSSHRuntime(xrayConfig)
-	defer releaseSSH()
+	releaseManaged := stageManagedRuntime(xrayConfig)
+	defer releaseManaged()
 	if process != nil && process.IsRunning() {
 		previousConfig = process.GetConfig()
 		// A config the core cannot bind never replaces one that works: its failed
@@ -1447,7 +1451,7 @@ func (s *XrayService) RestartXray(isForce bool) error {
 			return fmt.Errorf("xray %s", refused)
 		}
 		if !isForce && !configUnchanged && s.tryHotApply(process, xrayConfig) {
-			applySSH()
+			applyManaged()
 			xrayState.holdBack("")
 			logger.Info("Xray config changes applied through the core API, no restart needed")
 			return nil
@@ -1466,11 +1470,11 @@ func (s *XrayService) RestartXray(isForce bool) error {
 	xrayState.replace(process)
 	s.xrayAPI.StatsLastValues = nil
 	err = process.Start()
-	if err == nil && stagedOutbounds != nil {
+	if err == nil && requiresReady {
 		err = waitSSHCoreReady(process)
 	}
 	if err != nil {
-		if stagedOutbounds != nil {
+		if requiresReady {
 			_ = process.Stop()
 			reason := "xray startup failed"
 			if previousConfig != nil {
@@ -1493,7 +1497,7 @@ func (s *XrayService) RestartXray(isForce bool) error {
 		return err
 	}
 
-	applySSH()
+	applyManaged()
 	return nil
 }
 
@@ -1653,6 +1657,7 @@ func (s *XrayService) StopXray() error {
 	lock.Lock()
 	defer lock.Unlock()
 	stopManagedSSH()
+	stopManagedMieru()
 	stopManagedSSHOutbounds()
 	isManuallyStopped.Store(true)
 	logger.Debug("Attempting to stop Xray...")

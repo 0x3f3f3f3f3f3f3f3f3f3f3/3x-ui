@@ -96,6 +96,7 @@ func run(root, outDir string) error {
 			StructAllow: setOf(
 				"InboundOption",
 				"SSHRuntimeStatus",
+				"MieruRuntimeStatus",
 				"HappLinkResult",
 				"ClientSlim",
 				"ClientRenewalPreviewRequest",

@@ -71,7 +71,7 @@ func readClientPolicy(tx *gorm.DB, email string) (clientPolicyState, error) {
 		COALESCE(a.multiplier, 1000) AS multiplier, COALESCE(t.total, 0) AS traffic_quota,
 		(a.policy_id IS NOT NULL AND EXISTS (SELECT 1 FROM client_inbounds ci WHERE ci.client_id = c.id)
 		AND NOT EXISTS (SELECT 1 FROM client_inbounds ci JOIN inbounds i ON i.id = ci.inbound_id
-		WHERE ci.client_id = c.id AND (i.protocol <> ? OR i.node_id IS NOT NULL))) AS supported`, model.SSH).
+		WHERE ci.client_id = c.id AND (i.protocol NOT IN ? OR i.node_id IS NOT NULL))) AS supported`, []model.Protocol{model.SSH, model.Mieru}).
 		Joins("LEFT JOIN client_policy_settings p ON p.policy_id = c.policy_id").
 		Joins("LEFT JOIN client_usage_accounts a ON a.policy_id = c.policy_id").
 		Joins("LEFT JOIN client_traffics t ON t.email = c.email").Where("c.email = ?", email).Take(&state).Error

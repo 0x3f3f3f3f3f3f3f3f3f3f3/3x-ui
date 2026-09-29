@@ -20,6 +20,7 @@ type LocalDeps struct {
 	APIPort        func() int
 	SetNeedRestart func()
 	SSHChanged     func(inboundID int, full bool) error
+	MieruChanged   func(inboundID int, full bool) error
 }
 
 type Local struct {
@@ -43,6 +44,16 @@ func (l *Local) notifySSH(id int, full bool) error {
 	return l.deps.SSHChanged(id, full)
 }
 
+func (l *Local) notifyMieru(id int, full bool) error {
+	if l.deps.MieruChanged == nil {
+		return errors.New("managed mieru runtime is unavailable")
+	}
+	if l.deps.SetNeedRestart != nil {
+		l.deps.SetNeedRestart()
+	}
+	return l.deps.MieruChanged(id, full)
+}
+
 func (l *Local) withAPI(fn func(api *xray.XrayAPI) error) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -62,6 +73,9 @@ func (l *Local) withAPI(fn func(api *xray.XrayAPI) error) error {
 func (l *Local) AddInbound(_ context.Context, ib *model.Inbound) error {
 	if ib.Protocol == model.SSH {
 		return l.notifySSH(ib.Id, true)
+	}
+	if ib.Protocol == model.Mieru {
+		return l.notifyMieru(ib.Id, true)
 	}
 	if ib.Protocol == model.MTProto {
 		inst, ok := mtproto.InstanceFromInbound(ib)
@@ -119,6 +133,9 @@ func (l *Local) DelInbound(_ context.Context, ib *model.Inbound) error {
 	if ib.Protocol == model.SSH {
 		return l.notifySSH(ib.Id, true)
 	}
+	if ib.Protocol == model.Mieru {
+		return l.notifyMieru(ib.Id, true)
+	}
 	if ib.Protocol == model.MTProto {
 		mtproto.GetManager().Remove(ib.Id)
 		return nil
@@ -151,6 +168,18 @@ func (l *Local) UpdateInbound(ctx context.Context, oldIb, newIb *model.Inbound) 
 			return l.DelInbound(ctx, oldIb)
 		}
 		if newIb.Protocol != model.SSH && newIb.Enable {
+			return l.AddInbound(ctx, newIb)
+		}
+		return nil
+	}
+	if oldIb.Protocol == model.Mieru || newIb.Protocol == model.Mieru {
+		if err := l.notifyMieru(oldIb.Id, true); err != nil {
+			return err
+		}
+		if oldIb.Protocol != model.Mieru {
+			return l.DelInbound(ctx, oldIb)
+		}
+		if newIb.Protocol != model.Mieru && newIb.Enable {
 			return l.AddInbound(ctx, newIb)
 		}
 		return nil
@@ -281,6 +310,9 @@ func (l *Local) AddUser(_ context.Context, ib *model.Inbound, userMap map[string
 	if ib.Protocol == model.SSH {
 		return l.notifySSH(ib.Id, false)
 	}
+	if ib.Protocol == model.Mieru {
+		return l.notifyMieru(ib.Id, false)
+	}
 	if ib.Protocol == model.MTProto || ib.Protocol == model.AmneziaWG || ib.Protocol == model.TUIC {
 		return nil
 	}
@@ -292,6 +324,9 @@ func (l *Local) AddUser(_ context.Context, ib *model.Inbound, userMap map[string
 func (l *Local) RemoveUser(_ context.Context, ib *model.Inbound, email string) error {
 	if ib.Protocol == model.SSH {
 		return l.notifySSH(ib.Id, false)
+	}
+	if ib.Protocol == model.Mieru {
+		return l.notifyMieru(ib.Id, false)
 	}
 	if ib.Protocol == model.MTProto || ib.Protocol == model.AmneziaWG || ib.Protocol == model.TUIC {
 		return nil
@@ -340,6 +375,9 @@ func (l *Local) DeleteClient(context.Context, string) error {
 func (l *Local) UpdateUser(ctx context.Context, ib *model.Inbound, oldEmail string, payload model.Client) error {
 	if ib.Protocol == model.SSH {
 		return l.notifySSH(ib.Id, false)
+	}
+	if ib.Protocol == model.Mieru {
+		return l.notifyMieru(ib.Id, false)
 	}
 	if oldEmail != "" {
 		if err := l.RemoveUser(ctx, ib, oldEmail); err != nil && !strings.Contains(err.Error(), "not found") {

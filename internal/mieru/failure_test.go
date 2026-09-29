@@ -14,6 +14,181 @@ import (
 	"github.com/enfein/mieru/v3/pkg/stderror"
 )
 
+func TestNativeListenerFailureSignalsRuntimeProtection(t *testing.T) {
+	for _, network := range []string{"tcp", "udp"} {
+		t.Run(network, func(t *testing.T) {
+			db, ledger, controller := mieruDB(t)
+			_, user := mieruUser(t, db, ledger, controller, 1000)
+			server, err := New(Config{InboundTag: "listener-failure", Bindings: []Binding{{Network: network, Address: "127.0.0.1:0"}}, Clients: []Client{user}}, controller,
+				func(context.Context, Destination) (net.Conn, error) { return nil, errors.New("unexpected dispatch") })
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = server.Close() })
+			if err := server.Start(); err != nil {
+				t.Fatal(err)
+			}
+			server.listeners.mu.Lock()
+			listener := server.listeners.closers[0]
+			server.listeners.mu.Unlock()
+			if err := listener.Close(); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case <-server.ctx.Done():
+			case <-time.After(200 * time.Millisecond):
+				t.Fatal("failed native listener did not signal the supervising runtime")
+			}
+		})
+	}
+}
+
+func TestNativeShutdownNotifiesExistingTCPAndUDPFlows(t *testing.T) {
+	for _, underlay := range []string{"tcp", "udp"} {
+		t.Run(underlay, func(t *testing.T) {
+			db, ledger, controller := mieruDB(t)
+			_, user := mieruUser(t, db, ledger, controller, 1000)
+			server := startNative(t, controller, underlay, user)
+			client := officialClient(t, server.Addresses()[0], user)
+			tcp := wireEcho(t, client, nativeEcho(t, "tcp"), []byte("before-shutdown"))
+			udp := wireEcho(t, client, nativeEcho(t, "udp"), []byte("before-shutdown"))
+			results := make(chan error, 2)
+			for _, conn := range []net.Conn{tcp, udp} {
+				_ = conn.SetReadDeadline(time.Now().Add(1250 * time.Millisecond))
+				go func() {
+					var b [1]byte
+					_, err := conn.Read(b[:])
+					results <- err
+				}()
+			}
+			if err := server.Close(); err != nil {
+				t.Fatal(err)
+			}
+			for range 2 {
+				if err := <-results; !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.ErrClosedPipe) {
+					t.Errorf("shutdown failed to notify an admitted flow within 1.25s: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestNativeFirstUseFailureProtectsRoutingAndUsage(t *testing.T) {
+	for _, underlay := range []string{"tcp", "udp"} {
+		t.Run(underlay, func(t *testing.T) {
+			db, ledger, controller := mieruDB(t)
+			_, user := mieruUser(t, db, ledger, controller, 1000)
+			var authenticated, dispatched atomic.Int64
+			server, err := New(Config{
+				InboundTag: "first-use-failure", Bindings: []Binding{{Network: underlay, Address: "127.0.0.1:0"}}, Clients: []Client{user},
+				Authenticated: func(_ context.Context, id string) error {
+					if id != user.PolicyID {
+						return errors.New("wrong authenticated policy identity")
+					}
+					authenticated.Add(1)
+					return errors.New("first-use metadata unavailable")
+				},
+			}, controller, func(ctx context.Context, d Destination) (net.Conn, error) {
+				dispatched.Add(1)
+				return directTestDial(ctx, d)
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = server.Close() })
+			if err := server.Start(); err != nil {
+				t.Fatal(err)
+			}
+			target := nativeEcho(t, "tcp")
+			wrong := user
+			wrong.Password = "invalid-first-use-password"
+			mux := clientMux(t, server.Addresses()[0], wrong)
+			rejectNativeRequest(t, rawNativeSession(t, mux), nativeRequest(t, target))
+			if authenticated.Load() != 0 {
+				t.Fatal("unauthenticated request activated first use")
+			}
+			client := officialClient(t, server.Addresses()[0], user)
+			requireDeniedSession(t, client, target)
+			if authenticated.Load() != 1 || dispatched.Load() != 0 {
+				t.Fatalf("first-use failure bypassed protection: authenticated=%d dispatched=%d", authenticated.Load(), dispatched.Load())
+			}
+			account, err := ledger.Read(t.Context(), user.PolicyID)
+			if err != nil || account.Up != 0 || account.Down != 0 || account.Billed != 0 {
+				t.Fatalf("first-use failure invented payload usage: %+v err=%v", account, err)
+			}
+		})
+	}
+}
+
+func TestNativeFirstUseWaitIsCancelledByCredentialRotation(t *testing.T) {
+	for _, underlay := range []string{"tcp", "udp"} {
+		t.Run(underlay, func(t *testing.T) {
+			db, ledger, controller := mieruDB(t)
+			_, user := mieruUser(t, db, ledger, controller, 1000)
+			entered, cancelled := make(chan string, 1), make(chan struct{})
+			var dispatched atomic.Int64
+			server, err := New(Config{
+				InboundTag: "pending-first-use", Bindings: []Binding{{Network: underlay, Address: "127.0.0.1:0"}}, Clients: []Client{user},
+				Authenticated: func(ctx context.Context, id string) error {
+					entered <- id
+					<-ctx.Done()
+					close(cancelled)
+					return ctx.Err()
+				},
+			}, controller, func(ctx context.Context, d Destination) (net.Conn, error) {
+				dispatched.Add(1)
+				return directTestDial(ctx, d)
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = server.Close() })
+			if err := server.Start(); err != nil {
+				t.Fatal(err)
+			}
+			client := officialClient(t, server.Addresses()[0], user)
+			target := nativeEcho(t, "tcp")
+			result := make(chan error, 1)
+			go func() {
+				conn, err := client.DialContext(t.Context(), target)
+				if conn != nil {
+					_ = conn.Close()
+				}
+				result <- err
+			}()
+			select {
+			case id := <-entered:
+				if id != user.PolicyID {
+					t.Fatalf("first-use identity=%q", id)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("authenticated request did not reach first-use callback")
+			}
+			rotated := user
+			rotated.Password = "rotation-cancels-first-use"
+			if err := server.UpdateClients([]Client{rotated}); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case <-cancelled:
+			case <-time.After(250 * time.Millisecond):
+				t.Fatal("credential rotation left first-use callback blocked")
+			}
+			select {
+			case err := <-result:
+				if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrClosedPipe) {
+					t.Fatalf("retired first-use request result: %v", err)
+				}
+			case <-time.After(1250 * time.Millisecond):
+				t.Fatal("retired first-use request stayed open")
+			}
+			if dispatched.Load() != 0 {
+				t.Fatal("retired first-use request reached routing")
+			}
+		})
+	}
+}
+
 func TestNativeAuthenticationAndRouteFailureNeverDialDirect(t *testing.T) {
 	db, ledger, controller := mieruDB(t)
 	_, user := mieruUser(t, db, ledger, controller, 1000)

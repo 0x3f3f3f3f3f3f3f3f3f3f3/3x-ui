@@ -30,16 +30,16 @@ func managedUsageFixture(t *testing.T, multiplier clientpolicy.Multiplier) (*dat
 
 func seedManagedUsageFixture(t *testing.T, multiplier clientpolicy.Multiplier) (*database.ClientUsageLedger, model.ClientRecord, model.ClientUsageMeter, int) {
 	t.Helper()
-	client := model.Client{Email: "managed-usage", Enable: true, TotalGB: 1000}
-	inbound := mkInbound(t, 31234, model.VLESS, clientsSettings(t, []model.Client{client}))
-	if err := (&ClientService{}).SyncInbound(nil, inbound.Id, []model.Client{client}); err != nil {
-		t.Fatal(err)
-	}
-	record := lookupClientRecord(t, client.Email)
+	client := model.Client{Email: "managed-usage", Password: "managed-usage-fixture", Enable: true, TotalGB: 1000}
+	inbound := mkInbound(t, 31234, model.Mieru, clientsSettings(t, []model.Client{client}))
 	db := database.GetDB()
 	if err := db.Create(&xray.ClientTraffic{InboundId: inbound.Id, Email: client.Email, Enable: true, Total: 1000}).Error; err != nil {
 		t.Fatal(err)
 	}
+	if err := (&ClientService{}).SyncInbound(nil, inbound.Id, []model.Client{client}); err != nil {
+		t.Fatal(err)
+	}
+	record := lookupClientRecord(t, client.Email)
 	ledger := database.NewClientUsageLedger(db)
 	if _, err := ledger.ChangeMultiplier(context.Background(), record.PolicyID, 1, multiplier, nil); err != nil {
 		t.Fatal(err)
@@ -197,7 +197,7 @@ func managedEcho(t *testing.T, conn net.Conn) {
 func TestManagedUsageResetFencesLiveTCPOnceAcrossAttachments(t *testing.T) {
 	ledger, record, _, _ := managedUsageFixture(t, 1500)
 	db := database.GetDB()
-	second := mkInbound(t, 31235, model.VLESS, clientsSettings(t, []model.Client{*record.ToClient()}))
+	second := mkInbound(t, 31235, model.Mieru, clientsSettings(t, []model.Client{*record.ToClient()}))
 	if err := (&ClientService{}).SyncInbound(nil, second.Id, []model.Client{*record.ToClient()}); err != nil {
 		t.Fatal(err)
 	}
@@ -403,7 +403,9 @@ func TestManagedUsageSingleResetReachesEachNodeOnce(t *testing.T) {
 		if err := db.Model(inbound).Update("node_id", node.Id).Error; err != nil {
 			t.Fatal(err)
 		}
-		if err := (&ClientService{}).SyncInbound(nil, inbound.Id, []model.Client{*record.ToClient()}); err != nil {
+		// Model a pre-existing remote accounting snapshot; new unsupported attachments
+		// are denied by the public service and are tested separately.
+		if err := db.Create(&model.ClientInbound{ClientId: record.Id, InboundId: inbound.Id}).Error; err != nil {
 			t.Fatal(err)
 		}
 	}

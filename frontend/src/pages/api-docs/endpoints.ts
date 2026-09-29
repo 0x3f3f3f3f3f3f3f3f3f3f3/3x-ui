@@ -294,6 +294,15 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'GET',
+        path: '/panel/api/inbounds/mieru/status',
+        summary: 'Read the authenticated user’s mieru inbound runtime states.',
+        description:
+          'Does not apply configuration. Admin token or panel session required; monitor and node-sync tokens are denied. States: disabled, idle (no enabled clients), pending, running, protected, unsupported (remote mieru). Running means the native listener serves against the applied router; it does not establish target reachability or client quota eligibility. authenticatedSessions counts admitted TCP proxy sessions and UDP associations, excluding incomplete authentication and rejected requests. Several sessions may share an underlying native transport. reason contains a sanitized diagnostic. Returns [] when no mieru inbounds belong to the user.',
+        responseSchema: 'MieruRuntimeStatus',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'GET',
         path: '/panel/api/inbounds/allLinks',
         responseObjectSchema: { type: 'array', nullable: true, items: { type: 'string' } },
         summary:

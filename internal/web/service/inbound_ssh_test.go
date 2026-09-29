@@ -752,7 +752,7 @@ func TestSSHFirstUseDoesNotWaitForStalledWriter(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	done := make(chan error, 1)
-	go func() { done <- startManagedSSHClient(ctx, client.PolicyID) }()
+	go func() { done <- startManagedClient(ctx, client.PolicyID) }()
 	select {
 	case err := <-done:
 		if !errors.Is(err, context.DeadlineExceeded) {

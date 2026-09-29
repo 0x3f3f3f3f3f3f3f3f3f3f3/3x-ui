@@ -483,6 +483,8 @@
         "autoOutboundsInterfaceTooltip": "الواجهة الفعلية لحركة المرور الصادرة. استخدم 'auto' للاكتشاف؛ يتم تفعيلها تلقائياً عند تعيين Auto system routes.",
         "rewriteAddress": "إعادة كتابة العنوان",
         "rewritePort": "إعادة كتابة المنفذ",
+        "mieruTransport": "نقل mieru",
+        "mieruTransportDesc": "وسيلة النقل بين العميل والخادم. يدعم كل خيار تمرير حركة TCP وUDP عبر الوكيل.",
         "allowedNetwork": "الشبكة المسموح بها",
         "followRedirect": "اتبع إعادة التوجيه",
         "accounts": "الحسابات",
@@ -715,8 +717,8 @@
       },
       "sniffingDestOverride": "تجاوز الوجهة",
       "advancedTitle": "الإعدادات المتقدمة",
-      "sshRuntime": {
-        "label": "SSH runtime: {state}",
+      "managedRuntime": {
+        "label": "{protocol} runtime: {state}",
         "disabled": "Disabled",
         "idle": "Idle",
         "pending": "Pending",
@@ -724,25 +726,32 @@
         "protected": "Protected",
         "unsupported": "Unsupported",
         "unavailable": "Unavailable",
-        "connections": "Authenticated SSH connections: {count}",
-        "explanation": "SSH listener status. Client quota and expiry restrictions still apply. Each authenticated SSH connection counts once, even with multiple forwarding channels.",
-        "awaitingConfiguration": "Waiting for the SSH configuration to be applied.",
-        "remoteUnavailable": "Remote SSH runtime observation is not yet supported.",
-        "awaitingDisable": "Waiting for the running SSH listener to stop.",
+        "connections": "Authenticated {protocol} connections: {count}",
+        "explanation": "{protocol} listener status. Client quota and expiry restrictions still apply. Each authenticated {protocol} connection counts once, even with multiple forwarding channels.",
+        "awaitingConfiguration": "Waiting for the {protocol} configuration to be applied.",
+        "remoteUnavailable": "Remote {protocol} runtime observation is not yet supported.",
+        "awaitingDisable": "Waiting for the running {protocol} listener to stop.",
         "noClients": "This inbound has no enabled clients.",
         "awaitingClients": "Waiting for the client changes to reach the running listener.",
         "waitingForRouter": "Waiting for the applied routing configuration and a running core.",
         "ratePolicyUnavailable": "Client rate policies are unavailable. The listener is protected.",
         "accountingUnavailable": "Client accounting policies are unavailable. The listener is protected.",
-        "listenerStopped": "The SSH listener stopped. Recovery is pending.",
+        "listenerStopped": "The {protocol} listener stopped. Recovery is pending.",
         "credentialsUnavailable": "Client credentials could not be applied.",
         "routingUnavailable": "The authenticated routing path is unavailable.",
-        "invalidConfiguration": "The stored SSH server configuration is invalid.",
-        "listenerUnavailable": "SSH listener unavailable. Check the listening address and port.",
-        "unknownReason": "Further runtime details are unavailable. Check service logs."
+        "invalidConfiguration": "The stored {protocol} server configuration is invalid.",
+        "listenerUnavailable": "{protocol} listener unavailable. Check the listening address and port.",
+        "unknownReason": "Further runtime details are unavailable. Check service logs.",
+        "sessions": "جلسات mieru الموثقة: {count}",
+        "mieruExplanation": "حالة مستمع mieru. تظل حصة العميل وقيود انتهاء الصلاحية سارية. تُحسب كل جلسة TCP أو ارتباط UDP مسموح به مرة واحدة، بغض النظر عن تعدد الإرسال."
       }
     },
     "clients": {
+      "mieruUsernameInvalid": "يجب أن يتكون اسم مستخدم mieru من 1–64 بايت UTF-8 دون مسافات في البداية أو النهاية.",
+      "mieruPasswordInvalid": "يجب أن تتكون كلمة مرور mieru من 1–64 بايت UTF-8.",
+      "mieruPasswordDesc": "كلمة مرور مصادقة mieru. يُستخدم بريد العميل الإلكتروني كاسم مستخدم.",
+      "managedLocalOnly": "يدعم العملاء المُدارون حاليًا اتصالات SSH أو mieru الواردة المحلية فقط.",
+      "managedLimitsUnavailable": "لم تُنفذ بعد حدود عدد عناوين IP والأجهزة لاتصالات SSH وmieru. تتوفر حصة البيانات ومدة الصلاحية وسياسات المرور.",
       "tabBasics": "أساسي",
       "tabCredentials": "بيانات الاعتماد",
       "tabLinks": "الروابط",
@@ -1039,12 +1048,14 @@
         "reversePort": "Remote listen port",
         "addReverse": "Authorize remote listener",
         "removeReverse": "Revoke remote listener",
-        "localOnly": "SSH clients currently require local SSH inbounds only.",
         "exportTitle": "OpenSSH configuration",
         "exportUnavailable": "Cannot export SSH: the host public key, address, port or username is missing or invalid. Check the inbound and client settings.",
         "exportHelp": "Download both files into one folder and run SSH from that folder. The known_hosts file pins this server’s actual public key; download it again after an intentional host-key change.",
-        "runHelp": "Replace the private-key path with your own matching client key. This example opens TCP SOCKS on loopback only. Use -L for a permitted target, or -R for an explicitly authorized remote listener. SSH nodes are not included in proxy subscription formats.",
-        "limitsUnavailable": "SSH connection IP and device-count limits are not yet implemented. Traffic quota, expiry and traffic policies are available."
+        "runHelp": "Replace the private-key path with your own matching client key. This example opens TCP SOCKS on loopback only. Use -L for a permitted target, or -R for an explicitly authorized remote listener. SSH nodes are not included in proxy subscription formats."
+      },
+      "mieru": {
+        "download": "تنزيل JSON لـ mieru",
+        "exportHelp": "استورد هذا الملف باستخدام عميل mieru الرسمي. يستمع وكيل SOCKS على 127.0.0.1:1080. تدعم اشتراكات Mihomo بروتوكول mieru؛ ولا يدعمه Xray JSON أو Clash القديم."
       }
     },
     "groups": {

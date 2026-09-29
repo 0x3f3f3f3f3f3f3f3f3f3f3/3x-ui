@@ -89,8 +89,7 @@ func (j *CheckClientIpJob) resolveEnforce(hasLimit, f2bInstalled bool) bool {
 	return hasLimit
 }
 
-// collectFromOnlineAPI merges native online-stats and admitted SSH transports.
-// SSH collection remains available when the native online RPC is unsupported or fails.
+// Managed protocol observations remain available when the core online RPC fails.
 func (j *CheckClientIpJob) collectFromOnlineAPI() (map[string]map[string]int64, bool) {
 	onlineUsers, ok, err := j.xrayService.GetOnlineUsers()
 	if err != nil {
@@ -108,6 +107,14 @@ func (j *CheckClientIpJob) collectFromOnlineAPI() (map[string]map[string]int64, 
 		onlineUsers = append(onlineUsers, sshUsers...)
 		ok = true
 	}
+	mieruUsers, _, mieruErr := (&service.InboundService{}).GetLocalMieruOnlineUsers()
+	if mieruErr != nil {
+		logger.Warning("[LimitIP] mieru source observations unavailable:", mieruErr)
+	}
+	if len(mieruUsers) > 0 {
+		onlineUsers = append(onlineUsers, mieruUsers...)
+		ok = true
+	}
 	if !ok {
 		return nil, false
 	}
@@ -115,7 +122,7 @@ func (j *CheckClientIpJob) collectFromOnlineAPI() (map[string]map[string]int64, 
 	observed := make(map[string]map[string]int64, len(onlineUsers))
 	for _, user := range onlineUsers {
 		for _, entry := range user.IPs {
-			// SSH may legitimately authenticate a loopback peer; retain its actual address.
+			// Managed services may authenticate a loopback peer; retain its actual address.
 			ts := entry.LastSeen
 			if ts <= 0 {
 				ts = now
@@ -364,8 +371,8 @@ func (j *CheckClientIpJob) processObserved(observed map[string]map[string]int64,
 			continue
 		}
 
-		// A host-wide IP ban cannot enforce independent SSH clients behind one address.
-		enforceClient := enforce && inbound.Protocol != model.SSH
+		// A host-wide IP ban cannot distinguish managed clients behind one address.
+		enforceClient := enforce && inbound.Protocol != model.SSH && inbound.Protocol != model.Mieru
 		candidates, keptLive := j.updateInboundClientIps(tx, clientIpsRecord, inbound, email, limitByEmail[email], ipsWithTime, enforceClient, observedAreLive)
 		bans = append(bans, pendingBan{inbound: inbound, email: email, candidates: candidates, keptLive: keptLive})
 	}

@@ -1120,6 +1120,9 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	if err := normalizeSSHInbound(inbound, ""); err != nil {
 		return inbound, false, err
 	}
+	if err := normalizeMieruInbound(inbound, nil); err != nil {
+		return inbound, false, err
+	}
 	if inbound.NodeID != nil && !isNodeEligibleProtocol(inbound.Protocol) {
 		return inbound, false, common.NewErrorf("%s inbounds cannot be assigned to a node", inbound.Protocol)
 	}
@@ -1232,6 +1235,10 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 			}
 		case "ssh":
 			if _, err := sshClientBinding(client, uuid.NewString()); err != nil {
+				return inbound, false, err
+			}
+		case "mieru":
+			if _, err := mieruClientBinding(client, uuid.NewString()); err != nil {
 				return inbound, false, err
 			}
 		default:
@@ -1717,6 +1724,9 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	if err := normalizeSSHInbound(inbound, oldInbound.Settings); err != nil {
 		return inbound, false, err
 	}
+	if err := normalizeMieruInbound(inbound, oldInbound); err != nil {
+		return inbound, false, err
+	}
 	inbound.SubSortIndex = normalizeSubSortIndex(inbound.SubSortIndex)
 
 	clients, err := s.GetClients(inbound)
@@ -1920,7 +1930,7 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 			}
 			if !push {
 				needRestart = true
-			} else if oldProtocol == model.MTProto || oldInbound.Protocol == model.MTProto || oldProtocol == model.TUIC || oldInbound.Protocol == model.TUIC || oldProtocol == model.SSH || oldInbound.Protocol == model.SSH {
+			} else if oldProtocol == model.MTProto || oldInbound.Protocol == model.MTProto || oldProtocol == model.TUIC || oldInbound.Protocol == model.TUIC || oldProtocol == model.SSH || oldInbound.Protocol == model.SSH || oldProtocol == model.Mieru || oldInbound.Protocol == model.Mieru {
 				oldSnapshot := *oldInbound
 				oldSnapshot.Tag = tag
 				oldSnapshot.Protocol = oldProtocol
@@ -1934,7 +1944,7 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 						pushable = false
 					}
 				}
-				newProtocolIsSidecar := oldInbound.Protocol == model.MTProto || oldInbound.Protocol == model.TUIC || oldInbound.Protocol == model.SSH
+				newProtocolIsSidecar := oldInbound.Protocol == model.MTProto || oldInbound.Protocol == model.TUIC || oldInbound.Protocol == model.SSH || oldInbound.Protocol == model.Mieru
 				if pushable {
 					postCommitApply = func() {
 						if err2 := rt.UpdateInbound(context.Background(), &oldSnapshot, payload); err2 == nil {
@@ -2166,8 +2176,15 @@ func (s *InboundService) updateClientTraffics(tx *gorm.DB, oldInbound *model.Inb
 		if stillUsed {
 			continue
 		}
-		if err := s.DelClientStat(tx, email); err != nil {
+		owned, err := clientHasUsageAccount(tx, email)
+		if err != nil {
 			return err
+		}
+		// Detaching an owned client must retain the projection paired with its durable ledger.
+		if !owned {
+			if err := s.DelClientStat(tx, email); err != nil {
+				return err
+			}
 		}
 		// Keep inbound_client_ips in sync when the inbound edit drops an
 		// email, so the IP-limit job doesn't keep a ghost tracking row (#4963).

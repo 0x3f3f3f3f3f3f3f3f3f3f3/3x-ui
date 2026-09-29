@@ -3606,7 +3606,8 @@ export const SCHEMAS: Record<string, unknown> = {
           "mtproto",
           "amneziawg",
           "tuic",
-          "ssh"
+          "ssh",
+          "mieru"
         ],
         "example": "vless",
         "type": "string"
@@ -3967,6 +3968,32 @@ export const SCHEMAS: Record<string, unknown> = {
     "required": [
       "client",
       "seed"
+    ],
+    "type": "object"
+  },
+  "MieruRuntimeStatus": {
+    "properties": {
+      "authenticatedSessions": {
+        "example": 2,
+        "type": "integer"
+      },
+      "inboundId": {
+        "example": 1,
+        "type": "integer"
+      },
+      "reason": {
+        "type": "string"
+      },
+      "state": {
+        "example": "running",
+        "type": "string"
+      }
+    },
+    "required": [
+      "authenticatedSessions",
+      "inboundId",
+      "reason",
+      "state"
     ],
     "type": "object"
   },

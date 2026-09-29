@@ -29,6 +29,19 @@ func inboundTransports(protocol model.Protocol, streamSettings, settings string)
 		return transportUDP
 	case model.MTProto:
 		return transportTCP
+	case model.Mieru:
+		var native mieruInboundSettings
+		if err := json.Unmarshal([]byte(settings), &native); err != nil {
+			return transportTCP | transportUDP
+		}
+		switch native.Network {
+		case "", "tcp":
+			return transportTCP
+		case "udp":
+			return transportUDP
+		default:
+			return transportTCP | transportUDP
+		}
 	}
 
 	var bits transportBits
@@ -59,14 +72,28 @@ func inboundTransports(protocol model.Protocol, streamSettings, settings string)
 		var st map[string]any
 		if json.Unmarshal([]byte(settings), &st) == nil {
 			switch protocol {
-			case model.Shadowsocks, model.Tunnel:
+			case model.Shadowsocks, model.Tunnel, model.Protocol("dokodemo-door"):
 				key := "network"
-				if protocol == model.Tunnel {
+				if protocol == model.Tunnel || protocol == model.Protocol("dokodemo-door") {
 					key = "allowedNetwork"
+					if st["network"] != nil {
+						key = "network"
+					}
 				}
-				if n, ok := st[key].(string); ok && n != "" {
+				var networks []string
+				switch n := st[key].(type) {
+				case string:
+					networks = strings.Split(n, ",")
+				case []any:
+					for _, value := range n {
+						if network, ok := value.(string); ok {
+							networks = append(networks, network)
+						}
+					}
+				}
+				if len(networks) != 0 {
 					bits = 0
-					for part := range strings.SplitSeq(n, ",") {
+					for _, part := range networks {
 						switch strings.TrimSpace(part) {
 						case "tcp":
 							bits |= transportTCP
@@ -119,6 +146,18 @@ func streamV6Only(streamSettings string) bool {
 }
 
 func listenOverlaps(a, b bindAddr) bool {
+	if a.listen == "localhost" {
+		a.listen = "127.0.0.1"
+	}
+	if b.listen == "localhost" {
+		b.listen = "127.0.0.1"
+	}
+	if ip := net.ParseIP(a.listen); ip != nil {
+		a.listen = ip.String()
+	}
+	if ip := net.ParseIP(b.listen); ip != nil {
+		b.listen = ip.String()
+	}
 	if a.listen == b.listen {
 		return true
 	}
@@ -240,20 +279,50 @@ func (s *InboundService) checkPortConflict(inbound *model.Inbound, ignoreId int)
 }
 
 func checkPortConflictTx(db *gorm.DB, inbound *model.Inbound, ignoreId int) (*portConflictDetail, error) {
-	newBits := inboundTransports(inbound.Protocol, inbound.StreamSettings, inbound.Settings)
+	if err := lockListenerReservationsTx(db); err != nil {
+		return nil, err
+	}
+	if conflict, err := checkListenerPortConflictTx(db, inbound, ignoreId); err != nil || conflict != nil {
+		return conflict, err
+	}
+	port, err := inboundRoutingBridgePort(inbound)
+	if err != nil || port == 0 {
+		return nil, err
+	}
+	if port == inbound.Port && inboundTransports(inbound.Protocol, inbound.StreamSettings, inbound.Settings)&transportTCP != 0 && listenOverlaps(loopbackBind, inboundBindAddr(inbound)) {
+		return nil, fmt.Errorf("%s public listener overlaps its own routing bridge on port %d", inbound.Protocol, port)
+	}
+	bridge := &model.Inbound{Protocol: model.VLESS, Listen: "127.0.0.1", Port: port, NodeID: inbound.NodeID}
+	return checkListenerPortConflictTx(db, bridge, ignoreId)
+}
 
-	// The internal Xray API inbound (tag "api", loopback TCP) isn't a DB row,
-	// so a local user inbound reusing its port would leave Xray binding the
-	// port twice (#5304). Nodes run their own Xray, so this only applies to
-	// the local panel.
-	if inbound.NodeID == nil && inbound.Port == reservedAPIPort() &&
-		newBits&transportTCP != 0 && listenOverlaps(loopbackBind, inboundBindAddr(inbound)) {
-		return &portConflictDetail{
-			Tag:        "api",
-			Listen:     "127.0.0.1",
-			Port:       inbound.Port,
-			Transports: transportTCP,
-		}, nil
+func lockListenerReservationsTx(db *gorm.DB) error {
+	if db.Name() != "postgres" {
+		return nil
+	}
+	// Also serialize callers without an active traffic writer; release only on commit/rollback.
+	return db.Exec("SELECT pg_advisory_xact_lock(hashtext(current_schema()), hashtext('3x-ui:listener-reservations'))").Error
+}
+
+func checkListenerPortConflictTx(db *gorm.DB, inbound *model.Inbound, ignoreId int) (*portConflictDetail, error) {
+	return checkListenerReservationsTx(db, inbound, ignoreId, true)
+}
+
+func checkListenerReservationsTx(db *gorm.DB, inbound *model.Inbound, ignoreId int, includeTemplate bool) (*portConflictDetail, error) {
+	newBits := inboundTransports(inbound.Protocol, inbound.StreamSettings, inbound.Settings)
+	if conflict, err := checkManagedBridgeConflict(db, inbound, ignoreId, newBits); err != nil || conflict != nil {
+		return conflict, err
+	}
+
+	if inbound.NodeID == nil {
+		if conflict, err := checkSSHUpstreamPortConflict(inbound, newBits); err != nil || conflict != nil {
+			return conflict, err
+		}
+		if includeTemplate {
+			if conflict, err := checkTemplatePortConflictTx(db, inbound); err != nil || conflict != nil {
+				return conflict, err
+			}
+		}
 	}
 
 	// Egress SOCKS server holds loopback EgressPort when AWG outbounds are
@@ -465,6 +534,10 @@ func amneziawgnetSocksSelfConflict(inbound *model.Inbound, id int) string {
 // does id's own derived relay port collide with some other inbound's port.
 func checkAmneziawgnetSocksReverseConflict(db *gorm.DB, id int) (*portConflictDetail, error) {
 	relayPort := amneziawgnet.SOCKSPortForInbound(id)
+	relay := &model.Inbound{Listen: "127.0.0.1", Port: relayPort}
+	if conflict, err := checkManagedBridgeConflict(db, relay, id, transportTCP); err != nil || conflict != nil {
+		return conflict, err
+	}
 	var candidates []*model.Inbound
 	if err := db.Model(model.Inbound{}).
 		Where("port = ? AND node_id IS NULL AND id != ?", relayPort, id).

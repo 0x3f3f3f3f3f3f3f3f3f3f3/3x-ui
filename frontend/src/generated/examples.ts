@@ -1035,6 +1035,12 @@ export const EXAMPLES: Record<string, unknown> = {
     "client": "mlkem768-client",
     "seed": "mlkem768-seed"
   },
+  "MieruRuntimeStatus": {
+    "authenticatedSessions": 2,
+    "inboundId": 1,
+    "reason": "",
+    "state": "running"
+  },
   "Msg": {
     "msg": "",
     "obj": null,

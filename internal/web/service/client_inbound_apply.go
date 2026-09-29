@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/logger"
@@ -498,6 +500,10 @@ func (s *ClientService) prepareInboundClientAdd(inboundSvc *InboundService, data
 			if client.SSH == nil {
 				return nil, common.NewError("SSH client requires public keys and target permissions")
 			}
+		case "mieru":
+			if _, err := mieruClientBinding(client, uuid.NewString()); err != nil {
+				return nil, err
+			}
 		default:
 			if client.ID == "" {
 				return nil, common.NewError("empty client ID")
@@ -720,7 +726,7 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 		newClientId = clients[0].Auth
 	case "wireguard", "amneziawg":
 		newClientId = clients[0].Email
-	case "mtproto", "ssh":
+	case "mtproto", "ssh", "mieru":
 		newClientId = clients[0].Email
 	default:
 		newClientId = clients[0].ID
