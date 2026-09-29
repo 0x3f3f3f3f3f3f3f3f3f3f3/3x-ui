@@ -117,6 +117,20 @@ func (c *ClientPolicyAPI) CloseConnections(ctx context.Context, id string) (uint
 	return r.Closed, nil
 }
 
+func (c *ClientPolicyAPI) CloseInboundConnections(ctx context.Context, id, tag string) (uint32, error) {
+	if tag == "" {
+		return 0, clientpolicy.ErrInvalidPolicy
+	}
+	if !slices.Contains(c.capabilities.GetCapabilities(), "inbound-scoped-session-close-v1") {
+		return 0, fmt.Errorf("%w: missing inbound-scoped-session-close-v1", ErrClientPolicyCapability)
+	}
+	r, err := c.client.CloseConnections(ctx, &policycommand.ClientRequest{ClientId: id, InboundTag: tag})
+	if err != nil {
+		return 0, err
+	}
+	return r.Closed, nil
+}
+
 func (c *ClientPolicyAPI) Checkpoint(ctx context.Context) error {
 	_, err := c.client.CheckpointUsage(ctx, &policycommand.Empty{})
 	return err

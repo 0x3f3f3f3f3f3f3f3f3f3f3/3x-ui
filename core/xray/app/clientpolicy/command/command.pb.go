@@ -62,6 +62,7 @@ type ClientRequest struct {
 	state                 protoimpl.MessageState `protogen:"open.v1"`
 	ClientId              string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	ExpectedPolicyVersion uint64                 `protobuf:"varint,2,opt,name=expected_policy_version,json=expectedPolicyVersion,proto3" json:"expected_policy_version,omitempty"`
+	InboundTag            string                 `protobuf:"bytes,3,opt,name=inbound_tag,json=inboundTag,proto3" json:"inbound_tag,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -108,6 +109,13 @@ func (x *ClientRequest) GetExpectedPolicyVersion() uint64 {
 		return x.ExpectedPolicyVersion
 	}
 	return 0
+}
+
+func (x *ClientRequest) GetInboundTag() string {
+	if x != nil {
+		return x.InboundTag
+	}
+	return ""
 }
 
 type Capabilities struct {
@@ -875,10 +883,12 @@ var File_app_clientpolicy_command_command_proto protoreflect.FileDescriptor
 const file_app_clientpolicy_command_command_proto_rawDesc = "" +
 	"\n" +
 	"&app/clientpolicy/command/command.proto\x12 xray.app.clientpolicy.command.v1\x1a\x1dapp/clientpolicy/config.proto\"\a\n" +
-	"\x05Empty\"d\n" +
+	"\x05Empty\"\x85\x01\n" +
 	"\rClientRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x126\n" +
-	"\x17expected_policy_version\x18\x02 \x01(\x04R\x15expectedPolicyVersion\"\xe1\x01\n" +
+	"\x17expected_policy_version\x18\x02 \x01(\x04R\x15expectedPolicyVersion\x12\x1f\n" +
+	"\vinbound_tag\x18\x03 \x01(\tR\n" +
+	"inboundTag\"\xe1\x01\n" +
 	"\fCapabilities\x12\x1f\n" +
 	"\vapi_version\x18\x01 \x01(\rR\n" +
 	"apiVersion\x12!\n" +

@@ -444,3 +444,37 @@ All normal, SQL-failure and control-loss renewal cases pass under race on SQLite
 (4.459 s) and PostgreSQL (8.412 s). The complete panel/lint/build/generation gate
 above includes this fix. No quota, renewal count or lifetime counter is reset
 by the selection change.
+
+## Closing sessions for one inbound — 2026-09-29
+
+The control API accepts an optional `ClientRequest.inbound_tag` (protobuf field
+3) for `CloseConnections`. A supplied tag limits the operation to that client
+on that inbound; omission preserves the existing client-wide behavior. The
+core advertises `inbound-scoped-session-close-v1`. The panel checks this
+capability before sending a scoped request, because an older protobuf server
+would otherwise ignore the added field and close every connection.
+
+`TestCloseConnectionsRestrictsItsInboundScope` first closed two sessions instead
+of one. It now verifies admission stops for the selected session, admission
+continues on the sibling inbound, repeated/unknown scopes close zero sessions,
+client-wide close still works, and the admitted 11 bytes remain billed once.
+Core engine/control race checks pass (5.901 s / 1.042 s). Removing the panel
+capability guard with a temporary Go overlay makes the adapter regression fail
+with an unexpected RPC, proving the guard is exercised.
+
+During the still-uncommitted activation work, a real VLESS + Tunnel test also
+reproduced a same-client sibling flow being disconnected by partial detach.
+With the scoped API and Runtime consumer, the sibling stream survives and
+lifetime totals remain 112 upload / 212 download / 348 billed bytes after
+three 4-byte bidirectional exchanges on top of the 100/200 historical seed.
+This is evidence for the API consumer under development, not a claim that
+ordinary managed startup, legacy migration or all lifecycle paths are complete.
+
+The nine-file scoped-close increment was also checked independently in a
+detached worktree at `f3465945`, without the activation changes. The adapter
+race checks, Go lint (zero issues), full shuffled panel suite (218.12 s wall),
+build (7.77 s) and full shuffled core suite (643.14 s) pass. Initial full runs
+failed in unchanged tests: the public AdGuard QUIC DNS query timed out, and an
+AmneziaWG test found its fixed TCP port 58912 occupied. An isolated DNS repeat
+passed once and then timed out. The final panel and core suites ran sequentially;
+no test assertion, timeout or source was changed to obtain the passing runs.

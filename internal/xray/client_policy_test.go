@@ -28,6 +28,9 @@ func TestClientPolicyAdapterRejectsQuotaWindowWithoutCapability(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer api.Close()
+	if _, err := api.CloseInboundConnections(ctx, "owner", "one-listener"); !errors.Is(err, ErrClientPolicyCapability) {
+		t.Fatalf("sent a scoped close to a core that would ignore its scope: %v", err)
+	}
 	policy := &clientpolicy.PolicyConfig{ClientId: "owner", Version: 2, Enabled: true, MultiplierMicros: 1000000, BurstBytes: 65536, QuotaBytes: 10, QuotaBaselineRemainder: 500000}
 	if err := api.Apply(ctx, []*clientpolicy.PolicyConfig{policy}); !errors.Is(err, ErrClientPolicyCapability) {
 		t.Fatalf("sent quota reset without advertised support: %v", err)

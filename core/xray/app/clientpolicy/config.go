@@ -20,6 +20,7 @@ type Manager interface {
 	GetClient(string) (Policy, Snapshot, error)
 	Connections(string) ([]Connection, error)
 	CloseConnections(string) (int, error)
+	CloseInboundConnections(string, string) (int, error)
 	Checkpoint() error
 	ReadLedger(uint64, int) ([]LedgerRecord, error)
 }

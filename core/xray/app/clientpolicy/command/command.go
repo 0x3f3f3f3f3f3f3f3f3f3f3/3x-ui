@@ -60,7 +60,7 @@ func (s *service) GetCapabilities(ctx context.Context, _ *Empty) (*Capabilities,
 		return nil, err
 	}
 	c := s.engine.Capabilities()
-	features := []string{"trusted-tunnel-client-id-v1", "trusted-vless-client-id-v1", "trusted-vmess-client-id-v1", "trusted-trojan-client-id-v1", "trusted-shadowsocks-aead-client-id-v1", "shared-directional-rate-v1", "fixed-point-billing-v1", "quota-window-baseline-v1", "live-session-control-v1"}
+	features := []string{"trusted-tunnel-client-id-v1", "trusted-vless-client-id-v1", "trusted-vmess-client-id-v1", "trusted-trojan-client-id-v1", "trusted-shadowsocks-aead-client-id-v1", "shared-directional-rate-v1", "fixed-point-billing-v1", "quota-window-baseline-v1", "live-session-control-v1", "inbound-scoped-session-close-v1"}
 	if c.Persistent {
 		features = append(features, "local-durable-reservations-v1", "committed-cumulative-ledger-v1", "create-only-usage-seed-v1", "durable-first-use-expiry-v1")
 	}
@@ -156,7 +156,13 @@ func (s *service) CloseConnections(ctx context.Context, r *ClientRequest) (*Clos
 	if err := s.authorize(ctx); err != nil {
 		return nil, err
 	}
-	n, err := s.engine.CloseConnections(r.GetClientId())
+	var n int
+	var err error
+	if r.GetInboundTag() == "" {
+		n, err = s.engine.CloseConnections(r.GetClientId())
+	} else {
+		n, err = s.engine.CloseInboundConnections(r.GetClientId(), r.GetInboundTag())
+	}
 	if err != nil {
 		return nil, rpcError(err)
 	}

@@ -4,7 +4,7 @@ option go_package = "github.com/xtls/xray-core/app/clientpolicy/command";
 import "app/clientpolicy/config.proto";
 
 message Empty {}
-message ClientRequest { string client_id = 1; uint64 expected_policy_version = 2; }
+message ClientRequest { string client_id = 1; uint64 expected_policy_version = 2; string inbound_tag = 3; }
 message Capabilities {
  uint32 api_version = 1;
  string core_version = 2;

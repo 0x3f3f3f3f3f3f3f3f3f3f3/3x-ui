@@ -68,12 +68,28 @@ func (e *Engine) Connections(id string) ([]Connection, error) {
 }
 
 func (e *Engine) CloseConnections(id string) (int, error) {
+	return e.closeConnections(id, "")
+}
+
+func (e *Engine) CloseInboundConnections(id, tag string) (int, error) {
+	if tag == "" {
+		return 0, ErrInvalidPolicy
+	}
+	return e.closeConnections(id, tag)
+}
+
+func (e *Engine) closeConnections(id, tag string) (int, error) {
 	c, err := e.state(id)
 	if err != nil {
 		return 0, err
 	}
 	c.mu.Lock()
-	sessions := c.sessionsLocked()
+	sessions := make([]*Session, 0, len(c.sessions))
+	for _, session := range c.sessions {
+		if tag == "" || session.metadata.InboundTag == tag {
+			sessions = append(sessions, session)
+		}
+	}
 	c.mu.Unlock()
 	closeSessions(sessions)
 	return len(sessions), nil
