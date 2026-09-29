@@ -24,7 +24,7 @@ type OutboundService struct{}
 
 func (s *OutboundService) AddTraffic(traffics []*xray.Traffic, clientTraffics []*xray.ClientTraffic) (error, bool) {
 	err := database.GetDB().Transaction(func(tx *gorm.DB) error {
-		return s.addOutboundTraffic(tx, traffics)
+		return s.AddTrafficTx(tx, traffics)
 	})
 	return err, false
 }
@@ -39,7 +39,8 @@ func saturatingAdd(a, b int64) int64 {
 	return a + b
 }
 
-func (s *OutboundService) addOutboundTraffic(tx *gorm.DB, traffics []*xray.Traffic) error {
+// AddTrafficTx joins traffic settlement to the caller's transaction.
+func (s *OutboundService) AddTrafficTx(tx *gorm.DB, traffics []*xray.Traffic) error {
 	if len(traffics) == 0 {
 		return nil
 	}

@@ -565,3 +565,46 @@ This increment was checked independently at `c1fbc8a6`, without ordinary
 activation changes: adapter/process and Runtime race checks pass (31.13 s wall),
 Go lint reports zero issues, the complete shuffled panel suite passes
 (256.34 s wall), and the panel builds. The production core source is unchanged.
+
+## Atomic legacy traffic settlement — 2026-09-29
+
+The production job now reads cumulative counters without resetting them and
+commits inbound, client and outbound changes with one per-child receipt.
+Real VLESS echo tests inject failures in each traffic table and receipt writes,
+including the first poll and a newly constructed job. Failed transactions keep
+all totals unchanged; retry adds each delta once. Another wrapper commits the
+real SQL transaction and then returns a simulated lost acknowledgement. Before
+the fix, retry doubled a four-byte echo (client totals 108/208 instead of
+104/204). A retained batch and SQL receipt now acknowledge it without adding
+usage again, and subsequent traffic remains collectible in the next batch.
+
+First-use tests inject failures at the inbound settings write, normalized client
+write and expiry update. All changes roll back together. Zero-byte reports keep
+idle delayed-start clients inactive, including mixed active/idle polls. Process
+tests use real helper children and gRPC counters to verify concurrent polls,
+shutdown waiting for settlement, fresh cursors after child replacement and
+separate inbound/outbound counters sharing a tag.
+
+The collector was tested independently of ordinary managed activation at
+`8100a5a4`. SQLite race checks passed in 58.88 s wall and PostgreSQL checks in
+47.60 s wall. The expanded receipt cases passed under race in 4.938 s. Review
+caught a missing migration registration; the full regression also failed its
+existing model-parity check. Registering the model alone then reproduced failure
+to migrate an older database without this table. With both fixes, model parity,
+copy checks and real SQLite→PostgreSQL→SQLite migration/legacy compatibility
+passed under race in 12.093 s. CI explicitly requires the migration test's PASS
+record and the real collector test in both database jobs.
+
+Commands: `go test -race ./internal/web/job ./internal/web/service ./internal/xray
+-run '^Test(XrayTrafficJobRetriesUncommittedCountersAtomically|FirstUseTrafficSettlement|ProcessTrafficSettlement)'
+-count=1`; set `XRAY_E2E_BINARY` to the custom build. The PostgreSQL run sets
+`XUI_DB_TYPE=postgres` and a dedicated `XUI_DB_DSN`; migration tests use their own
+schema. Select `TestLegacyTrafficReceiptCrossDatabaseMigration` for receipt
+round-trip and older-schema coverage. After the migration correction, lint
+reported zero issues, the complete shuffled panel suite passed in 245.49 s wall,
+and the panel build passed in 10.78 s.
+
+This increment retains the existing lifecycle Runtime ordering. Moving those
+calls outside the serial writer, stale-plan revalidation, ordinary activation,
+legacy crash recovery and a verified final drain are separate unfinished work.
+No production core or frontend source changes in this increment.

@@ -2,9 +2,9 @@ name: Custom core
 on:
   push:
     branches: [feature/custom-xray-unified-policy]
-    paths: ["core/**", "internal/database/**", "internal/web/service/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
+    paths: ["core/**", "internal/database/**", "internal/web/service/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
   pull_request:
-    paths: ["core/**", "internal/database/**", "internal/web/service/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
+    paths: ["core/**", "internal/database/**", "internal/web/service/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
 permissions:
   contents: read
 jobs:
@@ -69,6 +69,14 @@ jobs:
           for test in TestPeriodicTrafficResetRetryKeepsOriginalMembershipAndNewUsage TestPeriodicResetReachesClientNodesConcurrently TestPeriodicResetReachesInboundNodesConcurrently; do
             grep -q -- "^--- PASS: $test " /tmp/policy-bootstrap.log
           done
+      - name: Atomic local traffic settlement
+        run: |
+          set -o pipefail
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race ./internal/web/job ./internal/web/service ./internal/xray \
+            -run '^Test(XrayTrafficJobRetriesUncommittedCountersAtomically|FirstUseTrafficSettlement|ProcessTrafficSettlement)' -count=1 -v | tee /tmp/traffic-settlement.log
+          for test in TestXrayTrafficJobRetriesUncommittedCountersAtomically TestFirstUseTrafficSettlementRollsBackEveryWrite TestFirstUseTrafficSettlementDoesNotStartIdleClients TestProcessTrafficSettlementRetriesAndSerializesPolls TestProcessTrafficSettlementFinishesBeforeStopAndResetsForNewChild; do
+            grep -q -- "^--- PASS: $test " /tmp/traffic-settlement.log
+          done
   policy-postgres:
     runs-on: ubuntu-latest
     services:
@@ -98,7 +106,15 @@ jobs:
       - name: Real PostgreSQL migrations, commit failure and Tunnel ledger
         run: |
           set -o pipefail
-          XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race ./internal/database ./internal/web/service -run 'TestClientStableIdentityMigrationPostgres|TestClientPolicyCrossDatabaseMigration|TestClientPolicy(Ledger|StateProvisioning|RuntimeBootstrap|Options|Omission|Desired|Polling|Config|Reset|Accounting|Lifecycle|Renewal|FirstUse)|TestTunnelOwner|TestScheduledTrafficReset' -count=1 -v | tee /tmp/policy-postgres.log
-          for test in TestClientStableIdentityMigrationPostgres TestClientPolicyCrossDatabaseMigration TestClientPolicyLedgerPostgresCommitFailure TestClientPolicyLedgerRealTunnelAndRestart TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts TestClientPolicyPollingRetriesCommittedTraffic TestTunnelOwnerConcurrentAttachmentsChooseOneOwner TestClientPolicyConfigFeedsRealTunnelLedger TestClientPolicyConfigPreparesEveryPolicyBatch TestClientPolicyResetBatchRollsBackEveryBoundary TestClientPolicyResetBatchRetriesKeepIndependentLatestWindows TestClientPolicyResetBulkPinsMembershipBeforeCoreRecovery TestClientPolicyResetAllRetryExcludesNewClientsAndNewUsage TestClientPolicyResetInboundBatchUsesLinksAndKeepsItsOriginalMembers TestClientPolicyResetBulkCommitsLegacyEnableWithItsCounters TestClientPolicyResetBulkPreservesRemoteInboundFields TestClientPolicyResetRetriesKeepTheLatestWindowAndLifetime TestClientPolicyResetPostgresCommitFailureKeepsPriorPolicy TestClientPolicyResetRuntimePollingRetriesTheCommittedBoundary TestClientPolicyResetEntrypointsProtectStoppedAndPreparedClients TestClientPolicyResetEntrypointsRecheckAfterQueuedBootstrap TestClientPolicyResetEntrypointsRejectReusedEmailWhileQueued TestClientPolicyAccountingIncludesEverySnapshotBatch TestClientPolicyAccountingWaitsForResetAcknowledgement TestScheduledTrafficResetMonthlySelection TestScheduledTrafficResetOlderWindowKeepsNewUsage TestScheduledTrafficResetPendingWindowCannotUndoManualReset TestScheduledTrafficResetPendingWindowKeepsLaterManualDisable TestScheduledTrafficResetCalendarBoundaries TestClientPolicyLifecycleKeepsManagedRestrictions TestClientPolicyLifecyclePreservesManagedSiblingPrecision TestClientPolicyRenewalPollingPreservesLifetimeAndRestrictions TestClientPolicyFirstUseSettlementPreservesNewerEditsAndRetries TestClientPolicyFirstUseCompilerPollingAndChildRestart; do
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race ./internal/database ./internal/web/service -run 'TestClientStableIdentityMigrationPostgres|TestClientPolicyCrossDatabaseMigration|TestLegacyTrafficReceiptCrossDatabaseMigration|TestClientPolicy(Ledger|StateProvisioning|RuntimeBootstrap|Options|Omission|Desired|Polling|Config|Reset|Accounting|Lifecycle|Renewal|FirstUse)|TestTunnelOwner|TestScheduledTrafficReset' -count=1 -v | tee /tmp/policy-postgres.log
+          for test in TestClientStableIdentityMigrationPostgres TestClientPolicyCrossDatabaseMigration TestLegacyTrafficReceiptCrossDatabaseMigration TestClientPolicyLedgerPostgresCommitFailure TestClientPolicyLedgerRealTunnelAndRestart TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts TestClientPolicyPollingRetriesCommittedTraffic TestTunnelOwnerConcurrentAttachmentsChooseOneOwner TestClientPolicyConfigFeedsRealTunnelLedger TestClientPolicyConfigPreparesEveryPolicyBatch TestClientPolicyResetBatchRollsBackEveryBoundary TestClientPolicyResetBatchRetriesKeepIndependentLatestWindows TestClientPolicyResetBulkPinsMembershipBeforeCoreRecovery TestClientPolicyResetAllRetryExcludesNewClientsAndNewUsage TestClientPolicyResetInboundBatchUsesLinksAndKeepsItsOriginalMembers TestClientPolicyResetBulkCommitsLegacyEnableWithItsCounters TestClientPolicyResetBulkPreservesRemoteInboundFields TestClientPolicyResetRetriesKeepTheLatestWindowAndLifetime TestClientPolicyResetPostgresCommitFailureKeepsPriorPolicy TestClientPolicyResetRuntimePollingRetriesTheCommittedBoundary TestClientPolicyResetEntrypointsProtectStoppedAndPreparedClients TestClientPolicyResetEntrypointsRecheckAfterQueuedBootstrap TestClientPolicyResetEntrypointsRejectReusedEmailWhileQueued TestClientPolicyAccountingIncludesEverySnapshotBatch TestClientPolicyAccountingWaitsForResetAcknowledgement TestScheduledTrafficResetMonthlySelection TestScheduledTrafficResetOlderWindowKeepsNewUsage TestScheduledTrafficResetPendingWindowCannotUndoManualReset TestScheduledTrafficResetPendingWindowKeepsLaterManualDisable TestScheduledTrafficResetCalendarBoundaries TestClientPolicyLifecycleKeepsManagedRestrictions TestClientPolicyLifecyclePreservesManagedSiblingPrecision TestClientPolicyRenewalPollingPreservesLifetimeAndRestrictions TestClientPolicyFirstUseSettlementPreservesNewerEditsAndRetries TestClientPolicyFirstUseCompilerPollingAndChildRestart; do
             grep -q -- "^--- PASS: $test " /tmp/policy-postgres.log
+          done
+      - name: Atomic local traffic settlement
+        run: |
+          set -o pipefail
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race ./internal/web/job ./internal/web/service \
+            -run '^Test(XrayTrafficJobRetriesUncommittedCountersAtomically|FirstUseTrafficSettlement|ProcessTrafficSettlement)' -count=1 -v | tee /tmp/traffic-settlement.log
+          for test in TestXrayTrafficJobRetriesUncommittedCountersAtomically TestFirstUseTrafficSettlementRollsBackEveryWrite TestFirstUseTrafficSettlementDoesNotStartIdleClients; do
+            grep -q -- "^--- PASS: $test " /tmp/traffic-settlement.log
           done

@@ -45,6 +45,7 @@ func migrationModels() []any {
 		&model.Inbound{},
 		&xray.ClientTraffic{},
 		&model.OutboundTraffics{},
+		&model.LegacyTrafficReceipt{},
 		&model.InboundClientIps{},
 		&model.ClientRecord{},
 		&model.ClientPolicySource{},
@@ -107,6 +108,7 @@ func MigrateData(srcPath, dstDSN string) error {
 	hasPolicyResets := src.Migrator().HasTable(&model.ClientPolicyReset{})
 	hasResetBatches := src.Migrator().HasTable(&model.ClientTrafficResetBatch{})
 	hasResetTimes := src.Migrator().HasTable(&model.ClientTrafficResetTime{})
+	hasLegacyTrafficReceipts := src.Migrator().HasTable(&model.LegacyTrafficReceipt{})
 	if hasPolicyResets && policyTableCount != len(policyTables) {
 		return errors.New("source has client policy resets without a complete ledger")
 	}
@@ -152,6 +154,9 @@ func MigrateData(srcPath, dstDSN string) error {
 		}
 
 		for _, m := range migrationModels() {
+			if _, ok := m.(*model.LegacyTrafficReceipt); ok && !hasLegacyTrafficReceipts {
+				continue
+			}
 			if _, ok := m.(*model.ClientTrafficResetTime); ok && !hasResetTimes {
 				continue
 			}

@@ -98,6 +98,7 @@ Files: `internal/database/{db.go,model/*}`, `internal/web/{service,controller,ru
 - [ ] Extend Runtime lifecycle, batch operations and state/reason/statistics UI, API registry/codegen and all locale keys (English/Chinese translations).
 - [ ] Test wildcard/dual-stack/control-port collision, reassignment, reset/renew restrictions and active connection termination.
 - [x] Core prerequisite: drain established TCP/UDP/Unix connections on inbound removal; test same-port Tunnel reassignment and unaffected sibling listeners.
+- [x] Scoped legacy collector: atomic inbound/client/outbound settlement, lost-commit-ack deduplication, first-use rollback and SQLite/PostgreSQL receipt migration. Final drain and ordinary managed activation remain open.
 - [ ] Test end-to-end DB → API → UI → generated config → measured traffic → durable events → statistics.
 
 ## Task 7: SSH inbound and outbound

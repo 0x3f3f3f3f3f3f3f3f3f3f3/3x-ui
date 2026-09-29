@@ -136,7 +136,12 @@ func (s *InboundService) addClientTraffic(tx *gorm.DB, traffics []*xray.ClientTr
 
 	emails := make([]string, 0, len(traffics))
 	for _, traffic := range traffics {
-		emails = append(emails, traffic.Email)
+		if traffic != nil && (traffic.Up > 0 || traffic.Down > 0) {
+			emails = append(emails, traffic.Email)
+		}
+	}
+	if len(emails) == 0 {
+		return nil
 	}
 	dbClientTraffics := make([]*xray.ClientTraffic, 0, len(traffics))
 	// Match purely by email. client_traffics is email-keyed (one shared row per
@@ -192,7 +197,7 @@ func (s *InboundService) addClientTraffic(tx *gorm.DB, traffics []*xray.ClientTr
 			),
 			t.Up, t.Down, now, ct.Email,
 		).Error; err != nil {
-			logger.Warning("AddClientTraffic update data ", err)
+			return err
 		}
 	}
 
@@ -206,7 +211,7 @@ func (s *InboundService) addClientTraffic(tx *gorm.DB, traffics []*xray.ClientTr
 			`UPDATE client_traffics SET expiry_time = ? WHERE email = ? AND expiry_time < 0`,
 			convertedExpiryByEmail[email], email,
 		).Error; err != nil {
-			logger.Warning("AddClientTraffic update expiry_time ", err)
+			return err
 		}
 	}
 
@@ -303,23 +308,19 @@ func (s *InboundService) adjustTraffics(tx *gorm.DB, dbClientTraffics []*xray.Cl
 		}
 	}
 
-	err = tx.Save(inbounds).Error
-	if err != nil {
-		logger.Warning("AddClientTraffic update inbounds ", err)
-		logger.Error(inbounds)
-	} else {
-		for _, ib := range inbounds {
-			if ib == nil {
-				continue
-			}
-			cs, gcErr := s.GetClients(ib)
-			if gcErr != nil {
-				logger.Warning("AddClientTraffic sync clients: GetClients failed", gcErr)
-				continue
-			}
-			if syncErr := s.clientService.SyncInbound(tx, ib.Id, cs); syncErr != nil {
-				logger.Warning("AddClientTraffic sync clients: SyncInbound failed", syncErr)
-			}
+	if err := tx.Save(inbounds).Error; err != nil {
+		return nil, nil, err
+	}
+	for _, ib := range inbounds {
+		if ib == nil {
+			continue
+		}
+		clients, err := s.GetClients(ib)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := s.clientService.SyncInbound(tx, ib.Id, clients); err != nil {
+			return nil, nil, err
 		}
 	}
 

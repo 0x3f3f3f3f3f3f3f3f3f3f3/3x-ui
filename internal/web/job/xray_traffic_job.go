@@ -75,19 +75,13 @@ func (j *XrayTrafficJob) Run() {
 	if !j.xrayService.IsXrayRunning() {
 		return
 	}
-	traffics, clientTraffics, err := j.xrayService.GetXrayTraffic()
+	settled, err := j.xrayService.CollectAndSettleTraffic()
 	if err != nil {
+		logger.Warning("settle xray traffic failed:", err)
 		return
 	}
-	needRestart0, clientsDisabled, err := j.inboundService.AddTraffic(traffics, clientTraffics)
-	if err != nil {
-		logger.Warning("add inbound traffic failed:", err)
-	}
-	err, needRestart1 := j.outboundService.AddTraffic(traffics, clientTraffics)
-	if err != nil {
-		logger.Warning("add outbound traffic failed:", err)
-	}
-	if clientsDisabled {
+	traffics, clientTraffics := settled.Traffics, settled.ClientTraffics
+	if settled.ClientsDisabled {
 		restartOnDisable, settingErr := j.settingService.GetRestartXrayOnClientDisable()
 		if settingErr != nil {
 			logger.Warning("get RestartXrayOnClientDisable failed:", settingErr)
@@ -105,7 +99,7 @@ func (j *XrayTrafficJob) Run() {
 	} else if err != nil {
 		logger.Warning("get ExternalTrafficInformEnable failed:", err)
 	}
-	if needRestart0 || needRestart1 {
+	if settled.NeedRestart {
 		j.xrayService.SetToNeedRestart()
 	}
 

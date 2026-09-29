@@ -1209,6 +1209,24 @@ func (s *XrayService) GetXrayTraffic() ([]*xray.Traffic, []*xray.ClientTraffic, 
 		logger.Debug("Attempted to fetch Xray traffic, but Xray is not running:", err)
 		return nil, nil, err
 	}
+	if err := maintainManagedTraffic(process); err != nil {
+		return nil, nil, err
+	}
+	if err := s.xrayAPI.InitProcess(process); err != nil {
+		logger.Debug("Failed to initialize Xray API:", err)
+		return nil, nil, err
+	}
+	defer s.xrayAPI.Close()
+
+	traffic, clientTraffic, err := s.xrayAPI.GetTraffic()
+	if err != nil {
+		logger.Debug("Failed to fetch Xray traffic:", err)
+		return nil, nil, err
+	}
+	return traffic, clientTraffic, nil
+}
+
+func maintainManagedTraffic(process *xray.Process) error {
 	if len(process.GetConfig().ClientPolicy) != 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		err := pollLocalClientPolicyLedger(ctx, process)
@@ -1226,21 +1244,10 @@ func (s *XrayService) GetXrayTraffic() ([]*xray.Traffic, []*xray.ClientTraffic, 
 		cancel()
 		if err != nil {
 			logger.Warning("Failed to collect managed client ledger:", err)
-			return nil, nil, fmt.Errorf("collect managed client ledger: %w", err)
+			return fmt.Errorf("collect managed client ledger: %w", err)
 		}
 	}
-	if err := s.xrayAPI.InitProcess(process); err != nil {
-		logger.Debug("Failed to initialize Xray API:", err)
-		return nil, nil, err
-	}
-	defer s.xrayAPI.Close()
-
-	traffic, clientTraffic, err := s.xrayAPI.GetTraffic()
-	if err != nil {
-		logger.Debug("Failed to fetch Xray traffic:", err)
-		return nil, nil, err
-	}
-	return traffic, clientTraffic, nil
+	return nil
 }
 
 // GetOnlineUsers returns connection-based online users (email + source IPs)

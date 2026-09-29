@@ -15,6 +15,7 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/database/dbtest"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	xuilogger "github.com/mhsanaei/3x-ui/v3/internal/logger"
+	"github.com/mhsanaei/3x-ui/v3/internal/testpg"
 )
 
 // the panel logger is a process-wide singleton. init it once per test
@@ -27,6 +28,11 @@ var portConflictLoggerOnce sync.Once
 func setupConflictDB(t *testing.T) {
 	t.Helper()
 	portConflictLoggerOnce.Do(func() { xuilogger.InitLogger(logging.ERROR) })
+	cleanup, err := testpg.IsolatePackage("service_" + t.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
 
 	dbDir := t.TempDir()
 	t.Setenv("XUI_DB_FOLDER", dbDir)

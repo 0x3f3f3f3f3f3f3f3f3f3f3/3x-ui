@@ -125,6 +125,12 @@ func NewTestProcess(xrayConfig *Config, configPath string) *Process {
 }
 
 type process struct {
+	trafficMu       sync.Mutex
+	trafficCursor   map[string]int64
+	trafficID       string
+	trafficSequence int64
+	trafficPending  *pendingTrafficBatch
+
 	// mu guards the process lifecycle fields (cmd, done, exitErr) plus version,
 	// apiPort, and config, which are written by Start/startCommand/refreshVersion/
 	// refreshAPIPort/SetConfig
@@ -712,6 +718,9 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) (err error) {
 var renameFile = os.Rename
 
 func (p *process) startCommand(cmd *exec.Cmd) error {
+	p.trafficMu.Lock()
+	defer p.trafficMu.Unlock()
+
 	p.mu.Lock()
 	p.cmd = cmd
 	p.done = make(chan struct{})
@@ -728,6 +737,10 @@ func (p *process) startCommand(cmd *exec.Cmd) error {
 		return err
 	}
 
+	p.trafficCursor = nil
+	p.trafficID = ""
+	p.trafficSequence = 0
+	p.trafficPending = nil
 	attachChildLifetime(cmd)
 
 	go p.waitForCommand(cmd, done)
@@ -766,6 +779,9 @@ func (p *process) waitForCommand(cmd *exec.Cmd, done chan struct{}) {
 
 // Stop terminates the running Xray process.
 func (p *process) Stop() error {
+	p.trafficMu.Lock()
+	defer p.trafficMu.Unlock()
+
 	p.controlReady.Store(false)
 	if !p.IsRunning() {
 		return errors.New("xray is not running")

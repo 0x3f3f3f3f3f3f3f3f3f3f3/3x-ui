@@ -127,3 +127,27 @@ Legacy node counter resets retain bounded concurrent Runtime calls after SQL com
 The normal local traffic poll advances due managed clients through committed receipt boundaries. Expiry, renewal count, attached settings and the desired policy version commit together. A renewal that reaches the present opens one quota window; a prepaid cap exhausted in historical catch-up leaves the client expired and preserves its period usage. Neither path changes manual enable or lifetime counters. Settings edits retain exact JSON integer values.
 
 Normal polling now reconciles all committed desired policy versions, including expiry-only updates with no quota-reset row. SQL preparation failures leave the prior state intact; failure after commit is retried without spending another renewal allowance. Prepared/active identities are excluded from legacy raw-quota disabling, automatic enable/zeroing and first-use conversion. Durable managed first-use activation and ordinary managed startup remain unfinished.
+
+## Transactional collection of legacy operational counters
+
+The production traffic job reads non-resetting cumulative Xray statistics. Each
+child process owns its cursor and retains a pending batch until SQL acknowledges
+settlement. Inbound, client and outbound deltas, first-use expiry changes and a
+`legacy_traffic_receipts` row commit in one transaction. Failure rolls them back
+without advancing the cursor. If SQL committed but its acknowledgement was lost,
+retrying the same process ID, sequence and batch ID recognizes that commit and
+does not add the deltas again. Traffic arriving during that retry is collected
+in the next batch. The first poll includes traffic already observed by the child.
+
+There is one latest receipt per child, preserved by database migration/export.
+The process guard serializes polls with child shutdown, and a new child gets a
+new cursor and identity. Inbound and outbound statistics with the same tag stay
+separate. Zero-byte reports do not activate a delayed-start client's expiry.
+Lifecycle and remote notification work retains its existing best-effort behavior.
+
+These operational counters continue to update for managed clients. Managed
+billing and quota use the independent durable policy ledger; legacy raw fields
+are neither frozen migration seeds nor an additional billing authority. The
+initialization seed is retained in the policy receipt. This collector cannot
+recover legacy bytes that were never observed before a core crash. A verified
+final accounting drain and automatic legacy-to-managed handoff remain open.
