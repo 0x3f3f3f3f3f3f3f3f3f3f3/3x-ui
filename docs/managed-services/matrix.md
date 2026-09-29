@@ -162,14 +162,14 @@ adapter and shared controller on SQLite, before public Runtime integration.
 | Shared live duplex shaping across native listeners | V | Actual mixed streams/packets, two same-IP clients and two listeners, 32/64 KiB/s, unlimited baseline and live changes; receiver-observed packet flight is explicitly bounded in the test |
 | Quota, disable and owned shutdown | V | Existing TCP/UDP cutoff and server restart denial; malformed UDP cleanup, TCP backpressure, unrelated-user continuity and partial-start listener release |
 | Continuous one-way UDP target lifetime | V | Actual 31-second upload-only traffic retains one target source port and exact upload-only billing |
-| Authenticated Xray UDP routing / policy-aware bridge | N | Current SOCKS bridge is TCP-only; packet-capable identity-preserving bridge still required |
+| Internal authenticated Xray TCP/UDP routing / policy-aware bridge | V | Private policy-ID credentials, actual direct IPv4 peer replies, user/domain/IP/source/tag/network/port/priority/block/balancer exits; official mieru clients on both underlays, exact single billing and existing-flow revocation. Other outbounds, IPv6 and public Runtime remain open |
 | Public model/Runtime/API/UI/export/node/deployment integration | N | No public mieru service option or manager is claimed by this increment |
 | Native pre-accept resource stress, credential rotation, PostgreSQL adapter acceptance | N | Native queue peak-memory bounds, live credential generation handling and the adapter's second-dialect vertical remain open |
 
 ## UDP core prerequisite evidence
 
 These results concern the independently built pinned core patch. They do not
-change the N status of the managed mieru routing/management rows above.
+establish public managed mieru activation or the remaining outbound matrix.
 
 | Core prerequisite | Status | Evidence / limit |
 |---|---|---|
@@ -177,5 +177,5 @@ change the N status of the managed mieru routing/management rows above.
 | Empty packet presence independent of billing bytes | V | Actual connected UDP read and real pipe preserve one empty packet and zero byte count; empty packets consume finite queue capacity |
 | Finite per-user UDP pipe configuration | V | Real authenticated UDP input and stalled TCP protocol outbound, unlimited control plus finite user policy despite unlimited global default; Linux-owned socket buffers fixed |
 | Reproducible source and build identity | V | Pinned module/checksum verification, checked patch application, separate output, retained MPL-2.0 provenance; existing output paths are refused |
-| Private policy-ID bridge, source-IP replies and unified route tests | N | No public managed service consumes this core capability yet; original domains remain visible to routing, but stock freedom may return a domain alias in packet metadata |
+| Private policy-ID bridge, source-IP replies and unified route tests | V | Opt-in authenticated core extension preserves user and original target/source; direct reader returns actual IP; absent peer metadata and stock/forged capability replies fail closed. Public activation remains N |
 | Distribution, installer selection and Runtime capability enforcement | N | The independent build command does not replace or install a panel core |

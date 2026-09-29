@@ -207,13 +207,16 @@ engine and carries authenticated TCP/UDP into the existing shared policy
 controller. Actual official-client tests exercise all four underlay/payload
 combinations, same-IP identities, fixed-point charging, quota cutoff, rates,
 partial startup and backpressure cleanup. These are internal adapter results.
-The required dial callback preserves routing context; its test direct connector
-is not evidence of the future Xray UDP bridge or public Runtime integration.
+The required dial callback preserves routing context. Tests now also connect
+official clients through the private managed Xray bridge; the earlier direct
+connector tests alone were not evidence of core routing.
 
 The [core datagram prerequisite](xray-datagram-bridge.md) now supplies a pinned,
 independently built source patch with real empty/maximum UDP payload and finite
-queue tests. The private policy-ID bridge, actual reply-source metadata and
-Runtime activation still need implementation before the routing item is done.
+queue tests. The private policy-ID TCP/UDP bridge now has authenticated health,
+actual direct UDP peer metadata, real route/exit tests and official mieru client
+single-billing/revocation evidence. Public model/Runtime activation and the full
+outbound/platform/failure matrix remain open before the routing item is done.
 
 ## Task 7: Snell v4/v5/v6 vertical integration
 

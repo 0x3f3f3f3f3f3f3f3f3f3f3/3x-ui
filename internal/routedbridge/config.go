@@ -13,6 +13,10 @@ import (
 
 // Apply adds a private routed entry after normal panel policy generation, without changing user rules.
 func (b *Bridge) Apply(cfg *xray.Config) error {
+	return b.apply(cfg, false)
+}
+
+func (b *Bridge) apply(cfg *xray.Config, managed bool) error {
 	if cfg == nil {
 		return ErrConfig
 	}
@@ -60,6 +64,10 @@ func (b *Bridge) Apply(cfg *xray.Config) error {
 	bridgePolicy := make(map[string]any)
 	maps.Copy(bridgePolicy, base)
 	bridgePolicy["statsUserUplink"], bridgePolicy["statsUserDownlink"], bridgePolicy["statsUserOnline"] = false, false, false
+	if managed {
+		bridgePolicy["bufferSize"] = 64
+		bridgePolicy["handshake"] = 5
+	}
 	levels[strconv.FormatUint(uint64(level), 10)] = bridgePolicy
 	policy["levels"] = levels
 	policyJSON, err := json.Marshal(policy)
@@ -77,6 +85,16 @@ func (b *Bridge) Apply(cfg *xray.Config) error {
 		accounts = append(accounts, map[string]string{"user": client.Email, "pass": client.password})
 	}
 	settings, err := json.Marshal(map[string]any{"auth": "password", "accounts": accounts, "udp": false, "userLevel": level})
+	protocol := "socks"
+	if managed {
+		clients := make([]map[string]any, 0, len(ids))
+		for _, id := range ids {
+			client := b.clients[id]
+			clients = append(clients, map[string]any{"email": client.Email, "password": client.password, "level": level})
+		}
+		settings, err = json.Marshal(map[string]any{"managed": true, "clients": clients})
+		protocol = "trojan"
+	}
 	if err != nil {
 		return ErrConfig
 	}
@@ -86,7 +104,7 @@ func (b *Bridge) Apply(cfg *xray.Config) error {
 	}
 	cfg.Policy = policyJSON
 	cfg.InboundConfigs = append(cfg.InboundConfigs, xray.InboundConfig{
-		Tag: b.tag, Listen: listen, Port: int(b.address.Port()), Protocol: "socks", Settings: settings,
+		Tag: b.tag, Listen: listen, Port: int(b.address.Port()), Protocol: protocol, Settings: settings,
 		StreamSettings: json_util.RawMessage(`{"network":"raw","sockopt":{"acceptProxyProtocol":true}}`),
 	})
 	return nil

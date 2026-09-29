@@ -130,6 +130,14 @@ client export, backup, node and deployment flows. This plan does not declare
 mieru complete after a loopback echo or a library test. Publish logical verified
 milestones only to the already approved feature branch and verify remote SHA.
 
-The [packet bridge prerequisite](xray-datagram-bridge.md) now has a reproducible
-pinned-core patch and actual boundary tests. This does not yet connect the
-native mieru callback to the core or provide a public managed service.
+The [packet bridge](xray-datagram-bridge.md) now has a reproducible pinned-core
+patch and actual direct IPv4 route/exit tests. Official mieru clients exercise
+both underlays and both payload networks through it. UDP replies consume each
+packet's actual IP peer via `ReadFrom`; a connected UDP socket may supply its
+known `RemoteAddr`. No new DNS lookup invents the response address.
+
+The core uses a separate user level with user traffic/online counters disabled;
+the panel policy controller remains the billing owner. Real core outbound
+counters independently verify the transferred payload, and enabling duplicate
+core user meters makes the integration test fail. Public service selection,
+Runtime reconciliation, exports, deployment and node integration remain open.

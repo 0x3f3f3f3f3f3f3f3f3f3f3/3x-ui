@@ -61,3 +61,51 @@ until an appropriate adapter is implemented and verified.
 
 Do not claim stock cores, all outbounds, IPv6, public integration or multi-node
 execution are verified from a single direct IPv4 loopback result.
+
+## Managed bridge implementation decision (2026-09-29)
+
+Keep the SSH SOCKS bridge. Add a separate managed bridge for both stream and
+packet dispatch by new adapters, retaining one public inbound tag and a private
+32-byte random credential per policy-ID binding. Its core account uses the
+existing email label for user routing and a separate unmetered policy level.
+
+An explicit core `managed` setting enables the private extension. Before any
+target request, the bridge sends an authenticated reserved probe containing
+invalid address type zero, plus a fresh 32-byte nonce. The managed core returns a
+versioned HMAC-SHA256 acknowledgement using the private account password. A
+stock core rejects that address type before routing, even if an outbound has
+a destination override, and cannot produce the acknowledgement. Only after
+validating the acknowledgement does the same connection send its TCP/UDP
+target. Readiness checks close at the acknowledgement without any outbound.
+Use bounded handshake deadlines and exact reads so fragmentation cannot cause
+anonymous downgrade, partial-header bypass or an unbounded wait.
+
+UDP streams are fixed to the original target; reject a different address in a
+later packet. The client adapter exposes each response's supplied IP/port via
+`ReadFrom`, and the native mieru handler must use that metadata after reading
+the packet. On the explicitly managed path, direct freedom packet reads retain
+their actual socket peer instead of substituting a domain alias. Ordinary
+inbounds retain their existing response-address semantics. Missing IP metadata
+fails the managed packet path; other outbounds still require real acceptance.
+
+First tests: real-core authenticated readiness without targets; wrong secrets,
+stock-core rejection and canceled/stalled handshake; original domain routing
+and actual IP reply; complete packets; independent same-IP users and source/tag/
+network/port/IP/block/egress/balancer selection; official native clients through
+the bridge with exact single billing and existing-flow policy enforcement.
+
+Implemented internal path:
+
+```text
+official mieru client → native authentication → stable panel policy ID
+  → shared payload admission/shaping/ledger → private per-ID core credential
+  → original user/tag/source/domain/IP/port/network routing → selected outbound
+  → real target; replies retain actual available IP/port → payload policy → client
+```
+
+The generated private level disables core user upload/download/online counters
+and selects a finite 64 KiB pipe policy. Managed UDP response metadata must
+contain an actual IP; missing metadata closes the flow. The client rejects
+malformed or oversized response frames and closes their stream. All writes
+carry one complete packet, including an empty packet. These internal results
+do not enable a public service or select the new core in Runtime.

@@ -16,5 +16,5 @@ stage=$(mktemp -d "$output_dir/.managed-xray.XXXXXX")
 trap 'rm -rf -- "$stage"' EXIT HUP INT TERM
 sh "$tool_dir/prepare.sh" "$stage/source" >/dev/null
 cd "$stage/source"
-go build -trimpath -buildvcs=false -ldflags '-X github.com/xtls/xray-core/core.build=3x-ui-packets-1' -o "$stage/xray" ./main
+go build -trimpath -buildvcs=false -ldflags '-X github.com/xtls/xray-core/core.build=3x-ui-managed-1' -o "$stage/xray" ./main
 ln -- "$stage/xray" "$output"

@@ -59,7 +59,7 @@ type Destination struct {
 	Source     netip.AddrPort
 }
 
-// UDP connectors preserve datagram boundaries and return the actual IP peer in RemoteAddr.
+// UDP connectors preserve datagrams and expose actual IP peers through ReadFrom or a connected RemoteAddr.
 type DialFunc func(context.Context, Destination) (net.Conn, error)
 
 type Server struct {

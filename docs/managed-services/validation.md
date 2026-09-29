@@ -2440,3 +2440,171 @@ context spaces in the unified patch file. A directory-scoped Git attribute
 exempts only patch-context trailing spaces and space-before-tab; applied Go
 source still passes `gofmt`, and patch application is checked before building.
 All other source whitespace checks remain enabled.
+
+## Managed authenticated routing increment (2026-09-29)
+
+This increment keeps the same panel/core source pin and official mieru v3.38.0.
+The standalone core now reports `3x-ui-managed-1`. It is not installed or selected
+by public Runtime. Tests own loopback listeners, child processes and temporary
+SQLite databases; the Git credential is not used by any test service.
+
+The managed bridge's initial RED failed because its API did not exist. The first
+actual old-core run then rejected user level 4294967295 as uint8. Patch 0002
+widens inbound Trojan user levels and explicitly enables the private extension.
+A 100-byte probe includes a reserved invalid address type and a fresh nonce;
+only a versioned HMAC acknowledgement permits the later target stage. Readiness
+checks never provide a target. The stock pinned core is tested with an actual
+redirect outbound and cannot dispatch this probe. Wrong credentials, forged
+acknowledgements and canceled peers fail closed.
+
+Actual UDP tests preserve zero-, 1-, 8193- and 65507-byte packets and return the
+socket's actual IP/port while routing on the original domain. A blackhole HTTP
+response without UDP source metadata initially arrived as a fabricated
+127.0.0.1:12345 peer (101 bytes). The managed server now rejects such responses
+before the standard Trojan fallback to an assumed source. Ordinary inbounds
+retain their existing response-address behavior. Parser tests reject domain
+response addresses, zero ports, oversized lengths, invalid CRLF, insufficient
+consumer buffers and partial payloads without exposing a partial packet.
+
+Independent target sockets observe exits 127.0.0.2 and 127.0.0.3 for same-source
+users, original domains/IPs, source IP/port, inbound/network/port selectors,
+ordered blocking and balancing. The initial random-balancer fixture used prefix
+`b`, which also selected its `blocked` outbound; a shuffled run exposed this.
+The fixture now names that outbound `deny` and verifies round-robin exits
+.2/.3/.2 across three separately authenticated flows. Neither production router
+behavior nor acceptance tolerance was changed. A changed destination on an
+existing UDP stream is rejected before it can reuse the first routing decision.
+
+The fragmented-request fixture initially fragmented the PROXY v1 prefix too.
+The pinned proxyproto implementation explicitly requires that header in one
+write and rejected it before managed authentication. The fixture now follows
+that requirement while still sending managed authentication and target headers
+one byte at a time. No fragmentation tolerance is claimed for the PROXY v1
+prefix itself.
+
+Official mieru clients first timed out on UDP over both TCP and UDP underlays:
+the native receiver inspected a logical domain `RemoteAddr` before reading.
+It now consumes each `ReadFrom` peer, with a connected socket's known
+`RemoteAddr` as the alternate contract. Real-client tests transfer 8192 raw bytes
+in each direction per user across TCP and UDP payloads. The two users bill
+24576 bytes at 1.5x and 8192 bytes at 0.5x. Core outbound counters independently
+report 16384 bytes per direction for both users combined; no core user meter
+exists. Manual disable closes existing TCP/UDP connections and leaves the
+other user usable. With the other user's quota reduced to 8205 billed bytes,
+a four-byte reply exceeding the remaining allowance sends no prefix and bills
+nothing; a one-byte exchange consumes the remainder, reaching exact counters
+8207 up / 8203 down / 8205 billed, closing old flows and denying a new session.
+
+Temporary Go overlays proved the tests detect removed HMAC validation, forged
+source metadata, duplicate core user meters, lost routing identity and removal
+of the fixed-target guard. Overlays and mutant binaries stay outside the repo.
+The first mutant build omitted `-buildvcs=false` and failed VCS stamping; that
+build failure is not counted as a killed behavioral mutant.
+
+The final tooling build succeeded at `/tmp/3x-ui-xray-managed-final-1` with
+SHA256 `a9ffe3693e9b2b4b44a573fc8a815eeafdfe79f74a4e2c28b7617564c5d9cfb2`.
+A fresh `prepare.sh` output matched all eight changed source files. Generated
+protobuf uses protoc 33.5 and protoc-gen-go v1.36.11. Geodata test assets retain
+the verified commit and hashes documented in the preceding increment.
+
+The complete native package race run passed 10 top-level tests and eight
+subtests, with no skip or race, in 77.547s. It includes existing native rate,
+backpressure, one-way UDP and authentication tests as well as the new core
+integration. Its accompanying bridge run failed only the balancer fixture
+above. After correction, three complete bridge race runs passed 39 top-level
+and 72 subtest events with no skip or race. The later owned-core-exit test and
+full final regressions are recorded separately below. These logs remain local:
+`/tmp/3x-ui-managed-panel-race-final.jsonl` and
+`/tmp/3x-ui-managed-bridge-race-final.jsonl`.
+
+Public CRUD/Runtime/API/UI/export/install/node/backup integration, IPv6, other
+UDP outbounds, full core-routed rate/failure acceptance and all remaining
+original protocol requirements are still open. Direct connector rate tests
+are not evidence of rates through every core outbound. No frontend, migration
+or generated API schema changed in this increment.
+
+The final core full suite ran from 00:39:16Z to 00:49:24Z:
+
+```sh
+cd /tmp/3x-ui-managed-core-final-1
+go test -p 1 -count=1 -shuffle=on -json ./...
+```
+
+That invocation failed: 82 test packages passed, `testing/scenarios` failed
+`TestDokodemoTCP`, and 85 packages had no tests. The failing case attempted six
+consecutive listener ports after selecting only the first free port. All five
+attempts logged `bind: address already in use`; no managed request was involved.
+Without code, assertion, kernel or network changes, isolated `-count=5 -run
+'^TestDokodemoTCP$'` passed five times. The entire scenarios package then passed
+all 66 top-level tests in 318.014s with the same shuffle seed:
+
+```sh
+go test -p 1 -count=1 -shuffle=1790642553566814748 -json ./testing/scenarios
+```
+
+Combining the 82 initially successful packages with that complete package rerun
+produces **83 passing test packages, 561 top-level passes, 207 subtest passes and
+one top-level skip (`TestSockOptMark`)**, plus 85 packages without tests. This is
+a combined result, not a claim that the first invocation was green. Logs:
+`/tmp/3x-ui-managed-core-full-final.jsonl`,
+`/tmp/3x-ui-managed-dokodemo-recheck.jsonl`,
+`/tmp/3x-ui-managed-core-scenarios-rerun.jsonl`.
+
+The affected core package race command also exited zero:
+
+```sh
+go test -p 1 -race -count=1 -json ./common/session ./proxy/trojan ./proxy/freedom ./infra/conf
+```
+
+It passed 58 top-level tests and 12 subtests across two packages; session and
+freedom have no package test files and are exercised by the real wire tests.
+There were no skipped test cases, failures or detected races. Log:
+`/tmp/3x-ui-managed-core-race-final.jsonl`.
+
+Final panel regression and build used the final generated binary, owned
+PostgreSQL fixture and independent OpenSSH server:
+
+```sh
+XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+XUI_MANAGED_XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+SSH_E2E_SERVER=/usr/sbin/sshd \
+XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' \
+LD_LIBRARY_PATH=/tmp/3x-ui-pg-tools/root/usr/lib/aarch64-linux-gnu \
+go test -p 1 -count=1 -shuffle=on -json ./...
+go build ./...
+golangci-lint run ./internal/routedbridge/... ./internal/mieru/...
+```
+
+All three commands exited zero. The Go run lasted 00:59:11Z–01:07:40Z on
+2026-09-29: **52 test packages and 2507 top-level tests passed; 18 top-level tests
+skipped**, with seven packages without tests. There were 5007 passing and 29
+skipped test/subtest events, no failures. Native mieru passed in 70.667s,
+routedbridge in 4.136s and the service package in 204.266s. The core-exit test
+kills only its owned process, observes the existing packet stream close, and
+requires authenticated readiness and new target creation to fail. The build
+succeeded and affected lint reported zero issues. Log:
+`/tmp/3x-ui-managed-panel-full-final.jsonl`.
+
+The skipped top-level cases were `TestHostAutoMigrateCreatesColumns_Postgres`,
+`TestClientWeeklyRenewMigration_Postgres`, `TestMigrate_Postgres`,
+`TestUpdatePanel_UnsupportedPlatformReturnsNoRunId`,
+`TestAddInbound_PostgresCommitFailureMakesNoRuntimeCall`,
+`TestUpdateInbound_PostgresCommitFailureMakesNoRuntimeCall`,
+`TestAddTrafficReturnsDeferredCommitFailure`,
+`TestSetClientLimitHwidIsSerializedWithSyncInbound`, and the ten scale cases
+`TestDelAllClientsPostgresScale`, `TestWsPayloadScale`,
+`TestGroupAndListPostgresScale`, `TestGetClientTrafficByEmailABScale`,
+`TestAddTrafficPollScale`, `TestAddDelClientPostgresScale`,
+`TestAllAPIsPostgresScale`, `TestBulkOpsPostgresScale`,
+`TestSyncInboundPostgresScale`, `TestGetXrayConfigScale`.
+Their additional environment/platform conditions were not enabled by this run;
+they are not counted as passes or complete second-dialect acceptance.
+
+No new full frontend result is claimed for this internal Go/core increment.
+Shell syntax, source formatting, relative documentation links and Git whitespace
+checks passed. Public integration remains open as stated above.
+
+A final focused `go test -race -count=1 -run
+'^TestManagedCoreExitClosesExistingPacketFlowAndRefusesNewTarget$' -v
+./internal/routedbridge` also passed against the final binary (1.150s, no skip
+or detected race). Log: `/tmp/3x-ui-managed-core-exit-race.log`.

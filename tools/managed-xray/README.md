@@ -1,7 +1,7 @@
 # Managed Xray source patches
 
-These patches are a prerequisite under development for complete authenticated
-UDP routing. They do not install or replace the panel's configured core.
+These patches support the internal authenticated managed TCP/UDP bridge.
+They do not install or replace the panel's configured core.
 
 The source is the unchanged panel dependency pin:
 
@@ -27,13 +27,18 @@ sh tools/managed-xray/prepare.sh /tmp/xui-core-source
 (cd /tmp/xui-core-source && go test -race -count=1 ./common/buf ./transport/pipe ./proxy/trojan ./proxy/freedom)
 sh tools/managed-xray/build.sh /tmp/xui-core
 XUI_MANAGED_XRAY_E2E_BINARY=/tmp/xui-core go test -race -count=1 ./internal/routedbridge
+XUI_MANAGED_XRAY_E2E_BINARY=/tmp/xui-core go test -race -count=1 ./internal/mieru
 ```
 
-The binary reports `3x-ui-packets-1` alongside the original Xray version. The
+Set `XRAY_E2E_BINARY` to a separate stock binary at the same source pin to run
+the explicit stock-capability rejection test. Without that variable, that test
+is skipped; it is not counted as successful stock interoperability.
+
+The binary reports `3x-ui-managed-1` alongside the original Xray version. The
 build uses the pinned core's own module graph and disables VCS stamping and
 local source paths. No release has been published and no installer currently
-selects this build. Runtime capability negotiation and packaging are remaining
-work; a version label alone does not prove an installed backend is healthy.
+selects this build. Public Runtime capability enforcement and packaging remain
+open; the private bridge verifies a nonce-bound HMAC before sending a target.
 
 Patch 0001 keeps one complete UDP payload in one buffer, sizes framing for a
 255-byte domain and the full two-byte payload length, validates packet CRLF,
@@ -52,9 +57,17 @@ packages. They are run against that patched source; an ordinary panel
 `go test ./...` does not execute them. The actual binary tests remain in
 `internal/routedbridge` and skip unless `XUI_MANAGED_XRAY_E2E_BINARY` is supplied.
 
-Source-IP response metadata, other UDP outbounds, additional native protocol
-packet parsers and public managed-service activation are not established by
-these boundary tests. See the [bridge plan](../../docs/managed-services/xray-datagram-bridge.md).
+Patch 0002 adds the explicit Trojan `managed` setting, a private authenticated
+capability handshake, uint32 inbound user levels and one fixed original target
+per UDP connection. The managed direct reader returns its actual socket peer;
+the managed server rejects responses without an IP peer instead of substituting
+the original destination. Ordinary Trojan/freedom response behavior is retained.
+The protobuf was generated with protoc 33.5 and protoc-gen-go v1.36.11.
+
+Actual internal tests cover direct IPv4 routing and official mieru clients.
+Other UDP outbounds, IPv6, additional native protocol packet parsers and public
+managed-service activation remain open. See the
+[bridge plan](../../docs/managed-services/xray-datagram-bridge.md).
 
 The upstream full suite additionally needs `resources/geoip.dat` and
 `resources/geosite.dat`. The verified run used the upstream CI's

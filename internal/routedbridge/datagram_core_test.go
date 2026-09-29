@@ -84,7 +84,7 @@ func reserveDatagramCoreAddress(t *testing.T) string {
 	return address
 }
 
-func startDatagramCore(t *testing.T, binaryPath, address, password string, configure ...func(map[string]any)) {
+func startDatagramCore(t *testing.T, binaryPath, address, password string, configure ...func(map[string]any)) *exec.Cmd {
 	t.Helper()
 	_, port, err := net.SplitHostPort(address)
 	if err != nil {
@@ -137,11 +137,12 @@ func startDatagramCore(t *testing.T, binaryPath, address, password string, confi
 		conn, err := net.DialTimeout("tcp", address, 50*time.Millisecond)
 		if err == nil {
 			_ = conn.Close()
-			return
+			return cmd
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("owned core listener did not become ready")
+	return nil
 }
 
 func connectDatagramCore(t *testing.T, address, password string, port uint16) net.Conn {

@@ -1,0 +1,286 @@
+diff --git a/common/session/session.go b/common/session/session.go
+--- a/common/session/session.go
++++ b/common/session/session.go
+@@ -35,6 +35,8 @@
+ 
+ // Inbound is the metadata of an inbound connection.
+ type Inbound struct {
++	// Require actual UDP socket peers instead of aliases on the private managed bridge.
++	ManagedPacketPeer bool
+ 	// Source address of the inbound connection.
+ 	Source net.Destination
+ 	// Local address of the inbound connection.
+diff --git a/infra/conf/trojan.go b/infra/conf/trojan.go
+--- a/infra/conf/trojan.go
++++ b/infra/conf/trojan.go
+@@ -105,13 +105,14 @@
+ // TrojanUserConfig is user configuration
+ type TrojanUserConfig struct {
+ 	Password string `json:"password"`
+-	Level    byte   `json:"level"`
++	Level    uint32 `json:"level"`
+ 	Email    string `json:"email"`
+ 	Flow     string `json:"flow"`
+ }
+ 
+ // TrojanServerConfig is Inbound configuration
+ type TrojanServerConfig struct {
++	Managed   bool                     `json:"managed"`
+ 	Users     []*TrojanUserConfig      `json:"users"`
+ 	Clients   []*TrojanUserConfig      `json:"clients"`
+ 	Fallbacks []*TrojanInboundFallback `json:"fallbacks"`
+@@ -126,7 +127,8 @@
+ 	}
+ 
+ 	config := &trojan.ServerConfig{
+-		Users: make([]*protocol.User, len(c.Users)),
++		Users:   make([]*protocol.User, len(c.Users)),
++		Managed: c.Managed,
+ 	}
+ 
+ 	processClient := func(idx int) error {
+diff --git a/proxy/freedom/freedom.go b/proxy/freedom/freedom.go
+--- a/proxy/freedom/freedom.go
++++ b/proxy/freedom/freedom.go
+@@ -439,6 +439,13 @@
+ 			reader = buf.NewReader(conn)
+ 		} else {
+ 			reader = NewPacketReader(conn, h, defaultRule, UDPOverride, destination)
++			if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.ManagedPacketPeer {
++				if packetReader, ok := reader.(*PacketReader); ok {
++					packetReader.ActualPeer = true
++				} else {
++					return errors.New("managed UDP requires actual peer metadata")
++				}
++			}
+ 		}
+ 		if err := buf.Copy(reader, output, buf.UpdateActivity(timer)); err != nil {
+ 			return errors.New("failed to process response").Base(err)
+@@ -488,6 +495,7 @@
+ 
+ type PacketReader struct {
+ 	*internet.PacketConnWrapper
++	ActualPeer bool
+ 	stats.Counter
+ 	Handler           *Handler
+ 	DefaultRule       *FinalRule
+@@ -515,8 +523,8 @@
+ 
+ 		// if udp dest addr is changed, we are unable to get the correct src addr
+ 		// so we don't attach src info to udp packet, break cone behavior, assuming the dial dest is the expected scr addr
+-		if !r.IsOverridden {
+-			if r.InitChangedAddr == sourceAddr {
++		if r.ActualPeer || !r.IsOverridden {
++			if !r.ActualPeer && r.InitChangedAddr == sourceAddr {
+ 				sourceAddr = r.InitUnchangedAddr
+ 			}
+ 			b.UDP = &net.Destination{
+diff --git a/proxy/trojan/config.proto b/proxy/trojan/config.proto
+--- a/proxy/trojan/config.proto
++++ b/proxy/trojan/config.proto
+@@ -29,4 +29,5 @@
+ message ServerConfig {
+   repeated xray.common.protocol.User users = 1;
+   repeated Fallback fallbacks = 2;
++  bool managed = 3;
+ }
+diff --git a/proxy/trojan/config.pb.go b/proxy/trojan/config.pb.go
+--- a/proxy/trojan/config.pb.go
++++ b/proxy/trojan/config.pb.go
+@@ -198,6 +198,7 @@
+ 	state         protoimpl.MessageState `protogen:"open.v1"`
+ 	Users         []*protocol.User       `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
+ 	Fallbacks     []*Fallback            `protobuf:"bytes,2,rep,name=fallbacks,proto3" json:"fallbacks,omitempty"`
++	Managed       bool                   `protobuf:"varint,3,opt,name=managed,proto3" json:"managed,omitempty"`
+ 	unknownFields protoimpl.UnknownFields
+ 	sizeCache     protoimpl.SizeCache
+ }
+@@ -244,6 +245,13 @@
+ 		return x.Fallbacks
+ 	}
+ 	return nil
++}
++
++func (x *ServerConfig) GetManaged() bool {
++	if x != nil {
++		return x.Managed
++	}
++	return false
+ }
+ 
+ var File_proxy_trojan_config_proto protoreflect.FileDescriptor
+@@ -261,10 +269,11 @@
+ 	"\x04dest\x18\x05 \x01(\tR\x04dest\x12\x12\n" +
+ 	"\x04xver\x18\x06 \x01(\x04R\x04xver\"L\n" +
+ 	"\fClientConfig\x12<\n" +
+-	"\x06server\x18\x01 \x01(\v2$.xray.common.protocol.ServerEndpointR\x06server\"{\n" +
++	"\x06server\x18\x01 \x01(\v2$.xray.common.protocol.ServerEndpointR\x06server\"\x95\x01\n" +
+ 	"\fServerConfig\x120\n" +
+ 	"\x05users\x18\x01 \x03(\v2\x1a.xray.common.protocol.UserR\x05users\x129\n" +
+-	"\tfallbacks\x18\x02 \x03(\v2\x1b.xray.proxy.trojan.FallbackR\tfallbacksBU\n" +
++	"\tfallbacks\x18\x02 \x03(\v2\x1b.xray.proxy.trojan.FallbackR\tfallbacks\x12\x18\n" +
++	"\amanaged\x18\x03 \x01(\bR\amanagedBU\n" +
+ 	"\x15com.xray.proxy.trojanP\x01Z&github.com/xtls/xray-core/proxy/trojan\xaa\x02\x11Xray.Proxy.Trojanb\x06proto3"
+ 
+ var (
+diff --git a/proxy/trojan/managed.go b/proxy/trojan/managed.go
+new file mode 100644
+--- /dev/null
++++ b/proxy/trojan/managed.go
+@@ -0,0 +1,87 @@
++package trojan
++
++import (
++	"bytes"
++	"context"
++	"crypto/hmac"
++	"crypto/sha256"
++	"io"
++	"time"
++
++	"github.com/xtls/xray-core/common/buf"
++	"github.com/xtls/xray-core/common/errors"
++	"github.com/xtls/xray-core/common/log"
++	"github.com/xtls/xray-core/common/net"
++	"github.com/xtls/xray-core/common/session"
++	"github.com/xtls/xray-core/features/routing"
++	"github.com/xtls/xray-core/transport/internet/stat"
++)
++
++func (s *Server) processManaged(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
++	if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
++		return err
++	}
++	var probe [100]byte
++	if _, err := io.ReadFull(conn, probe[:]); err != nil {
++		return errors.New("incomplete managed authentication").Base(err)
++	}
++	if !bytes.Equal(probe[56:68], []byte{'\r', '\n', 0x7f, 0, 0, 0, 0, 0, 0, 0, '\r', '\n'}) {
++		return errors.New("invalid managed authentication")
++	}
++	user := s.validator.Get(hexString(probe[:56]))
++	if user == nil {
++		return errors.New("invalid managed user")
++	}
++	mac := hmac.New(sha256.New, []byte(user.Account.(*MemoryAccount).Password))
++	_, _ = mac.Write([]byte("3x-ui-managed/1"))
++	_, _ = mac.Write(probe[68:])
++	reply := append([]byte{'X', 'U', 'I', 1}, mac.Sum(nil)...)
++	if n, err := conn.Write(reply); err != nil {
++		return err
++	} else if n != len(reply) {
++		return io.ErrShortWrite
++	}
++	var command [1]byte
++	if _, err := io.ReadFull(conn, command[:]); err != nil {
++		if err == io.EOF {
++			return nil
++		}
++		return err
++	}
++	network := net.Network_TCP
++	switch command[0] {
++	case commandTCP:
++	case commandUDP:
++		network = net.Network_UDP
++	default:
++		return errors.New("invalid managed command")
++	}
++	address, port, err := addrParser.ReadAddressPort(nil, conn)
++	if err != nil {
++		return err
++	}
++	var delimiter [2]byte
++	if _, err := io.ReadFull(conn, delimiter[:]); err != nil {
++		return err
++	}
++	if delimiter != [2]byte{'\r', '\n'} || port == 0 || address == nil {
++		return errors.New("invalid managed target")
++	}
++	if err := conn.SetDeadline(time.Time{}); err != nil {
++		return err
++	}
++	destination := net.Destination{Address: address, Port: port, Network: network}
++	inbound := session.InboundFromContext(ctx)
++	inbound.Name = "xui-managed"
++	inbound.User = user
++	inbound.CanSpliceCopy = 3
++	inbound.ManagedPacketPeer = true
++	sessionPolicy := s.policyManager.ForLevel(user.Level)
++	if network == net.Network_UDP {
++		return s.handleUDPPayload(ctx, sessionPolicy, &PacketReader{Reader: conn, FixedTarget: &destination}, &PacketWriter{Writer: conn}, dispatcher)
++	}
++	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
++		From: conn.RemoteAddr(), To: destination, Status: log.AccessAccepted, Email: user.Email,
++	})
++	return s.handleConnection(ctx, sessionPolicy, destination, buf.NewReader(conn), buf.NewWriter(conn), dispatcher)
++}
+diff --git a/proxy/trojan/protocol.go b/proxy/trojan/protocol.go
+--- a/proxy/trojan/protocol.go
++++ b/proxy/trojan/protocol.go
+@@ -216,6 +216,7 @@
+ // PacketReader is UDP Connection Reader Wrapper for trojan protocol
+ type PacketReader struct {
+ 	io.Reader
++	FixedTarget *net.Destination
+ }
+ 
+ // ReadMultiBuffer implements buf.Reader
+@@ -245,6 +246,9 @@
+ 	}
+ 
+ 	dest := net.UDPDestination(addr, port)
++	if r.FixedTarget != nil && dest != *r.FixedTarget {
++		return nil, errors.New("managed packet changed original destination")
++	}
+ 	b := buf.NewWithSize(int32(remain))
+ 	b.UDP = &dest
+ 	if _, err := b.ReadFullFrom(r, int32(remain)); err != nil {
+diff --git a/proxy/trojan/server.go b/proxy/trojan/server.go
+--- a/proxy/trojan/server.go
++++ b/proxy/trojan/server.go
+@@ -39,10 +39,14 @@
+ 	validator     *Validator
+ 	fallbacks     map[string]map[string]map[string]*Fallback // or nil
+ 	cone          bool
++	managed       bool
+ }
+ 
+ // NewServer creates a new trojan inbound handler.
+ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
++	if config.Managed && len(config.Fallbacks) != 0 {
++		return nil, errors.New("managed bridge cannot enable fallbacks")
++	}
+ 	validator := new(Validator)
+ 	for _, user := range config.Users {
+ 		u, err := user.ToMemoryUser()
+@@ -60,6 +64,7 @@
+ 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+ 		validator:     validator,
+ 		cone:          ctx.Value("cone").(bool),
++		managed:       config.Managed,
+ 	}
+ 
+ 	if config.Fallbacks != nil {
+@@ -147,6 +152,9 @@
+ 
+ // Process implements proxy.Inbound.Process().
+ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
++	if s.managed {
++		return s.processManaged(ctx, conn, dispatcher)
++	}
+ 	iConn := stat.TryUnwrapStatsConn(conn)
+ 
+ 	sessionPolicy := s.policyManager.ForLevel(0)
+@@ -252,6 +260,11 @@
+ 	defer timer.SetTimeout(0)
+ 	udpServer := udp.NewDispatcher(dispatcher, func(ctx context.Context, packet *udp_proto.Packet) {
+ 		udpPayload := packet.Payload
++		if s.managed && (udpPayload.UDP == nil || udpPayload.UDP.Address == nil || !udpPayload.UDP.Address.Family().IsIP() || udpPayload.UDP.Port == 0) {
++			udpPayload.Release()
++			cancel()
++			return
++		}
+ 		if udpPayload.UDP == nil {
+ 			udpPayload.UDP = &packet.Source
+ 		}

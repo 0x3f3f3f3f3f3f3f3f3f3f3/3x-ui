@@ -129,18 +129,29 @@ func (a *udpAssociation) receive(key string, conn net.Conn) {
 		}
 		a.mu.Unlock()
 	}()
-	var address apimodel.AddrSpec
-	if err := address.From(conn.RemoteAddr().String()); err != nil || len(address.IP) == 0 {
-		return
-	}
-	writer := a.flow.DatagramWriter(policyflow.Download, udpResponseWriter{association: a, address: address})
+	packetReader, perPacketPeer := conn.(interface {
+		ReadFrom([]byte) (int, net.Addr, error)
+	})
 	p := make([]byte, policyflow.MaxDatagramSize+1)
 	for {
 		_ = conn.SetReadDeadline(time.Now().Add(udpIdleTime))
-		n, err := conn.Read(p)
+		var n int
+		var err error
+		var peer net.Addr
+		if perPacketPeer {
+			n, peer, err = packetReader.ReadFrom(p)
+		} else {
+			n, err = conn.Read(p)
+			peer = conn.RemoteAddr()
+		}
 		if err != nil {
 			return
 		}
+		var address apimodel.AddrSpec
+		if peer == nil || address.From(peer.String()) != nil || len(address.IP) == 0 {
+			return
+		}
+		writer := a.flow.DatagramWriter(policyflow.Download, udpResponseWriter{association: a, address: address})
 		if _, err := writer.Write(p[:n]); err != nil && !packetQuotaRemainder(err) {
 			a.flow.Close()
 			return
