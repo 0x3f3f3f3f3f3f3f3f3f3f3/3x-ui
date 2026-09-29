@@ -1931,6 +1931,9 @@
           "auth": {
             "type": "string"
           },
+          "clientId": {
+            "type": "string"
+          },
           "comment": {
             "type": "string"
           },
@@ -2029,6 +2032,7 @@
           "adTag",
           "allowedIPs",
           "auth",
+          "clientId",
           "comment",
           "createdAt",
           "email",

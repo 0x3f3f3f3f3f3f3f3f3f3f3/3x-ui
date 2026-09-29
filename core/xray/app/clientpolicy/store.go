@@ -23,13 +23,14 @@ var (
 )
 
 type storedClient struct {
-	Policy         Policy `json:"policy"`
-	Usage          Usage  `json:"usage"`
-	UncertainBytes uint64 `json:"uncertainBytes"`
-	ReservedBytes  uint64 `json:"reservedBytes"`
-	Revoked        bool   `json:"revoked"`
-	Sequence       uint64 `json:"sequence"`
-	Epoch          uint64 `json:"epoch"`
+	InitializationHash string `json:"initializationHash,omitempty"`
+	Policy             Policy `json:"policy"`
+	Usage              Usage  `json:"usage"`
+	UncertainBytes     uint64 `json:"uncertainBytes"`
+	ReservedBytes      uint64 `json:"reservedBytes"`
+	Revoked            bool   `json:"revoked"`
+	Sequence           uint64 `json:"sequence"`
+	Epoch              uint64 `json:"epoch"`
 }
 
 type stateStore interface {
@@ -165,6 +166,7 @@ func OpenPersistentEngine(path, instanceID string) (*Engine, error) {
 	for _, r := range records {
 		c := newClientState(e)
 		c.policy, c.usage, c.uncertain, c.revoked, c.sequence = r.Policy, r.Usage, r.UncertainBytes, r.Revoked, r.Sequence
+		c.initializationHash = r.InitializationHash
 		c.buckets[Upload].update(c.policy.UploadRate, c.policy.BurstBytes, now)
 		c.buckets[Download].update(c.policy.DownloadRate, c.policy.BurstBytes, now)
 		e.clients[c.policy.ClientID] = c
@@ -221,7 +223,7 @@ func (c *clientState) persistLocked(p Policy, revoked bool, reserved uint64) err
 	if c.engine.store == nil {
 		return nil
 	}
-	seq, err := c.engine.store.save(storedClient{Policy: p, Usage: c.usage, UncertainBytes: c.uncertain, ReservedBytes: reserved, Revoked: revoked})
+	seq, err := c.engine.store.save(storedClient{Policy: p, Usage: c.usage, UncertainBytes: c.uncertain, ReservedBytes: reserved, Revoked: revoked, InitializationHash: c.initializationHash})
 	if err != nil {
 		return fmt.Errorf("%w: commit: %w", ErrStorage, err)
 	}

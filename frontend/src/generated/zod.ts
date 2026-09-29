@@ -482,6 +482,7 @@ export const ClientRecordSchema = z.object({
   adTag: z.string(),
   allowedIPs: z.string(),
   auth: z.string(),
+  clientId: z.string(),
   comment: z.string(),
   createdAt: z.number().int(),
   email: z.string(),

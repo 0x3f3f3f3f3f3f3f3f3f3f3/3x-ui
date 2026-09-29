@@ -458,6 +458,7 @@ export interface ClientRecord {
   adTag: string;
   allowedIPs: string;
   auth: string;
+  clientId: string;
   comment: string;
   createdAt: number;
   email: string;

@@ -74,7 +74,7 @@ func TestClientPolicyAdapterRejectsMissingOrIncompatibleCoreCapabilities(t *test
 }
 
 func TestClientPolicyAdapterNegotiatesVersionAndStableInstance(t *testing.T) {
-	caps := &policycommand.Capabilities{ApiVersion: 1, InstanceId: "expected", Epoch: 4, Capabilities: []string{"trusted-tunnel-client-id-v1", "shared-directional-rate-v1", "fixed-point-billing-v1", "live-session-control-v1", "local-durable-reservations-v1", "committed-cumulative-ledger-v1"}}
+	caps := &policycommand.Capabilities{ApiVersion: 1, InstanceId: "expected", Epoch: 4, Capabilities: []string{"trusted-tunnel-client-id-v1", "shared-directional-rate-v1", "fixed-point-billing-v1", "live-session-control-v1", "local-durable-reservations-v1", "committed-cumulative-ledger-v1", "create-only-usage-seed-v1"}}
 	path := capabilitySocket(t, caps)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

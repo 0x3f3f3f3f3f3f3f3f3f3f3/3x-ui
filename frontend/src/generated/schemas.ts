@@ -1905,6 +1905,9 @@ export const SCHEMAS: Record<string, unknown> = {
       "auth": {
         "type": "string"
       },
+      "clientId": {
+        "type": "string"
+      },
       "comment": {
         "type": "string"
       },
@@ -2003,6 +2006,7 @@ export const SCHEMAS: Record<string, unknown> = {
       "adTag",
       "allowedIPs",
       "auth",
+      "clientId",
       "comment",
       "createdAt",
       "email",

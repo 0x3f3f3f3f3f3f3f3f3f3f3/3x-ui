@@ -9,6 +9,7 @@ This endpoint currently supports filesystem Unix sockets on supported Unix platf
 | GetCapabilities | API version 1, distinctive custom core version, stable instance ID, epoch, explicitly implemented capability names and 64 KiB raw reservation quantum |
 | GetClient | current policy, live admitted counters, frozen uncertain bytes, restriction reasons and active session count |
 | ApplyPolicies | 1–1000 fully validated policies, one atomic persisted batch; monotonic versions and identical replay semantics |
+| InitializeClient | create-only policy plus exact historical usage; identical retries preserve current policy/usage, conflicting seeds or existing unseeded identities fail |
 | RevokeClient | permanent client-ID tombstone; requires the exact expected current policy version |
 | ListConnections | bounded active registry for a client, session ID, inbound/authenticated account/target metadata and effective policy version |
 | CloseConnections | closes sessions present at collection time; reconnect requires a separate disable/revoke/quota restriction |
@@ -17,7 +18,7 @@ This endpoint currently supports filesystem Unix sockets on supported Unix platf
 
 `ReadLedger` returns the last committed record per client, not an append-only per-packet history. A record includes stable instance ID, its commit epoch/sequence, client ID, policy version, exact directional/billed totals and remainder, frozen uncertain bytes, outstanding reservation and revocation. All fields come from one database read transaction; raw/live Snapshot values must not be combined with a durable sequence to fabricate a ledger event. Updating the same client replaces its cumulative record, so sequence gaps are expected. A cursor ahead of durable state is rejected explicitly.
 
-The panel adapter at `internal/xray/client_policy.go` negotiates version, all required capabilities and expected instance before allowing operations. A missing service, wrong version/identity or missing enforcement capability returns a distinct error; it never falls back to legacy statistics for quota enforcement. The adapter is tested, but production Runtime wiring, identity migration, idempotent panel DB settlement and UI remain unfinished.
+The panel adapter at `internal/xray/client_policy.go` negotiates version, all required capabilities (including `create-only-usage-seed-v1`) and expected instance before allowing operations. A missing service, wrong version/identity or missing enforcement capability returns a distinct error; it never falls back to legacy statistics for quota enforcement. Stable record identity migration and transactional panel DB settlement now have SQLite/PostgreSQL tests. Production Runtime wiring and UI remain unfinished.
 
 Verified real flow: a Tunnel stream exhausts a 65,536-byte upload burst at 1 B/s. An RPC changes the same client's existing flow to unlimited upload and multiplier 2; the blocked payload resumes within 2 seconds. After 65,536 bytes per direction at multiplier 1 and 8192 per direction at multiplier 2, the committed ledger is 73,728 raw bytes per direction and 163,840 billed bytes. Connection query returns that client's active flow; the close RPC terminates its real TCP socket. Stale version updates are rejected. These results do not establish other protocols or global budgets.
 
@@ -32,4 +33,4 @@ protoc --go_out=. --go_opt=paths=source_relative \
   app/clientpolicy/command/command.proto
 ```
 
-Remaining gates include panel transactional replay/out-of-order settlement, restore fencing, whole configuration-start rollback, mass-client performance, durable checkpoint scheduling and protected local transport on Windows. Existing target metadata limitations remain: the pre-rewrite Tunnel target is not yet independently preserved.
+Remaining gates include production settlement scheduling, coordinated legacy cutover, restore fencing, whole configuration-start rollback, mass-client performance and protected local transport on Windows. Existing target metadata limitations remain: the pre-rewrite Tunnel target is not yet independently preserved.

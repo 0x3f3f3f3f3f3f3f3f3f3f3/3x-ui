@@ -47,7 +47,7 @@ func rpcError(err error) error {
 		code = codes.Aborted
 	case errors.Is(err, clientpolicy.ErrInvalidPolicy), errors.Is(err, clientpolicy.ErrInvalidUsage):
 		code = codes.InvalidArgument
-	case errors.Is(err, clientpolicy.ErrRevoked), errors.Is(err, clientpolicy.ErrEngineClosed), errors.Is(err, clientpolicy.ErrStorage), errors.Is(err, clientpolicy.ErrLedgerCursor):
+	case errors.Is(err, clientpolicy.ErrRevoked), errors.Is(err, clientpolicy.ErrEngineClosed), errors.Is(err, clientpolicy.ErrStorage), errors.Is(err, clientpolicy.ErrLedgerCursor), errors.Is(err, clientpolicy.ErrAlreadyInitialized):
 		code = codes.FailedPrecondition
 	case errors.Is(err, clientpolicy.ErrQueueFull):
 		code = codes.ResourceExhausted
@@ -62,13 +62,31 @@ func (s *service) GetCapabilities(ctx context.Context, _ *Empty) (*Capabilities,
 	c := s.engine.Capabilities()
 	features := []string{"trusted-tunnel-client-id-v1", "shared-directional-rate-v1", "fixed-point-billing-v1", "live-session-control-v1"}
 	if c.Persistent {
-		features = append(features, "local-durable-reservations-v1", "committed-cumulative-ledger-v1")
+		features = append(features, "local-durable-reservations-v1", "committed-cumulative-ledger-v1", "create-only-usage-seed-v1")
 	}
 	return &Capabilities{ApiVersion: 1, CoreVersion: core.VersionStatement()[0], InstanceId: c.InstanceID, Epoch: c.Epoch, Capabilities: features, ReservationRawBytes: c.ReservationRawBytes}, nil
 }
 
 func policyConfig(p clientpolicy.Policy) *clientpolicy.PolicyConfig {
 	return &clientpolicy.PolicyConfig{ClientId: p.ClientID, Version: p.Version, Enabled: p.Enabled, MultiplierMicros: p.Multiplier, QuotaBytes: p.QuotaBytes, UploadBytesPerSecond: p.UploadRate, DownloadBytesPerSecond: p.DownloadRate, BurstBytes: p.BurstBytes, ExpiresAt: p.ExpiresAt}
+}
+
+func runtimePolicy(p *clientpolicy.PolicyConfig) clientpolicy.Policy {
+	return clientpolicy.Policy{ClientID: p.ClientId, Version: p.Version, Enabled: p.Enabled, Multiplier: p.MultiplierMicros, QuotaBytes: p.QuotaBytes, UploadRate: p.UploadBytesPerSecond, DownloadRate: p.DownloadBytesPerSecond, BurstBytes: p.BurstBytes, ExpiresAt: p.ExpiresAt}
+}
+
+func (s *service) InitializeClient(ctx context.Context, r *InitializeRequest) (*Empty, error) {
+	if err := s.authorize(ctx); err != nil {
+		return nil, err
+	}
+	if r == nil || r.Policy == nil || r.Usage == nil {
+		return nil, status.Error(codes.InvalidArgument, "policy and initial usage are required")
+	}
+	u := clientpolicy.Usage{RawUpload: r.Usage.RawUpload, RawDownload: r.Usage.RawDownload, BilledBytes: r.Usage.BilledBytes, Remainder: r.Usage.Remainder}
+	if err := s.engine.Initialize(runtimePolicy(r.Policy), u); err != nil {
+		return nil, rpcError(err)
+	}
+	return &Empty{}, nil
 }
 func usage(u clientpolicy.Usage) *Usage {
 	return &Usage{RawUpload: u.RawUpload, RawDownload: u.RawDownload, BilledBytes: u.BilledBytes, Remainder: u.Remainder}
@@ -97,7 +115,7 @@ func (s *service) ApplyPolicies(ctx context.Context, r *ApplyRequest) (*Empty, e
 		if p == nil {
 			return nil, status.Error(codes.InvalidArgument, "nil client policy")
 		}
-		policies = append(policies, clientpolicy.Policy{ClientID: p.ClientId, Version: p.Version, Enabled: p.Enabled, Multiplier: p.MultiplierMicros, QuotaBytes: p.QuotaBytes, UploadRate: p.UploadBytesPerSecond, DownloadRate: p.DownloadBytesPerSecond, BurstBytes: p.BurstBytes, ExpiresAt: p.ExpiresAt})
+		policies = append(policies, runtimePolicy(p))
 	}
 	if err := s.engine.ApplyBatch(policies); err != nil {
 		return nil, rpcError(err)

@@ -59,7 +59,7 @@ func DialClientPolicy(ctx context.Context, socket, expectedInstance string) (*Cl
 	for _, name := range capabilities.Capabilities {
 		present[name] = true
 	}
-	for _, name := range []string{"trusted-tunnel-client-id-v1", "shared-directional-rate-v1", "fixed-point-billing-v1", "live-session-control-v1", "local-durable-reservations-v1", "committed-cumulative-ledger-v1"} {
+	for _, name := range []string{"trusted-tunnel-client-id-v1", "shared-directional-rate-v1", "fixed-point-billing-v1", "live-session-control-v1", "local-durable-reservations-v1", "committed-cumulative-ledger-v1", "create-only-usage-seed-v1"} {
 		if !present[name] {
 			conn.Close()
 			return nil, fmt.Errorf("%w: missing %s", ErrClientPolicyCapability, name)
@@ -74,6 +74,10 @@ func (c *ClientPolicyAPI) Capabilities() *policycommand.Capabilities {
 }
 func (c *ClientPolicyAPI) GetClient(ctx context.Context, id string) (*policycommand.ClientState, error) {
 	return c.client.GetClient(ctx, &policycommand.ClientRequest{ClientId: id})
+}
+func (c *ClientPolicyAPI) Initialize(ctx context.Context, policy *clientpolicy.PolicyConfig, seed *policycommand.Usage) error {
+	_, err := c.client.InitializeClient(ctx, &policycommand.InitializeRequest{Policy: policy, Usage: seed})
+	return err
 }
 func (c *ClientPolicyAPI) Apply(ctx context.Context, policies []*clientpolicy.PolicyConfig) error {
 	_, err := c.client.ApplyPolicies(ctx, &policycommand.ApplyRequest{Policies: policies})

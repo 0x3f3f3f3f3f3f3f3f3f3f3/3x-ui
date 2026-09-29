@@ -74,6 +74,9 @@ func allModels() []any {
 		&model.Node{},
 		&model.ApiToken{},
 		&model.ClientRecord{},
+		&model.ClientPolicySource{},
+		&model.ClientPolicyTotal{},
+		&model.ClientPolicyReceipt{},
 		&model.ClientInbound{},
 		&model.ClientHwid{},
 		&model.ClientExternalLink{},
@@ -113,6 +116,9 @@ func migrateInboundExcludeFromSubColumn() error {
 }
 
 func initModels() error {
+	if err := migrateClientStableIDColumn(); err != nil {
+		return err
+	}
 	if err := migrateClientTrafficLastSubFetchColumn(); err != nil {
 		return err
 	}
@@ -135,6 +141,9 @@ func initModels() error {
 			log.Printf("Error auto migrating model: %v", err)
 			return err
 		}
+	}
+	if err := migrateClientStableIDs(); err != nil {
+		return err
 	}
 	if err := dropLegacyInboundPortUnique(); err != nil {
 		return err

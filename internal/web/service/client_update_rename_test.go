@@ -26,10 +26,12 @@ func TestUpdateInboundClientRenameDoesNotDuplicateRecord(t *testing.T) {
 	if err := svc.SyncInbound(nil, ib.Id, source); err != nil {
 		t.Fatalf("seed linkage: %v", err)
 	}
-	origId := lookupClientRecord(t, "old@x").Id
+	original := lookupClientRecord(t, "old@x")
+	origId := original.Id
 
 	renamed := source
 	renamed[0].Email = "new@x"
+	renamed[0].ID = "bbbbbbbb-0000-0000-0000-000000000001"
 	if _, err := svc.UpdateInboundClient(inboundSvc, &model.Inbound{
 		Id:       ib.Id,
 		Settings: clientsSettings(t, renamed),
@@ -43,6 +45,9 @@ func TestUpdateInboundClientRenameDoesNotDuplicateRecord(t *testing.T) {
 	rec := lookupClientRecord(t, "new@x")
 	if rec.Id != origId {
 		t.Fatalf("record id after rename = %d, want %d", rec.Id, origId)
+	}
+	if original.StableID == "" || rec.StableID != original.StableID || rec.UUID != renamed[0].ID {
+		t.Fatal("rename and credential rotation must preserve stable identity")
 	}
 }
 

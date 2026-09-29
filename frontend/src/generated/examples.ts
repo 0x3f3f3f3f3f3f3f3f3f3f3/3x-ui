@@ -500,6 +500,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "adTag": "",
     "allowedIPs": "",
     "auth": "",
+    "clientId": "",
     "comment": "",
     "createdAt": 0,
     "email": "",

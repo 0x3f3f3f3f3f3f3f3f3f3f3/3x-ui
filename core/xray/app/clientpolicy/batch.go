@@ -57,7 +57,7 @@ func (e *Engine) applyBatch(policies []Policy, commit bool) error {
 			return ErrPolicyVersion
 		}
 		if p != c.policy {
-			records = append(records, storedClient{Policy: p, Usage: c.usage, UncertainBytes: c.uncertain})
+			records = append(records, storedClient{Policy: p, Usage: c.usage, UncertainBytes: c.uncertain, InitializationHash: c.initializationHash})
 		}
 	}
 	if len(e.clients)+additions > maxStoredClients {

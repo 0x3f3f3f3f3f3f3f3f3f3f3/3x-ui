@@ -15,7 +15,7 @@ This is the initial source-audit matrix, not a support announcement. `E/U` = exi
 | Hysteria2 | E/U both | E/U | N | QUIC/mux/UDP and auth updates |
 | WireGuard | E/U both | E/U | N | per-peer identity, IP/payload accounting distinction |
 | TUN | E/U inbound | no account auth; resource identity required | N | packet semantics, route and owner mapping |
-| Tunnel/dokodemo-door | E/U inbound; NA outbound (listener adapter) | forwarding client lifecycle N | I/V for scoped in-memory Tunnel tests below; local persistence I/V for tests below; panel settlement N | TCP/UDP, all routing modes, owner lifecycle, shared policy |
+| Tunnel/dokodemo-door | E/U inbound; NA outbound (listener adapter) | forwarding client lifecycle N | I/V for scoped Tunnel/local persistence/SQL settlement tests; production Runtime activation N | TCP/UDP, all routing modes, owner lifecycle, shared policy |
 | Snell v4 | N both | N | N | official Surge interoperability + independent outbound test |
 | Snell v5 | N both | N | N | v4-like paths separately, QUIC Proxy Mode mandatory |
 | Snell v6 beta | N both | N | N | fixed beta client/server, shaping modes, TCP/UDP/reuse |
@@ -40,7 +40,7 @@ Each applicable row above must cover **both directions separately** and every fe
 | Routing, DNS, outbounds, block, balancing and chains | core Dispatcher/Router and panel xray forms | N |
 | Share/QR/subscription/config export | `internal/sub`, `frontend/src/lib/xray`, `docs/lib/xray` | N |
 | API, permission checks and notifications | controller/runtime, Telegram/Discord/email/eventbus | N |
-| SQLite/PostgreSQL migrations, backup/restore/import/export | `internal/database`, server service | N |
+| SQLite/PostgreSQL migrations, backup/restore/import/export | `internal/database`, server service | stable identity and ledger migration I/V; portable exports/restore fencing N |
 | Install/upgrade/Docker/platform matrix | install/update, DockerInit, CI/release workflows | N |
 | Node sync and global budgets/rates, outage/replay | runtime Local/Remote, node and global traffic models | N |
 | LDAP sync, external subscription links, hosts, renewal schedules | existing services/jobs and DB relationships | N; preserve current behavior |
@@ -69,3 +69,5 @@ Lack of an upstream API, platform test machine or commercial client is **not** i
 - Local durable reservations: graceful and abrupt engine recovery, exact/frozen counters, version/tombstone persistence, atomic batches, storage failure and real Tunnel restart tests implemented. Panel settlement, restore fencing and global budgets remain N; protected core control API is implemented and tested as described below.
 
 - Private Unix gRPC API v1: capability negotiation, atomic policy updates, current state, version-checked revocation, connection query/close, checkpoint and committed cumulative ledger. Real existing-flow RPC update resumes within 2 s with exact multiplier-boundary accounting. Panel adapter rejects unsupported cores, but Runtime/DB/UI integration remains N.
+
+Identity/ledger increment (2026-09-29): ClientRecord stable UUID generation/backfill, immutable ORM updates, SQL backup-compatible schema, SQLite→PostgreSQL migration and idempotent committed-receipt settlement are I/V for the tests named in testing.md. Real Tunnel traffic and restart settle correctly through the private API into both databases. Core create-only legacy seeding is I/V. Production Runtime/config/UI activation, portable exports, coordinated legacy cutover, node identity mapping and restore fencing remain N; this evidence does not upgrade complete lifecycle or protocol rows.

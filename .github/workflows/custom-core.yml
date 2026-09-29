@@ -2,9 +2,9 @@ name: Custom core
 on:
   push:
     branches: [feature/custom-xray-unified-policy]
-    paths: ["core/**", "tools/build-custom-core.sh", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
+    paths: ["core/**", "internal/database/**", "internal/web/service/client_policy*", "internal/xray/client_policy*", "tools/build-custom-core.sh", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
   pull_request:
-    paths: ["core/**", "tools/build-custom-core.sh", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
+    paths: ["core/**", "internal/database/**", "internal/web/service/client_policy*", "internal/xray/client_policy*", "tools/build-custom-core.sh", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
 permissions:
   contents: read
 jobs:
@@ -28,3 +28,36 @@ jobs:
         run: bash tools/build-custom-core.sh
       - name: Build panel against same managed source
         run: make dist-stub && go build ./...
+      - name: Panel policy SQLite and adapter race checks
+        run: go test -race ./internal/database ./internal/web/service ./internal/xray -run 'TestClientStableIdentity|TestClientPolicyLedger|TestClientPolicyAdapter' -count=1
+  policy-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: xui_policy
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d xui_policy"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      XUI_DB_TYPE: postgres
+      XUI_DB_DSN: "host=127.0.0.1 port=5432 user=postgres password=postgres dbname=xui_policy sslmode=disable"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: make dist-stub
+      - name: Real PostgreSQL migrations, commit failure and Tunnel ledger
+        run: |
+          set -o pipefail
+          go test -race ./internal/database ./internal/web/service -run 'TestClientStableIdentityMigrationPostgres|TestClientPolicyCrossDatabaseMigration|TestClientPolicyLedger' -count=1 -v | tee /tmp/policy-postgres.log
+          for test in TestClientStableIdentityMigrationPostgres TestClientPolicyCrossDatabaseMigration TestClientPolicyLedgerPostgresCommitFailure TestClientPolicyLedgerRealTunnelAndRestart; do
+            grep -q -- "^--- PASS: $test " /tmp/policy-postgres.log
+          done

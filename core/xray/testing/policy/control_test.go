@@ -127,3 +127,30 @@ func TestManagedControlServiceRejectsTCPAndAbstractSockets(t *testing.T) {
 		}
 	}
 }
+
+func TestPrivateControlInitializesLegacyUsageOnce(t *testing.T) {
+	socket := privateSocket(t)
+	start(t, fmt.Sprintf(`{"log":{"loglevel":"error"},"api":{"tag":"control","listen":%q,"services":["ClientPolicyServiceV1"]},"clientPolicy":{"policies":[]},"outbounds":[{"protocol":"blackhole"}]}`, socket))
+	conn, err := grpc.NewClient("unix://"+socket, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	api := command.NewClientPolicyServiceClient(conn)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	request := &command.InitializeRequest{Policy: &clientpolicy.PolicyConfig{ClientId: "migrated", Version: 1, Enabled: true, MultiplierMicros: 2000000, QuotaBytes: 100, BurstBytes: 65536}, Usage: &command.Usage{RawUpload: 10, RawDownload: 20, BilledBytes: 30}}
+	for range 2 {
+		if _, err := api.InitializeClient(ctx, request); err != nil {
+			t.Fatal(err)
+		}
+	}
+	state, err := api.GetClient(ctx, &command.ClientRequest{ClientId: "migrated"})
+	if err != nil || state.Usage.BilledBytes != 30 || state.Usage.RawUpload != 10 || state.Usage.RawDownload != 20 || state.Policy.MultiplierMicros != 2000000 {
+		t.Fatalf("incorrect seed: %v/%v", state, err)
+	}
+	request.Usage.BilledBytes = 0
+	if _, err := api.InitializeClient(ctx, request); status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("accepted conflicting seed: %v", err)
+	}
+}

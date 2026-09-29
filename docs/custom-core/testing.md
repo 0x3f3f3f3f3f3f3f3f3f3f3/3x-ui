@@ -91,3 +91,31 @@ API v1 tests first received gRPC Unimplemented, then exposed the generic Unix li
 Panel `go test -race ./internal/xray -run TestClientPolicyAdapter -count=1` passed against actual local gRPC transports. The fixtures test capability negotiation only: absent service, incompatible version, wrong instance and missing enforcement capabilities fail explicitly; a fully matching service succeeds. These are not additional protocol interoperability tests. Runtime/DB/UI integration remains unfinished.
 
 API checkpoint: final focused core/API race checks, focused vet, rebuilt Custom Xray-core and full panel `make test-go` passed. Final lifecycle regression also confirms a closed engine no longer advertises readiness. The new adapter has not yet been wired into production panel Runtime.
+
+## Panel identity, transactional receipts and legacy seed — 2026-09-29
+
+SQLite identity migration tests first failed on missing stable-ID support, then passed. A separate partial-migration test reproduced duplicate empty IDs blocking unique-index creation; moving the backfill before index creation fixed it. PostgreSQL 16.15 was downloaded as Ubuntu packages and unpacked into a private temporary test directory, run as `nobody` with TCP disabled; no system service was installed or changed. Tests use isolated schemas and close their pools. Both missing-column and partially nullable/empty-column PostgreSQL migrations passed under race, preserving credentials, quotas and old `111/222` directional counters.
+
+Ledger tests cover seed preservation, multipliers already applied in core, duplicate/out-of-order pages, invalid/regressing counters, signed overflow, wrong source/epoch, cursor gaps, whole-page rollback, 20 concurrent retries, and a deleted client's final receipt remaining on its original UUID. SQLite and PostgreSQL focused race runs passed. PostgreSQL additionally executes a real deferred foreign-key violation at transaction commit: totals, per-client receipt and source cursor all roll back; replay after removing the injected violation commits exactly once.
+
+Core initialization tests first failed on missing methods; the private RPC test first returned `Unimplemented`. Implementation now passes core policy/API/Tunnel scoped race tests. A 100-byte quota seeded with 30 billed bytes admits only the remaining budget. Identical initialization retries after traffic, policy changes and restart do not reset counters; conflicting seeds, existing unseeded identities and revoked identities are rejected. Fault tests cover an error before the initialization write and an error returned after that write committed.
+
+`TestClientPolicyLedgerRealTunnelAndRestart` passes with SQLite and PostgreSQL under race. The account begins with 100 upload / 200 download / 300 billed historical bytes. Each full core run echoes an independently observed 1024 bytes each way at multiplier 2. Panel totals become `1124/1224/4396`, then after restarting the same core store `2148/2248/8492`, with zero uncertainty. Each real gRPC ledger page is submitted twice. The test explicitly exercises the panel adapter, real Tunnel sockets and SQL settlement; it is not a full browser/production Runtime acceptance test.
+
+`TestClientPolicyCrossDatabaseMigration` verifies IDs, policy sources, cumulative totals, fractional remainder and receipts survive SQLite→PostgreSQL copying. An old source without the new identity column/tables initially failed the unique index; migration now generates identities while copying without modifying the source, accepts all-three policy tables absent as a legacy schema, and rejects an incomplete policy-table set. This migration test passes under race. Portable per-client export/restore fencing remain unfinished.
+
+Reproduction (Go 1.27.1; set `XUI_DB_TYPE=postgres` and `XUI_DB_DSN` to an isolated test database for PostgreSQL-only cases):
+
+```sh
+go test -race ./internal/database ./internal/web/service -run 'TestClientStableIdentity|TestClientPolicyLedger|TestClientPolicyCrossDatabaseMigration' -count=1
+go test -race ./internal/xray -run TestClientPolicyAdapter -count=1
+(cd core/xray && go test -race ./app/clientpolicy/... ./testing/policy -count=1)
+```
+
+When PostgreSQL is not configured its explicitly gated tests are skipped and do not count as PostgreSQL evidence. Here the PostgreSQL commands were separately run against the real private instance. Frontend generation/build passed after adding the response identity field; full frontend and full panel verification results will be recorded at the commit gate.
+
+Commit-gate checks: generated schemas/OpenAPI (also copied to the docs site), frontend build and TypeScript checks passed. Full frontend `npm test -- --maxWorkers=1` passed 174 files / 1742 tests in 447.99 seconds without changing timeouts or assertions. Final focused core policy/API/Tunnel race, core/panel focused vet, panel adapter race, PostgreSQL identity/ledger/Tunnel/migration race and custom-core binary build passed.
+
+The first full panel `make test-go` run failed in the unchanged Discord test `TestGatewayRequestedHeartbeatDoesNotRaceTicker`; its 10 ms fixture heartbeat missed an ACK and closed the socket under concurrent package load. The test then passed 30 consecutive isolated runs. No Discord code, expected result or timing threshold was changed. A full `GOFLAGS=-p=1 make test-go` rerun is recorded separately below; the failed concurrent run is not a passing result.
+
+The full panel rerun `GOFLAGS=-p=1 GOTOOLCHAIN=go1.27.1 make test-go` passed. It includes the original Discord test unchanged. The isolated 30/30 pass plus the serial suite support scheduling contention as the explanation for the earlier parallel failure; no claim is made that the 10 ms fixture is load-independent.

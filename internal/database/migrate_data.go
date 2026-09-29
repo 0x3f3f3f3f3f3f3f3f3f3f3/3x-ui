@@ -47,6 +47,9 @@ func migrationModels() []any {
 		&model.OutboundTraffics{},
 		&model.InboundClientIps{},
 		&model.ClientRecord{},
+		&model.ClientPolicySource{},
+		&model.ClientPolicyTotal{},
+		&model.ClientPolicyReceipt{},
 		&model.ClientInbound{},
 		&model.ClientHwid{},
 		&model.ClientExternalLink{},
@@ -88,6 +91,16 @@ func MigrateData(srcPath, dstDSN string) error {
 		return err
 	}
 	defer srcSQL.Close()
+	policyTables := []any{&model.ClientPolicySource{}, &model.ClientPolicyTotal{}, &model.ClientPolicyReceipt{}}
+	policyTableCount := 0
+	for _, m := range policyTables {
+		if src.Migrator().HasTable(m) {
+			policyTableCount++
+		}
+	}
+	if policyTableCount != 0 && policyTableCount != len(policyTables) {
+		return errors.New("source has an incomplete client policy ledger schema")
+	}
 
 	dst, err := gorm.Open(postgres.Open(dstDSN), &gorm.Config{Logger: logger.Discard})
 	if err != nil {
@@ -127,6 +140,12 @@ func MigrateData(srcPath, dstDSN string) error {
 		}
 
 		for _, m := range migrationModels() {
+			if policyTableCount == 0 {
+				switch m.(type) {
+				case *model.ClientPolicySource, *model.ClientPolicyTotal, *model.ClientPolicyReceipt:
+					continue
+				}
+			}
 			n, err := copyTable(src, tx, m)
 			if err != nil {
 				return fmt.Errorf("copy %T: %w", m, err)
@@ -239,6 +258,11 @@ func copyTable(src, dst *gorm.DB, mdl any) (int, error) {
 
 		rows := make([]map[string]any, n)
 		for i := range n {
+			if client, ok := slice.Index(i).Interface().(*model.ClientRecord); ok {
+				if err := client.BeforeCreate(nil); err != nil {
+					return total, err
+				}
+			}
 			rv := reflect.Indirect(slice.Index(i))
 			row := make(map[string]any, len(columns))
 			for _, name := range columns {

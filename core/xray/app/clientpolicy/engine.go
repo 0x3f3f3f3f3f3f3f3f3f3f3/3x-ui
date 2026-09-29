@@ -26,19 +26,20 @@ type Engine struct {
 }
 
 type clientState struct {
-	engine          *Engine
-	uncertain       uint64
-	sequence        uint64
-	reservationLeft uint64
-	mu              sync.Mutex
-	policy          Policy
-	usage           Usage
-	revoked         bool
-	closed          bool
-	changed         chan struct{}
-	buckets         [2]bucket
-	sessions        map[uint64]*Session
-	expiry          *time.Timer
+	initializationHash string
+	engine             *Engine
+	uncertain          uint64
+	sequence           uint64
+	reservationLeft    uint64
+	mu                 sync.Mutex
+	policy             Policy
+	usage              Usage
+	revoked            bool
+	closed             bool
+	changed            chan struct{}
+	buckets            [2]bucket
+	sessions           map[uint64]*Session
+	expiry             *time.Timer
 }
 
 func newClientState(e *Engine) *clientState {
