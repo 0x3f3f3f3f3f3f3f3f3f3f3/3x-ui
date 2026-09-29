@@ -172,7 +172,14 @@ func TestXrayTrafficJobRetriesUncommittedCountersAtomically(t *testing.T) {
 					for _, stat := range page.Stat {
 						counters[stat.Name] = stat.Value
 					}
-					if counters["user>>>"+email+">>>traffic>>>uplink"] == payloadBytes && counters["user>>>"+email+">>>traffic>>>downlink"] == payloadBytes {
+					// This IPv4 VLESS request has a 26-byte header and a 2-byte response header.
+					// Network counters settle after user counters, so wait for all accounting layers.
+					if counters["user>>>"+email+">>>traffic>>>uplink"] == payloadBytes &&
+						counters["user>>>"+email+">>>traffic>>>downlink"] == payloadBytes &&
+						counters["inbound>>>settle-in>>>traffic>>>uplink"] == payloadBytes+26 &&
+						counters["inbound>>>settle-in>>>traffic>>>downlink"] == payloadBytes+2 &&
+						counters["outbound>>>settle-out>>>traffic>>>uplink"] == payloadBytes &&
+						counters["outbound>>>settle-out>>>traffic>>>downlink"] == payloadBytes {
 						break
 					}
 					if time.Now().After(deadline) {
