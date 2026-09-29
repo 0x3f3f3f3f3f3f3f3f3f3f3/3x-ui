@@ -16,7 +16,8 @@ import (
 	apimodel "github.com/enfein/mieru/v3/apis/model"
 	"github.com/enfein/mieru/v3/pkg/appctl/appctlpb"
 	"github.com/enfein/mieru/v3/pkg/common"
-	"github.com/enfein/mieru/v3/pkg/protocol"
+
+	protocol "github.com/mhsanaei/3x-ui/v3/internal/mieru/native"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/policyflow"
 )
@@ -121,6 +122,11 @@ func (s *Server) Start() error {
 	}
 	s.started = true
 	s.mux = protocol.NewMux(false)
+	if err := s.mux.SetServerLimits(protocol.ServerLimits{Sessions: maxSessions, SessionsPerUser: policyflow.MaxFlows, QueueSegments: 256, QueueBytes: 128 << 10, DisableUserMetrics: true}); err != nil {
+		s.cancel()
+		_ = s.mux.Close()
+		return err
+	}
 	s.mux.SetStreamListenerFactory(&s.listeners).SetPacketListenerFactory(&s.listeners).
 		SetServerUsers(s.users).SetEndpoints(s.endpoints)
 	if err := s.mux.Start(); err != nil {

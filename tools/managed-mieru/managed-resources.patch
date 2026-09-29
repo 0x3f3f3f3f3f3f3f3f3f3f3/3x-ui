@@ -1,0 +1,903 @@
+--- /dev/null
++++ b/managed_resources.go
+@@ -0,0 +1,283 @@
++package protocol
++
++import (
++	"errors"
++	"sync"
++	"sync/atomic"
++	"time"
++
++	"github.com/enfein/mieru/v3/pkg/appctl/appctlpb"
++	"github.com/enfein/mieru/v3/pkg/common"
++	"github.com/enfein/mieru/v3/pkg/protocol/serveruser"
++)
++
++type ServerLimits struct {
++	Sessions           int
++	SessionsPerUser    int
++	QueueSegments      int
++	QueueBytes         int
++	DisableUserMetrics bool
++}
++
++type ServerResourceStats struct {
++	Sessions          int
++	PeakSessions      int
++	Rejected          uint64
++	BufferedBytes     int64
++	PeakBufferedBytes int64
++}
++
++type serverResources struct {
++	limits    ServerLimits
++	mu        sync.Mutex
++	sessions  int
++	peak      int
++	rejected  uint64
++	closed    bool
++	users     map[string]int
++	bytes     atomic.Int64
++	peakBytes atomic.Int64
++	workers   sync.WaitGroup
++}
++
++type sessionResource struct {
++	owner        *serverResources
++	user         string
++	deliveryMu   sync.Mutex
++	released     bool
++	receiveBytes atomic.Int64
++	underlay     *baseUnderlay
++}
++
++func (m *Mux) SetServerLimits(limits ServerLimits) error {
++	m.mu.Lock()
++	defer m.mu.Unlock()
++	if m.isClient || m.used || limits.Sessions < 1 || limits.Sessions > 1024 || limits.SessionsPerUser < 1 || limits.SessionsPerUser > limits.Sessions || limits.QueueSegments < 64 || limits.QueueSegments > 4096 || limits.QueueBytes < 65535 || limits.QueueBytes > 16<<20 {
++		return errors.New("invalid managed mieru server resource limits")
++	}
++	m.serverResources = &serverResources{limits: limits, users: make(map[string]int)}
++	return nil
++}
++
++func (m *Mux) ServerResourceStats() ServerResourceStats {
++	m.mu.Lock()
++	r := m.serverResources
++	m.mu.Unlock()
++	if r == nil {
++		return ServerResourceStats{}
++	}
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	return ServerResourceStats{Sessions: r.sessions, PeakSessions: r.peak, Rejected: r.rejected, BufferedBytes: r.bytes.Load(), PeakBufferedBytes: r.peakBytes.Load()}
++}
++
++func (r *serverResources) acquire(policy serveruser.Policy) *sessionResource {
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	user := policy.Name()
++	if r.closed || user == "" || r.sessions >= r.limits.Sessions || r.users[user] >= r.limits.SessionsPerUser || (r.limits.DisableUserMetrics && len(policy.Quotas()) != 0) {
++		r.rejected++
++		return nil
++	}
++	r.sessions++
++	r.peak = max(r.peak, r.sessions)
++	r.users[user]++
++	r.workers.Add(1)
++	return &sessionResource{owner: r, user: user}
++}
++
++func (r *serverResources) adjustBytes(delta int) {
++	if r == nil {
++		return
++	}
++	current := r.bytes.Add(int64(delta))
++	for peak := r.peakBytes.Load(); current > peak; peak = r.peakBytes.Load() {
++		if r.peakBytes.CompareAndSwap(peak, current) {
++			break
++		}
++	}
++}
++
++func (m *Mux) newServerUnderlay(mtu int, pattern *appctlpb.TrafficPattern) *baseUnderlay {
++	b := newBaseUnderlay(false, mtu, pattern)
++	b.serverResources = m.serverResources
++	if b.serverResources != nil {
++		b.pendingSessions = make(chan struct{}, sessionChanCapacity)
++	}
++	return b
++}
++
++func (b *baseUnderlay) newServerSession(id uint32, policy serveruser.Policy) *Session {
++	if b.serverResources == nil {
++		return newSessionWithServerUserPolicy(id, false, b.MTU(), policy, nil, b.trafficPattern)
++	}
++	select {
++	case b.pendingSessions <- struct{}{}:
++	default:
++		b.serverResources.mu.Lock()
++		b.serverResources.rejected++
++		b.serverResources.mu.Unlock()
++		return nil
++	}
++	lease := b.serverResources.acquire(policy)
++	if lease == nil {
++		<-b.pendingSessions
++		return nil
++	}
++	return newSessionWithResource(id, false, b.MTU(), policy, nil, b.trafficPattern, lease)
++}
++
++func (b *baseUnderlay) discardServerSession(s *Session) {
++	if s.resource != nil {
++		<-b.pendingSessions
++		s.releaseManagedResources()
++	}
++}
++
++func (s *Session) releaseManagedResources() {
++	r := s.resource
++	if r == nil {
++		return
++	}
++	r.deliveryMu.Lock()
++	defer r.deliveryMu.Unlock()
++	if r.released {
++		return
++	}
++	r.released = true
++	s.oLock.Lock()
++	s.sendQueue.DeleteAll()
++	s.sendBuf.DeleteAll()
++	s.oLock.Unlock()
++	s.recvQueue.DeleteAll()
++	s.recvBuf.DeleteAll()
++	s.rLock.Lock()
++	s.unreadBuf = nil
++	s.rLock.Unlock()
++	for {
++		select {
++		case seg := <-s.recvChan:
++			r.releaseReceived(len(seg.payload))
++		default:
++			if r.underlay != nil {
++				r.underlay.sessionMap.CompareAndDelete(s.id, s)
++			}
++			r.owner.mu.Lock()
++			r.owner.sessions--
++			r.owner.users[r.user]--
++			if r.owner.users[r.user] == 0 {
++				delete(r.owner.users, r.user)
++			}
++			r.owner.mu.Unlock()
++			r.owner.workers.Done()
++			return
++		}
++	}
++}
++
++func (s *Session) queueManagedStreamSegment(seg *segment) {
++	for {
++		select {
++		case <-s.closedChan:
++			return
++		default:
++		}
++		if s.recvQueue.Insert(seg) {
++			return
++		}
++		select {
++		case <-s.closedChan:
++			return
++		case <-time.After(backPressureDelay):
++		}
++	}
++}
++
++func (b *baseUnderlay) deliverManagedSegment(s *Session, seg *segment) bool {
++	r := s.resource
++	r.deliveryMu.Lock()
++	defer r.deliveryMu.Unlock()
++	if r.released || s.closeRequested.Load() {
++		return false
++	}
++	for !r.reserveReceived(len(seg.payload)) {
++		if s.transportProtocol == common.PacketTransport {
++			return true
++		}
++		select {
++		case <-s.closedChan:
++			return false
++		case <-time.After(backPressureDelay):
++		}
++	}
++	if s.transportProtocol == common.PacketTransport {
++		select {
++		case s.recvChan <- seg:
++		default:
++			r.releaseReceived(len(seg.payload))
++		}
++		return true
++	}
++	select {
++	case s.recvChan <- seg:
++		return true
++	case <-s.closedChan:
++		r.releaseReceived(len(seg.payload))
++		return false
++	case <-b.done:
++		r.releaseReceived(len(seg.payload))
++		return false
++	}
++}
++
++func (r *sessionResource) reserveReceived(n int) bool {
++	for used := r.receiveBytes.Load(); ; used = r.receiveBytes.Load() {
++		if used+int64(n) > int64(r.owner.limits.QueueBytes) {
++			return false
++		}
++		if r.receiveBytes.CompareAndSwap(used, used+int64(n)) {
++			r.owner.adjustBytes(n)
++			return true
++		}
++	}
++}
++
++func (r *sessionResource) releaseReceived(n int) {
++	r.receiveBytes.Add(-int64(n))
++	r.owner.adjustBytes(-n)
++}
++
++func (t *segmentTree) canFit(segments, payloadBytes int) bool {
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	return t.tr.Len()+segments <= t.cap && (t.byteLimit == 0 || t.bufferedBytes+payloadBytes <= t.byteLimit)
++}
++
++func (s *Session) queueManagedPacketSegment(seg *segment) error {
++	s.requestPacketAck()
++	seq, _ := seg.Seq()
++	next := s.nextRecv.Load()
++	if seq < next {
++		return nil
++	}
++	if seq == next && s.recvQueue.Insert(seg) {
++		s.nextRecv.Add(1)
++	} else if !s.recvBuf.Insert(seg) {
++		return nil
++	}
++	if err := s.moveRecvBufToRecvQueue(); err != nil {
++		return err
++	}
++	s.requestPacketAck()
++	return nil
++}
++
++func drainManagedQueue[T any](queue <-chan T) {
++	for {
++		select {
++		case <-queue:
++		default:
++			return
++		}
++	}
++}
+--- /dev/null
++++ b/managed_resources_test.go
+@@ -0,0 +1,130 @@
++package protocol
++
++import (
++	"bytes"
++	"errors"
++	"io"
++	"net"
++	"testing"
++	"time"
++
++	"github.com/enfein/mieru/v3/pkg/cipher"
++	"github.com/enfein/mieru/v3/pkg/common"
++	"github.com/enfein/mieru/v3/pkg/protocol/serveruser"
++)
++
++func TestManagedClosedUnderlayRejectsAnAllocatedSession(t *testing.T) {
++	for _, network := range []string{"tcp", "udp"} {
++		t.Run(network, func(t *testing.T) {
++			mux := NewMux(false)
++			t.Cleanup(func() { _ = mux.Close() })
++			if err := mux.SetServerLimits(ServerLimits{Sessions: 2, SessionsPerUser: 1, QueueSegments: 64, QueueBytes: 65535, DisableUserMetrics: true}); err != nil {
++				t.Fatal(err)
++			}
++			var base *baseUnderlay
++			var underlay Underlay
++			if network == "tcp" {
++				stream := &StreamUnderlay{baseUnderlay: *mux.newServerUnderlay(1400, nil)}
++				underlay, base = stream, &stream.baseUnderlay
++			} else {
++				packet := &PacketUnderlay{baseUnderlay: *mux.newServerUnderlay(1400, nil)}
++				underlay, base = packet, &packet.baseUnderlay
++			}
++			policy := serveruser.BuildPolicies(rawUserMap("user", "password"))["user"]
++			session := base.newServerSession(1, policy)
++			if session == nil {
++				t.Fatal("fixture failed to allocate a pending authenticated session")
++			}
++			if err := base.Close(); err != nil {
++				t.Fatal(err)
++			}
++			err := underlay.AddSession(session, nil)
++			if err == nil {
++				// Avoid writing a shutdown frame on a fixture without an attached socket.
++				session.forwardStateTo(sessionClosed)
++				_ = session.closeWithError(io.ErrClosedPipe)
++				session.wg.Wait()
++			}
++			base.discardServerSession(session)
++			if !errors.Is(err, io.ErrClosedPipe) {
++				t.Fatalf("closed native underlay accepted a session whose authentication was already in flight: %v", err)
++			}
++			if stats := mux.ServerResourceStats(); stats.Sessions != 0 || stats.BufferedBytes != 0 {
++				t.Fatalf("rejected admission retained resources: %+v", stats)
++			}
++		})
++	}
++}
++
++func TestManagedStaleCleanupPreservesReusedSessionTraffic(t *testing.T) {
++	const username = "reused-session"
++	credential := cipher.HashPassword([]byte(t.Name()), []byte(username))
++	mux := NewMux(false).SetServerUsers(userMap(makeTestUser(username, credential)))
++	t.Cleanup(func() { _ = mux.Close() })
++	if err := mux.SetServerLimits(ServerLimits{Sessions: 2, SessionsPerUser: 2, QueueSegments: 64, QueueBytes: 65535, DisableUserMetrics: true}); err != nil {
++		t.Fatal(err)
++	}
++	socket, err := net.ListenPacket("udp", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	server := &PacketUnderlay{baseUnderlay: *mux.newServerUnderlay(1400, nil), conn: socket, sessionCleanTicker: time.NewTicker(sessionCleanInterval), serverUsers: &mux.serverUsers}
++	loopDone := make(chan error, 1)
++	go func() { loopDone <- server.RunEventLoop(t.Context()) }()
++	t.Cleanup(func() {
++		_ = server.Close()
++		_ = socket.Close()
++		select {
++		case <-loopDone:
++		case <-time.After(time.Second):
++			t.Error("native packet event loop did not stop")
++		}
++	})
++	sender := newServerUserPacketSender(t, socket.LocalAddr(), credential, username)
++	t.Cleanup(func() { _ = sender.conn.Close() })
++	open := func() *Session {
++		t.Helper()
++		if err := sender.writeOneSegment(testSessionSegment(openSessionRequest, 7, common.PacketTransport), socket.LocalAddr()); err != nil {
++			t.Fatal(err)
++		}
++		accepted := make(chan net.Conn, 1)
++		go func() { conn, _ := server.Accept(); accepted <- conn }()
++		select {
++		case conn := <-accepted:
++			if conn == nil {
++				t.Fatal("native session was not accepted")
++			}
++			session := conn.(*Session)
++			t.Cleanup(func() { _ = session.Close() })
++			waitForServerUserSessionBlock(t, session)
++			return session
++		case <-time.After(time.Second):
++			t.Fatal("native open request timed out")
++			return nil
++		}
++	}
++	previous := open()
++	if err := previous.Close(); err != nil {
++		t.Fatal(err)
++	}
++	deadline := time.Now().Add(time.Second)
++	for mux.ServerResourceStats().Sessions != 0 && time.Now().Before(deadline) {
++		time.Sleep(time.Millisecond)
++	}
++	if stats := mux.ServerResourceStats(); stats.Sessions != 0 {
++		t.Fatalf("original session did not finish before ID reuse: %+v", stats)
++	}
++	current := open()
++	if err := server.RemoveSession(previous); err != nil {
++		t.Fatal(err)
++	}
++	payload := []byte("replacement-session-payload")
++	if err := sender.writeOneSegment(testDataSegment(7, 1, payload, common.PacketTransport), socket.LocalAddr()); err != nil {
++		t.Fatal(err)
++	}
++	_ = current.SetReadDeadline(time.Now().Add(time.Second))
++	got := make([]byte, len(payload))
++	if n, err := current.Read(got); err != nil || n != len(payload) || !bytes.Equal(got, payload) {
++		t.Fatalf("stale cleanup removed the replacement session's packet dispatch: %q / %v", got[:n], err)
++	}
++}
+--- a/mux.go
++++ b/mux.go
+@@ -74,7 +74,9 @@
+ 	multiplexFactor int
+ 
+ 	// ---- server only fields ----
+-	serverUsers serveruser.Registry
++	serverUsers     serveruser.Registry
++	serverResources *serverResources
++	serverAcceptWG  sync.WaitGroup
+ }
+ 
+ var _ net.Listener = &Mux{}
+@@ -326,6 +328,11 @@
+ 	// registered under the same lock, so no writer can be added after this
+ 	// point.
+ 	close(m.done)
++	if m.serverResources != nil {
++		m.serverResources.mu.Lock()
++		m.serverResources.closed = true
++		m.serverResources.mu.Unlock()
++	}
+ 	m.ctxCancelFunc()
+ 	for _, underlay := range m.underlays {
+ 		underlay.Close()
+@@ -338,6 +345,11 @@
+ 	// final publication for this Mux and is complete before Close returns.
+ 	<-m.maintenanceDone
+ 	m.serverUnderlayLoopWG.Wait()
++	m.serverAcceptWG.Wait()
++	if m.serverResources != nil {
++		m.serverResources.workers.Wait()
++		drainManagedQueue(m.chAccept)
++	}
+ 	if !m.isClient {
+ 		m.flushServerUserCacheMetrics()
+ 	}
+@@ -539,10 +551,12 @@
+ 			m.underlays = append(m.underlays, underlay)
+ 			m.cleanUnderlay(false)
+ 			m.startServerUnderlayEventLoop(ctx, underlay)
++			m.serverAcceptWG.Add(1)
+ 			m.mu.Unlock()
+ 
+ 			// Accept sessions from the underlay.
+ 			go func(ctx context.Context, underlay Underlay) {
++				defer m.serverAcceptWG.Done()
+ 				for {
+ 					conn, err := underlay.Accept()
+ 					if err != nil {
+@@ -584,7 +598,7 @@
+ 			trafficPattern = m.trafficPattern.Effective()
+ 		}
+ 		underlay := &PacketUnderlay{
+-			baseUnderlay:       *newBaseUnderlay(false, properties.MTU(), trafficPattern),
++			baseUnderlay:       *m.newServerUnderlay(properties.MTU(), trafficPattern),
+ 			conn:               conn,
+ 			sessionCleanTicker: time.NewTicker(sessionCleanInterval),
+ 			serverUsers:        &m.serverUsers,
+@@ -607,10 +621,12 @@
+ 		m.underlays = append(m.underlays, underlay)
+ 		m.cleanUnderlay(false)
+ 		m.startServerUnderlayEventLoop(ctx, underlay)
++		m.serverAcceptWG.Add(1)
+ 		m.mu.Unlock()
+ 
+ 		// Accept sessions from the underlay.
+ 		go func(ctx context.Context, underlay Underlay) {
++			defer m.serverAcceptWG.Done()
+ 			for {
+ 				conn, err := underlay.Accept()
+ 				if err != nil {
+@@ -652,7 +668,7 @@
+ 		source = serveruser.SourceFromAddr(rawConn.RemoteAddr())
+ 	}
+ 	return &StreamUnderlay{
+-		baseUnderlay:       *newBaseUnderlay(false, mtu, trafficPattern),
++		baseUnderlay:       *m.newServerUnderlay(mtu, trafficPattern),
+ 		conn:               rawConn,
+ 		sessionCleanTicker: time.NewTicker(sessionCleanInterval),
+ 		serverUsers:        &m.serverUsers,
+--- a/segment.go
++++ b/segment.go
+@@ -172,8 +172,11 @@
+ 
+ // segmentTree is a B-tree to store multiple Segment in order.
+ type segmentTree struct {
+-	tr  *btree.BTreeG[*segment]
+-	cap int
++	tr            *btree.BTreeG[*segment]
++	cap           int
++	byteLimit     int
++	bufferedBytes int
++	resources     *serverResources
+ 
+ 	mu                sync.Mutex
+ 	chanEmptyEvent    chan struct{}
+@@ -206,6 +209,15 @@
+ 		t.notifyNotEmpty()
+ 		return false
+ 	}
++	delta := len(seg.payload)
++	if previous, found := t.tr.Get(seg); found {
++		delta -= len(previous.payload)
++	}
++	if t.byteLimit > 0 && t.bufferedBytes+delta > t.byteLimit {
++		return false
++	}
++	t.bufferedBytes += delta
++	t.resources.adjustBytes(delta)
+ 	prev, replace := t.tr.ReplaceOrInsert(seg)
+ 	if replace {
+ 		if log.IsLevelEnabled(log.TraceLevel) {
+@@ -233,6 +245,8 @@
+ 	if seg == nil {
+ 		panic("segmentTree.DeleteMin() return nil")
+ 	}
++	t.bufferedBytes -= len(seg.payload)
++	t.resources.adjustBytes(-len(seg.payload))
+ 	if t.tr.Len() > 0 {
+ 		t.notifyNotEmpty()
+ 	} else {
+@@ -267,6 +281,8 @@
+ 		if seg == nil {
+ 			panic("segmentTree.DeleteMin() return nil")
+ 		}
++		t.bufferedBytes -= len(seg.payload)
++		t.resources.adjustBytes(-len(seg.payload))
+ 	}
+ 	if t.tr.Len() > 0 {
+ 		t.notifyNotEmpty()
+@@ -281,6 +297,8 @@
+ 	t.mu.Lock()
+ 	defer t.mu.Unlock()
+ 
++	t.resources.adjustBytes(-t.bufferedBytes)
++	t.bufferedBytes = 0
+ 	t.tr.Clear(false)
+ 	t.notifyEmpty()
+ }
+--- a/session.go
++++ b/session.go
+@@ -109,8 +109,10 @@
+ }
+ 
+ type Session struct {
+-	conn  Underlay                           // underlay connection
+-	block atomic.Pointer[cipher.BlockCipher] // cipher to decrypt data
++	resource *sessionResource
++	readWake chan struct{}
++	conn     Underlay                           // underlay connection
++	block    atomic.Pointer[cipher.BlockCipher] // cipher to decrypt data
+ 
+ 	id                uint32                   // session ID number
+ 	isClient          bool                     // if this session is owned by client
+@@ -193,10 +195,19 @@
+ 	pendingPolicies map[string]serveruser.Policy,
+ 	trafficPattern *appctlpb.TrafficPattern,
+ ) *Session {
++	return newSessionWithResource(id, isClient, mtu, policy, pendingPolicies, trafficPattern, nil)
++}
++
++func newSessionWithResource(id uint32, isClient bool, mtu int, policy serveruser.Policy, pendingPolicies map[string]serveruser.Policy, trafficPattern *appctlpb.TrafficPattern, resource *sessionResource) *Session {
+ 	rttStat := congestion.NewRTTStats()
+ 	rttStat.SetMaxAckDelay(packetAckDelay)
+ 	rttStat.SetRTOMultiplier(txTimeoutBackOff)
++	channelCapacity := segmentChanCapacity
++	if resource != nil {
++		channelCapacity = min(64, resource.owner.limits.QueueSegments)
++	}
+ 	s := &Session{
++		resource:                  resource,
+ 		conn:                      nil,
+ 		block:                     atomic.Pointer[cipher.BlockCipher]{},
+ 		id:                        id,
+@@ -213,10 +224,18 @@
+ 		sendBuf:                   newSegmentTree(segmentTreeCapacity),
+ 		recvBuf:                   newSegmentTree(segmentTreeCapacity),
+ 		recvQueue:                 newSegmentTree(segmentTreeCapacity),
+-		recvChan:                  make(chan *segment, segmentChanCapacity),
++		recvChan:                  make(chan *segment, channelCapacity),
+ 		packetOutputWakeup:        make(chan struct{}, 1),
+ 		rttStat:                   rttStat,
+ 		cubicSendAlgorithm:        congestion.NewCubicSendAlgorithm(minWindowSize, maxWindowSize),
++	}
++	if resource != nil {
++		s.readWake = make(chan struct{}, 1)
++		for _, tree := range []*segmentTree{s.sendQueue, s.sendBuf, s.recvQueue, s.recvBuf} {
++			tree.cap = resource.owner.limits.QueueSegments
++			tree.byteLimit = resource.owner.limits.QueueBytes
++			tree.resources = resource.owner
++		}
+ 	}
+ 	now := time.Now().UnixMicro()
+ 	s.lastRXTime.Store(now)
+@@ -278,6 +297,12 @@
+ 			seg, ok := s.recvQueue.DeleteMin()
+ 			if !ok {
+ 				continue
++			}
++			if s.readWake != nil && s.transportProtocol == common.PacketTransport {
++				select {
++				case s.readWake <- struct{}{}:
++				default:
++				}
+ 			}
+ 			if s.isClient && seg.metadata.Protocol() == openSessionResponse && s.isState(sessionAttached) {
+ 				s.forwardStateTo(sessionEstablished)
+@@ -599,7 +624,7 @@
+ 	if len(b) > fragmentSize {
+ 		nFragment = (len(b)-1)/fragmentSize + 1
+ 	}
+-	for s.sendQueue.Remaining() <= nFragment { // reserve one slot for Close()
++	for !s.sendQueue.canFit(nFragment+1, len(b)) { // reserve one slot for Close()
+ 		select {
+ 		case <-s.closedChan:
+ 			return 0, io.EOF
+@@ -715,7 +740,16 @@
+ 			return nil
+ 		case <-s.closedChan:
+ 			return nil
++		case <-s.readWake:
++			if err := s.moveRecvBufToRecvQueue(); err != nil {
++				_ = s.closeWithError(err)
++				return err
++			}
++			s.requestPacketAck()
+ 		case seg := <-s.recvChan:
++			if s.resource != nil {
++				s.resource.releaseReceived(len(seg.payload))
++			}
+ 			if err := s.input(seg); err != nil {
+ 				err = fmt.Errorf("input() failed: %w", err)
+ 				log.Debugf("%v %v", s, err)
+@@ -892,7 +926,7 @@
+ 			}
+ 
+ 			seg, deleted := s.sendQueue.DeleteMinIf(func(iter *segment) bool {
+-				return totalTransmissionCount < s.sendWindowSize()
++				return totalTransmissionCount < s.sendWindowSize() && s.sendBuf.canFit(1, len(iter.payload))
+ 			})
+ 			if !deleted {
+ 				s.oLock.Unlock()
+@@ -1097,7 +1131,7 @@
+ 		}
+ 
+ 		// Register server per user metrics.
+-		if !s.isClient {
++		if !s.isClient && (s.resource == nil || !s.resource.owner.limits.DisableUserMetrics) {
+ 			if s.uploadBytes == nil {
+ 				s.uploadBytes = metrics.RegisterMetric(fmt.Sprintf(metrics.UserMetricGroupFormat, (*s.block.Load()).BlockContext().UserName), metrics.UserMetricUploadBytes, metrics.COUNTER_TIME_SERIES)
+ 			}
+@@ -1132,7 +1166,9 @@
+ 	switch s.transportProtocol {
+ 	case common.StreamTransport:
+ 		// Deliver the segment directly to recvQueue.
+-		if s.waitForRecvQueueSpace() {
++		if s.resource != nil {
++			s.queueManagedStreamSegment(seg)
++		} else if s.waitForRecvQueueSpace() {
+ 			if !s.recvQueue.Insert(seg) {
+ 				return fmt.Errorf("inputData() failed: insert %v to receive queue failed", seg)
+ 			}
+@@ -1157,6 +1193,12 @@
+ 		}
+ 		if s.sendQueue.Len() > 0 {
+ 			s.wakePacketOutput()
++		}
++		if s.resource != nil {
++			if err := s.queueManagedPacketSegment(seg); err != nil {
++				return err
++			}
++			break
+ 		}
+ 
+ 		// Deliver the segment to recvBuf.
+@@ -1397,6 +1439,10 @@
+ 
+ 	// Don't clear receive buf and queue, because read is allowed after
+ 	// the session is closed.
++	if s.resource != nil {
++		s.oLock.Lock()
++		defer s.oLock.Unlock()
++	}
+ 	s.sendQueue.DeleteAll()
+ 	s.sendBuf.DeleteAll()
+ 	s.forwardStateTo(sessionClosed)
+@@ -1413,7 +1459,11 @@
+ 
+ // receiveWindowSize determines how many more packets this session can receive.
+ func (s *Session) receiveWindowSize() int {
+-	return mathext.Max(0, segmentTreeCapacity-s.recvBuf.Len()-s.recvQueue.Len())
++	capacity := segmentTreeCapacity
++	if s.resource != nil {
++		capacity = s.resource.owner.limits.QueueSegments
++	}
++	return mathext.Max(0, capacity-s.recvBuf.Len()-s.recvQueue.Len())
+ }
+ 
+ // waitForRecvQueueSpace returns true when the recv queue has empty space.
+@@ -1445,7 +1495,7 @@
+ 		nextRecv := s.nextRecv.Load()
+ 		seg, deleted := s.recvBuf.DeleteMinIf(func(iter *segment) bool {
+ 			seq, _ := iter.Seq()
+-			return seq <= nextRecv
++			return seq < nextRecv || (seq == nextRecv && s.recvQueue.canFit(1, len(iter.payload)))
+ 		})
+ 		if seg == nil || !deleted {
+ 			return nil
+--- a/underlay_base.go
++++ b/underlay_base.go
+@@ -60,7 +60,11 @@
+ 	outBytes atomic.Int64
+ 
+ 	// ---- client fields ----
+-	scheduler *ScheduleController
++	scheduler       *ScheduleController
++	serverResources *serverResources
++	pendingSessions chan struct{}
++	startMutex      sync.Mutex
++	closing         bool
+ }
+ 
+ var (
+@@ -82,6 +86,9 @@
+ func (b *baseUnderlay) Accept() (net.Conn, error) {
+ 	select {
+ 	case session := <-b.readySessions:
++		if b.pendingSessions != nil {
++			<-b.pendingSessions
++		}
+ 		return session, nil
+ 	case <-b.done:
+ 		return nil, io.ErrClosedPipe
+@@ -90,6 +97,11 @@
+ 
+ // Close implements net.Listener interface. The caller must hold closeMutex lock.
+ func (b *baseUnderlay) Close() error {
++	if b.serverResources != nil {
++		b.startMutex.Lock()
++		b.closing = true
++		b.startMutex.Unlock()
++	}
+ 	select {
+ 	case <-b.done:
+ 		return nil
+@@ -98,11 +110,19 @@
+ 
+ 	b.sessionMap.Range(func(k, v any) bool {
+ 		s := v.(*Session)
+-		s.Close()
++		if s.resource != nil {
++			_ = s.closeWithError(io.ErrClosedPipe)
++		} else {
++			_ = s.Close()
++		}
+ 		s.wg.Wait()
++		b.sessionMap.Delete(k)
+ 		return true
+ 	})
+ 	close(b.done)
++	if b.serverResources != nil {
++		drainManagedQueue(b.readySessions)
++	}
+ 	UnderlayCurrEstablished.Add(-1)
+ 	return nil
+ }
+@@ -129,6 +149,9 @@
+ }
+ 
+ func (b *baseUnderlay) AddSession(s *Session, remoteAddr net.Addr) error {
++	if b.serverResources != nil && b.closing {
++		return io.ErrClosedPipe
++	}
+ 	if s == nil {
+ 		return stderror.ErrNullPointer
+ 	}
+@@ -146,6 +169,9 @@
+ 	}
+ 	if _, loaded := b.sessionMap.LoadOrStore(s.id, s); loaded {
+ 		return stderror.ErrAlreadyExist
++	}
++	if s.resource != nil {
++		s.resource.underlay = b
+ 	}
+ 	s.conn = b
+ 	s.remoteAddr = remoteAddr
+@@ -171,7 +197,11 @@
+ 		return fmt.Errorf("session %d is not attached to this underlay", s.id)
+ 	}
+ 
+-	b.sessionMap.Delete(s.id)
++	if s.resource != nil {
++		b.sessionMap.CompareAndDelete(s.id, s)
++	} else {
++		b.sessionMap.Delete(s.id)
++	}
+ 	s.Close()
+ 	s.wg.Wait()
+ 	return nil
+@@ -219,6 +249,9 @@
+ // deliverSegmentToSession blocks for live sessions to preserve back pressure,
+ // but returns when the session or underlay has been closed.
+ func (b *baseUnderlay) deliverSegmentToSession(s *Session, seg *segment) bool {
++	if s.resource != nil {
++		return b.deliverManagedSegment(s, seg)
++	}
+ 	select {
+ 	case s.recvChan <- seg:
+ 		return true
+--- a/underlay_packet.go
++++ b/underlay_packet.go
+@@ -148,6 +148,10 @@
+ }
+ 
+ func (u *PacketUnderlay) AddSession(s *Session, remoteAddr net.Addr) error {
++	if u.serverResources != nil {
++		u.startMutex.Lock()
++		defer u.startMutex.Unlock()
++	}
+ 	if err := u.baseUnderlay.AddSession(s, remoteAddr); err != nil {
+ 		return err
+ 	}
+@@ -158,6 +162,9 @@
+ 	log.Debugf("Adding session %d to %v", s.id, u)
+ 
+ 	s.wg.Add(2)
++	if s.resource != nil {
++		go func() { s.wg.Wait(); s.releaseManagedResources() }()
++	}
+ 	go func() {
+ 		if err := s.runInputLoop(context.Background()); err != nil && !stderror.IsEOF(err) && !stderror.IsClosed(err) {
+ 			log.Debugf("%v runInputLoop(): %v", s, err)
+@@ -279,8 +286,12 @@
+ 		log.Debugf("%v received openSessionRequest, but session ID %d is already used", u, sessionID)
+ 		return nil
+ 	}
+-	session := newSessionWithServerUserPolicy(sessionID, false, u.MTU(), seg.serverUserPolicy, nil, u.trafficPattern)
++	session := u.newServerSession(sessionID, seg.serverUserPolicy)
++	if session == nil {
++		return nil
++	}
+ 	if err := u.AddSession(session, remoteAddr); err != nil {
++		u.discardServerSession(session)
+ 		return err
+ 	}
+ 	if !u.deliverSegmentToSession(session, seg) {
+--- a/underlay_stream.go
++++ b/underlay_stream.go
+@@ -156,6 +156,10 @@
+ }
+ 
+ func (t *StreamUnderlay) AddSession(s *Session, remoteAddr net.Addr) error {
++	if t.serverResources != nil {
++		t.startMutex.Lock()
++		defer t.startMutex.Unlock()
++	}
+ 	if err := t.baseUnderlay.AddSession(s, remoteAddr); err != nil {
+ 		return err
+ 	}
+@@ -166,6 +170,9 @@
+ 	log.Debugf("Adding session %d to %v", s.id, t)
+ 
+ 	s.wg.Add(2)
++	if s.resource != nil {
++		go func() { s.wg.Wait(); s.releaseManagedResources() }()
++	}
+ 	go func() {
+ 		if err := s.runInputLoop(context.Background()); err != nil && !stderror.IsEOF(err) && !stderror.IsClosed(err) {
+ 			log.Debugf("%v runInputLoop(): %v", s, err)
+@@ -299,8 +306,12 @@
+ 	if seg.serverUserAuthentication.Valid() {
+ 		policy = seg.serverUserAuthentication.Policy()
+ 	}
+-	session := newSessionWithServerUserPolicy(sessionID, false, t.MTU(), policy, nil, t.trafficPattern)
++	session := t.newServerSession(sessionID, policy)
++	if session == nil {
++		return nil
++	}
+ 	if err := t.AddSession(session, nil); err != nil {
++		t.discardServerSession(session)
+ 		return err
+ 	}
+ 	if !t.deliverSegmentToSession(session, seg) {

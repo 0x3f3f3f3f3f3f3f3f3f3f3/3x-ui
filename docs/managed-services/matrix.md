@@ -165,7 +165,8 @@ adapter and shared controller on SQLite, before public Runtime integration.
 | Continuous one-way UDP target lifetime | V | Actual 31-second upload-only traffic retains one target source port and exact upload-only billing |
 | Internal authenticated Xray TCP/UDP routing / policy-aware bridge | V | Private policy-ID credentials, actual direct IPv4 peer replies, user/domain/IP/source/tag/network/port/priority/block/balancer exits; official mieru clients on both underlays, exact single billing and existing-flow revocation. Other outbounds, IPv6 and public Runtime remain open |
 | Public model/Runtime/API/UI/export/node/deployment integration | N | No public mieru service option or manager is claimed by this increment |
-| Native pre-accept resource stress, diagnostic reclamation, PostgreSQL adapter acceptance | N | Native queue peak-memory bounds, retained native per-generation diagnostic metric groups and the adapter's second-dialect vertical remain open |
+| Internal native session/queue bounds and generation diagnostics | V | Maintained protocol-only extension limits native admission before allocation, bounds payload trees/staging, reclaims finished metadata and suppresses per-generation diagnostic groups; real TCP/UDP stress and payload recovery. This is not a process RSS bound or public Runtime completion |
+| PostgreSQL mieru vertical acceptance | N | The adapter's second-dialect public integration and real data-path acceptance remain open |
 
 ## UDP core prerequisite evidence
 

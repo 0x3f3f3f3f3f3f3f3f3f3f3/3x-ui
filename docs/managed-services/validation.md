@@ -2717,3 +2717,130 @@ whitespace checks passed. This increment changes no public API/model/migration
 or frontend files and makes no new full-frontend validation claim. Native
 pre-accept resource bounds, retained diagnostic group reclamation, public
 Runtime activation and the remaining original acceptance requirements stay open.
+
+## Native mieru resource bounds — 2026-09-29
+
+This internal increment retains the v3.38.0 official client and embeds only a
+maintained copy of the server protocol package. Source pins, GPL license,
+per-file checksums, patch and reproduction instructions are in
+[tools/managed-mieru](../../tools/managed-mieru/README.md). The public Runtime,
+UI/API, PostgreSQL vertical and remaining protocol/outbound/platform acceptance
+are still open. Queue payload bounds are not a process resident-memory bound.
+
+Before the extension, actual official clients allocated 333 TCP / 335 UDP native
+sessions while adapter admission was paused, beyond the adapter's 256-session
+limit. A credential generation retained two native diagnostic time series.
+After adding bounded queues, tests also exposed UDP loss with a one-item staging
+channel and a duplex stall when a full receive queue blocked ACK processing.
+The final staging queue has both a 64-item and 128 KiB bound. Packet input stays
+nonblocking; application reads wake ordered delivery/window updates. TCP uses
+backpressure. The original ten-second resumed transfer deadline was retained.
+
+Actual tests use four users and five loopback listeners: three flood users must
+reach exactly the shared 256-session peak and trigger rejections while an
+existing fourth user's payload continues. Shutdown must return zero active
+leases and queue bytes. Another test pauses admission during a 1,835,008-byte
+upload for at least 300 ms after saturation, verifies the five-queue 640 KiB
+payload ceiling, resumes the complete echo, checks exact durable raw/billed
+bytes and requires zero resources after shutdown, over both underlays.
+
+Closed-session churn first retained one native metadata entry after releasing
+its admission slot. Twelve real connect/echo/close rounds per underlay now
+require immediate metadata removal with slot release. A protocol-level test
+also first accepted a pending authenticated session after underlay shutdown;
+it now requires `io.ErrClosedPipe` and reclaimed resources. The complete copied
+upstream protocol suite still exercises unconfigured native behavior.
+
+Temporary Go overlays independently removed the tree byte cap, shared admission
+cap and diagnostic suppression. All three were rejected by behavioral assertions:
+1,212,426 queued bytes exceeded 655,360; 312 TCP / 321 UDP sessions exceeded 256;
+a credential generation registered two retained series. The byte mutation was
+caught by the TCP case; its UDP case passed, so that mutation is not separate
+proof of the UDP byte limit. No working source or module-cache file was changed.
+Logs: `/tmp/3x-ui-mieru-resources-mutant-{bytes,admission,diagnostics}.log`.
+
+Final verification uses the same owned PostgreSQL 16.15/OpenSSH 9.6p1 fixtures,
+Go 1.27.1 and managed Xray binary/source pin recorded in the preceding increment:
+
+```sh
+export XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1
+export XUI_MANAGED_XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1
+export SSH_E2E_SERVER=/usr/sbin/sshd
+export XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable'
+go test -race -p 1 -count=1 -shuffle=on -json ./internal/mieru/...
+go test -p 1 -count=1 -shuffle=on -json ./...
+go build ./...
+golangci-lint run ./internal/mieru/...
+python3 tools/managed-mieru/prepare.py --verify
+```
+
+Pinned upstream source keeps its existing formatting and lint conventions via
+an enumerated-file exclusion for errcheck/errorlint/staticcheck/unconvert and
+formatters. Compiler and vet still cover those files. Authored resource code
+and tests retain all repository lint rules. No public API, schema, migration or
+frontend source changes are included in this increment.
+
+The first native race run passed both packages: adapter 19 top-level / 23
+subtests in 121.343s; copied protocol 75 top-level / 1,838 subtests in 30.260s.
+There were no skipped tests, failures or race reports. This includes the final
+shutdown queue/write synchronization changes. Log:
+`/tmp/3x-ui-mieru-resources-native-race.jsonl`.
+
+Review then found a further ID-reuse boundary: a periodic cleaner can retain an
+old session pointer while worker cleanup removes that session and a new session
+reuses its ID. A real encrypted-UDP regression first returned EOF instead of the
+replacement session's payload after that stale cleanup. Managed removal now
+compares both ID and session pointer before deleting the entry. Five repeated
+race runs passed with exact replacement payload in 1.057s. Logs:
+`/tmp/3x-ui-mieru-resources-reuse-{red,green}.log`.
+
+The pre-fix full repository run passed 53 test packages, 2,591 top-level tests
+and 4,353 subtests, with 18 top-level / 11 subtests explicitly skipped and seven
+packages without tests. Build, lint (zero issues) and exact source reproduction
+passed. Because the ID-reuse regression required a subsequent production fix,
+these are preliminary results; final checks are recorded separately below.
+
+After the ID-reuse fix, the final native race run passed 95 top-level tests and
+1,861 subtests across both packages, with zero skips, failures or race reports:
+adapter 19 top-level / 23 subtests in 120.377s; copied native package 76 top-level /
+1,838 subtests in 31.586s. Final log:
+`/tmp/3x-ui-mieru-resources-final-native-race.jsonl`.
+
+The subsequent full repository invocation did **not** pass on its first run.
+`TestSSHUpstreamPolicyQuotaAndLifecycle` stalled in the test client's unbounded
+`recovered.Dial` during post-reset authentication replacement. A SIGQUIT of only
+the owned `service.test` process captured the blocked SSH channel-open stack;
+the panel listener, policy watcher and unrelated channel were still running.
+Recorded child fixtures were stopped after verifying their process start IDs.
+Other packages continued. The failed run is retained in
+`/tmp/3x-ui-mieru-resources-final-panel-full.jsonl`; diagnostic stack:
+`/tmp/3x-ui-mieru-resources-stalled-stack.log`.
+
+The fixture now uses `DialContext` with its existing two-second recovery deadline
+and cancels that attempt when `Client.Wait` observes connection closure. It keeps
+the actual recovery, peer continuity and exact post-reset billing assertions.
+Five real OpenSSH/Xray repetitions passed under race detection in 63.844s, with
+no skipped cases: `/tmp/3x-ui-mieru-resources-ssh-recovery-race.log`.
+The complete service package is rerun with the failed invocation's exact shuffle
+seed, `1790649930973753459`, with PostgreSQL, OpenSSH and both managed-core
+environment variables set; this is not a focused-test-only replacement.
+
+The complete service rerun passed in 194.538s: 913 top-level tests and 981
+subtests passed; 13 top-level tests and five subtests were explicitly skipped.
+It ran from 02:53:51Z to 02:57:05Z. The formerly stalled test passed in 11.79s.
+Log: `/tmp/3x-ui-mieru-resources-final-service-rerun.jsonl`.
+
+Combining that complete service-package result with the other 52 complete
+packages from the full invocation gives 53 passing test packages, 2,592 passing
+top-level tests and 4,353 passing subtests. There are 18 top-level / 11 subtest
+skips and seven packages without tests. The exact skipped test set is unchanged
+from the preceding hot-credential increment. This combined coverage does not
+turn the earlier failed invocation into a successful first run.
+
+After the service fixture change, `go build ./...` passed; lint over both
+`./internal/mieru/...` and `./internal/web/service/...` reported zero issues;
+source reproduction passed byte for byte. Logs:
+`/tmp/3x-ui-mieru-resources-final-{panel-build,panel-lint,reproduce}.log`.
+The final verification script exited zero. Relative documentation links, Python
+syntax, source-manifest JSON, authored Go formatting and staged whitespace checks
+also passed. No additional public-service or full-frontend acceptance is claimed.

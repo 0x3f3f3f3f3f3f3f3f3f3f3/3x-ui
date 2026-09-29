@@ -394,7 +394,10 @@ func testSSHInboundProductionXrayLifecycle(t *testing.T, configure func(map[stri
 	for time.Now().Before(deadline) {
 		recovered, err = ssh.Dial("tcp", address, &ssh.ClientConfig{User: client.Email, Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)}, HostKeyCallback: ssh.FixedHostKey(host.PublicKey()), Timeout: time.Second})
 		if err == nil {
-			recoveredFlow, err = recovered.Dial("tcp", "route.invalid:443")
+			channelCtx, cancel := context.WithDeadline(t.Context(), deadline)
+			go func(connection *ssh.Client) { _ = connection.Wait(); cancel() }(recovered)
+			recoveredFlow, err = recovered.DialContext(channelCtx, "tcp", "route.invalid:443")
+			cancel()
 		}
 		if err == nil {
 			break

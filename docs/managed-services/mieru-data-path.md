@@ -88,15 +88,23 @@ explicit policy-aware TCP/UDP connectors; never silently default to direct.
 - Bound the adapter to 256 TCP underlays and 256 accepted/closing sessions,
   the controller to 128 flows per client, and each UDP association to 16 target
   sockets with one bounded receive buffer per target. UDP target inactivity
-  is 30 seconds, refreshed by uploads as well as downloads. Limits do not
-  establish a complete peak-memory bound for native pre-accept queues; that
-  resource stress acceptance remains open before public runtime integration.
-- The official native metrics registry retains diagnostic user groups and has
-  no removal API. Authentication generations therefore retain diagnostic groups
-  across rotations until process exit, although policy accounting remains
-  stable and single-owned. Bounding or reclaiming these native diagnostics,
-  together with pre-accept queue stress, remains required before public Runtime
-  activation; the hot-credential increment does not claim full resource bounds.
+  is 30 seconds, refreshed by uploads as well as downloads.
+- The [maintained native extension](../../tools/managed-mieru/README.md) now
+  reserves a session slot before native allocation: 256 total and 128 per
+  authentication generation across listeners. Its four segment trees each
+  hold at most 256 segments / 128 KiB, and receive staging holds at most
+  64 segments / 128 KiB. Native TCP backpressure and UDP retransmission retain
+  ordered payload delivery. These queue bounds exclude partial application
+  reads, active protocol workers, encryption, metadata and kernel buffers;
+  they are not a process RSS limit. Ready/accept queues hold at most 64
+  references each. Worker cleanup clears payload and removes session metadata
+  before releasing the slot; shutdown also waits for accept workers.
+- Managed mode suppresses per-generation diagnostic groups because the official
+  registry cannot remove them. It rejects session admission for users carrying
+  native quotas in that mode; the panel ledger owns accounting and quota.
+  Aggregate native diagnostics remain active.
+  The official client stays unmodified. Source pin, license, reviewable patch,
+  checksum validation and byte-for-byte reproduction are checked in.
 - The existing SOCKS bridge is TCP-only and cannot be assumed to preserve UDP
   client identity. Add and actually verify an authenticated packet-capable
   bridge before claiming unified UDP routing. Full UI/API/runtime/deployment,

@@ -4,3 +4,4 @@
 
 # Unified patch context requires a leading space, including on blank/tabbed lines.
 tools/managed-xray/patches/*.patch whitespace=-blank-at-eol,-space-before-tab
+tools/managed-mieru/*.patch whitespace=-blank-at-eol,-space-before-tab

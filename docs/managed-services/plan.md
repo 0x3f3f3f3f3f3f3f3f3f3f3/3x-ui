@@ -222,9 +222,12 @@ Native credential hot replacement now uses separate authentication generations
 over the official hashed-password interface. It preserves unchanged users,
 retires existing and delayed sessions of changed users, cancels pending target
 dials and releases their idle TCP underlays. Actual native tests cover both
-underlays and policy-ID reassignment without inherited accounting. Native
-diagnostic metric retention and pre-accept resource bounds remain explicit
-prerequisites to public activation, alongside the shared Runtime work above.
+underlays and policy-ID reassignment without inherited accounting. The maintained
+native protocol extension now bounds pre-allocation session admission and native
+payload queues, retires session metadata with its workers and disables retained
+per-generation diagnostic groups. Official-client overload/recovery tests and
+the complete copied upstream suite exercise the change. Public integration
+still needs the shared Runtime work above and the remaining acceptance matrix.
 
 ## Task 7: Snell v4/v5/v6 vertical integration
 

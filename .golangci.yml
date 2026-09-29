@@ -23,6 +23,13 @@ linters:
       - frontend
       - internal/web/dist
     rules:
+      # Preserve pinned upstream code; authored managed_resources files stay fully linted.
+      - path: '^internal/mieru/native/(low_entropy|metadata|mux|padding|scheduler|segment|server_session_validation|server_user_session_benchmark_test|server_user_test_helpers_test|server_user_transport_integration_test|server_user_test|session|underlay|underlay_base|underlay_low_entropy_test|underlay_packet|underlay_stream)(_test)?\.go$'
+        linters:
+          - errcheck
+          - errorlint
+          - staticcheck
+          - unconvert
       - path: _test\.go
         linters:
           - errcheck
@@ -49,5 +56,6 @@ formatters:
         - github.com/mhsanaei/3x-ui
   exclusions:
     paths:
+      - '^internal/mieru/native/(low_entropy|metadata|mux|padding|scheduler|segment|server_session_validation|server_user_session_benchmark_test|server_user_test_helpers_test|server_user_transport_integration_test|server_user_test|session|underlay|underlay_base|underlay_low_entropy_test|underlay_packet|underlay_stream)(_test)?\.go$'
       - frontend
       - internal/web/dist
