@@ -96,3 +96,8 @@ first startup probe failed on a mistaken `/usr/sbin/ss` path; its owned process
 was cleaned up. The corrected probe used `/usr/bin/ss` through PATH and completed
 for all three versions. This diagnostic failure is not counted as a backend
 compatibility failure or a passing acceptance test.
+
+The later [isolated Linux networking probe](linux-network-prerequisites.md)
+adds real IPv4/IPv6 TCP/UDP original-target and reply evidence for the proposed
+transparent egress mechanism, plus nft transaction/owned-cleanup checks. It does
+not authenticate a Snell session or close the missing real-Surge acceptance.
