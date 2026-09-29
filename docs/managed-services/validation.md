@@ -4709,3 +4709,54 @@ The existing installer defect remains open until integration and rollback tests
 pass. Full-root Go regression will be repeated after those existing application
 paths change; this independent package/CLI change used affected race tests and
 full repository lint.
+
+## Release source identity and file inventory
+
+`release-manifest` now generates the bounded source/file manifest described in
+[update-staging.md](update-staging.md). Explicit release flags make `update-stage`
+verify it before publishing a stage path. Installer, menu, web updater and
+release/Docker integration remain open; these tools alone do not fix those paths.
+The declared ABIs and caller-supplied source commit still need verification
+against the actual panel and managed-core capability before activation.
+
+New API tests initially failed to compile; the release-flag test failed because
+the command had no such flags. Follow-up RED runs exposed four accepted ambiguous
+JSON forms (case aliases at three levels and an omitted nonexecutable flag),
+then a fifth case where `null` silently decoded as `false`. Exact required keys
+and non-null scalar fields now reject those inputs.
+
+Affected race/shuffle validation passed **30 top-level tests / 135 subtests**,
+no skips, across `internal/updatebundle`, `tools/update-stage` and
+`tools/release-manifest` (1.397s, 2.083s, 1.027s). This includes the preceding
+staging tests. Both Linux arm64 tools built with CGo disabled. Full repository
+lint and Windows amd64/Darwin arm64 staging-command cross-builds also passed;
+those are build checks, not runtime platform acceptance.
+
+Go overlay negative controls removed one check at a time. Omitting the identity
+comparison accepted mismatched commit/tag fixtures; omitting the per-file
+comparison accepted six changed inventories. Ordinary arm64, armv7 and amd64
+fixtures continued to pass in each mutation run. No worktree source was changed
+for these controls.
+
+A real-binary fixture assembled the prior normal panel and managed Xray, the
+new staging helper and repository scripts/units (ten files plus the manifest).
+Its declared source was deliberately a fixture identity, **not proof of the
+binaries' source revision**, and no runtime capability probe or installer was
+executed. Results from the built CLI commands:
+
+| Case | Result | Local staging/verification duration |
+| --- | --- | --- |
+| Matching fixture identity and file inventory | Exit 0; every staged file hash matched | 1.519s |
+| Different selected full commit | Exit 2; identity mismatch | 1.269s |
+| Menu changed after manifest creation, outer archive SHA256 recomputed | Exit 2; file differs from manifest | 1.373s |
+
+Every case preserved the old-install sentinel. Failed cases emitted no stage
+path and removed their temporary directory; the successful stage was removed
+by the fixture after inspection. Logs are `release-manifest-real-bundle.json`,
+`release-manifest-final-race.jsonl`, `release-manifest-json-alias-red.jsonl`,
+`release-manifest-null-red.jsonl`, `release-manifest-identity-mutation-red.jsonl`
+and `release-manifest-file-hash-mutation-red.jsonl` under `/tmp/3x-ui-rate-trace/`.
+
+The restored source was checked again under race/shuffle after the overlays;
+see `release-manifest-restored-race.jsonl` and `release-manifest-full-lint.log`.
+No frontend or existing application delivery code changed in this increment.

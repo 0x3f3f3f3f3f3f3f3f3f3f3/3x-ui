@@ -84,3 +84,56 @@ and a valid archive missing the panel both stopped the fixture service and
 removed the old program/unit before failing. The database fixture remained.
 Those observations reproduce the integration defect; this staging component
 alone does not establish that the updater defect is fixed.
+
+## Source and file manifest
+
+A separate build command records an assembled bundle's declared source identity
+and exact file inventory:
+
+```sh
+CGO_ENABLED=0 go build -o release-manifest ./tools/release-manifest
+./release-manifest --directory /path/to/x-ui --commit FULL_SOURCE_COMMIT \
+  --tag RELEASE_TAG --platform linux-arm64
+```
+
+It exclusively creates `release.json`; an existing file is never overwritten.
+The repository is fixed to this task's fork,
+`0x3f3f3f3f3f3f3f3f3f3f3/3x-ui`. A full 40-character lowercase commit, bounded
+tag and supported Linux platform are required. The manifest binds those fields,
+format version 1, declared policy/routing ABI 1, and every file's size, SHA256
+and executable flag. The build caller supplies the commit; generating the
+manifest does not independently prove which source produced a binary.
+
+A complete bundle must contain `x-ui`, `update-stage`, `update.sh`, `install.sh`,
+`x-ui.sh`, `x-ui.rc`, all three existing systemd unit variants, and its Xray
+binary. ARMv5/v6/v7 bundles use the panel's canonical `bin/xray-linux-arm32`
+filename; other supported labels are `amd64`, `arm64`, `386` and `s390x`.
+Optional assets are included in the same inventory. Source files must be ordinary
+files/directories with accepted names and no links or privileged mode bits.
+The manifest cannot list itself. Its JSON is bounded to 1 MiB and rejects
+unknown, repeated, case-aliased, missing or null fields and trailing input.
+
+To require this identity and full inventory when staging, supply all three
+release flags together:
+
+```sh
+./update-stage --archive /path/to/release.tar.gz \
+  --sha256 EXPECTED_ARCHIVE_SHA256 --parent /path/to/staging/parent \
+  --release-commit FULL_SELECTED_COMMIT --release-tag SELECTED_TAG \
+  --release-platform linux-arm64
+```
+
+These values must come from the selected trusted release, rather than simply
+copying untrusted values from the downloaded archive. A missing manifest,
+incompatible declaration, wrong identity, changed file or extra/missing file
+fails before the command prints a staging directory; it removes that stage.
+Running without the release flags still performs structural staging only.
+
+The full-inventory check is for an assembled or freshly staged bundle. Runtime
+files added to an installed directory are not release members. The installer
+and web updater still need integration that respects this distinction, binds
+scripts/helpers to the selected release, preserves runtime state and restores
+the old program/database on failed activation. The ABI values are declarations:
+a native panel metadata check and authenticated managed-core probe are still
+required to establish actual compatibility before activation. No stock-core
+compatibility or complete fork-safe update claim follows from this manifest.
