@@ -77,6 +77,7 @@ func allModels() []any {
 		&model.ClientPolicySource{},
 		&model.ClientPolicyTotal{},
 		&model.ClientPolicyReceipt{},
+		&model.ClientPolicyReset{},
 		&model.ClientInbound{},
 		&model.ClientHwid{},
 		&model.ClientExternalLink{},

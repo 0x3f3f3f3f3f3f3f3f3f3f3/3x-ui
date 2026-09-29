@@ -50,6 +50,7 @@ func migrationModels() []any {
 		&model.ClientPolicySource{},
 		&model.ClientPolicyTotal{},
 		&model.ClientPolicyReceipt{},
+		&model.ClientPolicyReset{},
 		&model.ClientInbound{},
 		&model.ClientHwid{},
 		&model.ClientExternalLink{},
@@ -101,6 +102,10 @@ func MigrateData(srcPath, dstDSN string) error {
 	if policyTableCount != 0 && policyTableCount != len(policyTables) {
 		return errors.New("source has an incomplete client policy ledger schema")
 	}
+	hasPolicyResets := src.Migrator().HasTable(&model.ClientPolicyReset{})
+	if hasPolicyResets && policyTableCount != len(policyTables) {
+		return errors.New("source has client policy resets without a complete ledger")
+	}
 
 	dst, err := gorm.Open(postgres.Open(dstDSN), &gorm.Config{Logger: logger.Discard})
 	if err != nil {
@@ -140,6 +145,9 @@ func MigrateData(srcPath, dstDSN string) error {
 		}
 
 		for _, m := range migrationModels() {
+			if _, ok := m.(*model.ClientPolicyReset); ok && !hasPolicyResets {
+				continue
+			}
 			if policyTableCount == 0 {
 				switch m.(type) {
 				case *model.ClientPolicySource, *model.ClientPolicyTotal, *model.ClientPolicyReceipt:

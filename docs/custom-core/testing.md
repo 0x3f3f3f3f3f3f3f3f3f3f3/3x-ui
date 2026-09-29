@@ -286,3 +286,20 @@ The complete run also exposed an existing Tunnel scenario fixture that chose one
 The complete panel suite passed with the new custom and unmodified binaries enabled (service 67.344 s, Xray 14.813 s); lint reported zero issues and scoped core vet passed.
 
 After the port fixture repair, the complete shuffled core suite passed with package parallelism 2, including DNS (56.529 s) and scenarios (340.128 s). This later successful run does not erase the external DNS timing failure recorded above. No other heavy check ran during the rerun. The six independent-process rate cases also passed their original limits: upload measured 258046 / 1047134 B/s and download 262347 / 1048466 B/s at configured 256 KiB/s / 1 MiB/s. Unlimited controls measured 17178163 / 32156957 B/s; these observations are not a controlled claim of unchanged throughput versus prior runs. See [raw observations](evidence/tunnel-rates-quota-windows.jsonl).
+
+## Durable SQL reset requests — 2026-09-29
+
+The reset preparation tests use real committed engine receipts. Three upload bytes at multiplier 0.5 produce 1.5 billed bytes; the first request captures that boundary. Four later download bytes increase lifetime billing to 3.5. A second request captures 3.5, and a delayed retry of the first request retains that newer window without granting further credit. Sixteen concurrent identical requests create one reset record and policy version while preserving manual disable and expiry. Frozen uncertainty is credited explicitly; outstanding reservations are excluded.
+
+Insert-time failure rolls back both desired version and reset record. A real PostgreSQL deferred-constraint failure verifies the same behavior at commit time and returns no policy that could be applied to the core. Separate regressions reject unsettled, revoked, shared remote, multiple-source and inconsistent-version resets. The migration test preserves every boundary field from SQLite to PostgreSQL, accepts older schemas without reset history, and rejects a reset table without a complete ledger.
+
+The initial service tests failed before implementation. A delayed-retry mutation failed by returning the old boundary with an extra version; a migration-copy omission failed with a missing reset record. Both were restored before final checks. SQLite reset race checks passed in 4.481 s. Final PostgreSQL migration/desired/reset race checks passed in 4.938 s / 20.726 s. The complete panel suite passed with custom and unmodified core binaries enabled (service 58.748 s, Xray 14.726 s), and lint reported zero issues.
+
+```sh
+go test -race ./internal/web/service -run '^TestClientPolicy(Reset|Desired)' -count=1
+# With the isolated PostgreSQL environment:
+go test -race ./internal/database ./internal/web/service \
+  -run '^TestClientPolicy(CrossDatabaseMigration|Reset|Desired)' -count=1
+```
+
+This increment establishes SQL preparation and migration. Runtime application/retry, public reset/bulk/scheduled flows, period statistics and automatic activation remain open. No core, frontend or public HTTP schema changed, so the preceding core and frontend evidence was not rerun for this SQL-only increment.

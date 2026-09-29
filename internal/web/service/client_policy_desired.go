@@ -35,35 +35,15 @@ func PrepareClientPolicies(clientIDs []string) ([]clientpolicy.Policy, error) {
 		if len(clients) != len(clientIDs) {
 			return gorm.ErrRecordNotFound
 		}
+		resets, err := latestClientPolicyResets(tx, clientIDs)
+		if err != nil {
+			return err
+		}
 		for _, client := range clients {
-			policy, err := desiredClientPolicy(client)
+			policy, err := prepareClientPolicyRecord(tx, client, resets[client.StableID])
 			if err != nil {
 				return err
 			}
-			raw, err := json.Marshal(policy)
-			if err != nil {
-				return err
-			}
-			hash := sha256.Sum256(raw)
-			fingerprint := hex.EncodeToString(hash[:])
-			version := client.DesiredPolicyVersion
-			if version < 0 || version == 0 && client.PolicyFingerprint != "" || version > 0 && client.PolicyFingerprint == "" {
-				return ErrClientPolicyLedger
-			}
-			if client.PolicyFingerprint != fingerprint {
-				if version == math.MaxInt64 {
-					return clientpolicy.ErrOverflow
-				}
-				version++
-				// These columns are create-only in ordinary ORM saves; only reconciliation advances them.
-				if err := tx.Table("clients").Where("id = ?", client.Id).Updates(map[string]any{
-					"desired_policy_version": version,
-					"policy_fingerprint":     fingerprint,
-				}).Error; err != nil {
-					return err
-				}
-			}
-			policy.Version = uint64(version)
 			policies = append(policies, policy)
 		}
 		return nil
@@ -95,4 +75,44 @@ func desiredClientPolicy(client model.ClientRecord) (clientpolicy.Policy, error)
 		policy.DownloadRate = uint64(client.Policy.DownloadBytesPerSecond)
 	}
 	return policy, policy.Validate()
+}
+
+func prepareClientPolicyRecord(tx *gorm.DB, client model.ClientRecord, reset *model.ClientPolicyReset) (clientpolicy.Policy, error) {
+	policy, err := desiredClientPolicy(client)
+	if err != nil {
+		return policy, err
+	}
+	if reset != nil {
+		if reset.Id != 0 && (reset.ClientID != client.StableID || reset.PolicyVersion > client.DesiredPolicyVersion) {
+			return policy, ErrClientPolicyLedger
+		}
+		if err := validateClientPolicyReset(reset); err != nil {
+			return policy, err
+		}
+		policy.QuotaBaselineBytes = uint64(reset.BilledBytes + reset.UncertainBytes)
+		policy.QuotaBaselineRemainder = uint64(reset.Remainder)
+	}
+	raw, err := json.Marshal(policy)
+	if err != nil {
+		return policy, err
+	}
+	hash := sha256.Sum256(raw)
+	fingerprint := hex.EncodeToString(hash[:])
+	version := client.DesiredPolicyVersion
+	if version < 0 || version == 0 && client.PolicyFingerprint != "" || version > 0 && client.PolicyFingerprint == "" {
+		return policy, ErrClientPolicyLedger
+	}
+	if client.PolicyFingerprint != fingerprint {
+		if version == math.MaxInt64 {
+			return policy, clientpolicy.ErrOverflow
+		}
+		version++
+		if err := tx.Table("clients").Where("id = ?", client.Id).Updates(map[string]any{
+			"desired_policy_version": version, "policy_fingerprint": fingerprint,
+		}).Error; err != nil {
+			return policy, err
+		}
+	}
+	policy.Version = uint64(version)
+	return policy, nil
 }

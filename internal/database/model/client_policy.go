@@ -15,6 +15,23 @@ type ClientPolicyTotal struct {
 	UncertainBytes int64  `gorm:"not null"`
 }
 
+// A reset captures a committed lifetime boundary; request retries never capture it again.
+type ClientPolicyReset struct {
+	Id             int64  `gorm:"primaryKey;autoIncrement;index:idx_policy_reset_order,priority:2"`
+	ClientID       string `gorm:"size:36;not null;uniqueIndex:idx_policy_reset_request,priority:1;index:idx_policy_reset_order,priority:1;<-:create"`
+	RequestID      string `gorm:"size:128;not null;uniqueIndex:idx_policy_reset_request,priority:2;<-:create"`
+	InstanceID     string `gorm:"size:128;not null;<-:create"`
+	Epoch          int64  `gorm:"not null;<-:create"`
+	Sequence       int64  `gorm:"not null;<-:create"`
+	RawUpload      int64  `gorm:"not null;<-:create"`
+	RawDownload    int64  `gorm:"not null;<-:create"`
+	BilledBytes    int64  `gorm:"not null;<-:create"`
+	Remainder      int64  `gorm:"not null;<-:create"`
+	UncertainBytes int64  `gorm:"not null;<-:create"`
+	PolicyVersion  int64  `gorm:"not null;<-:create"`
+	CreatedAt      int64  `gorm:"autoCreateTime:milli;<-:create"`
+}
+
 // Receipts survive client deletion so final usage cannot reach a replacement identity.
 type ClientPolicyReceipt struct {
 	InstanceID     string `gorm:"primaryKey;size:128"`

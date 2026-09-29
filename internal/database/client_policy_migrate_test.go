@@ -41,7 +41,8 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	source := model.ClientPolicySource{InstanceID: "migrated-source", NodeKey: "local", Epoch: 3, Sequence: 17}
 	total := model.ClientPolicyTotal{ClientID: clients[0].StableID, RawUpload: 11, RawDownload: 22, BilledBytes: 66, UncertainBytes: 5}
 	receipt := model.ClientPolicyReceipt{InstanceID: source.InstanceID, ClientID: total.ClientID, Epoch: 2, Sequence: 17, PolicyVersion: 4, RawUpload: 11, RawDownload: 22, BilledBytes: 66, UncertainBytes: 5, Remainder: 1234}
-	for _, row := range []any{&source, &total, &receipt} {
+	reset := model.ClientPolicyReset{ClientID: clients[0].StableID, RequestID: "migrated-reset", InstanceID: source.InstanceID, Epoch: 2, Sequence: 10, RawUpload: 4, RawDownload: 5, BilledBytes: 9, Remainder: 500000, UncertainBytes: 2, PolicyVersion: 3, CreatedAt: 123456}
+	for _, row := range []any{&source, &total, &receipt, &reset} {
 		if err := src.Create(row).Error; err != nil {
 			t.Fatal(err)
 		}
@@ -59,6 +60,10 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	if err := dst.First(&gotReceipt).Error; err != nil || gotReceipt != receipt {
 		t.Fatalf("receipt migration lost state: %+v %v", gotReceipt, err)
 	}
+	var gotReset model.ClientPolicyReset
+	if err := dst.First(&gotReset).Error; err != nil || gotReset != reset {
+		t.Fatalf("reset migration lost request or exact boundary: %+v %v", gotReset, err)
+	}
 	var gotTotal model.ClientPolicyTotal
 	if err := dst.First(&gotTotal).Error; err != nil || gotTotal != total {
 		t.Fatalf("total migration lost state: %+v %v", gotTotal, err)
@@ -69,6 +74,16 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	}
 	if gotClient.Policy == nil || *gotClient.Policy != *clients[0].Policy || gotClient.DesiredPolicyVersion != 7 || gotClient.PolicyFingerprint != "stored-policy-fingerprint" {
 		t.Fatalf("policy migration lost settings/version: %+v", gotClient)
+	}
+	if err := src.Migrator().DropTable(&model.ClientPolicyReset{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateData(path, os.Getenv("XUI_DB_DSN")); err != nil {
+		t.Fatalf("pre-reset ledger schema migration: %v", err)
+	}
+	var resetCount int64
+	if err := dst.Model(&model.ClientPolicyReset{}).Count(&resetCount).Error; err != nil || resetCount != 0 {
+		t.Fatalf("old schema fabricated reset history: %d %v", resetCount, err)
 	}
 	if err := src.Migrator().DropTable(&model.ClientPolicyReceipt{}, &model.ClientPolicyTotal{}, &model.ClientPolicySource{}); err != nil {
 		t.Fatal(err)
@@ -99,5 +114,11 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	}
 	if src.Migrator().HasColumn(&model.ClientRecord{}, "StableID") {
 		t.Fatal("migration modified source schema")
+	}
+	if err := src.AutoMigrate(&model.ClientPolicyReset{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateData(path, os.Getenv("XUI_DB_DSN")); err == nil || err.Error() != "source has client policy resets without a complete ledger" {
+		t.Fatalf("accepted resets without the lifetime ledger: %v", err)
 	}
 }
