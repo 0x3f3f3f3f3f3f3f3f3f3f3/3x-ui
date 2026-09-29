@@ -99,6 +99,15 @@ flows and uses 32 KiB copy buffers and grants. Its Proxy operation has one
 writer per direction; arbitrary adapters must preserve that ownership.
 It checks policy before dialing and commits each accepted payload before its
 write. A failed write may therefore leave accepted, billed bytes undelivered.
+Pacing runs both before admission and immediately before destination writes,
+with separate buckets shared by all bindings of the same client/direction.
+The first bounds admission work; the second prevents database stalls from
+releasing previously paced grants as one aggregate burst. Both use the same
+rate and burst and accrue credit concurrently, so they do not divide the
+configured rate. Each stage retains the 128-waiter bound, and a policy edit
+updates both stages. A slow destination does not hold a shared write mutex.
+No extra payload queue or billable meter is introduced. Protocol/kernel
+buffering after the write boundary remains a separate acceptance concern.
 At most one committed grant per direction/flow awaits its write: up to 64 KiB
 per Proxy flow, or 8 MiB at the 128-flow limit. Kernel, TLS and protocol buffers
 are separate and must be included in each adapter's measured in-flight bound.

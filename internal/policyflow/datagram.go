@@ -34,6 +34,10 @@ func (w *datagramWriter) Write(p []byte) (int, error) {
 		return 0, context.Cause(w.flow.ctx)
 	}
 	s := w.flow.state
+	delivery := s.writeUp
+	if w.direction == Download {
+		delivery = s.writeDown
+	}
 	var err error
 	if len(p) == 0 {
 		err = s.check(w.flow.ctx)
@@ -59,6 +63,11 @@ func (w *datagramWriter) Write(p []byte) (int, error) {
 	}
 	if err := w.flow.ctx.Err(); err != nil {
 		return 0, context.Cause(w.flow.ctx)
+	}
+	if len(p) > 0 {
+		if _, err := delivery.AcquireDatagram(w.flow.ctx, len(p)); err != nil {
+			return 0, err
+		}
 	}
 	n, err := w.destination.Write(p)
 	if err == nil && n != len(p) {

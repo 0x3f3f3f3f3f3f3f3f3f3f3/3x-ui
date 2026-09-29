@@ -53,16 +53,17 @@ type Controller struct {
 type flowFault struct{ err error }
 
 type clientState struct {
-	controller       *Controller
-	policyID         string
-	meter            model.ClientUsageMeter
-	opMu             sync.Mutex
-	upload, download *clientpolicy.Limiter
-	flowsMu          sync.Mutex
-	flows            map[*Flow]struct{}
-	lastGood         atomic.Pointer[time.Time]
-	checking         atomic.Bool
-	fault            atomic.Pointer[flowFault]
+	controller         *Controller
+	policyID           string
+	meter              model.ClientUsageMeter
+	opMu               sync.Mutex
+	upload, download   *clientpolicy.Limiter
+	writeUp, writeDown *clientpolicy.Limiter
+	flowsMu            sync.Mutex
+	flows              map[*Flow]struct{}
+	lastGood           atomic.Pointer[time.Time]
+	checking           atomic.Bool
+	fault              atomic.Pointer[flowFault]
 }
 
 func NewController(ledger *database.ClientUsageLedger, source string) *Controller {
@@ -81,6 +82,14 @@ func (c *Controller) Configure(ctx context.Context, policyID string, rates Rates
 	if err != nil {
 		return err
 	}
+	writeUp, err := clientpolicy.NewLimiter(rates.Upload)
+	if err != nil {
+		return err
+	}
+	writeDown, err := clientpolicy.NewLimiter(rates.Download)
+	if err != nil {
+		return err
+	}
 	c.configureMu.Lock()
 	defer c.configureMu.Unlock()
 	c.mu.Lock()
@@ -94,13 +103,19 @@ func (c *Controller) Configure(ctx context.Context, policyID string, rates Rates
 		if err := old.upload.SetRate(rates.Upload); err != nil {
 			return err
 		}
-		return old.download.SetRate(rates.Download)
+		if err := old.download.SetRate(rates.Download); err != nil {
+			return err
+		}
+		if err := old.writeUp.SetRate(rates.Upload); err != nil {
+			return err
+		}
+		return old.writeDown.SetRate(rates.Download)
 	}
 	meter, err := c.ledger.ClaimAdmissionSource(ctx, policyID, c.source)
 	if err != nil {
 		return err
 	}
-	s := &clientState{controller: c, policyID: policyID, meter: meter, upload: up, download: down, flows: make(map[*Flow]struct{})}
+	s := &clientState{controller: c, policyID: policyID, meter: meter, upload: up, download: down, writeUp: writeUp, writeDown: writeDown, flows: make(map[*Flow]struct{})}
 	s.checked()
 	c.mu.Lock()
 	if c.ctx.Err() != nil {
@@ -334,8 +349,10 @@ func (w *flowWriter) Write(p []byte) (int, error) {
 	}
 	s := w.flow.state
 	limiter := s.upload
+	delivery := s.writeUp
 	if w.direction == Download {
 		limiter = s.download
+		delivery = s.writeDown
 	}
 	written := 0
 	for len(p) > 0 {
@@ -353,7 +370,8 @@ func (w *flowWriter) Write(p []byte) (int, error) {
 		if err := w.flow.ctx.Err(); err != nil {
 			return written, context.Cause(w.flow.ctx)
 		}
-		n, err := w.destination.Write(p[:grant])
+		// Admission can stall after pacing; share a second bucket at the actual write boundary.
+		n, err := clientpolicy.NewShapedWriter(w.flow.ctx, w.destination, delivery).Write(p[:grant])
 		written += n
 		if err != nil {
 			return written, err

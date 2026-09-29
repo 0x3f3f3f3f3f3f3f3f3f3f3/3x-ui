@@ -3431,3 +3431,114 @@ Final affected static analysis passed with zero issues:
 ./internal/sub/...` (`/tmp/3x-ui-mieru-public-backend-lint-final.log`).
 `git diff --check` also passed. The public increment is ready for its backend
 and frontend commits; this does not close Task 6 or the full requirements.
+
+### Public mixed SSH/mieru rate acceptance — follow-up
+
+Backend commit `40145cb9` and frontend commit `7523149c` were pushed to the
+approved feature branch; independent `git ls-remote` matched
+`7523149c16e0046b198500166af1d0b4d846ad89`. These are scoped integration
+milestones; public shared-rate acceptance remained open at that point.
+
+The new production harness attaches two same-IP canonical clients to one SSH
+and two mieru listeners, with two simultaneous duplex streams per listener
+and client. It uses real OpenSSH and the official mieru client, the actual
+policy API and managed core, the existing rate bounds and 2s live-change
+criterion, exact 2x ledger arithmetic, and core restart. The first race run
+**failed**: SQLite/TCP and PostgreSQL/TCP+UDP passed, but SQLite/UDP delivered
+262,143 upload bytes for the unchanged second client over 1.501s, exceeding
+its 221,621-byte upper bound at 131,072 B/s during the other client's live
+rate increase. Log: `/tmp/3x-ui-public-mixed-rates-first.jsonl` (75.804s).
+This is not a complete performance pass. The next diagnostic run compares
+ledger admission deltas with receiver deltas to locate scheduling or buffered
+burst behavior; rate bounds and measurement durations remain unchanged.
+
+Three SQLite/UDP diagnostic race repetitions passed (56.917s), but ten
+further repetitions **failed**: four passed, four failed the unchanged
+unlimited-baseline requirement, and two exceeded the initial download bound.
+One failure delivered 228,556 bytes while 189,235 bytes were admitted during
+the diagnostic interval, exposing previously admitted in-flight data; this
+does not by itself establish the complete cause. Logs:
+`/tmp/3x-ui-public-mixed-rates-udp-diagnostic.jsonl` and
+`/tmp/3x-ui-public-mixed-rates-udp-reproduce.jsonl` (113.814s).
+
+The normal-build comparison (`go test -p 1 ./internal/web/service -run
+'^TestClientPolicyProductionSSHAndMieruShareRates' -count=3 -json`, with the
+managed-core and PostgreSQL fixture environment) also **failed**, 213.16s:
+ten transport/database subtests passed and two failed, no skips. SQLite/UDP
+sent 222,822 upload bytes against the 221,566-byte upper bound in 1.500s for
+the unchanged client during its peer's live increase. PostgreSQL/TCP once
+failed official-client SOCKS5 response negotiation after core restart with
+`TIMEOUT`. Log: `/tmp/3x-ui-public-mixed-rates-no-race-comparison.jsonl`.
+These failures cannot be dismissed as race instrumentation overhead.
+
+Inspection also found diagnostic timing skew: receiver snapshots straddled
+SQL reads while their clock did not, and validation could delay later end
+snapshots. The corrected harness collects all diagnostic reads before the
+receiver clock and all receiver end counters before validation or SQL. The
+rate bounds, baseline, settling periods, measurement duration and 2s live
+update requirement are unchanged. This measurement correction is not a
+production rate fix; the first failure preceded those diagnostic probes.
+
+The aligned normal-build rerun still **failed** (231.205s): eleven subtests
+passed, one PostgreSQL/TCP restart handshake timed out, zero skips. Log:
+`/tmp/3x-ui-public-mixed-rates-clock-aligned.jsonl`; failure stack:
+`/tmp/3x-ui-mieru-dial-3555727615.stacks`. The stack shows native TCP underlays
+waiting to deliver segments to full per-session staging channels. The pinned
+official client's default multiplex factor is one; its stream sender does not
+use the packet transport's per-session receive-window control. A deterministic
+multiplexed-handshake reproduction and an explicit compatibility decision remain
+pending; no timeout extension or silent test configuration change was made.
+The upstream wire contract is pinned at
+[mieru v3.38.0](https://github.com/enfein/mieru/blob/v3.38.0/docs/protocol.md);
+the observed TCP behavior is grounded in that version's
+[stream sender](https://github.com/enfein/mieru/blob/v3.38.0/pkg/protocol/session.go)
+and [default client configuration](https://github.com/enfein/mieru/blob/v3.38.0/pkg/appctl/appctlcommon/client.go).
+
+A separate deterministic regression occupied the real SQLite connection for
+250ms while six authenticated flow writers waited for durable admission.
+All four stream/datagram and upload/download cases failed: 26,212 bytes reached
+the destination within 60ms of database recovery, above the fixed rate-plus-burst
+bound of approximately 10,750 bytes. Cause: grants were paced before admission,
+then accumulated while admission waited. A second shared direction bucket at
+the post-admission write boundary made all four cases pass; the full policyflow
+and clientpolicy race suites passed (16.710s and 9.560s). This preserves durable
+admission and bounds without serializing blocking writes behind one mutex.
+Evidence: `/tmp/3x-ui-rate-trace/admission-four-red.log` and
+`/tmp/3x-ui-rate-trace/admission-green.jsonl`.
+
+This scoped correction does **not** close public rate acceptance. Two normal
+mixed repetitions after it **failed** (141.191s), six subtests passed, two failed,
+zero skipped: one SQLite/UDP live-increase window delivered 157,284 upload bytes,
+15 bytes below its unchanged 157,299-byte lower bound; one PostgreSQL/TCP restart
+again timed out opening a multiplexed official-client session. Log:
+`/tmp/3x-ui-rate-trace/public-delivery-gate.jsonl`. A separate timing-instrumented
+UDP race run had three passes and two insufficient-baseline failures, 67.463s
+(`/tmp/3x-ui-rate-trace/public-observed.jsonl`); it did not reproduce a burst.
+
+The post-admission correction's complete affected race regression passed:
+`go test -race -p 1 ./internal/policyflow ./internal/clientpolicy
+./internal/sshtunnel ./internal/mieru -count=1 -json`, with the managed-core
+fixture enabled — 64 top-level tests, 89 subtests, zero skips, all four packages
+passed (20.403s, 9.560s, 14.735s, 120.992s respectively). This includes four
+additional cases changing an unlimited rate while admissions were already
+queued, then checking the same recovery burst bound. Log:
+`/tmp/3x-ui-rate-trace/shared-controller-regression.jsonl`. This is scoped
+controller/adaptor regression evidence; the public failures above remain open.
+
+The fixed-underlay TCP diagnostic subsequently confirmed the mechanism using
+the pinned official protocol client: a finite 1 MiB upload at 16 KiB/s kept a
+second handshake on the same TCP underlay blocked for 250ms; another TCP underlay
+for that same client completed its handshake within 1s. Removing the rate cap
+released the first underlay's pending handshake within 2s. Peak native buffering
+was 294,912 bytes, inside the existing finite bounds. No server queue was enlarged.
+The isolated experiment passed in 4.090s:
+`/tmp/3x-ui-rate-trace/tcp-mux-diagnostic.log`; source and overlay are in the same
+directory. Export compatibility work remains pending. This experiment establishes
+the observed cause and an independent-connection alternative, not support for
+bounded handshake latency under arbitrary TCP multiplexing.
+
+The already published public SSH shared-rate tests also passed on SQLite and
+PostgreSQL after the controller correction (two top-level tests, zero skips,
+20.775s; `/tmp/3x-ui-rate-trace/published-ssh-regression.jsonl`). The panel build
+passed (`go build -o /tmp/3x-ui-rate-guard-panel .`), the affected controller/limiter
+static analysis reported zero issues, and `git diff --check` passed.
