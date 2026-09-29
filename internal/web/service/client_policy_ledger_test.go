@@ -13,17 +13,11 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
-	"github.com/mhsanaei/3x-ui/v3/internal/testpg"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
 
 func setupPolicyLedgerDB(t *testing.T) {
 	t.Helper()
-	cleanup, err := testpg.IsolatePackage("policy_" + t.Name())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(cleanup)
 	setupBulkDB(t)
 }
 

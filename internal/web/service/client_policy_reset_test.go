@@ -273,7 +273,7 @@ func TestClientPolicyResetPendingIgnoresUnrelatedRevokedClients(t *testing.T) {
 			if err := SettleClientPolicyLedger("core-a", 1, 2, page); err != nil {
 				t.Fatal(err)
 			}
-			pending, err := pendingClientPolicyResetIDs(database.GetDB(), "core-a", []clientpolicy.Policy{
+			pending, err := pendingClientPolicyIDs(database.GetDB(), "core-a", []clientpolicy.Policy{
 				{ClientID: id, Version: 1}, {ClientID: revokedID, Version: 2},
 			})
 			if err != nil || len(pending) != 1 || pending[0] != id {

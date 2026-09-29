@@ -9,10 +9,16 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/dbtest"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
+	"github.com/mhsanaei/3x-ui/v3/internal/testpg"
 )
 
 func setupBulkDB(t *testing.T) {
 	t.Helper()
+	cleanup, err := testpg.IsolatePackage("service_" + t.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
 	dbDir := t.TempDir()
 	t.Setenv("XUI_DB_FOLDER", dbDir)
 	dbtest.InitDB(t, filepath.Join(dbDir, "x-ui.db"))

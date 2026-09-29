@@ -73,3 +73,14 @@ func normalizeLegacyClientSettings(inbound *model.Inbound) {
 		inbound.Settings = string(out)
 	}
 }
+
+// Lifecycle edits retain integer tokens when updating another client in the same inbound.
+func decodeTrafficLifecycleSettings(raw string) (map[string]any, error) {
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.UseNumber()
+	var settings map[string]any
+	if err := dec.Decode(&settings); err != nil {
+		return nil, err
+	}
+	return settings, nil
+}

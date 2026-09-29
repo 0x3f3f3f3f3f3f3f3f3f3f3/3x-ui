@@ -220,11 +220,19 @@ func (s *InboundService) adjustTraffics(tx *gorm.DB, dbClientTraffics []*xray.Cl
 	// first traffic tick it becomes an absolute deadline of now+duration. Compute
 	// it once per email so every inbound the client is attached to lands on the
 	// same value (recomputing per inbound would skip all but the first one).
-	newExpiryByEmail := make(map[string]int64, len(dbClientTraffics))
-	for traffic_index := range dbClientTraffics {
-		if dbClientTraffics[traffic_index].ExpiryTime < 0 {
-			newExpiryByEmail[dbClientTraffics[traffic_index].Email] = now - dbClientTraffics[traffic_index].ExpiryTime
+	var delayed []*xray.ClientTraffic
+	for _, row := range dbClientTraffics {
+		if row.ExpiryTime < 0 {
+			delayed = append(delayed, row)
 		}
+	}
+	legacy, err := legacyClientTrafficRows(tx, delayed)
+	if err != nil {
+		return nil, nil, err
+	}
+	newExpiryByEmail := make(map[string]int64, len(legacy))
+	for _, row := range legacy {
+		newExpiryByEmail[row.Email] = now - row.ExpiryTime
 	}
 	if len(newExpiryByEmail) == 0 {
 		return dbClientTraffics, nil, nil
@@ -239,7 +247,7 @@ func (s *InboundService) adjustTraffics(tx *gorm.DB, dbClientTraffics []*xray.Cl
 	// authoritative. client_traffics.inbound_id goes stale when an inbound is
 	// deleted and recreated, which would leave the negative expiry unconverted.
 	var inboundIds []int
-	err := tx.Table("client_inbounds").
+	err = tx.Table("client_inbounds").
 		Joins("JOIN clients ON clients.id = client_inbounds.client_id").
 		Where("clients.email IN (?)", delayedEmails).
 		Distinct().
@@ -257,8 +265,10 @@ func (s *InboundService) adjustTraffics(tx *gorm.DB, dbClientTraffics []*xray.Cl
 		return nil, nil, err
 	}
 	for inbound_index := range inbounds {
-		settings := map[string]any{}
-		_ = json.Unmarshal([]byte(inbounds[inbound_index].Settings), &settings)
+		settings, err := decodeTrafficLifecycleSettings(inbounds[inbound_index].Settings)
+		if err != nil {
+			return nil, nil, err
+		}
 		clients, ok := settings["clients"].([]any)
 		if ok {
 			var newClients []any
@@ -360,6 +370,10 @@ func (s *InboundService) autoRenewClients(tx *gorm.DB, mutationBatch *trafficMut
 	if err != nil {
 		return false, 0, err
 	}
+	traffics, err = legacyClientTrafficRows(tx, traffics)
+	if err != nil {
+		return false, 0, err
+	}
 	// return if there is no client to renew
 	if len(traffics) == 0 {
 		return false, 0, nil
@@ -430,8 +444,10 @@ func (s *InboundService) autoRenewClients(tx *gorm.DB, mutationBatch *trafficMut
 	}
 	renewedEmails := make([]string, 0, len(traffics))
 	for inbound_index := range inbounds {
-		settings := map[string]any{}
-		_ = json.Unmarshal([]byte(inbounds[inbound_index].Settings), &settings)
+		settings, err := decodeTrafficLifecycleSettings(inbounds[inbound_index].Settings)
+		if err != nil {
+			return false, 0, err
+		}
 		clients, _ := settings["clients"].([]any)
 		if len(clients) == 0 {
 			continue

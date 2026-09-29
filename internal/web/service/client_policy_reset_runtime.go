@@ -95,7 +95,7 @@ func applyLocalClientPolicyReset(ctx context.Context, ids []string, prepare func
 	return nil
 }
 
-func reconcileLocalClientPolicyResets(ctx context.Context, process *xray.Process) error {
+func reconcileLocalClientPolicies(ctx context.Context, process *xray.Process) error {
 	lock.Lock()
 	defer lock.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -118,7 +118,7 @@ func reconcileLocalClientPolicyResets(ctx context.Context, process *xray.Process
 			return err
 		}
 		batch := config.Policies[start:min(start+1000, len(config.Policies))]
-		pending, err := pendingClientPolicyResetIDs(database.GetDB().WithContext(ctx), config.InstanceID, batch)
+		pending, err := pendingClientPolicyIDs(database.GetDB().WithContext(ctx), config.InstanceID, batch)
 		if err != nil {
 			return err
 		}
@@ -130,7 +130,7 @@ func reconcileLocalClientPolicyResets(ctx context.Context, process *xray.Process
 			return err
 		}
 		if err := managed.ApplyManagedPolicies(ctx, process, policies); err != nil {
-			return fmt.Errorf("retry pending resets: %w", err)
+			return fmt.Errorf("retry pending client policies: %w", err)
 		}
 		changed = true
 	}
@@ -140,7 +140,7 @@ func reconcileLocalClientPolicyResets(ctx context.Context, process *xray.Process
 	return nil
 }
 
-func pendingClientPolicyResetIDs(tx *gorm.DB, instanceID string, policies []clientpolicy.Policy) ([]string, error) {
+func pendingClientPolicyIDs(tx *gorm.DB, instanceID string, policies []clientpolicy.Policy) ([]string, error) {
 	ids := make([]string, len(policies))
 	for i, policy := range policies {
 		ids[i] = policy.ClientID
@@ -149,12 +149,13 @@ func pendingClientPolicyResetIDs(tx *gorm.DB, instanceID string, policies []clie
 	if err != nil {
 		return nil, err
 	}
-	if len(resets) == 0 {
-		return nil, nil
+	var clients []model.ClientRecord
+	if err := tx.Select("stable_id", "desired_policy_version").Where("stable_id IN ?", ids).Find(&clients).Error; err != nil {
+		return nil, err
 	}
-	ids = ids[:0]
-	for id := range resets {
-		ids = append(ids, id)
+	desired := make(map[string]int64, len(clients))
+	for _, client := range clients {
+		desired[client.StableID] = client.DesiredPolicyVersion
 	}
 	var receipts []model.ClientPolicyReceipt
 	if err := tx.Where("client_id IN ?", ids).Find(&receipts).Error; err != nil {
@@ -171,14 +172,19 @@ func pendingClientPolicyResetIDs(tx *gorm.DB, instanceID string, policies []clie
 	}
 	var pending []string
 	for _, policy := range policies {
-		reset := resets[policy.ClientID]
-		if reset == nil {
+		version := desired[policy.ClientID]
+		if reset := resets[policy.ClientID]; reset != nil {
+			if reset.InstanceID != instanceID || reset.PolicyVersion > version {
+				return nil, ErrClientPolicyLedger
+			}
+		}
+		if version == 0 {
 			continue
 		}
-		if reset.InstanceID != instanceID || versions[policy.ClientID] <= 0 {
+		if version < 0 || versions[policy.ClientID] <= 0 {
 			return nil, ErrClientPolicyLedger
 		}
-		if reset.PolicyVersion > versions[policy.ClientID] || uint64(reset.PolicyVersion) > policy.Version {
+		if version > versions[policy.ClientID] || uint64(version) > policy.Version {
 			if revoked[policy.ClientID] {
 				return nil, ErrClientPolicyLedger
 			}

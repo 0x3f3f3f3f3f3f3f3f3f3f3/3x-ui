@@ -81,10 +81,14 @@ func (s *InboundService) disableInvalidClients(tx *gorm.DB, mutationBatch *traff
 	now := time.Now().UnixMilli()
 	cond, condArgs := depletedCond(tx)
 
-	var depletedRows []xray.ClientTraffic
+	var depletedRows []*xray.ClientTraffic
 	err := tx.Model(xray.ClientTraffic{}).
 		Where(cond+" AND enable = ?", append(condArgs, true)...).
 		Find(&depletedRows).Error
+	if err != nil {
+		return false, 0, nil, err
+	}
+	depletedRows, err = legacyClientTrafficRows(tx, depletedRows)
 	if err != nil {
 		return false, 0, nil, err
 	}
@@ -195,8 +199,8 @@ func (s *InboundService) markClientsDisabledInSettings(tx *gorm.DB, inboundID in
 	}
 	snapshot := ib
 
-	settings := map[string]any{}
-	if err := json.Unmarshal([]byte(ib.Settings), &settings); err != nil {
+	settings, err := decodeTrafficLifecycleSettings(ib.Settings)
+	if err != nil {
 		return nil, nil, err
 	}
 	clients, _ := settings["clients"].([]any)

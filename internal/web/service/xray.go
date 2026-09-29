@@ -1200,9 +1200,12 @@ func (s *XrayService) GetXrayTraffic() ([]*xray.Traffic, []*xray.ClientTraffic, 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		err := pollLocalClientPolicyLedger(ctx, process)
 		if err == nil {
-			err = reconcileLocalClientPolicyResets(ctx, process)
+			err = reconcileLocalClientPolicies(ctx, process)
 		}
 		if err == nil {
+			if renewalErr := renewLocalClientPolicies(ctx, process); renewalErr != nil {
+				logger.Warning("Pending managed client renewal:", renewalErr)
+			}
 			if resetErr := resumeScheduledTrafficResets(ctx); resetErr != nil {
 				logger.Warning("Pending scheduled traffic reset:", resetErr)
 			}
