@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1386,6 +1387,17 @@ func (s *XrayService) TestRoute(req xray.RouteTestRequest) (*xray.RouteTestResul
 func (s *XrayService) RestartXray(isForce bool) error {
 	lock.Lock()
 	defer lock.Unlock()
+	return s.restartXrayLocked(isForce, nil)
+}
+
+// updateContext enables mandatory validation/readiness for a binary replacement.
+// The outer update transaction owns recovery of both the binary and configuration.
+func (s *XrayService) restartXrayLocked(isForce bool, updateContext context.Context) error {
+	if updateContext != nil {
+		if err := updateContext.Err(); err != nil {
+			return err
+		}
+	}
 	logger.Debug("restart Xray, force:", isForce)
 	if !isForce && isManuallyStopped.Load() {
 		return nil
@@ -1420,13 +1432,13 @@ func (s *XrayService) RestartXray(isForce bool) error {
 		logger.Debug("It does not need to restart Xray")
 		return nil
 	}
-	if stagedOutbounds != nil || managedPlan.hasServices() {
+	if updateContext != nil || stagedOutbounds != nil || managedPlan.hasServices() {
 		if err := xray.ValidateConfig(xrayConfig); err != nil {
 			xrayState.holdBack(err.Error())
 			return err
 		}
 	}
-	requiresReady := stagedOutbounds != nil || len(managedPlan.mieru.entries) > 0
+	requiresReady := updateContext != nil || stagedOutbounds != nil || len(managedPlan.mieru.entries) > 0
 	if requiresReady {
 		if _, err := sshCoreAPIAddress(xrayConfig); err != nil {
 			xrayState.holdBack(err.Error())
@@ -1436,6 +1448,11 @@ func (s *XrayService) RestartXray(isForce bool) error {
 	var previousConfig *xray.Config
 	releaseManaged := stageManagedRuntime(xrayConfig)
 	defer releaseManaged()
+	if updateContext != nil {
+		if err := updateContext.Err(); err != nil {
+			return err
+		}
+	}
 	if process != nil && process.IsRunning() {
 		previousConfig = process.GetConfig()
 		// A config the core cannot bind never replaces one that works: its failed
@@ -1471,9 +1488,19 @@ func (s *XrayService) RestartXray(isForce bool) error {
 	s.xrayAPI.StatsLastValues = nil
 	err = process.Start()
 	if err == nil && requiresReady {
-		err = waitSSHCoreReady(process)
+		if updateContext != nil {
+			err = waitCoreReady(updateContext, process)
+		} else {
+			err = waitSSHCoreReady(process)
+		}
 	}
 	if err != nil {
+		if updateContext != nil {
+			// Restore the old executable before trying the previous configuration.
+			// The caller does both while retaining the same lifecycle lock.
+			_ = process.Stop()
+			return err
+		}
 		if requiresReady {
 			_ = process.Stop()
 			reason := "xray startup failed"

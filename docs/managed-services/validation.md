@@ -5204,3 +5204,98 @@ Logs under `/tmp/3x-ui-rate-trace/`: `menu-prepare-red.log`,
 `menu-checksum-diagnostic-red.log`, `menu-maintenance-final.jsonl`,
 `menu-regular-regression.jsonl`, `menu-web-regression.jsonl`,
 `menu-root-cli-regression.jsonl` and `menu-final-lint.log`.
+
+
+## 2026-09-29 — managed fork core updates and error recovery
+
+The independent core updater now selects this fork's complete Linux release,
+verifies its full tag commit, asset/checksum/inventory and actual managed runtime,
+then changes the core under the existing lifecycle mutex. The old executable and
+working configuration are restored after activation failure. No business database
+snapshot is restored. The UI separates package tags/prereleases from the running
+(or last reported) Xray version; the old string-list endpoint remains a tag-list
+compatibility representation. Container and unsupported-platform guards fail before download.
+
+Observed failures and corrections:
+
+- New catalog, subprocess preflight and file transaction APIs initially failed
+  their contract tests because those APIs were absent. The old service downloaded
+  stock XTLS ZIP files after stopping the live process; that path was removed.
+- The first actual process test invocation was denied loopback sockets by the
+  sandbox. The authorized isolated-socket rerun passed; the denied run is not
+  counted as a product failure or as successful coverage.
+- Removing the obsolete core digest helper exposed geodata's shared digest-limit
+  constant at compile time. Geodata now retains its own unchanged 64 KiB limit;
+  its checksum/update regression tests pass.
+- The frontend's new error handling exposed a synchronous-effect lint error.
+  The catalog request now updates state through its promise callbacks, discards
+  closed-dialog responses, and clears choices on a new dialog opening.
+- The Ukrainian API test exposed an empty failure title when a new translation
+  was absent. Core update titles/errors now explicitly fall back to English.
+- A running native core could otherwise be reported as successfully replaced
+  immediately after exec. The new native SOCKS test injects exit 29 after real
+  configuration/version validation and verifies restored payload routing through
+  the old configuration despite a changed, valid desired route.
+- The HTTP server has a 30-second write deadline, too short for a whole release.
+  Only the authenticated core-install response receives a nine-minute deadline
+  for its eight-minute operation plus recovery. A real HTTP/gzip test outlives a
+  short normal server deadline and still receives the complete response.
+
+Current focused evidence (race, shuffle and count=1 for Go):
+
+| Run | Result |
+| --- | --- |
+| Complete updatebundle + update-stage tests | 49 top-level, 208 subtests passed; 2 packages, zero skips |
+| Core, ordinary restart, bind, SSH/mieru, geodata and update-controller regression | 33 top-level, 67 subtests passed; 2 packages; two skips recorded below |
+| PostgreSQL core activation, actual OpenSSH outbound, localized API and HTTP/gzip deadline | 4 top-level, 14 subtests passed; 3 packages, zero skips |
+| Additional plain native recovery and locale contract run | 2 top-level, 6 subtests passed; zero skips |
+| Frontend managed release picker | 2 component tests passed; typecheck, lint and production build passed |
+
+The wider focused run skipped `TestSSHOutboundRunsThroughProductionXray` because
+`SSH_E2E_SERVER` had not been supplied; it was then rerun successfully with the
+owned OpenSSH fixture using `/usr/sbin/sshd`. The other skip is the existing
+`TestUpdatePanel_UnsupportedPlatformReturnsNoRunId`, which deliberately exercises
+only non-Linux behavior. These are not new successful runtime cases.
+
+Actual SQLite download/preflight tests cover incorrect checksum, mismatched full
+source commit, stock-core rejection and managed-core activation. They exchange
+mieru TCP and UDP payloads while download is in progress and afterward: exact
+raw counters are 132 bytes in each direction, billed once at 1.5x for 396 bytes.
+SQLite and isolated PostgreSQL activation matrices cover success, startup exit,
+API readiness timeout, cancellation during startup, invalid desired configuration,
+missing API, pre-canceled requests and deliberate manual stop. Each additional
+successful echo round adds exactly 44 bytes per direction and 132 billed bytes;
+manual-stop updates add none. An ordinary reconciliation queued during canceled
+startup waits until executable/process recovery releases the lifecycle mutex.
+
+The download tests use current Go service code, fixed-fork HTTP transport fixtures,
+an actual clean panel candidate from commit 61efa40f, a real managed core and a
+real stock core. They are not a published-release acceptance test. Placeholder
+nonexecuted service/script assets satisfy the test bundle inventory only.
+Crash-durable journals/boot recovery, shell-versus-panel cross-process coordination,
+transactional panel/SQLite/PostgreSQL activation with admission barriers, and actual
+container/foreign-platform execution remain open, along with the earlier original
+protocol/policy requirements. The previous full-repository suite is historical;
+these results must not be described as a new full-repository test pass.
+
+Logs under `/tmp/3x-ui-rate-trace/`: `managed-core-replacement-red.log`,
+`managed-core-lifecycle-red.log`, `managed-core-service-api-red.log`,
+`managed-core-ui-red.log`, `managed-core-http-deadline-red.log`,
+`managed-core-library-final.jsonl`, `managed-core-regression-final.jsonl`,
+`managed-core-pg-deadline-ssh.jsonl`, `managed-core-native-controller-green.jsonl`,
+`managed-core-download-runtime.jsonl` and `managed-core-frontend-build.log`.
+
+Full-repository `golangci-lint run --timeout=5m` completed with zero issues.
+The production frontend build generated 188 OpenAPI paths / 200 operations and
+completed successfully; the generated OpenAPI changes are included.
+
+The refactored staging helper also builds as a static Linux arm64 binary and
+as Windows amd64 / Darwin arm64 command binaries. The foreign builds are compile
+evidence only; those platforms explicitly reject runtime activation preflight.
+
+The rebuilt native static helper passed all nine existing isolated process
+bootstrap/archive/source/core-preflight/service-stop-failure cases. Old program,
+unit and database fixture bytes remained intact on rejection. The real managed
+core passed preflight before the fixture intentionally refused service stop.
+This shell probe does not test successful panel activation or database rollback
+(`managed-core-helper-process.jsonl`).

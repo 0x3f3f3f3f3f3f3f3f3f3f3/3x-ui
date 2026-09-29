@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Button, Collapse, Modal, Radio, Spin, Tag, Tooltip } from 'antd';
+import { Alert, Button, Collapse, Modal, Spin, Tag, Tooltip } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 
 import { HttpUtil } from '@/utils';
@@ -12,6 +12,11 @@ import './VersionModal.css';
 interface BusyEvent {
   busy: boolean;
   tip?: string;
+}
+
+interface ManagedCoreRelease {
+  tag: string;
+  prerelease: boolean;
 }
 
 interface VersionModalProps {
@@ -34,39 +39,51 @@ export default function VersionModal({ open, status, onClose, onBusy }: VersionM
   const { t } = useTranslation();
   const [modal, modalContextHolder] = Modal.useModal();
   const [activeKey, setActiveKey] = useState<string | string[]>('1');
-  const [versions, setVersions] = useState<string[]>([]);
+  const [versions, setVersions] = useState<ManagedCoreRelease[]>([]);
+  const [catalogError, setCatalogError] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const fetchVersions = useCallback(async () => {
-    try {
-      const msg = await HttpUtil.get<string[]>('/panel/api/server/getXrayVersion');
-      if (msg?.success) setVersions(msg.obj || []);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   const [wasOpen, setWasOpen] = useState(false);
   if (open !== wasOpen) {
     setWasOpen(open);
-    if (open) setLoading(true);
+    if (open) {
+      setLoading(true);
+      setVersions([]);
+      setCatalogError('');
+    }
   }
 
   useEffect(() => {
-    if (open) void fetchVersions();
-  }, [open, fetchVersions]);
+    if (!open) return;
+    let current = true;
+    void HttpUtil.get<ManagedCoreRelease[]>('/panel/api/server/getManagedCoreReleases')
+      .then((msg) => {
+        if (!current) return;
+        if (msg?.success) setVersions(msg.obj || []);
+        else setCatalogError(msg?.msg || t('pages.index.managedCoreUnavailable'));
+      })
+      .catch(() => {
+        if (current) setCatalogError(t('pages.index.managedCoreUnavailable'));
+      })
+      .finally(() => {
+        if (current) setLoading(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [open, t]);
 
   function switchXrayVersion(version: string) {
     modal.confirm({
-      title: t('pages.index.xraySwitchVersionDialog'),
-      content: t('pages.index.xraySwitchVersionDialogDesc').replace('#version#', version),
+      title: t('pages.index.managedCoreConfirmTitle'),
+      content: t('pages.index.managedCoreConfirm', { tag: version }),
       okText: t('confirm'),
       cancelText: t('cancel'),
       onOk: async () => {
         onClose();
         onBusy({ busy: true, tip: t('pages.index.dontRefresh') });
         try {
-          await HttpUtil.post(`/panel/api/server/installXray/${version}`);
+          await HttpUtil.post(`/panel/api/server/installXray/${encodeURIComponent(version)}`);
         } finally {
           onBusy({ busy: false });
         }
@@ -111,23 +128,39 @@ export default function VersionModal({ open, status, onClose, onBusy }: VersionM
           items={[
             {
               key: '1',
-              label: 'Xray',
+              label: t('pages.index.managedCoreReleases'),
               children: (
                 <>
                   <Alert
                     type="warning"
                     className="mb-12"
-                    title={t('pages.index.xraySwitchClickDesk')}
+                    title={t('pages.index.managedCoreNotice')}
                     showIcon
                   />
+                  <p>
+                    {t(
+                      status?.xray?.state === 'running'
+                        ? 'pages.index.managedCoreRunning'
+                        : 'pages.index.managedCoreStoppedVersion',
+                      { version: status?.xray?.version || '-' },
+                    )}
+                  </p>
+                  {catalogError && <Alert type="error" title={catalogError} showIcon />}
+                  {!loading && !catalogError && versions.length === 0 && (
+                    <p>{t('pages.index.managedCoreEmpty')}</p>
+                  )}
                   <div className="version-list">
                     {versions.map((version, index) => (
-                      <div key={version} className="version-list-item">
-                        <Tag color={index % 2 === 0 ? 'purple' : 'green'}>{version}</Tag>
-                        <Radio
-                          checked={version === `v${status?.xray?.version}`}
-                          onClick={() => switchXrayVersion(version)}
-                        />
+                      <div key={version.tag} className="version-list-item">
+                        <span>
+                          <Tag color={index % 2 === 0 ? 'purple' : 'green'}>{version.tag}</Tag>
+                          {version.prerelease && (
+                            <Tag color="orange">{t('pages.index.managedCorePrerelease')}</Tag>
+                          )}
+                        </span>
+                        <Button onClick={() => switchXrayVersion(version.tag)}>
+                          {t('pages.index.managedCoreInstall')}
+                        </Button>
                       </div>
                     ))}
                   </div>

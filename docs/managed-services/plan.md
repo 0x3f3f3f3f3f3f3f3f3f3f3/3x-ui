@@ -328,7 +328,10 @@ now uses that preflight before package/service changes and has an isolated first
 SQLite installation plus installed-panel HTTP check. Menu installation verifies
 its release asset, refresh restores the verified installed menu, and selected
 release tags pass through the managed updater without shell evaluation.
-Independent core updates, transactional activation/DB rollback,
+Native Linux independent core updates now verify complete fork bundles, reject
+stock cores, retain the running process during preparation and recover the old
+executable/configuration after activation errors. The release picker distinguishes
+package tags from actual core versions. Crash-durable activation/DB rollback,
 real service-manager/container/platform execution and final acceptance remain
 open; the broader delivery checkboxes below are intentionally not complete.
 

@@ -568,8 +568,17 @@ export const sections: readonly Section[] = [
       {
         method: 'GET',
         path: '/panel/api/server/getXrayVersion',
-        summary: 'List Xray binary versions available for install on this host.',
-        response: '{\n  "success": true,\n  "obj": ["v25.10.31", "v25.9.15", "v25.8.1"]\n}',
+        summary:
+          'Legacy string list of managed fork release package tags for this host (not Xray version numbers).',
+        response: '{\n  "success": true,\n  "obj": ["v3.8.5-managed.1", "dev-latest"]\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/getManagedCoreReleases',
+        summary:
+          'List managed fork release package candidates with tag and prerelease status. Selection still requires full source, artifact and runtime verification.',
+        response:
+          '{\n  "success": true,\n  "obj": [{"tag": "v3.8.5-managed.1", "prerelease": false}]\n}',
       },
       {
         method: 'GET',
@@ -668,13 +677,13 @@ export const sections: readonly Section[] = [
         method: 'POST',
         path: '/panel/api/server/installXray/:version',
         summary:
-          'Download and install the specified Xray version. Pass "latest" for the newest release.',
+          'Verify a managed fork release package and install its core. Uses the explicit package tag; active connections are interrupted on success. Containers must update their image.',
         params: [
           {
             name: 'version',
             in: 'path',
             type: 'string',
-            desc: 'Xray tag (e.g. v25.10.31) or "latest".',
+            desc: 'Explicit managed fork release package tag (e.g. v3.8.5-managed.1).',
           },
         ],
       },

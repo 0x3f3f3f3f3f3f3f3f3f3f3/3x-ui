@@ -7,8 +7,9 @@ does not stop services, replace an installation or migrate a database. `update.s
 and `install.sh` run these checks before dependencies, service stop or program
 replacement. The regular menu and web updates use the verified installed updater.
 Menu installation, refresh and release selection also verify their script sources.
-Independent core updates and transactional program/DB rollback remain unfinished;
-preflight alone does not make activation atomic.
+Native Linux core updates use the same verified fork bundle and runtime preflight,
+with recovery of the previous core after an activation error. Crash recovery and
+transactional panel/database rollback remain unfinished.
 
 Build and run:
 
@@ -271,15 +272,16 @@ availability compares full source commits; short display hashes and release-body
 markers do not determine equality. Metadata lookup does not download or execute
 the candidate and is not evidence of its runtime compatibility.
 
-The separate core updater and safe activation/rollback are still open. Do not
-interpret source verification as evidence of complete distribution/recovery safety.
+The independent native Linux core updater is described below. Crash-durable
+activation and panel/database rollback remain open; source verification is not
+evidence of complete distribution/recovery safety.
 
 中文说明：常规菜单更新和网页更新已改用已安装发布包内、经过清单校验的
 更新脚本。脚本会复制到安装目录之外；运行时配置等额外文件不会因此被拒绝或
 修改。下载、完整文件校验和真实受管核心预检均在依赖安装与停服之前完成。
 网页更新在容器内会明确拒绝，并提示通过镜像更新；来源未知或带源码修改标记的
-构建也不能启动自动更新。独立核心更新和
-失败后的程序及数据库事务回滚仍未完成，不能将上述检查视为完整升级回滚保证。
+构建也不能启动自动更新。独立核心更新见下文；崩溃恢复及程序、数据库事务
+回滚仍未完成，不能将上述检查视为完整升级回滚保证。
 
 ## Standalone installer integration
 
@@ -360,3 +362,79 @@ is unavailable.
 面板。菜单首次安装必须校验 fork 发布的安装脚本及 SHA256；下载失败不会再
 尝试启动服务。旧版本入口改为选择受管 fork 的发布标签，禁止将输入作为 shell
 代码执行。上述来源校验不提供数据库降级或失败回滚保证。
+
+
+## Independent managed-core updates
+
+The version dialog now selects **managed fork release packages** and separately
+shows the running (or last reported, stopped) Xray version. A package tag is not
+an Xray version number. Prereleases are marked. Installing a core interrupts
+active core connections; a deliberately stopped core remains stopped.
+
+`GET /panel/api/server/getManagedCoreReleases` returns candidate objects such as
+`{"tag":"v3.8.5-managed.1","prerelease":false}`. The legacy
+`getXrayVersion` endpoint retains its string-array shape but now returns these
+fork package tags. `POST /panel/api/server/installXray/:version` requires an
+explicit package tag; it has no implicit `latest` alias or stock-core fallback.
+Containers must update the managed fork image. Other operating systems return a
+capability restriction pending implementation and runtime validation.
+
+The catalog reads at most one 20-entry page of the fixed fork's
+[GitHub releases API](https://docs.github.com/en/rest/releases/releases#list-releases).
+It filters draft/malformed/incomplete metadata and requires archive, checksum and
+companion manifest metadata for this platform. The list is not a complete release
+history or a runtime compatibility proof. It is cached for 15 minutes; on a fetch
+failure a previous successful list can be shown. Installation always resolves the
+selected tag and its full commit again and verifies newly downloaded bytes.
+
+Before touching the live core, the update downloads the complete release,
+checks the archive and full manifest, and executes the candidate panel's
+`verify-release` command in a separate process. That command checks the real
+managed-core protocol without initializing the business database or sharing the
+server's environment mutations/crash callbacks. The running core and its panel
+egress proxy remain available during these operations. Failed/canceled downloads,
+source mismatches and stock-core preflight failures leave existing flows intact.
+
+The candidate and previous executable are copied into a private directory on the
+live binary's filesystem. The candidate copy is checked against the manifest;
+symlinks, special file types/modes, and a target changed during preparation are
+rejected. Under the existing Xray lifecycle mutex, the live path is atomically
+replaced and the current desired configuration is validated before stopping the
+old process. A running core update requires the core Stats API and waits for an
+actual successful response before applying the managed service plan. This check
+also applies when there are no SSH or mieru services.
+
+On error, the previous executable is restored. If the original process is still
+running, it is retained. Otherwise, recovery starts the previously running
+configuration snapshot with the old executable, even if the database now contains
+a different desired configuration. Request cancellation does not interrupt this
+recovery. Failed recovery is reported, and an executable backup that could not be
+restored is retained with its path in the error. Successful recovery records the
+held-back state so desired-state divergence remains visible.
+
+Preparation and activation have an eight-minute context deadline. The authenticated
+install request extends its response deadline to nine minutes, including recovery;
+other requests retain the normal server limits. This works through the gzip
+response wrapper. A reverse proxy carrying this synchronous endpoint needs an
+adequate response timeout as well. Disconnecting cancels preparation, while
+recovery of an already changed core is allowed to finish.
+
+Core updates do not migrate, snapshot or restore the database. Current policy,
+usage and billing remain in the live ledger. SQLite tests exercise actual mieru TCP/UDP
+payloads through the core during download/preflight failures. SQLite and PostgreSQL
+activation tests verify exact 1.5x accounting after successful replacement and
+startup failure/recovery. A separate native
+SOCKS test verifies that recovery uses the old working route rather than a changed
+desired route. Release HTTP metadata/assets are owned test fixtures; this is not
+acceptance of an actually published GitHub release.
+
+This is recovery from errors while the panel remains alive, **not a crash-durable
+activation journal**. Cross-process coordination with a simultaneous shell/panel
+update, boot recovery, SQLite/PostgreSQL rollback with admission barriers, and
+actual Docker/foreign-platform update acceptance remain open. Verified download
+and file rename alone do not establish those guarantees.
+
+中文说明：独立核心更新改为选择此 fork 的完整受管发布包，先校验来源、归档及
+真实核心能力，再切换二进制。运行中的更新必须确认核心 API 就绪；启动失败时
+恢复旧二进制与此前实际工作的配置，不恢复旧数据库或回退新产生的计费数据。
+容器应更新镜像。崩溃恢复日志、跨进程更新互斥和整套面板/数据库事务回滚仍未完成。

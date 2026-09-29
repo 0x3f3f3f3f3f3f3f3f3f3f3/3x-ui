@@ -7289,7 +7289,7 @@
         "tags": [
           "Server"
         ],
-        "summary": "List Xray binary versions available for install on this host.",
+        "summary": "Legacy string list of managed fork release package tags for this host (not Xray version numbers).",
         "operationId": "get_panel_api_server_getXrayVersion",
         "responses": {
           "200": {
@@ -7311,9 +7311,47 @@
                 "example": {
                   "success": true,
                   "obj": [
-                    "v25.10.31",
-                    "v25.9.15",
-                    "v25.8.1"
+                    "v3.8.5-managed.1",
+                    "dev-latest"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/server/getManagedCoreReleases": {
+      "get": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "List managed fork release package candidates with tag and prerelease status. Selection still requires full source, artifact and runtime verification.",
+        "operationId": "get_panel_api_server_getManagedCoreReleases",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": [
+                    {
+                      "tag": "v3.8.5-managed.1",
+                      "prerelease": false
+                    }
                   ]
                 }
               }
@@ -7867,14 +7905,14 @@
         "tags": [
           "Server"
         ],
-        "summary": "Download and install the specified Xray version. Pass \"latest\" for the newest release.",
+        "summary": "Verify a managed fork release package and install its core. Uses the explicit package tag; active connections are interrupted on success. Containers must update their image.",
         "operationId": "post_panel_api_server_installXray_version",
         "parameters": [
           {
             "name": "version",
             "in": "path",
             "required": true,
-            "description": "Xray tag (e.g. v25.10.31) or \"latest\".",
+            "description": "Explicit managed fork release package tag (e.g. v3.8.5-managed.1).",
             "schema": {
               "type": "string"
             }

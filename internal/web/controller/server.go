@@ -13,6 +13,8 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/logger"
 	"github.com/mhsanaei/3x-ui/v3/internal/web/entity"
 	"github.com/mhsanaei/3x-ui/v3/internal/web/global"
+	"github.com/mhsanaei/3x-ui/v3/internal/web/locale"
+	"github.com/mhsanaei/3x-ui/v3/internal/web/middleware"
 	"github.com/mhsanaei/3x-ui/v3/internal/web/service"
 	"github.com/mhsanaei/3x-ui/v3/internal/web/service/panel"
 	"github.com/mhsanaei/3x-ui/v3/internal/web/websocket"
@@ -51,6 +53,7 @@ func (a *ServerController) initRouter(g *gin.RouterGroup) {
 	g.GET("/xrayObservatory", a.getXrayObservatory)
 	g.GET("/xrayObservatoryHistory/:tag/:bucket", a.getXrayObservatoryHistoryBucket)
 	g.GET("/getXrayVersion", a.getXrayVersion)
+	g.GET("/getManagedCoreReleases", a.getManagedCoreReleases)
 	g.GET("/getPanelUpdateInfo", a.getPanelUpdateInfo)
 	g.GET("/getUpdateStatus", a.getUpdateStatus)
 	g.GET("/getConfigJson", a.getConfigJson)
@@ -192,6 +195,40 @@ func (a *ServerController) getXrayVersion(c *gin.Context) {
 	jsonObj(c, versions, nil)
 }
 
+func (a *ServerController) getManagedCoreReleases(c *gin.Context) {
+	releases, err := a.serverService.GetManagedCoreReleases(c.Request.Context())
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "getVersion"), localizedCoreUpdateError(c, err))
+		return
+	}
+	jsonObj(c, releases, nil)
+}
+
+func localizedCoreUpdateError(c *gin.Context, err error) error {
+	var key string
+	switch {
+	case errors.Is(err, service.ErrCoreUpdateInContainer):
+		key = "pages.index.panelUpdateContainer"
+	case errors.Is(err, service.ErrCoreUpdatePlatform):
+		key = "pages.index.managedCorePlatform"
+	case errors.Is(err, service.ErrCoreUpdateBusy):
+		key = "pages.index.managedCoreBusy"
+	}
+	if key != "" {
+		if translated := coreUpdateMessage(c, key); translated != "" {
+			return errors.New(translated)
+		}
+	}
+	return err
+}
+
+func coreUpdateMessage(c *gin.Context, key string) string {
+	if translated := I18nWeb(c, key); translated != "" {
+		return translated
+	}
+	return locale.I18nForLang("en-US", key)
+}
+
 // getPanelUpdateInfo retrieves the current and latest panel version.
 func (a *ServerController) getPanelUpdateInfo(c *gin.Context) {
 	info, err := a.panelService.GetUpdateInfo()
@@ -203,11 +240,19 @@ func (a *ServerController) getPanelUpdateInfo(c *gin.Context) {
 	jsonObj(c, info, nil)
 }
 
-// installXray installs or updates Xray to the specified version.
+// installXray installs the managed core from a selected fork release package.
 func (a *ServerController) installXray(c *gin.Context) {
+	if err := middleware.SetResponseWriteDeadline(c, time.Now().Add(service.ManagedCoreUpdateTimeout+time.Minute)); err != nil {
+		jsonMsg(c, coreUpdateMessage(c, "pages.index.managedCoreFailed"), fmt.Errorf("cannot establish core update response deadline: %w", err))
+		return
+	}
 	version := c.Param("version")
-	err := a.serverService.UpdateXray(version)
-	jsonMsg(c, I18nWeb(c, "pages.index.xraySwitchVersionPopover"), err)
+	err := a.serverService.UpdateXrayContext(c.Request.Context(), version)
+	key := "pages.index.managedCoreUpdated"
+	if err != nil {
+		key = "pages.index.managedCoreFailed"
+	}
+	jsonMsg(c, coreUpdateMessage(c, key), localizedCoreUpdateError(c, err))
 }
 
 // updatePanel starts a panel self-update. With no "dev" form value it follows

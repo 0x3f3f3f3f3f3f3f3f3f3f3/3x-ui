@@ -199,7 +199,7 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	engine.Use(gzip.Gzip(gzip.DefaultCompression))
+	engine.Use(middleware.ResponseControlMiddleware(), gzip.Gzip(gzip.DefaultCompression))
 	assetsBasePath := basePath + "assets/"
 
 	store := cookie.NewStore(secret)

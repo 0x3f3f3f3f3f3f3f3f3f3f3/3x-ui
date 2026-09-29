@@ -46,6 +46,10 @@ func sshCoreAPIAddress(cfg *xray.Config) (string, error) {
 }
 
 func waitSSHCoreReady(process *xray.Process) error {
+	return waitCoreReady(context.Background(), process)
+}
+
+func waitCoreReady(parent context.Context, process *xray.Process) error {
 	address, err := sshCoreAPIAddress(process.GetConfig())
 	if err != nil {
 		return err
@@ -56,7 +60,7 @@ func waitSSHCoreReady(process *xray.Process) error {
 	}
 	defer conn.Close()
 	client := statsservice.NewStatsServiceClient(conn)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
 	for {
 		if !process.IsRunning() {
@@ -70,6 +74,9 @@ func waitSSHCoreReady(process *xray.Process) error {
 		}
 		select {
 		case <-ctx.Done():
+			if err := parent.Err(); err != nil {
+				return err
+			}
 			return errors.New("xray startup API readiness timed out")
 		case <-time.After(20 * time.Millisecond):
 		}
