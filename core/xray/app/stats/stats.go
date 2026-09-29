@@ -2,6 +2,7 @@ package stats
 
 import (
 	"context"
+	"net"
 	"sync"
 
 	"github.com/xtls/xray-core/common"
@@ -16,11 +17,14 @@ type Manager struct {
 	onlineMaps map[string]*OnlineMap
 	channels   map[string]*Channel
 	running    bool
+	io         *counterIOGroup
+	snapshot   map[string]int64
 }
 
 // NewManager creates an instance of Statistics Manager.
 func NewManager(ctx context.Context, config *Config) (*Manager, error) {
 	m := &Manager{
+		io:         &counterIOGroup{},
 		counters:   make(map[string]*Counter),
 		onlineMaps: make(map[string]*OnlineMap),
 		channels:   make(map[string]*Channel),
@@ -43,8 +47,12 @@ func (m *Manager) RegisterCounter(name string) (stats.Counter, error) {
 		return nil, errors.New("Counter ", name, " already registered.")
 	}
 	errors.LogDebug(context.Background(), "create new counter ", name)
-	c := new(Counter)
-	m.counters[name] = c
+	c := &Counter{io: m.io}
+	m.io.mu.Lock()
+	defer m.io.mu.Unlock()
+	if !m.io.sealed {
+		m.counters[name] = c
+	}
 	return c, nil
 }
 
@@ -57,8 +65,12 @@ func (m *Manager) GetOrRegisterCounter(name string) (stats.Counter, error) {
 		return c, nil
 	}
 	errors.LogDebug(context.Background(), "create new counter ", name)
-	c := new(Counter)
-	m.counters[name] = c
+	c := &Counter{io: m.io}
+	m.io.mu.Lock()
+	defer m.io.mu.Unlock()
+	if !m.io.sealed {
+		m.counters[name] = c
+	}
 	return c, nil
 }
 
@@ -66,6 +78,11 @@ func (m *Manager) GetOrRegisterCounter(name string) (stats.Counter, error) {
 func (m *Manager) UnregisterCounter(name string) error {
 	m.access.Lock()
 	defer m.access.Unlock()
+	m.io.mu.Lock()
+	defer m.io.mu.Unlock()
+	if m.io.sealed {
+		return net.ErrClosed
+	}
 
 	if _, found := m.counters[name]; found {
 		errors.LogDebug(context.Background(), "remove counter ", name)

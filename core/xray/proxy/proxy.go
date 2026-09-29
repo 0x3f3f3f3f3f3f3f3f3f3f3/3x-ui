@@ -201,6 +201,11 @@ func NewVisionReader(reader buf.Reader, trafficState *TrafficState, isUplink boo
 }
 
 func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	lease, err := stats.BeginIO(w.directReadCounter)
+	if err != nil {
+		return nil, err
+	}
+	defer stats.EndIO(lease)
 	buffer, err := w.Reader.ReadMultiBuffer()
 	if buffer.IsEmpty() {
 		return buffer, err
@@ -345,6 +350,12 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		w.directWriteCounter = writerCounter
 		*switchToDirectCopy = false
 	}
+	lease, err := stats.BeginIO(w.directWriteCounter)
+	if err != nil {
+		buf.ReleaseMulti(mb)
+		return err
+	}
+	defer stats.EndIO(lease)
 	if !mb.IsEmpty() && w.directWriteCounter != nil {
 		w.directWriteCounter.Add(int64(mb.Len()))
 	}
@@ -752,31 +763,23 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 		if splice {
 			errors.LogDebug(ctx, "CopyRawConn splice")
 			statWriter, _ := writer.(*dispatcher.SizeStatWriter)
+			var userCounter stats.Counter
+			if statWriter != nil {
+				userCounter = statWriter.Counter
+			}
 			//runtime.Gosched() // necessary
 			timer.SetTimeout(24 * time.Hour) // prevent leak, just in case
 			if inTimer != nil {
 				inTimer.SetTimeout(24 * time.Hour)
 			}
-			w, err := tc.ReadFrom(readerConn)
-			if readCounter != nil {
-				readCounter.Add(w) // outbound stats
-			}
-			if writeCounter != nil {
-				writeCounter.Add(w) // inbound stats
-			}
-			if statWriter != nil {
-				statWriter.Counter.Add(w) // user stats
-			}
+			err := copyRawSplice(tc, readerConn, readCounter, writeCounter, userCounter)
 			if err != nil && errors.Cause(err) != io.EOF {
 				return err
 			}
 			return nil
 		}
-		buffer, err := reader.ReadMultiBuffer()
+		buffer, err := readRawBuffer(reader, readCounter)
 		if !buffer.IsEmpty() {
-			if readCounter != nil {
-				readCounter.Add(int64(buffer.Len()))
-			}
 			timer.Update()
 			if werr := writer.WriteMultiBuffer(buffer); werr != nil {
 				return werr
@@ -789,6 +792,43 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 			return err
 		}
 	}
+}
+
+func copyRawSplice(writer *net.TCPConn, reader net.Conn, readCounter, writeCounter, userCounter stats.Counter) error {
+	counters := [3]stats.Counter{readCounter, writeCounter, userCounter}
+	var leases [3]stats.IOLease
+	defer func() {
+		for _, lease := range leases {
+			stats.EndIO(lease)
+		}
+	}()
+	for i, counter := range counters {
+		lease, err := stats.BeginIO(counter)
+		if err != nil {
+			return err
+		}
+		leases[i] = lease
+	}
+	n, err := writer.ReadFrom(reader)
+	for _, counter := range counters {
+		if counter != nil {
+			counter.Add(n)
+		}
+	}
+	return err
+}
+
+func readRawBuffer(reader buf.Reader, counter stats.Counter) (buf.MultiBuffer, error) {
+	lease, err := stats.BeginIO(counter)
+	if err != nil {
+		return nil, err
+	}
+	defer stats.EndIO(lease)
+	buffer, err := reader.ReadMultiBuffer()
+	if counter != nil {
+		counter.Add(int64(buffer.Len()))
+	}
+	return buffer, err
 }
 
 func readV(ctx context.Context, reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, readCounter stats.Counter) error {

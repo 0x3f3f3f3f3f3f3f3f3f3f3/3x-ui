@@ -13,6 +13,31 @@ type dataHandler func(MultiBuffer)
 
 type copyHandler struct {
 	onData []dataHandler
+	stats  []copyCounter
+}
+
+type copyCounter struct {
+	counter stats.Counter
+	lease   stats.IOLease
+}
+
+func (h *copyHandler) beginIO() error {
+	for i := range h.stats {
+		lease, err := stats.BeginIO(h.stats[i].counter)
+		if err != nil {
+			h.endIO()
+			return err
+		}
+		h.stats[i].lease = lease
+	}
+	return nil
+}
+
+func (h *copyHandler) endIO() {
+	for i := range h.stats {
+		stats.EndIO(h.stats[i].lease)
+		h.stats[i].lease = nil
+	}
 }
 
 // SizeCounter is for counting bytes copied by Copy().
@@ -44,6 +69,7 @@ func CountSize(sc *SizeCounter) CopyOption {
 // AddToStatCounter a CopyOption add to stat counter
 func AddToStatCounter(sc stats.Counter) CopyOption {
 	return func(handler *copyHandler) {
+		handler.stats = append(handler.stats, copyCounter{counter: sc})
 		handler.onData = append(handler.onData, func(b MultiBuffer) {
 			if sc != nil {
 				sc.Add(int64(b.Len()))
@@ -89,7 +115,11 @@ func IsWriteError(err error) bool {
 }
 
 func copyInternal(reader Reader, writer Writer, handler *copyHandler) error {
+	defer handler.endIO()
 	for {
+		if err := handler.beginIO(); err != nil {
+			return readError{err}
+		}
 		buffer, err := reader.ReadMultiBuffer()
 		if !buffer.IsEmpty() {
 			for _, handler := range handler.onData {
@@ -100,6 +130,7 @@ func copyInternal(reader Reader, writer Writer, handler *copyHandler) error {
 				return writeError{werr}
 			}
 		}
+		handler.endIO()
 
 		if err != nil {
 			return readError{err}

@@ -497,6 +497,11 @@ type PacketReader struct {
 }
 
 func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	lease, err := stats.BeginIO(r.Counter)
+	if err != nil {
+		return nil, err
+	}
+	defer stats.EndIO(lease)
 	b := buf.New()
 	b.Resize(0, buf.Size)
 	for {
@@ -578,6 +583,12 @@ type PacketWriter struct {
 }
 
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	lease, err := stats.BeginIO(w.Counter)
+	if err != nil {
+		buf.ReleaseMulti(mb)
+		return err
+	}
+	defer stats.EndIO(lease)
 	for {
 		mb2, b := buf.SplitFirst(mb)
 		mb = mb2

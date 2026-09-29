@@ -193,6 +193,11 @@ func (c *udpConn) updateActivity() {
 
 // ReadMultiBuffer implements buf.Reader
 func (c *udpConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	lease, err := stats.BeginIO(c.uplink)
+	if err != nil {
+		return nil, err
+	}
+	defer stats.EndIO(lease)
 	mb, err := c.reader.ReadMultiBuffer()
 	if err != nil {
 		return nil, err
@@ -212,6 +217,11 @@ func (c *udpConn) Read(buf []byte) (int, error) {
 
 // Write implements io.Writer.
 func (c *udpConn) Write(buf []byte) (int, error) {
+	lease, err := stats.BeginIO(c.downlink)
+	if err != nil {
+		return 0, err
+	}
+	defer stats.EndIO(lease)
 	n, err := c.output(buf)
 	if c.downlink != nil {
 		c.downlink.Add(int64(n))

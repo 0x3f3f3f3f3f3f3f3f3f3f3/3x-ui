@@ -233,3 +233,26 @@ withdrawn on transaction failure, so a newly created identity can safely reuse
 the email. Cross-database copy and SQL dump/restore preserve permanent deletion
 and absence metadata. This local path does not establish global node revocation
 or coordinated panel/core backup rollback fencing.
+
+## Legacy counter IO boundary prerequisite
+
+The statistics manager can seal new metered IO and wait for admitted operations
+to finish their counter updates. CounterConnection, buffered/readv/timeout copy,
+dispatcher user writers, inbound UDP, freedom UDP, WireGuard packet IO and Vision
+direct IO acquire a manager-owned lease before IO and release it after accounting.
+Raw TCP splice acquires all participating outbound, inbound and user counters
+before `ReadFrom`, including the ordinary read loop before splice becomes ready.
+Partial transfers retain each path's existing counting convention. Async timeout
+reads count upon actual completion, even if their result has not been retrieved.
+
+Sealing is irreversible for that manager. A deadline returns no snapshot and
+leaves the gate sealed; retry waits for remaining leases and returns a copy of the
+same final snapshot. New metered IO returns `net.ErrClosed`, including counters
+registered after sealing. Counter reset and removal cannot alter the boundary.
+No manager lock is held during IO or while waiting for existing leases.
+
+This is an internal prerequisite, not an exposed drain capability. The caller
+must cancel all IO owners before waiting, including idle mux/observer/WireGuard
+and raw sockets. Independent private control, boot-scoped acknowledgement, final
+panel settlement and healthy legacy cutover remain unimplemented. Ordinary
+managed activation still rejects a running legacy core before preparation.

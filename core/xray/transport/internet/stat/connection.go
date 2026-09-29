@@ -17,6 +17,11 @@ type CounterConnection struct {
 }
 
 func (c *CounterConnection) Read(b []byte) (int, error) {
+	lease, err := stats.BeginIO(c.ReadCounter)
+	if err != nil {
+		return 0, err
+	}
+	defer stats.EndIO(lease)
 	nBytes, err := c.Connection.Read(b)
 	if c.ReadCounter != nil {
 		c.ReadCounter.Add(int64(nBytes))
@@ -26,6 +31,11 @@ func (c *CounterConnection) Read(b []byte) (int, error) {
 }
 
 func (c *CounterConnection) Write(b []byte) (int, error) {
+	lease, err := stats.BeginIO(c.WriteCounter)
+	if err != nil {
+		return 0, err
+	}
+	defer stats.EndIO(lease)
 	nBytes, err := c.Connection.Write(b)
 	if c.WriteCounter != nil {
 		c.WriteCounter.Add(int64(nBytes))

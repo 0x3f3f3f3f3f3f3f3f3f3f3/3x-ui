@@ -122,6 +122,11 @@ func (r *ReadVReader) readMulti() (MultiBuffer, error) {
 
 // ReadMultiBuffer implements Reader.
 func (r *ReadVReader) ReadMultiBuffer() (MultiBuffer, error) {
+	lease, err := stats.BeginIO(r.counter)
+	if err != nil {
+		return nil, err
+	}
+	defer stats.EndIO(lease)
 	if r.alloc.Current() == 1 {
 		b, err := ReadBuffer(r.Reader)
 		if b.IsFull() {

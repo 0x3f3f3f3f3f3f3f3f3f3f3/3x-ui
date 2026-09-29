@@ -515,6 +515,11 @@ type PacketCounterConnection struct {
 }
 
 func (c *PacketCounterConnection) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+	lease, err := stats.BeginIO(c.ReadCounter)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer stats.EndIO(lease)
 	n, addr, err = c.PacketConn.ReadFrom(p)
 	if err == nil && c.ReadCounter != nil {
 		c.ReadCounter.Add(int64(n))
@@ -523,6 +528,11 @@ func (c *PacketCounterConnection) ReadFrom(p []byte) (n int, addr net.Addr, err 
 }
 
 func (c *PacketCounterConnection) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+	lease, err := stats.BeginIO(c.WriteCounter)
+	if err != nil {
+		return 0, err
+	}
+	defer stats.EndIO(lease)
 	n, err = c.PacketConn.WriteTo(p, addr)
 	if err == nil && c.WriteCounter != nil {
 		c.WriteCounter.Add(int64(n))

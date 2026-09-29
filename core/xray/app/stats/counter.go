@@ -5,6 +5,7 @@ import "sync/atomic"
 // Counter is an implementation of stats.Counter.
 type Counter struct {
 	value int64
+	io    *counterIOGroup
 }
 
 // Value implements stats.Counter.
@@ -14,6 +15,13 @@ func (c *Counter) Value() int64 {
 
 // Set implements stats.Counter.
 func (c *Counter) Set(newValue int64) int64 {
+	if c.io != nil {
+		c.io.mu.Lock()
+		defer c.io.mu.Unlock()
+		if c.io.sealed {
+			return c.Value()
+		}
+	}
 	return atomic.SwapInt64(&c.value, newValue)
 }
 

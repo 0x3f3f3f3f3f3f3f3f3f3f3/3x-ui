@@ -12,6 +12,12 @@ type SizeStatWriter struct {
 }
 
 func (w *SizeStatWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	lease, err := stats.BeginIO(w.Counter)
+	if err != nil {
+		buf.ReleaseMulti(mb)
+		return err
+	}
+	defer stats.EndIO(lease)
 	w.Counter.Add(int64(mb.Len()))
 	return w.Writer.WriteMultiBuffer(mb)
 }

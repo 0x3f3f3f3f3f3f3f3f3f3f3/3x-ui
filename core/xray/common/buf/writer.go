@@ -30,6 +30,11 @@ func (w *BufferToBytesWriter) WriteMultiBuffer(mb MultiBuffer) error {
 	if len(mb) == 1 {
 		return WriteAllBytes(w.Writer, mb[0].Bytes(), w.counter)
 	}
+	lease, err := stats.BeginIO(w.counter)
+	if err != nil {
+		return err
+	}
+	defer stats.EndIO(lease)
 
 	if cap(w.cache) < len(mb) {
 		w.cache = make([][]byte, 0, len(mb))

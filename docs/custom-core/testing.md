@@ -726,3 +726,30 @@ DSN for that job. The cross-database test is
 The frontend and production core source are unchanged in this increment. Healthy
 legacy handoff, automatic selection, complete UI application status, global node
 revocation and coordinated backup rollback fencing remain unfinished.
+
+### Legacy counter IO boundary prerequisite
+
+Delayed-IO regressions first failed because sealing returned before the last
+counter update. They cover ordinary Read/Write, WriteAllBytes and vector writes,
+unclaimed timeout reads, readv, Copy accounting options, dispatcher writers,
+inbound UDP, freedom UDP, WireGuard packets, Vision direct IO and writer transition,
+and real Linux TCP splice. Splice tests use each participating manager separately,
+so a missing inbound or user guard cannot hide behind an outbound lease. The
+pre-splice loop waits at a channel-observed second read. Follow-up tests cover
+partial transfer with error, rejected secondary/tertiary counters, nested admission
+after sealing, reset/removal refusal, and independent repeated snapshot maps.
+
+The expanded scoped race command passed: `go test -race -count=1 ./app/stats
+./proxy ./common/buf ./app/dispatcher ./app/proxyman/inbound ./proxy/wireguard`
+from `core/xray`. Package times were 1.434, 1.190, 1.721, 1.113, 1.093 and 1.133 s.
+Source review found no blocker for this prerequisite. The complete shuffled core
+suite passed in 646.25 s wall time, including protocol scenarios in 332.847 s.
+The expanded core race step passed in 85.80 s wall time. The custom binary built
+in 20.86 s; the complete shuffled panel suite using that binary passed in 299.54 s.
+Panel lint reported zero issues (25.94 s), and `go build ./...` passed (8.76 s).
+Changed Go files are formatted; workflow YAML and all 18 shell blocks validate.
+CI's race step now includes buffer, statistics, proxy and WireGuard packages.
+
+There is no public freeze/drain RPC or new capability. These tests establish
+metered IO accounting boundaries, not cancellation of every business socket,
+boot-scoped handoff, final SQL settlement or automatic managed activation.

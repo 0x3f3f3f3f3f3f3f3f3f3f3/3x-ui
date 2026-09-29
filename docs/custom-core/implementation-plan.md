@@ -100,6 +100,7 @@ Files: `internal/database/{db.go,model/*}`, `internal/web/{service,controller,ru
 - [x] Core prerequisite: drain established TCP/UDP/Unix connections on inbound removal; test same-port Tunnel reassignment and unaffected sibling listeners.
 - [x] Scoped local allocation fence: serialize remote attachment against local policy preparation; coordinated global allocation remains open.
 - [x] Scoped legacy collector: atomic inbound/client/outbound settlement, lost-commit-ack deduplication, first-use rollback and SQLite/PostgreSQL receipt migration. Final drain and ordinary managed activation remain open.
+- [ ] Legacy handoff: counter IO barrier prerequisite verified; implement IO-owner cancellation, private boot-scoped final snapshot and panel settlement before seed capture. No drain capability is exposed yet.
 - [ ] Test end-to-end DB → API → UI → generated config → measured traffic → durable events → statistics.
 
 ## Task 7: SSH inbound and outbound
@@ -242,3 +243,10 @@ SQL/control failure stops a running managed process and recovery is idempotent.
 Source review and final database, migration/backup, race, lint, full panel and
 build checks are complete; testing.md records the PostgreSQL fixture failure and
 its repeated successful rerun. Task 6 and the overall goal remain open.
+
+Task 6 legacy handoff prerequisite: manager-owned IO leases now fence all audited
+traffic counter paths, including asynchronous reads, UDP, Vision and raw splice.
+Timeout/retry, partial errors, nested admission and immutable snapshots pass race
+regressions; full core/panel suites, lint and builds pass. This does not expose a
+drain RPC or permit live legacy activation. IO-owner cancellation, private
+boot-scoped acknowledgement and atomic final settlement remain required.
