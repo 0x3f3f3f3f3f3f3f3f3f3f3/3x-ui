@@ -17,6 +17,7 @@ import { parseGeckoPacketSize } from '@/lib/xray/forms/transport/FinalMaskForm';
 import { getHeaderValue } from './headers';
 import { canEnableTlsFlow } from './protocol-capabilities';
 import { deriveSpiderX } from './spider-x';
+import { genMieruLink } from './mieru-link';
 
 // Share-link generators. Each per-protocol fn takes a typed inbound plus
 // client overrides and returns a URL (or '' when the protocol doesn't
@@ -1400,6 +1401,8 @@ export function getInboundClients(inbound: Inbound): ClientShape[] | null {
       return (inbound.settings.clients ?? []) as ClientShape[];
     case 'tuic':
       return (inbound.settings.clients ?? []) as ClientShape[];
+    case 'mieru':
+      return inbound.settings.clients;
     case 'shadowsocks': {
       const isMultiUser = inbound.settings.method !== '2022-blake3-chacha20-poly1305';
       return isMultiUser ? ((inbound.settings.clients ?? []) as ClientShape[]) : null;
@@ -1434,6 +1437,15 @@ export function genLink(input: GenLinkInput): string {
     externalProxy = null,
   } = input;
   switch (inbound.protocol) {
+    case 'mieru':
+      return genMieruLink(
+        address,
+        port,
+        inbound.settings.network,
+        client.email ?? '',
+        client.password ?? '',
+        remark,
+      );
     case 'vmess':
       return genVmessLink({
         inbound,

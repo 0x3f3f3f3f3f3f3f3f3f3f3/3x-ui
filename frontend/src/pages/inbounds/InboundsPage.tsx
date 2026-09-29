@@ -95,6 +95,7 @@ export default function InboundsPage() {
     lastOnlineMap,
     inboundSpeed,
     sshRuntimeStatuses,
+    mieruRuntimeStatuses,
     totals,
     expireDiff,
     trafficDiff,
@@ -798,6 +799,7 @@ export default function InboundsPage() {
                       lastOnlineMap={lastOnlineMap}
                       inboundSpeed={inboundSpeed}
                       sshRuntimeStatuses={sshRuntimeStatuses}
+                      mieruRuntimeStatuses={mieruRuntimeStatuses}
                       expireDiff={expireDiff}
                       trafficDiff={trafficDiff}
                       pageSize={pageSize}

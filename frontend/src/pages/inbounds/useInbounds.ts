@@ -14,6 +14,7 @@ import {
   LastOnlineMapSchema,
   InboundDetailSchema,
   SSHRuntimeStatusListSchema,
+  MieruRuntimeStatusListSchema,
 } from '@/schemas/inbound';
 import { OnlinesSchema, OnlineByNodeSchema, ActiveInboundsByNodeSchema } from '@/schemas/client';
 import { DefaultsPayloadSchema, type DefaultsPayload } from '@/schemas/defaults';
@@ -73,6 +74,8 @@ const TRACKED_PROTOCOLS: readonly string[] = [
   Protocols.MTPROTO,
   Protocols.AMNEZIAWG,
   Protocols.TUIC,
+  Protocols.SSH,
+  Protocols.MIERU,
 ];
 
 async function fetchSlimInbounds(): Promise<unknown[]> {
@@ -89,6 +92,16 @@ async function fetchSSHRuntimeStatuses() {
     strict: true,
   });
   if (!Array.isArray(validated.obj)) throw new Error('Invalid SSH runtime status response');
+  return validated.obj;
+}
+
+async function fetchMieruRuntimeStatuses() {
+  const msg = await HttpUtil.get('/panel/api/inbounds/mieru/status', undefined, { silent: true });
+  if (!msg?.success) throw new Error(msg?.msg || 'Failed to fetch Mieru runtime status');
+  const validated = parseMsg(msg, MieruRuntimeStatusListSchema, 'inbounds/mieru/status', {
+    strict: true,
+  });
+  if (!Array.isArray(validated.obj)) throw new Error('Invalid Mieru runtime status response');
   return validated.obj;
 }
 
@@ -252,6 +265,23 @@ export function useInbounds() {
           : [],
       ),
     [hasSSHInbounds, sshStatusQuery.data, sshStatusQuery.isError, sshStatusQuery.isPaused],
+  );
+  const hasMieruInbounds = dbInbounds.some((inbound) => inbound.protocol === 'mieru');
+  const mieruStatusQuery = useQuery({
+    queryKey: keys.inbounds.mieruStatus(),
+    queryFn: fetchMieruRuntimeStatuses,
+    enabled: hasMieruInbounds,
+    refetchInterval: 3000,
+    retry: false,
+  });
+  const mieruRuntimeStatuses = useMemo(
+    () =>
+      new Map(
+        hasMieruInbounds && !mieruStatusQuery.isError && !mieruStatusQuery.isPaused
+          ? (mieruStatusQuery.data ?? []).map((status) => [status.inboundId, status])
+          : [],
+      ),
+    [hasMieruInbounds, mieruStatusQuery.data, mieruStatusQuery.isError, mieruStatusQuery.isPaused],
   );
   const dbInboundsRef = useRef<DBInboundInstance[]>([]);
   useEffect(() => {
@@ -645,6 +675,7 @@ export function useInbounds() {
     fetchError,
     dbInbounds,
     sshRuntimeStatuses,
+    mieruRuntimeStatuses,
     clientCount,
     onlineClients,
     lastOnlineMap,

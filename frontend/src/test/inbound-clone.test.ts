@@ -28,6 +28,23 @@ function sourceInbound() {
 }
 
 describe('buildClonePayload', () => {
+  it.each(['ssh', 'mieru'])('allocates a new private bridge when cloning %s', (protocol) => {
+    const source = new DBInbound({
+      protocol,
+      port: 2443,
+      settings: {
+        bridgePort: 47123,
+        ...(protocol === 'mieru' ? { network: 'both' } : {}),
+        clients: [{ email: 'existing-user', password: 'fixture-password' }],
+      },
+    });
+    const payload = buildClonePayload(source, 2444, null);
+    expect(JSON.parse(payload.settings)).toEqual(
+      protocol === 'mieru' ? { network: 'both', clients: [] } : { clients: [] },
+    );
+    expect(source.settings).toHaveProperty('bridgePort', 47123);
+  });
+
   it('omits nodeId for a local-panel target so the row stays panel-local', () => {
     const payload = buildClonePayload(sourceInbound(), 23456, null);
     expect(payload).not.toHaveProperty('nodeId');

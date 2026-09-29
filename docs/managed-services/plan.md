@@ -217,7 +217,9 @@ independently built source patch with real empty/maximum UDP payload and finite
 queue tests. The private policy-ID TCP/UDP bridge now has authenticated health,
 actual direct UDP peer metadata, real route/exit tests and official mieru client
 single-billing/revocation evidence. Public model/Runtime activation and the full
-outbound/platform/failure matrix remain open before the routing item is done.
+outbound/platform/failure matrix are separate acceptance scopes: local public
+activation now has actual TCP/UDP data-path evidence, while the full matrix
+remains open before the routing item is done.
 
 Native credential hot replacement now uses separate authentication generations
 over the official hashed-password interface. It preserves unchanged users,
@@ -227,8 +229,10 @@ underlays and policy-ID reassignment without inherited accounting. The maintaine
 native protocol extension now bounds pre-allocation session admission and native
 payload queues, retires session metadata with its workers and disables retained
 per-generation diagnostic groups. Official-client overload/recovery tests and
-the complete copied upstream suite exercise the change. Public integration
-still needs the shared Runtime work above and the remaining acceptance matrix.
+the complete copied upstream suite exercise the change. Local public Runtime,
+canonical CRUD/bulk/portable restore, API/UI status, and native exports now have
+scoped evidence in validation.md. Public shared-rate performance, node policy,
+deployment, and the remaining acceptance matrix are still required.
 
 ## Task 7: Snell v4/v5/v6 vertical integration
 

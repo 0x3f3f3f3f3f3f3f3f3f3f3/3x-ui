@@ -8,8 +8,8 @@ import { InfinityIcon } from '@/components/ui';
 import { useDatepicker } from '@/hooks/useDatepicker';
 import type { NodeRecord } from '@/api/queries/useNodesQuery';
 import { coerceInboundJsonField } from '@/models/dbinbound';
-import type { SSHRuntimeStatus } from '@/generated/zod';
-import { SSHRuntimeBadge } from './SSHRuntimeBadge';
+import type { SSHRuntimeStatus, MieruRuntimeStatus } from '@/generated/zod';
+import { SSHRuntimeBadge, MieruRuntimeBadge } from './ManagedRuntimeBadge';
 
 import { RowActionsCell } from './RowActions';
 import {
@@ -30,7 +30,7 @@ import {
 import type { ClientCountEntry, DBInboundRecord, InboundSpeedEntry, RowAction } from './types';
 
 interface UseInboundColumnsParams {
-  hasSSHInbounds: boolean;
+  hasManagedInbounds: boolean;
   hasAnyRemark: boolean;
   hasAnySubSortIndex: boolean;
   hasActiveNode: boolean;
@@ -39,6 +39,7 @@ interface UseInboundColumnsParams {
   clientCount: Record<number, ClientCountEntry>;
   inboundSpeed: Record<number, InboundSpeedEntry>;
   sshRuntimeStatuses: ReadonlyMap<number, SSHRuntimeStatus>;
+  mieruRuntimeStatuses: ReadonlyMap<number, MieruRuntimeStatus>;
   subEnable: boolean;
   expireDiff: number;
   trafficDiff: number;
@@ -47,7 +48,7 @@ interface UseInboundColumnsParams {
 }
 
 export function useInboundColumns({
-  hasSSHInbounds,
+  hasManagedInbounds,
   hasAnyRemark,
   hasAnySubSortIndex,
   hasActiveNode,
@@ -56,6 +57,7 @@ export function useInboundColumns({
   clientCount,
   inboundSpeed,
   sshRuntimeStatuses,
+  mieruRuntimeStatuses,
   subEnable,
   expireDiff,
   trafficDiff,
@@ -134,12 +136,15 @@ export function useInboundColumns({
         title: t('pages.inbounds.enable'),
         key: 'enable',
         align: 'center',
-        width: hasSSHInbounds ? 160 : 80,
+        width: hasManagedInbounds ? 160 : 80,
         render: (_, record) => (
           <div className="inbound-enable-cell">
             <Switch checked={record.enable} onChange={(next) => onSwitchEnable(record, next)} />
             {record.protocol === 'ssh' && (
               <SSHRuntimeBadge status={sshRuntimeStatuses.get(record.id)} />
+            )}
+            {record.protocol === 'mieru' && (
+              <MieruRuntimeBadge status={mieruRuntimeStatuses.get(record.id)} />
             )}
           </div>
         ),
@@ -478,7 +483,7 @@ export function useInboundColumns({
     return cols;
   }, [
     t,
-    hasSSHInbounds,
+    hasManagedInbounds,
     hasAnyRemark,
     hasAnySubSortIndex,
     hasActiveNode,
@@ -487,6 +492,7 @@ export function useInboundColumns({
     clientCount,
     inboundSpeed,
     sshRuntimeStatuses,
+    mieruRuntimeStatuses,
     subEnable,
     expireDiff,
     trafficDiff,

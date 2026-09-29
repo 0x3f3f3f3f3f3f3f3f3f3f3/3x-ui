@@ -10,6 +10,7 @@ import {
   MtprotoClientSchema,
   ShadowsocksClientSchema,
   SSHManagedClientSchema,
+  MieruManagedClientSchema,
   TrojanClientSchema,
   TuicClientSchema,
   VlessClientSchema,
@@ -280,6 +281,8 @@ function clientSchemaForProtocol(protocol: string): z.ZodType | null {
       return AmneziawgClientSchema;
     case 'tuic':
       return TuicClientSchema;
+    case 'mieru':
+      return MieruManagedClientSchema;
     case 'ssh':
       return SSHManagedClientSchema;
     default:
@@ -362,7 +365,7 @@ export function formValuesToWirePayload(values: InboundFormValues): WireInboundP
     settingsPruned.clients = normalizeClients(values.protocol, settingsPruned.clients);
   }
   let streamPruned =
-    values.protocol !== 'ssh' && values.streamSettings
+    !['ssh', 'mieru'].includes(values.protocol) && values.streamSettings
       ? ((pruneEmpty(values.streamSettings) ?? {}) as Record<string, unknown>)
       : undefined;
   if (streamPruned) {

@@ -11,16 +11,36 @@ a configured core API is required for verified runtime activation.
 
 The [mieru native data-path increment](mieru-data-path.md) uses the pinned
 official v3.38.0 Go dependency; its tests need no separately installed mita
-binary. Public mieru service creation and deployment are still unavailable.
+binary. Local public service creation is implemented; deployment acceptance
+and remote-node execution remain incomplete.
 The server's protocol-only resource extension is reproduced and verified with
 `python3 tools/managed-mieru/prepare.py --verify`; see the
 [source and license instructions](../../tools/managed-mieru/README.md).
 The official client dependency remains unchanged. Native queue/session limits
 and diagnostic suppression do not replace the shared policy controller.
 The authenticated TCP/UDP bridge and its private gRPC serializer are implemented
-internally. Next are public Runtime and existing management/export paths,
-followed by node and packaging acceptance. No new production listener is enabled
-by adding this dependency. See the [public integration plan](mieru-integration-plan.md).
+through the local canonical Runtime. Native TCP/UDP/both transport settings,
+canonical password clients, traffic policy editing, runtime status, portable
+client restore and native export are implemented, with scoped evidence in
+[validation.md](validation.md) and the [coverage matrix](matrix.md).
+Node distribution, packaging and the remaining acceptance matrix are open.
+See the [public integration plan](mieru-integration-plan.md).
+
+For a local development instance using the managed core, choose `mieru` in
+Add Inbound, select TCP, UDP or both in Protocol, then attach a password client
+from Clients. The canonical email is the native username. Client Information's
+QR popover offers **Download mieru JSON**; import it with the pinned official
+client (`mieru apply config mieru.json`). It starts a local SOCKS proxy on
+loopback port 1080 when run. The download contains client credentials, so protect
+it as a client secret. Set a custom share address when the default advertised
+address is unsuitable for the client.
+
+Raw subscriptions emit official `mierus://` profiles. Mihomo output supports
+native TCP and UDP transports; selecting both emits a separate proxy for each
+transport. Xray JSON and legacy Clash do not support this native protocol and
+do not receive fabricated nodes. Server-side quotas and private bridge ports
+are not exported to clients. A `running` badge describes the listener/router
+state; each client still undergoes quota, expiry and enable checks.
 
 ## Development
 

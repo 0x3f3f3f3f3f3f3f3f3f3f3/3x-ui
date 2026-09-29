@@ -32,7 +32,7 @@ import { activateOnKey } from '@/utils/a11y';
 
 import { buildRowActionsMenu } from './RowActions';
 import { useInboundColumns } from './useInboundColumns';
-import { SSHRuntimeBadge } from './SSHRuntimeBadge';
+import { SSHRuntimeBadge, MieruRuntimeBadge } from './ManagedRuntimeBadge';
 import { buildHostRemarksByInboundId, formatHostRemarksLabel } from './helpers';
 import InboundStatsModal from './InboundStatsModal';
 import type { DBInboundRecord, GeneralAction, InboundListProps, RowAction } from './types';
@@ -54,6 +54,7 @@ export default function InboundList({
   lastOnlineMap: _lastOnlineMap,
   inboundSpeed,
   sshRuntimeStatuses,
+  mieruRuntimeStatuses,
   expireDiff,
   trafficDiff,
   pageSize,
@@ -169,7 +170,7 @@ export default function InboundList({
   }, [onBulkDelete, selectedRowKeys]);
 
   const columns = useInboundColumns({
-    hasSSHInbounds: dbInbounds.some((inbound) => inbound.protocol === 'ssh'),
+    hasManagedInbounds: dbInbounds.some((inbound) => ['ssh', 'mieru'].includes(inbound.protocol)),
     hasAnyRemark,
     hasAnySubSortIndex,
     hasActiveNode,
@@ -178,6 +179,7 @@ export default function InboundList({
     clientCount,
     inboundSpeed,
     sshRuntimeStatuses,
+    mieruRuntimeStatuses,
     subEnable,
     expireDiff,
     trafficDiff,
@@ -337,6 +339,9 @@ export default function InboundList({
                         />
                         {record.protocol === 'ssh' && (
                           <SSHRuntimeBadge status={sshRuntimeStatuses.get(record.id)} />
+                        )}
+                        {record.protocol === 'mieru' && (
+                          <MieruRuntimeBadge status={mieruRuntimeStatuses.get(record.id)} />
                         )}
                         <Dropdown
                           trigger={['click']}

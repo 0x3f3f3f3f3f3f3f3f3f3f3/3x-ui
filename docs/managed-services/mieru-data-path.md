@@ -65,9 +65,10 @@ explicit policy-aware TCP/UDP connectors; never silently default to direct.
   multiplexed sessions on the same stalled transport. Never abort the shared
   UDP listener for one user's policy change. Closing sessions still consume
   the adapter's session slots until native cleanup finishes.
-- Full shutdown closes owned TCP listeners/sockets first, retires sessions,
-  lets native UDP close messages finish, and finally closes UDP listeners and
-  the multiplexer. Accepted handlers and close workers are joined. Partial
+- Full shutdown stops TCP accepting first, retires and joins logical sessions,
+  lets native TCP/UDP close messages finish, and finally closes physical
+  listeners, sockets and the multiplexer. Accepted handlers and close workers
+  are joined. Partial
   startup releases every successfully acquired owned listener.
   Native cancellation and adapter cleanup can call `Close` concurrently;
   owned transports wait for the first close operation to complete before
@@ -105,10 +106,11 @@ explicit policy-aware TCP/UDP connectors; never silently default to direct.
   Aggregate native diagnostics remain active.
   The official client stays unmodified. Source pin, license, reviewable patch,
   checksum validation and byte-for-byte reproduction are checked in.
-- The existing SOCKS bridge is TCP-only and cannot be assumed to preserve UDP
-  client identity. Add and actually verify an authenticated packet-capable
-  bridge before claiming unified UDP routing. Full UI/API/runtime/deployment,
-  nodes, backup and remaining acceptance remain in main Task 6.
+- The original SOCKS bridge is TCP-only. The managed authenticated Trojan bridge
+  now carries native TCP/UDP payload with stable policy identity through the
+  applied Xray router, with real official-client evidence. Public management
+  integration is tracked in the [integration plan](mieru-integration-plan.md);
+  deployment, nodes and the remaining acceptance stay open in main Task 6.
 
 ## Review focus
 

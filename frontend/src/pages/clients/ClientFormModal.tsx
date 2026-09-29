@@ -53,6 +53,7 @@ import ClientRenewalFields from './ClientRenewalFields';
 import ClientPolicyEditor from './ClientPolicyEditor';
 import SSHClientFields from './SSHClientFields';
 import { SSHClientSchema } from '@/schemas/ssh';
+import { MieruCredentialsSchema } from '@/schemas/protocols/inbound/mieru';
 import { ClientFormSchema, ClientCreateFormSchema, type ClientFormValues } from '@/schemas/client';
 import './ClientFormModal.css';
 
@@ -70,7 +71,10 @@ const MULTI_CLIENT_PROTOCOLS = new Set([
   'amneziawg',
   'tuic',
   'ssh',
+  'mieru',
 ]);
+
+const MANAGED_PROTOCOLS = new Set(['ssh', 'mieru']);
 
 const CLIENT_FORM_MODAL_Z_INDEX = 1000;
 const CLIENT_IP_LOG_MODAL_Z_INDEX = CLIENT_FORM_MODAL_Z_INDEX + 1;
@@ -476,14 +480,21 @@ export default function ClientFormModal({
   const hasSSH =
     !!client?.ssh ||
     (inboundIds || []).some((id) => inbounds.some((ib) => ib.id === id && ib.protocol === 'ssh'));
+  const hasMieru = (inboundIds || []).some((id) =>
+    inbounds.some((ib) => ib.id === id && ib.protocol === 'mieru'),
+  );
+  const hasManaged = hasSSH || hasMieru || !!client?.billing;
   const hasOtherProtocol = (inboundIds || []).some((id) =>
-    inbounds.some((ib) => ib.id === id && ib.protocol !== 'ssh'),
+    inbounds.some((ib) => ib.id === id && !MANAGED_PROTOCOLS.has(ib.protocol || '')),
   );
   const canSelectAll =
-    hasSSH ||
+    hasManaged ||
     hasOtherProtocol ||
-    !inbounds.some((ib) => ib.protocol === 'ssh') ||
-    !inbounds.some((ib) => MULTI_CLIENT_PROTOCOLS.has(ib.protocol || '') && ib.protocol !== 'ssh');
+    !inbounds.some((ib) => MANAGED_PROTOCOLS.has(ib.protocol || '')) ||
+    !inbounds.some(
+      (ib) =>
+        MULTI_CLIENT_PROTOCOLS.has(ib.protocol || '') && !MANAGED_PROTOCOLS.has(ib.protocol || ''),
+    );
 
   useEffect(() => {
     if (hasSSH && !methods.getValues('ssh')) {
@@ -600,14 +611,16 @@ export default function ClientFormModal({
         .filter(
           (ib) =>
             (inboundIds || []).includes(ib.id) ||
-            (ib.protocol === 'ssh' ? !hasOtherProtocol && !ib.nodeId : !hasSSH),
+            (MANAGED_PROTOCOLS.has(ib.protocol || '')
+              ? !hasOtherProtocol && !ib.nodeId
+              : !hasManaged),
         )
         .map((ib) => ({
           label: formatInboundLabel(ib.tag, ib.remark),
           value: ib.id,
           title: formatInboundLabel(ib.tag, ib.remark),
         })),
-    [inbounds, inboundIds, hasSSH, hasOtherProtocol],
+    [inbounds, inboundIds, hasManaged, hasOtherProtocol],
   );
 
   const expiryDayjs = useMemo<Dayjs | null>(
@@ -684,11 +697,11 @@ export default function ClientFormModal({
   async function onSubmit() {
     const values = methods.getValues();
     if (
-      hasSSH &&
+      hasManaged &&
       (hasOtherProtocol ||
         values.inboundIds.some((id) => inbounds.some((ib) => ib.id === id && !!ib.nodeId)))
     ) {
-      messageApi.error(t('pages.clients.ssh.localOnly'));
+      messageApi.error(t('pages.clients.managedLocalOnly'));
       return;
     }
     const ssh = hasSSH ? SSHClientSchema.safeParse(values.ssh) : null;
@@ -696,6 +709,17 @@ export default function ClientFormModal({
       setActiveTab('config');
       messageApi.error(t(ssh.error.issues[0]?.message ?? 'pages.clients.ssh.publicKeyRequired'));
       return;
+    }
+    if (hasMieru) {
+      const credentials = MieruCredentialsSchema.safeParse({
+        email: values.email.trim(),
+        password: values.password,
+      });
+      if (!credentials.success) {
+        setActiveTab('config');
+        messageApi.error(t(credentials.error.issues[0]?.message ?? 'somethingWentWrong'));
+        return;
+      }
     }
     const schema = isEdit ? ClientFormSchema : ClientCreateFormSchema;
     const validated = schema.safeParse({
@@ -959,7 +983,7 @@ export default function ClientFormModal({
                             <InputNumber min={0} step={1} style={{ width: '100%' }} />
                           </FormField>
                         </Col>
-                        {!hasSSH && (
+                        {!hasManaged && (
                           <>
                             <Col xs={24} md={12}>
                               <Form.Item
@@ -1150,11 +1174,11 @@ export default function ClientFormModal({
                         </Row>
                       )}
 
-                      {hasSSH && (
+                      {hasManaged && (
                         <Alert
                           type="info"
                           showIcon
-                          title={t('pages.clients.ssh.limitsUnavailable')}
+                          title={t('pages.clients.managedLimitsUnavailable')}
                           style={{ marginBottom: 16 }}
                         />
                       )}
@@ -1203,7 +1227,7 @@ export default function ClientFormModal({
                   children: (
                     <>
                       {hasSSH && <SSHClientFields />}
-                      {!hasSSH && (
+                      {!hasManaged && (
                         <Form.Item label={t('pages.clients.uuid')}>
                           <Space.Compact style={{ display: 'flex' }}>
                             <Input
@@ -1220,10 +1244,14 @@ export default function ClientFormModal({
                         </Form.Item>
                       )}
 
-                      {!hasSSH && (
+                      {(!hasManaged || hasMieru) && (
                         <Form.Item
                           label={t('pages.clients.password')}
-                          tooltip={t('pages.clients.passwordDesc')}
+                          tooltip={t(
+                            hasMieru
+                              ? 'pages.clients.mieruPasswordDesc'
+                              : 'pages.clients.passwordDesc',
+                          )}
                         >
                           <Space.Compact style={{ display: 'flex' }}>
                             <Input
@@ -1260,7 +1288,7 @@ export default function ClientFormModal({
                         </Space.Compact>
                       </Form.Item>
 
-                      {!hasSSH && (
+                      {!hasManaged && (
                         <Form.Item
                           label={t('pages.clients.hysteriaAuth')}
                           tooltip={t('pages.clients.hysteriaAuthDesc')}

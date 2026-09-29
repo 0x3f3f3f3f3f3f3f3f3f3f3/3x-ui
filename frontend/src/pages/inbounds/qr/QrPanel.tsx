@@ -1,10 +1,11 @@
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, QRCode, Tag, Tooltip, message } from 'antd';
+import { Alert, Button, QRCode, Tag, Tooltip, message } from 'antd';
 import { CopyOutlined, DownloadOutlined, PictureOutlined } from '@ant-design/icons';
 
 import { ClipboardManager, FileManager } from '@/utils';
 import { activateOnKey } from '@/utils/a11y';
+import { mieruConfigFromLink } from '@/lib/xray/mieru-link';
 import './QrPanel.css';
 
 interface QrPanelProps {
@@ -65,6 +66,7 @@ export default function QrPanel({
   const { t } = useTranslation();
   const [messageApi, messageContextHolder] = message.useMessage();
   const qrRef = useRef<HTMLDivElement | null>(null);
+  const mieruConfig = mieruConfigFromLink(value);
 
   async function copy() {
     const ok = await ClipboardManager.copyText(value);
@@ -125,6 +127,18 @@ export default function QrPanel({
           </Tooltip>
         )}
       </div>
+      {mieruConfig && (
+        <>
+          <Alert type="info" showIcon title={t('pages.clients.mieru.exportHelp')} />
+          <Button
+            icon={<DownloadOutlined />}
+            aria-label={t('pages.clients.mieru.download')}
+            onClick={() => FileManager.downloadTextFile(mieruConfig, 'mieru.json')}
+          >
+            {t('pages.clients.mieru.download')}
+          </Button>
+        </>
+      )}
       {showQr && (
         <div
           ref={qrRef}

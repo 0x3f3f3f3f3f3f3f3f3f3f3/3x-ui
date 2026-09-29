@@ -2994,3 +2994,440 @@ stock-core logs use `/tmp/3x-ui-mieru-public-final-{full,build,lint,stock}` with
 `.jsonl` for full tests and `.log` for the other commands. Relative document links
 and whitespace checks also passed. No frontend or public mieru completion is
 claimed by these internal prerequisites, and no database schema changed here.
+
+## Public mieru Runtime work in progress (2026-09-29)
+
+The public vertical is not yet complete. Current source connects canonical
+mieru inbounds and email/password credentials to the shared policy controller,
+authenticated per-client Xray bridges and the normal `runtime.Runtime` mutation
+path. Later entries below record completed local API/schema generation, UI,
+presence/status, native profile exports and portable restoration checks. Node
+integration, deployment and the remaining acceptance matrix are still open.
+The earlier complete-suite results above describe the published prerequisites,
+not these newer uncommitted changes. No physical database columns were added;
+the existing string protocol column and canonical client/usage tables are reused.
+
+`TestMieruInboundRunsThroughProductionXrayLifecycle` uses the normal
+`InboundService.AddInbound` and `XrayService.RestartXray` paths, the pinned
+managed core, and the unmodified official mieru v3.38.0 Go client. Each TCP and
+UDP underlay carries both TCP and UDP payloads through domain/network routing
+rules to separately observable loopback targets; the default outbound blocks.
+The UDP assertion checks the actual reply peer. Each direction carries 8,193
+bytes per payload transport: the durable account must record upload 16,386,
+download 16,386 and billed 49,158 at multiplier 1.5. The test also checks that
+startup preserves negative first-use expiry and authenticated use activates it.
+Its initial RED was the public policy API reporting unsupported before Runtime
+integration. The actual first GREEN passed both underlays in 3.310s.
+
+A selected race run covering this path, native listener failure, shared policy
+ownership, SSH lifecycle and preview preservation passed 14 top-level tests and
+20 subtests with zero skips (service 47.551s, native adapter 2.815s). Log:
+`/tmp/3x-ui-mieru-public-runtime-race.jsonl`. This predates the following port and
+shutdown changes and is not a complete backend regression result.
+
+Managed SSH/mieru loopback TCP bridge reservations now participate in inbound
+save/update conflict checks, including disabled owners, other managed bridges,
+public listeners, the API and AWG egress ports, AWG relay slots and peer forwards.
+Address, transport and node separation remain valid. The original RED accepted
+all ten conflicting SSH/mieru saves, a conflicting bridge update, and four AWG
+resource directions. A test assertion initially compared compact JSON with the
+service's pretty-printed JSON; it was corrected to decode and inspect the stored
+port and native transport. The next focused run passed 39 top-level tests and
+37 subtests, zero skips, including PostgreSQL canonical ownership. Logs:
+`/tmp/3x-ui-managed-port-{red.log,green-2.jsonl}`. The first attempted green run
+had one test assertion failure and one PostgreSQL skip because its environment
+was omitted; it is not included in the successful counts.
+
+Public lifecycle tests additionally exercise live password rotation, manual
+client disable/re-enable while another client's TCP/UDP flows continue, quota
+reduction to current billed usage, denial after a real core restart, and traffic
+reset preserving a separate manual disable. Positive recovery is allowed the
+original two-second convergence requirement. Existing admitted flows must close
+within 1.25 seconds, and new connection rejection is checked separately. This
+quota test checks restriction and restart semantics; it does not replace the
+remaining public transfer-until-quota and throughput acceptance tests.
+
+The first lifecycle invocation had a fixture compilation error. Its next run
+passed the hot-credential cases but reached a 90-second package timeout during
+cleanup after an immediate post-reset admission failed. The official client's
+post-dial SOCKS handshake sets its own ten-second read timeout and does not use
+the supplied context deadline. Rejection probes now own separate official
+clients and stop/join them after 750ms; positive admission retries within the
+specified two-second convergence window. Neither the 1.25-second existing-flow
+cutoff nor production limits were relaxed. Logs retain each invocation as
+`/tmp/3x-ui-mieru-public-lifecycle-{first,2,3}.jsonl`.
+
+That corrected invocation exposed a real TCP-underlay failure: after the core
+stopped, an admitted client flow reached the 1.25-second timeout. A native-only
+reproduction showed that `Server.Close` aborted the physical TCP connection
+before logical close messages could reach the official client. The original
+native test started its deadline after `Close` returned and missed time spent
+inside shutdown; the corrected test starts both reads before shutdown and
+reproduced a TIMEOUT in one of three repetitions. Shutdown now stops admission,
+closes and joins managed sessions, then releases the underlying connections.
+The existing per-session 100ms blocked-write abort remains. Both underlays
+passed ten repetitions in 1.760s total, with the same 1.25-second notification
+bound. Logs: `/tmp/3x-ui-mieru-shutdown-{red-2,green}.log`.
+
+After that fix, the public hot-update, quota/reset and core-failure cases all
+passed on both underlays. The combined invocation still failed because its
+PostgreSQL subtests reused a schema and collided on the fixture username.
+Giving each underlay a disposable schema fixed isolation; the separate actual
+PostgreSQL TCP/UDP routing and exact billing run passed one top-level test and
+two subtests in 4.099s, no skips. Logs:
+`/tmp/3x-ui-mieru-public-lifecycle-green.jsonl` (failed combined invocation),
+`/tmp/3x-ui-mieru-public-postgres-green.jsonl` (successful isolated PG run).
+
+Native first-use tests verify that unauthenticated requests cannot invoke the
+callback, a metadata failure prevents routing and creates no usage, and rotating
+a credential cancels an in-progress first-use callback and closes its request.
+Both tests passed on both underlays in 1.563s. Temporary source overlays then
+proved meaningful RED for removing the callback, ignoring public hot changes,
+and ignoring the applied-core protection check. The latter failed on existing
+flow cutoff before reaching the later listener-release assertion; the mutation
+runner's first expected-message check was too narrow, and the actual failures
+were inspected and retained. Production files were never replaced by overlays.
+Logs: `/tmp/3x-ui-mieru-first-use-green.log` and
+`/tmp/3x-ui-mieru-public-mutations/drop-{first-use,hot-update,core-protection}.log`.
+
+Broader current-source race/static results will be recorded after the running
+checks finish; none of these focused checks constitutes public vertical or
+whole-task completion.
+
+The subsequent current-source check passed the complete native adapter race
+suite (23 top-level tests / 31 subtests, 115.089s), complete local Runtime race
+suite (57 / 67, 2.984s), and selected public/shared/SSH/port service race suite
+(52 / 54, 98.618s), all with zero skips or race reports. The script itself exited
+nonzero because lint then found three formatting issues and one direct error
+assertion. Formatting and `errors.As` handling were corrected; affected lint then
+reported zero issues, and listener/shutdown/first-use focused race tests passed
+4 top-level tests / 8 subtests in 5.091s. Logs use
+`/tmp/3x-ui-mieru-public-runtime-{native-race,local-race,service-race}.jsonl`,
+`-lint-fixed.log` and `-final-focus.jsonl`. These results precede the presence/API
+changes described below and do not replace a final whole-root regression.
+
+Reproduction for those checks (all test processes use disposable databases,
+loopback resources and the pinned managed core):
+
+```sh
+export XUI_MANAGED_XRAY_E2E_BINARY=/path/to/verified-managed-xray
+export XRAY_E2E_BINARY="$XUI_MANAGED_XRAY_E2E_BINARY"
+export SSH_E2E_SERVER=/usr/sbin/sshd
+export XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable'
+go test -p 1 -race ./internal/mieru -count=1 -timeout=4m
+go test -p 1 -race ./internal/web/runtime -count=1 -timeout=90s
+go test -p 1 -race ./internal/web/service -count=1 -timeout=3m \
+  -run '^(TestMieruInbound|TestManagedBridge|TestManagedPolicy|TestSSHInboundRunsThroughProductionXrayLifecycle|TestSSHConfigPreview|TestSSHInboundPreservesCanonical|TestCheckPortConflict|TestForwardedPort|TestAddInbound.*[Ff]orward|Test.*AmneziaWG.*(Conflict|Port))'
+```
+
+Additional listener tests caught real alias bypasses: bracketed addresses,
+expanded IPv6 wildcards and IPv4-mapped IPv6 addresses were validated but kept
+noncanonical strings for conflict checks; unmatched or nested brackets were
+also accepted. All 16 new SSH/mieru cases were RED before normalization. Managed
+listen addresses now store a canonical IP, accepting a single matched bracket
+pair and rejecting malformed input. Related reservation, canonical service,
+real SSH/mieru and PostgreSQL paths then passed 39 top-level tests / 53 subtests
+in 15.043s, no skips. Logs:
+`/tmp/3x-ui-managed-listen-{red.log,green.jsonl}`.
+
+Native presence now counts admitted logical TCP sessions and UDP associations,
+not underlying multiplexed transports. It excludes incomplete handshakes,
+policy rejection, closing sessions and retired authentication generations, and
+reports the actual normalized peer IP. The native presence test was RED with
+two working payload flows but zero observations, then related race coverage
+passed 8 top-level tests / 15 subtests in 16.166s. Public service projection
+preserves canonical membership and rejects stale username attribution; status
+reads are owner-scoped, start no runtime, and propagate database errors.
+Its real TCP/UDP and existing SSH regressions passed 7 top-level tests / 4
+subtests under race in 13.954s, no skips. Logs:
+`/tmp/3x-ui-mieru-presence-{red.log,green.jsonl}` and
+`/tmp/3x-ui-mieru-public-presence-{red.log,green.jsonl}`.
+
+The new `/panel/api/inbounds/mieru/status` route uses the existing owner/session
+and API-token restrictions. Its authorization test first failed with the missing
+route's 404. After routing was added, it caught an incorrect inherited JSON
+field name (`authenticatedConnections` instead of `authenticatedSessions`);
+the tag was corrected and all generated schemas/OpenAPI/reference MDX were
+regenerated. These failures remain in
+`/tmp/3x-ui-mieru-status-api-{red.log,green.jsonl}`. The corrected status API and route registry checks passed 3 top-level tests / 2
+subtests across two packages, no skips (`...-green-fixed.jsonl`).
+
+Cron collection now includes idle native TCP/UDP associations, real source IPs,
+last-online timestamps and active inbound tags even when the core online API is
+unavailable. Like SSH, mieru observations never trigger a host-wide shared-IP
+ban. Tests first failed for missing idle users and an incorrectly created ban;
+the integrated race suite passed 4 top-level tests / 2 subtests in 4.580s, no
+skips (`/tmp/3x-ui-mieru-collectors-{red.log,green.jsonl}`). This does not establish
+per-client IP/device-limit enforcement. Frontend consumption and the rest of
+the public vertical remain open.
+
+
+Frontend integration now exposes native mieru transport selection, canonical
+password editing (including a client shared with local SSH), lifecycle-field
+preservation, runtime state and logical-session counts on desktop/mobile, and
+online client rollups. Clone requests release the source private bridge port.
+All new messages are present in all 13 locales. Credentials are validated by
+UTF-8 byte length to match the official client/server bound.
+
+Evidence remains incremental: form/clone tests first failed 7 cases, then
+passed 17/17 including existing SSH; additional native credential checks failed
+3 cases before byte/whitespace validation; client form tests failed 6/7 before
+integration, then native forms/client and SSH regressions passed 22/22. Runtime
+status UI failed 10/10 before integration, then passed 20/20 across both
+protocols. An initial scripted badge refactor produced a duplicate declaration;
+that failed run is retained separately. Managed client rollups failed 2/5 before
+registration, then rollup plus locale/dead-key checks passed 7/7. Type checking
+passed; lint caught one unsafe optional-chain test expression, then passed after
+an explicit request guard. Logs use `/tmp/3x-ui-mieru-{form,client-ui,status-ui}*`,
+`/tmp/3x-ui-managed-count-ui-*` and `/tmp/3x-ui-mieru-ui-{typecheck,lint}*`.
+
+The first complete `npm test` run, including Chromium Storybook tests, finished
+with 186 passing files / 1 failing file and 1851 passing tests / 1 failing test
+in 357.13s, no reported skips. The sole failure was the new mieru polling test's
+5000ms total test deadline; it waited for a real 3000ms poll alongside rendering,
+tooltip timers and further refresh work. This is a failed complete run, not a
+full frontend pass (`/tmp/3x-ui-mieru-ui-full-test.log`). A deterministic interval
+clock is being checked while retaining actual query polling and stale-state
+assertions. Real browser CRUD against the running panel and official mieru
+traffic is still required by the public integration plan.
+
+
+The interval-clock version retained real TanStack polling and all failure/offline
+assertions and passed 20/20 SSH/mieru status tests in 12.12s; it does not relax the
+5000ms test deadline. A prior edit command used the wrong working directory and
+made no changes; the resulting rerun of the original tests is not evidence for
+the clock change (`...-poll-timers.log` versus `...-poll-timers-fixed.log`).
+
+Canonical follow-up tests first rejected native-only, mixed SSH/mieru and detached
+portable policy restoration, and exposed old Xray listeners surviving conversion
+back to mieru over both transports. A separate legacy-import test showed raw
+history becoming zero; that RED invocation also accidentally selected one
+PostgreSQL subtest without a DSN and skipped it, which is not counted as a pass.
+The first fix exposed an additional real recovery failure: inbound editing
+removed the last binding and deleted the traffic projection while its owned
+ledger survived. A direct boundary assertion reproduced `record not found`
+(`/tmp/3x-ui-mieru-transition-accounting-red.log`). The fix preserves owned
+projections across detach rather than weakening ledger ownership checks.
+
+The first post-fix race invocation remains failed
+(`/tmp/3x-ui-mieru-portable-transition-green.jsonl`). Its detached restoration
+assertion also mistakenly required `supported=true` with zero attachments; the
+existing API requires an actual supported attachment. The test now preserves
+that contract and verifies reattachment enables execution without changing the
+restored usage or owner. A fresh combined race run is pending; no complete
+backend verification is claimed from these changes.
+
+The corrected combined backend race run passed 8 top-level tests / 25 subtests
+in 27.138s, with no failures or skips
+(`/tmp/3x-ui-mieru-portable-transition-green-fixed.jsonl`). It exercises actual
+TCP/UDP protocol conversion and recovery, retained accounting projections,
+native-only/shared/detached/legacy portable clients on SQLite and PostgreSQL,
+and existing invalid-import, legacy SSH and traffic-row reuse regressions.
+Latest frontend type checking and lint also passed; the complete frontend test
+rerun followed by its build is still pending.
+
+### Public mieru export continuation (2026-09-29; uncommitted vertical)
+
+Frontend full rerun after deterministic interval tests: 1848 tests passed and
+four existing form tests exceeded the unchanged 5000ms limit (three
+`inbound-form-modal` cases and `happ-routing-editor` invalid JSON). Keeping the
+same source and deadlines, `npm test -- --maxWorkers=1` passed all 187 files /
+1852 tests in 480.71s; `npm run build` then passed in 2.87s. Logs:
+`/tmp/3x-ui-mieru-ui-full-test-fixed.log`,
+`/tmp/3x-ui-mieru-ui-full-test-serial.log`, `/tmp/3x-ui-mieru-ui-build.log`.
+This identifies concurrency sensitivity; these results predate the new export UI.
+
+Native export RED first returned no share link; direct link tests then passed
+with the official `appctl.ClientProfileToMultiURLs` encoder. Actual subscription
+interop caught the separate SQL protocol allowlist still excluding mieru. After
+fixing that query, official clients imported generated subscriptions and sent
+TCP and UDP payloads over TCP and UDP underlays, including a Host address override
+and deliberately stale settings credentials. The test waits for actual public
+listener status before connecting. Race run: 5 top-level / 11 subtests passed,
+zero skips, 5.779s (`/tmp/3x-ui-mieru-export-green-ready.jsonl`). Earlier failed
+logs remain `/tmp/3x-ui-mieru-export-red-and-interop.log` and
+`/tmp/3x-ui-mieru-export-green.jsonl`.
+
+The same RED demonstrated unsupported SSH/mieru/MTProto paths producing
+misleading direct-only Xray JSON profiles; those paths now emit no Xray config.
+Mihomo mapping uses the same validated native profiles and preserves native
+transport, credentials and public endpoint fields. Official v1.19.30 arm64 gzip
+was verified against GitHub's published SHA-256:
+`58896873736d28628f66de3677c8654fa0f180662523148e136cff4f6e890069`.
+Its configuration checks passed, but the first data test raced Mihomo's routing
+startup and failed after a successful SOCKS handshake. Pinned upstream startup
+opens listeners before `tunnel.OnRunning`; the test now waits for actual echo
+readiness, with the original 3s startup deadline. The follow-up result is pending;
+no completed Mihomo data-path acceptance is claimed here.
+
+New frontend export tests first reproduced empty links and missing JSON download.
+The native URI builder, label parser and shared QR panel now offer official JSON
+with SOCKS on loopback, using the exact shared profile's endpoint and credentials.
+All 13 locales include download and format guidance. Targeted export/share/QR/
+i18n tests passed 78/78 across six files in 14.72s after adding an explicit
+accessible button name (`/tmp/3x-ui-mieru-export-ui-green-fixed.log`). Earlier
+startup-permission, test-fixture and accessible-name failures are retained under
+`/tmp/3x-ui-mieru-export-ui-*`. Full current backend/frontend checks and real
+browser download-to-client acceptance remain open.
+
+The corrected full subscription run, `go test -race -shuffle=on -p 1
+./internal/sub`, passed 475 top-level and 511 nested tests in 45.291s with the
+managed core and official Mihomo v1.19.30 enabled. The two existing scale cases
+N10000/N100000 were skipped, not counted as acceptance. Log:
+`/tmp/3x-ui-mieru-full-sub-race-fixed.jsonl`. A redundant embedded selector in the
+new integration test was then simplified; affected Go lint passed with zero
+issues (`/tmp/3x-ui-mieru-export-go-lint-fixed.log`).
+
+Current frontend typecheck and lint passed. The full serial frontend regression
+passed all 1,860 tests in 189 files in 483.72s, with unchanged per-test deadlines;
+the production build then passed in 2.72s. Logs:
+`/tmp/3x-ui-mieru-export-ui-{typecheck-fixed,lint,full-test,build}.log`.
+The official mieru v3.38.0 CLI also accepted native JSON produced by the actual
+frontend export function, preserving escaped credentials, IPv6 and both transport
+bindings (`/tmp/3x-ui-mieru-json-validation/import.log`). This validates the format;
+browser download-to-running-client traffic is tracked separately and remains open.
+
+### Native public browser and bulk lifecycle acceptance (2026-09-29)
+
+The real browser fixture now passes all three native configurations: TCP, UDP,
+and both. It creates the inbound and password client through the UI, chooses a
+custom advertised loopback address, downloads JSON from Client Information's QR
+popover, imports that file with official mieru v3.38.0, and runs the actual CLI.
+The original export's loopback SOCKS port 1080 is checked; only that local port
+is relocated in the fixture to avoid collision. The public server bindings and
+credentials remain exactly those downloaded.
+
+Each configuration transfers a 16,384-byte TCP echo plus a 1,024-byte UDP echo
+through the native client, managed server and Xray router. Panel raw totals are
+17,408 B up and 17,408 B down, and billed usage is exactly 52,224 B at 1.5x.
+The editor saves 32,768/65,536 B/s directional rates. This small echo is not the
+required sustained rate acceptance. Desktop/mobile runtime badges show two
+authenticated logical sessions. Reducing quota through the authenticated client
+API to 40,000 B marks the account depleted and closes the existing TCP stream
+within the test's unchanged two-second window after the API response. The UI
+then disables the listener; canonical APIs delete the owned client and inbound.
+No page errors occur. Full quota exhaustion, sustained UDP cutoff, global rates
+and the remaining performance/fault matrix stay open.
+
+Command (after the full frontend build and current panel build):
+
+```sh
+XUI_E2E_PANEL=/tmp/3x-ui-mieru-browser-panel \
+XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+XUI_MIERU_E2E_BINARY=/tmp/3x-ui-mieru-v3.38.0 \
+node frontend/scripts/mieru-client-e2e.mjs
+```
+
+Result: exit 0, three configurations passed;
+`/tmp/3x-ui-mieru-browser-e2e-quota-fixed.log`. Official CLI was built with its
+own pinned v3.38.0 module dependencies (`go build -mod=readonly -p 1 ./cmd/mieru`);
+binary SHA-256 is
+`480ea2494f6a0852167654e2f9d0fd389ef2dee0ea3f3460201b0d40570768db`.
+
+Earlier failed fixture attempts remain in `/tmp/3x-ui-mieru-browser-e2e*.log`:
+missing environment before startup; incorrect relative password selector and
+share selector; an incorrect expectation that the default loopback share host
+would stay an IPv4 literal (existing behavior uses `localhost`); exact object
+comparison rejected the official CLI's additional derived password hash; the
+initial reader spun when a shaped reply arrived in partial chunks, starving the
+Node event loop; an initial native admission closed during asynchronous policy
+replacement; and the quota test sent the read-model `allowedIPs` string to an
+API expecting an array. The fixture now accumulates partial chunks, waits for
+actual native admission within two seconds, and sends the update API's input
+shape. These changes do not relax data totals, rate bounds or cutoff deadlines,
+and do not change production code. The stalled fixture's verified process tree
+was stopped and its exact temporary directory removed; unrelated services were
+untouched.
+
+`go test -race -p 1 ./internal/web/service -run '^TestMieruBulk' -count=1`
+passed 3 tests, no skips, in 5.109s, including SQLite and PostgreSQL. It checks
+two clients on two native inbounds, independent stable policy identity, exact
+usage/rate retention, denial of unmanaged bulk attachment, manual disable across
+quota increases, detach/reattach, idempotency, deletion/recreation with fresh
+ownership, and atomic rejection of a batch containing invalid UTF-8 credential
+length. Log: `/tmp/3x-ui-mieru-bulk-first.jsonl`.
+
+An isolated Go overlay removing mieru from canonical managed-ownership detection
+made the new bulk lifecycle test fail at the unsupported-policy assertion in
+0.466s (`/tmp/3x-ui-mieru-bulk-mutation.log`). Production source was unchanged.
+The final formatted browser script tightened SOCKS startup to an absolute
+two-second deadline and again passed all three configurations
+(`/tmp/3x-ui-mieru-browser-e2e-final.log`). Script lint and `git diff --check`
+also passed.
+
+The subsequent complete affected backend race/shuffle run did **not** pass:
+`go test -race -p 1 -shuffle=on -count=1 -timeout=10m ./internal/mieru
+./internal/web/...` returned exit 1. It passed 1,391 top-level and 1,371 nested
+tests, failed 7 top-level / 15 nested tests, and skipped 15 top-level / 9 nested
+tests. Sixteen test packages passed, the main service package failed (500.228s),
+and two packages had no tests. Log:
+`/tmp/3x-ui-mieru-public-web-race-full.jsonl`. The chained static check did not
+run after that failure.
+
+All failures used the older accounting fixture that claimed a ledger on VLESS,
+then called canonical synchronization to add or edit unsupported local/remote
+attachments. The new guard correctly refuses those paths. The accounting
+fixture now uses valid local mieru credentials; its initial traffic projection
+is created before canonical ownership is claimed. The remote reset fanout case
+directly seeds a pre-existing snapshot membership, since its subject is reset
+delivery, not authorization of a new unsupported attachment. Original usage,
+concurrency and cutoff assertions are unchanged; focused and full reruns remain
+required. Skips cover opt-in scale, dedicated PostgreSQL failure/serialization
+fixtures, the non-Linux update guard and Xray golden fixtures with unavailable
+assets; none establish acceptance.
+
+The accounting fixture correction passed the focused race run (23 top-level
+cases / 30 subtests, zero skips, 43.711s;
+`/tmp/3x-ui-mieru-accounting-fixture-fixed.jsonl`). The original failed full run
+above remains failed; a fresh full regression is required.
+
+Port reservation follow-up reproduced missing SSH upstream bridge, routed
+MTProto bridge, custom template inbound, and metrics listener conflicts through
+actual saves. Reverse `SaveXraySetting` checks also failed all nine ownership
+cases before the fix. Both directions now check and persist within one
+transaction. Reservations include disabled owners and respect transport,
+listen address, and node scope. Core integer-port configuration remains the
+existing supported format; a draft range test was removed because the panel's
+actual `InboundConfig.Port` is an integer and existing validation rejects ranges.
+
+Extra tests reproduced six socket interpretation errors: IP address aliases and
+core dokodemo UDP settings (including legacy/array forms). Those checks now
+follow the pinned core's socket semantics. The first concurrent save run then
+found a PostgreSQL failure: both template and native inbound could commit when
+the traffic writer was inactive. SQLite already serialized these transactions.
+A schema-scoped PostgreSQL transaction advisory lock now covers reservation
+checks and releases on commit or rollback. The corrected race run passed
+52 top-level tests / 100 subtests, zero skips, 23.373s, including 20 concurrent
+save rounds on each database. Evidence:
+`/tmp/3x-ui-mieru-template-ports-red.log`,
+`/tmp/3x-ui-mieru-template-socket-red.log`,
+`/tmp/3x-ui-mieru-ports-race-green.jsonl` (failed PostgreSQL run), and
+`/tmp/3x-ui-mieru-ports-race-fixed.jsonl` (passed).
+
+The fresh complete affected backend run passed:
+`go test -race -p 1 -shuffle=on -count=1 -timeout=10m ./internal/mieru
+./internal/web/...` — 1,406 top-level tests and 1,426 subtests, 17 tested
+packages passed (main service 508.436s, native mieru 122.964s), two packages
+had no tests. Fifteen top-level cases and nine subtests explicitly skipped:
+opt-in scale runs, separate PostgreSQL fault-injection fixtures, unavailable
+DNS/routing golden assets, and the non-Linux update guard. These are not passes.
+Log: `/tmp/3x-ui-mieru-public-web-race-final.jsonl`. The combined command exited
+nonzero only because the following static check found one `gofumpt` formatting
+issue in the new template reservation file. This full run precedes the final
+localhost and own-MTProto-listener boundary corrections described next.
+
+The last two focused RED tests reproduced core `localhost` versus IPv4 loopback
+aliasing and an MTProto listener colliding with its own routing bridge.
+After fixing both, the expanded port/MTProto/routing-save race run passed
+54 top-level tests / 101 subtests, zero skips, 23.849s
+(`/tmp/3x-ui-mieru-ports-final.jsonl`). Both failed tests are retained, with RED
+logs `/tmp/3x-ui-mieru-localhost-port-red.log` and
+`/tmp/3x-ui-mieru-final-ports-red.log`. The subsequent static check required
+one further multiline-literal formatting correction; that change has no
+runtime effect.
+
+Final affected static analysis passed with zero issues:
+`golangci-lint run --timeout 10m ./internal/mieru/... ./internal/web/...
+./internal/sub/...` (`/tmp/3x-ui-mieru-public-backend-lint-final.log`).
+`git diff --check` also passed. The public increment is ready for its backend
+and frontend commits; this does not close Task 6 or the full requirements.

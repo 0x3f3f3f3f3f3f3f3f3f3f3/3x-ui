@@ -28,6 +28,7 @@ export const keys = {
     root: () => ['inbounds'] as const,
     slim: () => ['inbounds', 'slim'] as const,
     sshStatus: () => ['inbounds', 'sshStatus'] as const,
+    mieruStatus: () => ['inbounds', 'mieruStatus'] as const,
     options: () => ['inbounds', 'options'] as const,
   },
   clients: {

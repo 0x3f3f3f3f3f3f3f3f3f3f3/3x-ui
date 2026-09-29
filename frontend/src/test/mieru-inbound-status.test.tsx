@@ -15,7 +15,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function row(protocol = 'ssh') {
+function row(protocol = 'mieru') {
   return {
     id: 1,
     protocol,
@@ -27,7 +27,7 @@ function row(protocol = 'ssh') {
   };
 }
 
-function fixture(protocol = 'ssh', isMobile = false) {
+function fixture(protocol = 'mieru', isMobile = false) {
   const queryClient = makeTestQueryClient();
   queryClient.setQueryData(keys.inbounds.slim(), [row(protocol)]);
   queryClient.setQueryData(keys.clients.onlines(), []);
@@ -58,7 +58,7 @@ function fixture(protocol = 'ssh', isMobile = false) {
   return { queryClient, ...rendered };
 }
 
-describe('SSH runtime state in the inbound list', () => {
+describe('mieru runtime state in the inbound list', () => {
   it.each([false, true])(
     'keeps an enabled but protected listener visible (mobile=%s)',
     async (mobile) => {
@@ -68,17 +68,19 @@ describe('SSH runtime state in the inbound list', () => {
             inboundId: 1,
             state: 'protected',
             reason: 'listener unavailable',
-            authenticatedConnections: 0,
+            authenticatedSessions: 0,
           },
         ]),
       );
-      fixture('ssh', mobile);
-      const badge = await screen.findByRole('status', { name: 'SSH runtime: Protected' });
+      fixture('mieru', mobile);
+      const badge = await screen.findByRole('status', { name: 'mieru runtime: Protected' });
       expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true');
       expect(badge.textContent).toContain('Protected');
       fireEvent.mouseOver(badge);
       expect(
-        await screen.findByText('SSH listener unavailable. Check the listening address and port.'),
+        await screen.findByText(
+          'mieru listener unavailable. Check the listening address and port.',
+        ),
       ).toBeTruthy();
       expect(screen.queryByText('Running')).toBeNull();
     },
@@ -90,35 +92,35 @@ describe('SSH runtime state in the inbound list', () => {
       .spyOn(HttpUtil, 'get')
       .mockResolvedValueOnce(
         new Msg(true, '', [
-          { inboundId: 1, state: 'running', reason: '', authenticatedConnections: 2 },
+          { inboundId: 1, state: 'running', reason: '', authenticatedSessions: 2 },
         ]),
       )
       .mockResolvedValue(new Msg(false, 'database unavailable', null));
     const { queryClient } = fixture();
-    const running = await screen.findByRole('status', { name: 'SSH runtime: Running' });
+    const running = await screen.findByRole('status', { name: 'mieru runtime: Running' });
     expect(running.textContent).toContain('2');
     fireEvent.mouseOver(running);
-    expect(await screen.findByText('Authenticated SSH connections: 2')).toBeTruthy();
+    expect(await screen.findByText('Authenticated mieru sessions: 2')).toBeTruthy();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3000);
     });
     await waitFor(
-      () => expect(screen.getByRole('status', { name: 'SSH runtime: Unavailable' })).toBeTruthy(),
+      () => expect(screen.getByRole('status', { name: 'mieru runtime: Unavailable' })).toBeTruthy(),
       { timeout: 5000 },
     );
-    expect(get.mock.calls.filter(([url]) => url === '/panel/api/inbounds/ssh/status')).toHaveLength(
-      2,
-    );
-    expect(screen.queryByRole('status', { name: 'SSH runtime: Running' })).toBeNull();
+    expect(
+      get.mock.calls.filter(([url]) => url === '/panel/api/inbounds/mieru/status'),
+    ).toHaveLength(2);
+    expect(screen.queryByRole('status', { name: 'mieru runtime: Running' })).toBeNull();
     get.mockResolvedValue(
       new Msg(true, '', [
-        { inboundId: 1, state: 'pending', reason: 'awaiting disable', authenticatedConnections: 2 },
+        { inboundId: 1, state: 'pending', reason: 'awaiting disable', authenticatedSessions: 2 },
       ]),
     );
     await act(async () => {
-      await queryClient.invalidateQueries({ queryKey: keys.inbounds.sshStatus() });
+      await queryClient.invalidateQueries({ queryKey: keys.inbounds.mieruStatus() });
     });
-    expect(await screen.findByRole('status', { name: 'SSH runtime: Pending' })).toHaveProperty(
+    expect(await screen.findByRole('status', { name: 'mieru runtime: Pending' })).toHaveProperty(
       'textContent',
       'Pending · 2',
     );
@@ -133,28 +135,22 @@ describe('SSH runtime state in the inbound list', () => {
           inboundId: 1,
           state: 'future-state',
           reason: 'private diagnostic',
-          authenticatedConnections: 5,
+          authenticatedSessions: 5,
         },
       ],
     ],
-    [
-      'invalid count',
-      [{ inboundId: 1, state: 'running', reason: '', authenticatedConnections: '2' }],
-    ],
-    [
-      'negative count',
-      [{ inboundId: 1, state: 'running', reason: '', authenticatedConnections: -1 }],
-    ],
+    ['invalid count', [{ inboundId: 1, state: 'running', reason: '', authenticatedSessions: '2' }]],
+    ['negative count', [{ inboundId: 1, state: 'running', reason: '', authenticatedSessions: -1 }]],
     ['null payload', null],
   ])('shows unavailable for %s instead of trusting configured enable', async (_label, payload) => {
     vi.spyOn(HttpUtil, 'get').mockResolvedValue(new Msg(true, '', payload));
     const { queryClient } = fixture();
     await waitFor(() => expect(HttpUtil.get).toHaveBeenCalled());
     await waitFor(() =>
-      expect(queryClient.getQueryState(keys.inbounds.sshStatus())?.fetchStatus).toBe('idle'),
+      expect(queryClient.getQueryState(keys.inbounds.mieruStatus())?.fetchStatus).toBe('idle'),
     );
-    expect(await screen.findByRole('status', { name: 'SSH runtime: Unavailable' })).toBeTruthy();
-    expect(screen.queryByRole('status', { name: 'SSH runtime: Running' })).toBeNull();
+    expect(await screen.findByRole('status', { name: 'mieru runtime: Unavailable' })).toBeTruthy();
+    expect(screen.queryByRole('status', { name: 'mieru runtime: Running' })).toBeNull();
     expect(screen.queryByText('private diagnostic')).toBeNull();
   });
 
@@ -163,30 +159,28 @@ describe('SSH runtime state in the inbound list', () => {
       .spyOn(HttpUtil, 'get')
       .mockResolvedValue(
         new Msg(true, '', [
-          { inboundId: 1, state: 'running', reason: '', authenticatedConnections: 1 },
+          { inboundId: 1, state: 'running', reason: '', authenticatedSessions: 1 },
         ]),
       );
     const { queryClient } = fixture();
-    await screen.findByRole('status', { name: 'SSH runtime: Running' });
+    await screen.findByRole('status', { name: 'mieru runtime: Running' });
     act(() => {
       onlineManager.setOnline(false);
-      void queryClient.invalidateQueries({ queryKey: keys.inbounds.sshStatus() });
+      void queryClient.invalidateQueries({ queryKey: keys.inbounds.mieruStatus() });
     });
-    await screen.findByRole('status', { name: 'SSH runtime: Unavailable' });
-    expect(screen.queryByRole('status', { name: 'SSH runtime: Running' })).toBeNull();
+    await screen.findByRole('status', { name: 'mieru runtime: Unavailable' });
+    expect(screen.queryByRole('status', { name: 'mieru runtime: Running' })).toBeNull();
     get.mockResolvedValue(
-      new Msg(true, '', [
-        { inboundId: 1, state: 'running', reason: '', authenticatedConnections: 3 },
-      ]),
+      new Msg(true, '', [{ inboundId: 1, state: 'running', reason: '', authenticatedSessions: 3 }]),
     );
     act(() => onlineManager.setOnline(true));
-    expect(await screen.findByRole('status', { name: 'SSH runtime: Running' })).toHaveProperty(
+    expect(await screen.findByRole('status', { name: 'mieru runtime: Running' })).toHaveProperty(
       'textContent',
       'Running · 3',
     );
   });
 
-  it('only polls when the list contains SSH inbounds', async () => {
+  it('only polls when the list contains mieru inbounds', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     const get = vi.spyOn(HttpUtil, 'get').mockResolvedValue(
       new Msg(true, '', [
@@ -194,7 +188,7 @@ describe('SSH runtime state in the inbound list', () => {
           inboundId: 1,
           state: 'idle',
           reason: 'no enabled clients',
-          authenticatedConnections: 0,
+          authenticatedSessions: 0,
         },
       ]),
     );
@@ -203,14 +197,14 @@ describe('SSH runtime state in the inbound list', () => {
     expect(get).not.toHaveBeenCalled();
     expect(screen.queryByRole('status')).toBeNull();
     act(() => queryClient.setQueryData(keys.inbounds.slim(), [row()]));
-    expect(await screen.findByRole('status', { name: 'SSH runtime: Idle' })).toBeTruthy();
+    expect(await screen.findByRole('status', { name: 'mieru runtime: Idle' })).toBeTruthy();
     act(() => queryClient.setQueryData(keys.inbounds.slim(), [row('vless')]));
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3300);
     });
-    expect(get.mock.calls.filter(([url]) => url === '/panel/api/inbounds/ssh/status')).toHaveLength(
-      1,
-    );
+    expect(
+      get.mock.calls.filter(([url]) => url === '/panel/api/inbounds/mieru/status'),
+    ).toHaveLength(1);
   });
 });

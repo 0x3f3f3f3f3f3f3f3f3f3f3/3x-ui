@@ -149,13 +149,13 @@ those accounts. SQLite/PostgreSQL and real TCP tests cover these service paths.
 This does not change the integrated-service matrix: native collection, public
 activation, remote accounting and protocol management remain incomplete.
 
-## Internal mieru backend evidence
+## Scoped mieru backend evidence
 
-The integrated-service mieru columns remain N. These scopes concern the native
-adapter and shared controller, before public Runtime integration. PostgreSQL
-evidence is limited to the explicitly named cases below.
+The complete-service mieru columns remain N. These rows distinguish internal
+adapter checks from local public integration. PostgreSQL evidence is limited
+to the explicitly named cases below.
 
-| Internal mieru capability | Status | Evidence / limit |
+| Mieru capability | Status | Evidence / limit |
 |---|---|---|
 | Official v3.38.0 authenticated TCP and UDP | V | Official client API, all four TCP/UDP underlay and target combinations, two independent same-IP users |
 | Stable identity, domain, target and original source in dispatch | V | Actual native sessions preserve policy ID, inbound tag, original localhost name, port, network and underlay source; required callback has no automatic direct fallback |
@@ -165,12 +165,19 @@ evidence is limited to the explicitly named cases below.
 | Quota, disable and owned shutdown | V | Existing TCP/UDP cutoff and server restart denial; malformed UDP cleanup, TCP backpressure, unrelated-user continuity and partial-start listener release |
 | Live native credential replacement | V | Official TCP/UDP clients; atomic invalid-batch rejection, unchanged sessions, rotation/removal/re-addition, empty set, delayed/cached authentication denial, exact policy-ID reassignment billing, pending dial cancellation and idle TCP socket reclamation |
 | Continuous one-way UDP target lifetime | V | Actual 31-second upload-only traffic retains one target source port and exact upload-only billing |
-| Internal authenticated Xray TCP/UDP routing / policy-aware bridge | V | Private policy-ID credentials, actual direct IPv4 peer replies, user/domain/IP/source/tag/network/port/priority/block/balancer exits; official mieru clients on both underlays, exact single billing and existing-flow revocation. Other outbounds, IPv6 and public Runtime remain open |
+| Internal authenticated Xray TCP/UDP routing / policy-aware bridge | V | Private policy-ID credentials, actual direct IPv4 peer replies, user/domain/IP/source/tag/network/port/priority/block/balancer exits; official mieru clients on both underlays, exact single billing and existing-flow revocation. Other outbounds and IPv6 remain open; public Runtime evidence is listed separately below |
 | Private bridge gRPC hot insertion | V | Actual core retains managed authentication and uint32 levels 255/4294967295, TCP/UDP payload and peer metadata, no duplicate user counters, existing stream continuity during add/remove; required policy definitions preloaded at startup |
-| Public model/Runtime/API/UI/export/node/deployment integration | N | No public mieru service option or manager is claimed by this increment |
+| Public canonical model and native credentials | V | Local TCP/UDP/both settings, canonical email/password and durable policy ownership; transport-aware public/private port conflicts; SQLite/PostgreSQL creation and bulk lifecycle tests |
+| Public Runtime lifecycle | V | Actual official clients through production Xray lifecycle; credential rotation, unrelated-client continuity, disable/re-enable, delayed expiry, quota reduction, core stop/recovery and protocol conversion; remaining full fault/rate matrix is open |
+| Public status API and management UI | V | Owner-scoped status/generated schemas plus full frontend regression; actual browser creates tcp/udp/both inbounds/password clients, edits policies, observes desktop/mobile count 2 and disables runtime. Remote/global and full public performance matrix remain open |
+| Native share/subscription export | V | Official mierus parser/client TCP+UDP flows for tcp/udp/both, canonical credentials and Host overrides; actual Mihomo v1.19.30 for each emitted transport; Xray JSON and legacy Clash exclude unsupported native profiles |
+| Native JSON browser download | V | Actual browser QR download imports into official mieru v3.38.0 and carries TCP/UDP echoes under tcp/udp/both settings; exact raw/billed counts and reduced-quota TCP closure; original loopback1080 export checked before relocating only the fixture's local SOCKS port |
+| Portable native client restore | V | SQLite/PostgreSQL native-only, shared SSH/mieru, detached and legacy snapshots preserve credentials, raw/billed/remainder, rates, quota, disable and renewal metadata; reattachment retains ownership |
+| IP/device enforcement and remote/global policy | N | Local admitted-session/IP observations exist; observations do not enforce per-client IP/device limits or distribute a global budget |
+| Native deployment/upgrade integration | N | Embedded adapter and pinned source exist; installation, upgrade, packaging and node acceptance remain open |
 | Internal native session/queue bounds and generation diagnostics | V | Maintained protocol-only extension limits native admission before allocation, bounds payload trees/staging, reclaims finished metadata and suppresses per-generation diagnostic groups; real TCP/UDP stress and payload recovery. This is not a process RSS bound or public Runtime completion |
 | Native UDP progress under application backpressure | V | Byte/segment/staging window bounds, current wire credits, earlier-fragment retention and separate ACK/delivery progress; encrypted ACK gap tests, complete native race suites and 20 unchanged real SSH-peer-stop recovery repetitions; queue bounds and rate tolerances unchanged |
-| PostgreSQL mieru vertical acceptance | N | Shared ownership, accounting and cross-protocol native rate checks pass on PostgreSQL; the second-dialect public integration and remaining real data-path matrix remain open |
+| PostgreSQL mieru vertical acceptance | N | Shared ownership, public lifecycle, canonical creation, bulk lifecycle and portable restoration have scoped evidence; browser/deployment and the complete requested matrix remain open |
 
 ## UDP core prerequisite evidence
 

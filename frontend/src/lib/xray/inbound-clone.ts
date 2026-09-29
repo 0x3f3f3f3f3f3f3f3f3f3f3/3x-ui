@@ -15,6 +15,7 @@ export function buildClonePayload(dbInbound: DBInbound, port: number, nodeId: nu
   try {
     const raw = { ...coerceInboundJsonField(dbInbound.settings) };
     raw.clients = [];
+    if (['ssh', 'mieru'].includes(dbInbound.protocol)) delete raw.bridgePort;
     clonedSettings = JSON.stringify(raw);
   } catch {
     const fallback = createDefaultInboundSettings(dbInbound.protocol);

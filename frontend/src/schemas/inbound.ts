@@ -1,9 +1,14 @@
 import { z } from 'zod';
-import { SSHRuntimeStatusSchema } from '@/generated/zod';
+import { SSHRuntimeStatusSchema, MieruRuntimeStatusSchema } from '@/generated/zod';
 
 export const SSHRuntimeStatusListSchema = SSHRuntimeStatusSchema.extend({
   inboundId: SSHRuntimeStatusSchema.shape.inboundId.positive(),
   authenticatedConnections: SSHRuntimeStatusSchema.shape.authenticatedConnections.nonnegative(),
+}).array();
+
+export const MieruRuntimeStatusListSchema = MieruRuntimeStatusSchema.extend({
+  inboundId: MieruRuntimeStatusSchema.shape.inboundId.positive(),
+  authenticatedSessions: MieruRuntimeStatusSchema.shape.authenticatedSessions.nonnegative(),
 }).array();
 
 export const SlimInboundSchema = z

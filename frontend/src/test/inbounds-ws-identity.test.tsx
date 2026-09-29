@@ -8,10 +8,10 @@ import { useInbounds } from '@/pages/inbounds/useInbounds';
 
 import { makeTestQueryClient } from './test-utils';
 
-function seedInbounds() {
+function seedInbounds(protocol = 'vless') {
   const rows = [1, 2].map((id) => ({
     id,
-    protocol: 'vless',
+    protocol,
     tag: `in-${id}`,
     enable: true,
     up: 10,
@@ -33,7 +33,7 @@ function seedInbounds() {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
-  return { rows, wrapper };
+  return { rows, wrapper, queryClient };
 }
 
 async function renderInbounds() {
@@ -46,6 +46,34 @@ async function renderInbounds() {
 // Every client_stats push carries all inbounds' totals, so rebuilding a row whether or
 // not its numbers moved re-ran the client rollup and the whole table on each push.
 describe('inbound websocket merges keep unchanged state', () => {
+  it.each(['ssh', 'mieru'])(
+    'includes %s clients in online counts and clears them on disconnect',
+    async (protocol) => {
+      const { wrapper, queryClient } = seedInbounds(protocol);
+      queryClient.setQueryData(keys.clients.onlines(), ['c1@x']);
+      queryClient.setQueryData(keys.clients.onlinesByGuid(), { '': ['c1@x'] });
+      queryClient.setQueryData(keys.clients.activeInbounds(), { '': ['in-1'] });
+      const { result } = renderHook(() => useInbounds(), { wrapper });
+      await waitFor(() =>
+        expect(result.current.clientCount[1]).toMatchObject({
+          clients: 1,
+          active: ['c1@x'],
+          online: ['c1@x'],
+          depleted: [],
+        }),
+      );
+      expect(result.current.clientCount[2]).toMatchObject({ clients: 1, online: [] });
+      act(() =>
+        result.current.applyTrafficEvent({
+          onlineClients: [],
+          onlineByGuid: { '': [] },
+          activeInbounds: { '': [] },
+        }),
+      );
+      await waitFor(() => expect(result.current.clientCount[1]?.online).toEqual([]));
+    },
+  );
+
   it('keeps rows and the client rollup when a client_stats push changes nothing', async () => {
     const { rows, result } = await renderInbounds();
     const before = result.current.dbInbounds;

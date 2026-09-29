@@ -15,6 +15,7 @@ export const ProtocolSchema = z.enum([
   'amneziawg',
   'tuic',
   'ssh',
+  'mieru',
 ]);
 export type Protocol = z.infer<typeof ProtocolSchema>;
 
@@ -39,4 +40,5 @@ export const Protocols = Object.freeze({
   AMNEZIAWG: 'amneziawg',
   TUIC: 'tuic',
   SSH: 'ssh',
+  MIERU: 'mieru',
 });

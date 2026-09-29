@@ -1,6 +1,6 @@
 import type { NodeRecord } from '@/api/queries/useNodesQuery';
 import type { HostRecord } from '@/schemas/api/host';
-import type { SSHRuntimeStatus } from '@/generated/zod';
+import type { SSHRuntimeStatus, MieruRuntimeStatus } from '@/generated/zod';
 
 export interface StreamHints {
   network: string;
@@ -74,6 +74,7 @@ export interface InboundListProps {
   lastOnlineMap: Record<string, number>;
   inboundSpeed: Record<number, InboundSpeedEntry>;
   sshRuntimeStatuses: ReadonlyMap<number, SSHRuntimeStatus>;
+  mieruRuntimeStatuses: ReadonlyMap<number, MieruRuntimeStatus>;
   expireDiff: number;
   trafficDiff: number;
   pageSize: number;

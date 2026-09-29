@@ -28,6 +28,7 @@ const PROTOCOL_LABELS: Record<string, string> = {
   tg: 'MTProto',
   vpn: 'AmneziaWG',
   tuic: 'TUIC',
+  mierus: 'mieru',
 };
 
 const PROTOCOL_COLORS: Record<string, string> = {
@@ -41,6 +42,7 @@ const PROTOCOL_COLORS: Record<string, string> = {
   MTProto: 'blue',
   AmneziaWG: 'yellow',
   TUIC: 'orange',
+  mieru: 'cyan',
 };
 
 const SECURITY_COLORS: Record<string, string> = {
@@ -126,6 +128,12 @@ export function parseLinkParts(link: string): LinkParts | null {
         remark = decodeURIComponent(hash);
       } catch {
         remark = hash;
+      }
+      if (scheme === 'mierus') {
+        network = [...new Set(url.searchParams.getAll('protocol'))].join('/');
+        port = [...new Set(url.searchParams.getAll('port'))].join(',');
+        remark = url.searchParams.get('profile') ?? '';
+        security = '';
       }
     } catch {
       /* not URL-shaped, fall back to protocol only */

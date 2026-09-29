@@ -61,6 +61,7 @@ import {
   HttpFields,
   HysteriaFields,
   MixedFields,
+  MieruFields,
   MtprotoFields,
   ShadowsocksFields,
   TuicFields,
@@ -542,7 +543,7 @@ export default function InboundFormModal({
             ],
           },
         });
-      } else if (next === Protocols.SSH) {
+      } else if (next === Protocols.SSH || next === Protocols.MIERU) {
         setV('streamSettings', undefined);
       } else if (next === Protocols.WIREGUARD || next === Protocols.TUNNEL) {
         setV('streamSettings', { security: 'none' });
@@ -813,6 +814,7 @@ export default function InboundFormModal({
       )}
 
       {protocol === Protocols.TUIC && <TuicFields />}
+      {protocol === Protocols.MIERU && <MieruFields />}
 
       {protocol === Protocols.TUN && <TunFields />}
 
@@ -1153,6 +1155,7 @@ export default function InboundFormModal({
                     Protocols.MTPROTO,
                     Protocols.AMNEZIAWG,
                     Protocols.TUIC,
+                    Protocols.MIERU,
                   ] as string[]
                 ).includes(protocol) || isFallbackHost
                   ? [
