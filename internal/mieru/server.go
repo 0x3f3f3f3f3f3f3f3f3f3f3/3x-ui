@@ -226,8 +226,27 @@ func (s *Server) handle(conn *managedSession) {
 		}
 		return
 	}
+
+	native, ok := conn.Conn.(*protocol.Session)
+	if !ok {
+		return
+	}
+	select {
+	case <-native.Done():
+		return
+	default:
+	}
+	ctx, cancel := context.WithCancel(client.ctx)
+	defer cancel()
+	s.workers.Go(func() {
+		select {
+		case <-native.Done():
+			cancel()
+		case <-ctx.Done():
+		}
+	})
 	if s.authenticated != nil {
-		if err := s.authenticated(client.ctx, client.PolicyID); err != nil {
+		if err := s.authenticated(ctx, client.PolicyID); err != nil {
 			return
 		}
 	}
@@ -238,7 +257,7 @@ func (s *Server) handle(conn *managedSession) {
 		if !setTarget(&d, request.DstAddr) {
 			return
 		}
-		_ = s.controller.Proxy(client.ctx, client.PolicyID, conn, func(ctx context.Context) (io.ReadWriteCloser, error) {
+		_ = s.controller.Proxy(ctx, client.PolicyID, conn, func(ctx context.Context) (io.ReadWriteCloser, error) {
 			ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 			defer cancel()
 			target, err := s.dial(ctx, d)
@@ -257,7 +276,7 @@ func (s *Server) handle(conn *managedSession) {
 		})
 	case constant.Socks5UDPAssociateCmd:
 		d.Network = "udp"
-		s.serveUDP(client.ctx, conn, d)
+		s.serveUDP(ctx, conn, d)
 	}
 }
 

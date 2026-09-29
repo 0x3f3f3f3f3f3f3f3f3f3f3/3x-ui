@@ -213,3 +213,19 @@ waits for its cursor transaction before delivery. See the
 [validation record](validation.md#public-udp-payload-rates-and-durable-admission-batching-2026-09-29)
 for the failed baselines, fixture correction, unchanged tolerances and negative
 controls. No complete Task 6 claim follows from these scoped checks.
+
+## Observed native session closure
+
+The adapter now binds first-use activation, TCP proxying and UDP policy waits
+to both the credential generation and the individual native session. Once the
+native session ends, its child context cancels pending work and closes owned
+targets. Other sessions and the shared listener keep running. The tracked
+watcher exits when the handler or its native session ends.
+
+Official-client tests cover queued shaped TCP/UDP payload on both underlays and
+blocked first-use activation. Native resources and adapter presence must clear
+within 2s after the official session Close returns. A new same-policy flow
+synchronizes with any already-started admission transaction before the exact
+stable-usage check. Committed but undelivered bytes keep their existing charge.
+This evidence concerns observed authenticated session closure; silent UDP
+peer loss and close frames behind full TCP queues remain separate cases.

@@ -50,6 +50,11 @@ type sessionResource struct {
 	underlay     *baseUnderlay
 }
 
+// Done lets the managed adapter cancel policy waits when the native session ends.
+func (s *Session) Done() <-chan struct{} {
+	return s.closedChan
+}
+
 func (m *Mux) SetServerLimits(limits ServerLimits) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

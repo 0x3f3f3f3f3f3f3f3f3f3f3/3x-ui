@@ -70,3 +70,8 @@ aggregate native transport diagnostics remain available. `ServerResourceStats`
 reports active leases, their peak/rejections and payload retained in the five
 bounded queues. It does not count application buffers, encryption or kernel
 memory. Default unconfigured native behavior remains available to upstream tests.
+
+The managed adapter also observes the native session's read-only `Done` signal.
+It cancels first-use, route and policy waits when that session ends, while keeping
+the authenticated credential generation and other sessions usable. This signal
+does not shorten native idle detection or change the wire protocol.

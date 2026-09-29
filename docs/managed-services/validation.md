@@ -3918,3 +3918,76 @@ zero after the full-root tests. Logs: `admission-backend-lint.log` and
 `admission-panel-build.log` in the same directory. No frontend source or assets
 changed in this increment. These results establish the scoped batching/UDP
 increment, not completion of the remaining native cleanup or full original goal.
+
+## Native session closure and policy wait lifetime (2026-09-29)
+
+The adapter passed only the authenticated credential generation's context into
+first-use activation, TCP proxying and UDP policy writers. An individual native
+session could finish and release all native buffers while its adapter still
+waited for a rate grant or first-use callback. A read-only native `Session.Done`
+signal now cancels a child context also owned by the credential generation.
+The handler uses that context before first use and for both payload types.
+The watcher is tracked with the handler's server workers. No wire format,
+client binary, native queue limit, idle timeout or accounting rule changes.
+
+Actual official-client tests cover both native underlays and both TCP/UDP
+payloads: establish traffic, set upload to 64 B/s, queue 64 KiB, close the native
+session, and require native resources and adapter presence to clear within 2s
+after the official Close returns.
+The fixture waits for the destination to observe the queued marker before
+closing the session. The target drains that marker without replying, while echoing setup
+and the independent healthy client's payload. This prevents a failed echo write
+from independently canceling the flow and masking the missing lifetime link.
+Two additional cases hold actual first-use activation until its context ends.
+The meaningful RED failed all **2 top-level / 6 subtests** in 14.884s: native
+sessions/buffers had been released but the adapter or callback remained alive
+(`native-peer-close-sink-red.jsonl`). The initial echo-target version passed the
+four queued-payload cases but failed both first-use cases; it did not isolate
+queued cancellation (`native-peer-close-red.jsonl`).
+
+The first fix passed the six cases under race in 4.292s. Broader race checking
+then exposed an observation race in one new TCP case: the test read usage as soon
+as presence disappeared, while an already-started six-byte admission transaction
+was still completing. The documented admission semantics permit such committed
+but undelivered charges. The final fixture opens/closes another flow for the same
+policy before taking the stable-accounting snapshot. That uses the existing
+admission/check mutex as a transaction barrier and also verifies the policy is
+still usable. Native resource and presence assertions remain before the barrier;
+the subsequent zero-growth assertion and the 2s cleanup bound are unchanged.
+The full copied native protocol suite passed during that otherwise failed run;
+public regression, lint and build did not run after the failure. Logs are under
+`/tmp/3x-ui-rate-trace/`, including `native-peer-close-full-race.jsonl`.
+
+The source patch was regenerated against checksum-verified official v3.38.0
+files, preserving its unified-diff format. `python3 tools/managed-mieru/prepare.py
+--verify` reproduced all native Go source and the license byte for byte.
+Graceful authenticated session-close evidence is separate from silent UDP peer
+loss or a TCP close frame behind a full transport queue. The earlier public
+client-stop observation and physical-disconnect timeout bounds remain open.
+
+With the final receiver-ready and transaction-barrier fixture, temporarily
+restoring the old server context binding failed all **2 top-level / 6 subtests**
+in 14.865s (`native-peer-close-observed-red.jsonl`). Restored source passed all
+six under race in 4.290s (`native-peer-close-observed-green.jsonl`). The subsequent
+complete `go test -p 1 -race -shuffle=on ./internal/mieru/... -count=1
+-timeout=300s -json` passed **2 packages, 108 top-level / 1881 subtests**, no skips
+or failures (`native-peer-close-final-race.jsonl`). Public Runtime/subscription
+regression and static/build results follow below.
+
+Normal-build public regression, with the pinned managed core, official-client
+module, Mihomo and PostgreSQL environment above, also passed:
+`go test -p 1 -shuffle=on ./internal/web/service ./internal/sub -run
+'^Test.*Mieru|^TestManagedPolicy' -count=1 -timeout=600s -json` — **2 packages,
+35 top-level / 84 subtests**, no skips or failures. This includes public shared
+TCP and UDP rates, quota/restriction combinations, core recovery, canonical
+lifecycle, shared-controller ownership and official subscription interoperation.
+Service took 370.844s; subscription took 5.028s. The two full native race package
+durations were 125.486s and 29.804s. These are affected-path checks after the
+peer-close change; the preceding full-root result belongs to the batching commit.
+
+`golangci-lint run ./internal/mieru/...` reported **0 issues**, and
+`go build -o /tmp/3x-ui-peer-close-panel .` completed with exit zero. Final logs:
+`native-peer-close-public-final.jsonl`, `native-peer-close-lint-final.log`,
+`native-peer-close-build-final.log`. Original rate/quotas and unchanged-client
+checks remain in force. Complete Task 6 and physical peer-loss detection remain
+open; no frontend source changed in this increment.

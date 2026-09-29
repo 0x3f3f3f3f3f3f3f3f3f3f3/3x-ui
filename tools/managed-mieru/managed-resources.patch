@@ -1,6 +1,6 @@
 --- /dev/null
 +++ b/managed_resources.go
-@@ -0,0 +1,350 @@
+@@ -0,0 +1,355 @@
 +package protocol
 +
 +import (
@@ -51,6 +51,11 @@
 +	released     bool
 +	receiveBytes atomic.Int64
 +	underlay     *baseUnderlay
++}
++
++// Done lets the managed adapter cancel policy waits when the native session ends.
++func (s *Session) Done() <-chan struct{} {
++	return s.closedChan
 +}
 +
 +func (m *Mux) SetServerLimits(limits ServerLimits) error {
