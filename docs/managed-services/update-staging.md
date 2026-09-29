@@ -6,8 +6,9 @@ directory. Its optional download mode selects this fork's release and tag commit
 does not stop services, replace an installation or migrate a database. `update.sh`
 and `install.sh` run these checks before dependencies, service stop or program
 replacement. The regular menu and web updates use the verified installed updater.
-Menu installation/refresh/legacy routes and transactional program/DB rollback
-remain unfinished; preflight alone does not make activation atomic.
+Menu installation, refresh and release selection also verify their script sources.
+Independent core updates and transactional program/DB rollback remain unfinished;
+preflight alone does not make activation atomic.
 
 Build and run:
 
@@ -186,8 +187,8 @@ fail at its unchanged 2-second deadline; restoring it passes.
 This command does not start the candidate web service, migrate or restore a
 database, validate every user configuration, replace an installed directory or
 prove a packaged image works. The installer integration below has separate
-native-process evidence; menu installation/refresh/legacy paths and safe
-activation with program/database rollback remain unfinished work.
+native-process evidence. Safe activation with program/database rollback remains
+unfinished work.
 
 ## Fork download and updater preparation
 
@@ -270,15 +271,14 @@ availability compares full source commits; short display hashes and release-body
 markers do not determine equality. Metadata lookup does not download or execute
 the candidate and is not evidence of its runtime compatibility.
 
-The menu installation/refresh/legacy-version routes, separate core updater,
-and safe activation/rollback are still open. Do not use those unchanged paths
-as evidence that all distribution and recovery routes are fork-safe.
+The separate core updater and safe activation/rollback are still open. Do not
+interpret source verification as evidence of complete distribution/recovery safety.
 
 中文说明：常规菜单更新和网页更新已改用已安装发布包内、经过清单校验的
 更新脚本。脚本会复制到安装目录之外；运行时配置等额外文件不会因此被拒绝或
 修改。下载、完整文件校验和真实受管核心预检均在依赖安装与停服之前完成。
 网页更新在容器内会明确拒绝，并提示通过镜像更新；来源未知或带源码修改标记的
-构建也不能启动自动更新。菜单安装入口、自身刷新/旧版本安装、独立核心更新和
+构建也不能启动自动更新。独立核心更新和
 失败后的程序及数据库事务回滚仍未完成，不能将上述检查视为完整升级回滚保证。
 
 ## Standalone installer integration
@@ -320,4 +320,43 @@ downgrade path; there is no automatic database downgrade/restore transaction yet
 中文说明：独立 `install.sh` 已使用 fork 的完整发布包校验和真实核心预检，
 失败时不会先安装依赖、停止服务或删除旧目录。首次 SQLite 安装及安装后面板
 HTTP 已在隔离环境验证；真实服务管理器、证书签发、PostgreSQL 安装和事务回滚
-仍未验证或未完成。菜单中的安装入口仍需要单独接入，不能与独立安装脚本混淆。
+仍未验证或未完成。菜单安装入口的校验方式见下文。
+
+## Menu installation, refresh and release selection
+
+`x-ui prepare-menu` prepares a private verified copy of the installed `x-ui.sh`,
+using the same compiled-source and individual manifest checks as `prepare-update`.
+The menu's refresh action (also `x-ui update-menu`) sets the copied file's mode
+before atomically replacing `/usr/bin/x-ui` on that directory's filesystem.
+It restores the matching installed release, makes no download and does not restart
+the panel. Missing or changed installed sources fail with the old menu intact;
+temporary source/destination files are removed.
+
+On an uninstalled native host, `x-ui install` downloads this fork release's
+standalone `install.sh` asset and mandatory `install.sh.sha256`. The sidecar must
+contain exactly one lowercase SHA256 and the expected filename. HTTPS redirects
+remain HTTPS; the sidecar is limited to 4096 bytes and the script to 2 MiB even
+without Content-Length, with a 120-second deadline per download. The installer
+runs only after checksum verification. Failures return nonzero and do not request
+service start. `XUI_UPDATE_TAG` selects a particular tag; absent it, bootstrap
+uses the latest stable release. This bootstrap trusts the fork's HTTPS release
+channel, as does the standalone staging-helper bootstrap; it is not an independent
+signature or source-provenance attestation.
+
+The Linux amd64 release job exports the portable installer and sidecar once,
+alongside its architecture-specific assets. Other Linux hosts use that same shell
+asset. The job change has been statically checked, but no release publication has
+been performed. Releases lacking these required assets are rejected.
+
+The existing `x-ui legacy` command now selects an exact managed-fork release tag
+and runs the verified installed updater. The input is bounded and validated, and
+is never evaluated as shell code. Upstream/old unmanaged releases cannot satisfy
+the helper/manifest/core checks. An older compatible bundle still does not imply
+safe database downgrade: consistent backup/restore and transactional rollback
+remain unfinished. The menu explicitly states that automatic database downgrade
+is unavailable.
+
+中文说明：菜单刷新恢复已安装发布包对应的已校验脚本，采用原子替换且不重启
+面板。菜单首次安装必须校验 fork 发布的安装脚本及 SHA256；下载失败不会再
+尝试启动服务。旧版本入口改为选择受管 fork 的发布标签，禁止将输入作为 shell
+代码执行。上述来源校验不提供数据库降级或失败回滚保证。

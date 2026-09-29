@@ -10,6 +10,46 @@ import (
 	"testing"
 )
 
+func TestPrepareInstalledMenuChecksItsOwnManifestEntry(t *testing.T) {
+	for _, changed := range []bool{false, true} {
+		t.Run(map[bool]string{false: "valid", true: "changed-menu"}[changed], func(t *testing.T) {
+			directory, identity := manifestFixture(t, "linux-arm64")
+			manifest, err := BuildManifest(t.Context(), directory, identity)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := WriteManifest(directory, manifest); err != nil {
+				t.Fatal(err)
+			}
+			name := "update.sh"
+			if changed {
+				name = "x-ui.sh"
+			}
+			if err := os.WriteFile(filepath.Join(directory, name), []byte("modified installed script"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			parent := t.TempDir()
+			path, err := PrepareInstalledMenu(t.Context(), directory, parent, identity.Commit, identity.Platform)
+			if changed {
+				if err == nil || path != "" {
+					t.Fatalf("changed menu accepted: %s %v", path, err)
+				}
+				if entries, err := os.ReadDir(parent); err != nil || len(entries) != 0 {
+					t.Fatalf("rejected menu leaked files: %v %v", entries, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := os.ReadFile(path)
+			if err != nil || string(got) != "fixture:x-ui.sh" || !strings.HasPrefix(filepath.Base(path), "3x-ui-menu-") {
+				t.Fatalf("wrong menu copy: %q %q %v", path, got, err)
+			}
+		})
+	}
+}
+
 func TestPrepareInstalledUpdaterAllowsRuntimeFilesAndSurvivesReplacement(t *testing.T) {
 	directory, identity := manifestFixture(t, "linux-arm64")
 	manifest, err := BuildManifest(t.Context(), directory, identity)

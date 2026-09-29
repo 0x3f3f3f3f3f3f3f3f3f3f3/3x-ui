@@ -325,8 +325,10 @@ Delivery progress (2026-09-29): managed bundle assembly, full-source manifests,
 bounded fork downloads, candidate managed-core preflight and verified installed
 menu/web update entry points have separate evidence. The standalone installer
 now uses that preflight before package/service changes and has an isolated first
-SQLite installation plus installed-panel HTTP check. Menu installation/refresh/
-legacy routes, independent core updates, transactional activation/DB rollback,
+SQLite installation plus installed-panel HTTP check. Menu installation verifies
+its release asset, refresh restores the verified installed menu, and selected
+release tags pass through the managed updater without shell evaluation.
+Independent core updates, transactional activation/DB rollback,
 real service-manager/container/platform execution and final acceptance remain
 open; the broader delivery checkboxes below are intentionally not complete.
 

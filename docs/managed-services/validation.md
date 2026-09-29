@@ -5145,3 +5145,62 @@ Shell/Python syntax and `git diff --check` passed. The first full Go lint run
 reported one formatting issue in the new test; after formatting correction,
 the final repository-wide run reported zero issues
 (`installer-final-lint-corrected.log`).
+
+## Verified menu maintenance and installer bootstrap (2026-09-29)
+
+Menu refresh now restores a verified `x-ui.sh` from the running panel's installed
+release, using `prepare-menu` before an atomic same-directory replacement of the
+control menu. Mode 0755 is set before replacement; refresh neither downloads nor
+restarts the panel. First menu installation downloads only the fork's bounded
+standalone installer and mandatory checksum. The existing `legacy` command now
+validates an exact fork tag and invokes the installed verified updater without
+`eval`. The Linux amd64 packaging job exports the portable installer/checksum
+once; the workflow has not been published or executed remotely.
+
+The old actual menu reproduced three failures inside guarded chroots: refresh
+fell back to upstream main; installer download failure still requested service
+start and returned zero; a shell expression in the legacy tag created a harmless
+owned `/fixture/injected` marker through `eval`. The new code rejects that same
+input before any download, and the marker is absent. A malformed checksum already
+failed closed but initially emitted no explanation; its additional diagnostic
+assertion failed first and now receives an explicit invalid-checksum message.
+
+The final **10 maintenance cases passed**: matching refresh, changed menu, missing
+manifest, selected managed tag, injected tag, missing checksum, wrong checksum,
+wrong sidecar filename, oversized installer and successful menu installation.
+The final case goes through both script bootstraps, real candidate/core preflight,
+actual first SQLite initialization and authenticated HTTP from the installed
+panel. All installed release files/menu/unit match the expected hashes and
+temporary files are removed. The oversized response is stopped by the bounded
+stream, including the expected fixture broken-pipe error; it is never executed.
+The existing **3 regular menu and 4 actual HTTP update cases also passed** after
+the shared verifier/probe changes. No skipped case is counted as a pass.
+
+The shared library/tool race/shuffle run passed **42 top-level and 182 subtests,
+zero skips**. The normal-binary preparation regression passed **1 top-level and
+3 subtests, zero skips**. Repository-wide Go lint reported zero issues; shell
+syntax, Python syntax, whitespace checks and official actionlint 1.7.12 checks
+for the changed release workflow passed.
+
+```sh
+python3 tools/managed-release/probe_update.py --menu-maintenance \
+  --helper /trusted/update-stage --panel /trusted/native-panel \
+  --managed-core /trusted/managed-xray --stock-core /trusted/stock-xray
+# Add --case menu-legacy-invalid to reproduce only the tag rejection.
+go test -p 1 -race -shuffle=on -count=1 ./internal/updatebundle ./tools/update-stage
+```
+
+These are owned Linux arm64 fixtures with actual binaries, SQLite and loopback
+HTTP. Network downloads and service/package managers remain isolated substitutes.
+Pre-commit binaries use a full declared fixture identity, not provenance
+attestation. No release asset has been published, and actual service-manager,
+container and foreign-platform runtime acceptance is unchanged. Independent
+core updates, transactional activation, database downgrade/rollback and the
+outstanding original protocol/policy requirements remain open.
+
+Logs under `/tmp/3x-ui-rate-trace/`: `menu-prepare-red.log`,
+`menu-prepare-library-green.jsonl`, `menu-refresh-red.log`,
+`menu-legacy-marker-red.log`, `menu-install-red.log`,
+`menu-checksum-diagnostic-red.log`, `menu-maintenance-final.jsonl`,
+`menu-regular-regression.jsonl`, `menu-web-regression.jsonl`,
+`menu-root-cli-regression.jsonl` and `menu-final-lint.log`.

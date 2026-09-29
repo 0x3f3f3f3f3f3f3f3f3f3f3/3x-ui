@@ -82,7 +82,7 @@ os_version=""
 os_version=$(grep "^VERSION_ID" /etc/os-release | cut -d '=' -f2 | tr -d '"' | tr -d '.')
 
 running_in_docker="false"
-if [[ -f /.dockerenv ]] || [[ "${XUI_IN_DOCKER}" == "true" ]]; then
+if [[ -f /.dockerenv || -f /run/.containerenv ]] || [[ "${XUI_IN_DOCKER}" == "true" ]]; then
     running_in_docker="true"
 fi
 
@@ -128,14 +128,61 @@ before_show_menu() {
     show_menu
 }
 
-install() {
-    bash <(curl -Ls https://raw.githubusercontent.com/MHSanaei/3x-ui/main/install.sh)
-    if [[ $? == 0 ]]; then
-        if [[ $# == 0 ]]; then
-            start
-        else
-            start 0
+run_fork_installer() (
+    if [[ "$running_in_docker" == true ]]; then
+        LOGE "Update the managed fork container image through your container runtime."
+        return 1
+    fi
+    local tag="${XUI_UPDATE_TAG:-}" work url expected actual
+    [[ -z "$tag" || "$tag" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$ ]] || {
+        LOGE "Invalid release tag."
+        return 1
+    }
+    work=$(mktemp -d "${TMPDIR:-/tmp}/.x-ui-install-XXXXXXXX") || return 1
+    trap 'rm -rf -- "$work"' EXIT
+    trap 'exit 143' TERM
+    trap 'exit 130' INT
+    url="https://github.com/0x3f3f3f3f3f3f3f3f3f3/3x-ui/releases/latest/download/install.sh"
+    if [[ -n "$tag" ]]; then
+        url="https://github.com/0x3f3f3f3f3f3f3f3f3f3/3x-ui/releases/download/${tag}/install.sh"
+    fi
+    download_installer_asset() {
+        local asset_url="$1" dest="$2" limit="$3" bytes
+        if ! (set -o pipefail; curl --fail --silent --location \
+            --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 120 \
+            "$asset_url" | head -c "$((limit + 1))" > "$dest"); then
+            LOGE "Failed to download the managed fork installer."
+            return 1
         fi
+        bytes=$(wc -c < "$dest")
+        [[ "$bytes" -gt 0 && "$bytes" -le "$limit" ]] || {
+            LOGE "Installer download has invalid size."
+            return 1
+        }
+    }
+    download_installer_asset "${url}.sha256" "$work/install.sh.sha256" 4096 || return 1
+    expected=$(awk 'NF != 2 || $2 != "install.sh" || NR != 1 {bad=1} END {if (bad || NR != 1) exit 1; print $1}' "$work/install.sh.sha256") || {
+        LOGE "Invalid installer checksum file."
+        return 1
+    }
+    [[ "$expected" =~ ^[0-9a-f]{64}$ ]] || {
+        LOGE "Invalid installer SHA256."
+        return 1
+    }
+    download_installer_asset "$url" "$work/install.sh" 2097152 || return 1
+    actual=$(sha256sum "$work/install.sh") || return 1
+    [[ "${actual%% *}" == "$expected" ]] || {
+        LOGE "Installer checksum mismatch."
+        return 1
+    }
+    chmod 700 "$work/install.sh" || return 1
+    bash "$work/install.sh"
+)
+
+install() {
+    run_fork_installer || return $?
+    if [[ $# == 0 ]]; then
+        before_show_menu
     fi
 }
 
@@ -191,57 +238,23 @@ update_dev() {
     fi
 }
 
-replace_xui_script() {
-    local url="$1"
-    local use_if_modified_since="$2"
-    local temp_file="/usr/bin/x-ui-temp.$$"
-
-    rm -f "$temp_file"
-    if [[ "$use_if_modified_since" == "true" ]]; then
-        curl -fLRo "$temp_file" -z /usr/bin/x-ui "$url"
-    else
-        curl -fLRo "$temp_file" "$url"
-    fi
-    if [[ $? != 0 ]]; then
-        rm -f "$temp_file"
+replace_xui_script() (
+    local script temp_file=""
+    script=$("${xui_folder}/x-ui" prepare-menu) || return 1
+    [[ "$script" == /* && "$script" != *$'\n'* && "${script##*/}" == 3x-ui-menu-*.sh && -f "$script" && ! -L "$script" ]] || {
+        LOGE "The panel did not return a verified menu path."
         return 1
-    fi
-
-    if [[ ! -s "$temp_file" ]]; then
-        rm -f "$temp_file"
-        # -z above means "not modified since /usr/bin/x-ui" rather than a
-        # real failure, so an empty download here is success, not an error.
-        [[ "$use_if_modified_since" == "true" ]] && return 0
-        return 1
-    fi
-
-    mv -f "$temp_file" /usr/bin/x-ui
-    if [[ $? != 0 ]]; then
-        rm -f "$temp_file"
-        return 1
-    fi
-    # The move already landed the new script; a transient chmod failure here
-    # shouldn't make callers think the whole replace failed.
-    chmod +x /usr/bin/x-ui
-    return 0
-}
-
-# The menu must match the installed panel, so update it from that release's
-# tag; fall back to main only when no script is published for the version.
-installed_script_url() {
-    local ver
-    ver=$("${xui_folder}/x-ui" -v 2> /dev/null | tr -d '[:space:]')
-    if [[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && curl -fsIL -o /dev/null "https://raw.githubusercontent.com/MHSanaei/3x-ui/v${ver}/x-ui.sh"; then
-        echo "https://raw.githubusercontent.com/MHSanaei/3x-ui/v${ver}/x-ui.sh"
-    else
-        echo -e "${yellow}No x-ui.sh published for the installed version (${ver:-unknown}), using main${plain}" >&2
-        echo "https://raw.githubusercontent.com/MHSanaei/3x-ui/main/x-ui.sh"
-    fi
-}
+    }
+    trap 'rm -f -- "$script"; [[ -z "$temp_file" ]] || rm -f -- "$temp_file"' EXIT
+    trap 'exit 143' TERM
+    trap 'exit 130' INT
+    temp_file=$(mktemp /usr/bin/.x-ui-menu-XXXXXXXX) || return 1
+    cp -- "$script" "$temp_file" && chmod 755 "$temp_file" && mv -f -- "$temp_file" /usr/bin/x-ui
+)
 
 update_menu() {
     echo -e "${yellow}Updating Menu${plain}"
-    confirm "This function will update the menu to the latest changes." "y"
+    confirm "Restore the verified menu matching the installed panel release?" "y"
     if [[ $? != 0 ]]; then
         LOGE "Cancelled"
         if [[ $# == 0 ]]; then
@@ -250,9 +263,8 @@ update_menu() {
         return 0
     fi
 
-    if replace_xui_script "$(installed_script_url)" "false"; then
-        chmod +x ${xui_folder}/x-ui.sh
-        echo -e "${green}Update successful. The panel has automatically restarted.${plain}"
+    if replace_xui_script; then
+        echo -e "${green}Menu restored to the installed release. Run x-ui again to use it.${plain}"
         exit 0
     else
         echo -e "${red}Failed to update the menu.${plain}"
@@ -261,18 +273,17 @@ update_menu() {
 }
 
 legacy_version() {
-    echo -n "Enter the panel version (like 2.4.0):"
-    read -r tag_version
-
-    if [ -z "$tag_version" ]; then
-        echo "Panel version cannot be empty. Exiting."
-        exit 1
+    local tag
+    read -rp "Enter the managed fork release tag (for example v3.8.5): " tag
+    [[ "$tag" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$ ]] || {
+        LOGE "Invalid release tag."
+        return 1
+    }
+    LOGI "Installing managed fork release ${tag}; automatic database downgrade is unavailable."
+    run_installed_updater "$tag" || return $?
+    if [[ $# == 0 ]]; then
+        before_show_menu
     fi
-    # Use the entered panel version in the download link
-    install_command="bash <(curl -Ls "https://raw.githubusercontent.com/mhsanaei/3x-ui/v$tag_version/install.sh") v$tag_version"
-
-    echo "Downloading and installing panel version $tag_version..."
-    eval $install_command
 }
 
 # Function to handle the deletion of the script file
@@ -334,7 +345,7 @@ uninstall() {
     echo ""
     echo -e "Uninstalled Successfully.\n"
     echo "If you need to install this panel again, you can use below command:"
-    echo -e "${green}bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)${plain}"
+    echo -e "${green}Use install.sh and its SHA256 from https://github.com/0x3f3f3f3f3f3f3f3f3f3/3x-ui/releases${plain}"
     echo ""
     # Trap the SIGTERM signal
     trap delete_script SIGTERM
@@ -867,13 +878,13 @@ enable_bbr() {
 }
 
 update_shell() {
-    if replace_xui_script "$(installed_script_url)" "true"; then
+    if replace_xui_script; then
         LOGI "Upgrade script succeeded, Please rerun the script"
         before_show_menu
     else
         echo ""
-        LOGE "Failed to download script, Please check whether the machine can connect Github"
-        before_show_menu
+        LOGE "Cannot restore the installed release menu. Check the panel source and release files."
+        return 1
     fi
 }
 
@@ -3449,7 +3460,7 @@ show_menu() {
 │  ${green}2.${plain} Update                                    │
 │  ${green}3.${plain} Update to Dev Channel (latest commit)     │
 │  ${green}4.${plain} Update Menu                               │
-│  ${green}5.${plain} Legacy Version                            │
+│  ${green}5.${plain} Select Fork Release                            │
 │  ${green}6.${plain} Uninstall                                 │
 │────────────────────────────────────────────────│
 │  ${green}7.${plain} Reset Username & Password                 │
@@ -3617,6 +3628,9 @@ if [[ $# > 0 ]]; then
             ;;
         "update-dev")
             check_install 0 && update_dev 0
+            ;;
+        "update-menu")
+            check_install 0 && update_menu 0
             ;;
         "legacy")
             check_install 0 && legacy_version 0

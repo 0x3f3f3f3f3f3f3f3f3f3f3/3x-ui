@@ -31,10 +31,10 @@ func runReleaseCommand(args []string, out io.Writer) (bool, error) {
 	switch args[0] {
 	case "release-info":
 		return true, writeReleaseInfo(args[1:], out)
-	case "prepare-update":
+	case "prepare-update", "prepare-menu":
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		return true, prepareInstalledUpdate(ctx, args[1:], out)
+		return true, prepareInstalledScript(ctx, args[0], args[1:], out)
 	case "verify-release":
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
@@ -44,9 +44,9 @@ func runReleaseCommand(args []string, out io.Writer) (bool, error) {
 	}
 }
 
-func prepareInstalledUpdate(ctx context.Context, args []string, out io.Writer) error {
+func prepareInstalledScript(ctx context.Context, command string, args []string, out io.Writer) error {
 	if len(args) != 0 {
-		return errors.New("prepare-update does not accept arguments")
+		return fmt.Errorf("%s does not accept arguments", command)
 	}
 	if runtime.GOOS != "linux" {
 		return errors.New("installed updater preparation requires Linux")
@@ -62,7 +62,11 @@ func prepareInstalledUpdate(ctx context.Context, args []string, out io.Writer) e
 	if err != nil {
 		return err
 	}
-	path, err := updatebundle.PrepareInstalledUpdater(ctx, filepath.Dir(executable), os.TempDir(), info.Commit, info.Platform)
+	prepare := updatebundle.PrepareInstalledUpdater
+	if command == "prepare-menu" {
+		prepare = updatebundle.PrepareInstalledMenu
+	}
+	path, err := prepare(ctx, filepath.Dir(executable), os.TempDir(), info.Commit, info.Platform)
 	if err != nil {
 		return err
 	}

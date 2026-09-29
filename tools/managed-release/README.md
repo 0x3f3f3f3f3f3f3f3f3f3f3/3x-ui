@@ -46,6 +46,8 @@ CGO_ENABLED=0 go build -trimpath -buildvcs=false \
   bundle with the candidate panel, then writes a GNU tar archive and SHA256.
   It also exports the platform's static bootstrap helper, its SHA256 and the
   release manifest. ARMv5/v6/v7 use `xray-linux-arm32` and `mtg-linux-arm`.
+  The amd64 job additionally exports the portable `install.sh` and its mandatory
+  checksum once for the menu's verified first-install bootstrap.
 - Cross-platform Linux preflight uses the existing Docker QEMU action to
   register emulators. See its [upstream documentation](https://github.com/docker/setup-qemu-action).
   These CI gates have not been executed locally on the foreign architectures.
@@ -116,3 +118,10 @@ SQLite installation, checks installed file hashes and private credential-file
 permissions, then starts the real installed panel and checks authenticated HTTP.
 Package and service managers are substitutes inside the owned chroot; no real
 systemd/OpenRC deployment, ACME issuance or upgrade rollback is claimed.
+
+`--menu-maintenance` checks menu refresh, selected-release input validation and
+the standalone installer bootstrap, including missing/wrong/malformed checksums,
+an oversized script and first installation followed by authenticated panel HTTP.
+Use `--case NAME` to rerun a single case from the selected mode. Refresh must make
+no network request or service restart; a shell expression in the release tag must
+be rejected before a fixture command marker can be created.

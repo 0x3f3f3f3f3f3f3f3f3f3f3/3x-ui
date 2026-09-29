@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -15,6 +16,22 @@ import (
 // Runtime files need not be release members. The caller supplies its compiled,
 // unmodified panel commit/platform; this does not attest against a hostile root.
 func PrepareInstalledUpdater(ctx context.Context, directory, parent, commit, platform string) (path string, resultErr error) {
+	return prepareInstalledScript(ctx, directory, parent, commit, platform, "update.sh")
+}
+
+// PrepareInstalledMenu copies the verified control menu for the running panel.
+// The caller owns the returned private file and must remove it after use.
+func PrepareInstalledMenu(ctx context.Context, directory, parent, commit, platform string) (path string, resultErr error) {
+	return prepareInstalledScript(ctx, directory, parent, commit, platform, "x-ui.sh")
+}
+
+func prepareInstalledScript(ctx context.Context, directory, parent, commit, platform, name string) (path string, resultErr error) {
+	label, pattern := "updater", "3x-ui-update-*.sh"
+	if name == "x-ui.sh" {
+		label, pattern = "menu", "3x-ui-menu-*.sh"
+	} else if name != "update.sh" {
+		return "", errors.New("unsupported installed script")
+	}
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -44,26 +61,26 @@ func PrepareInstalledUpdater(ctx context.Context, directory, parent, commit, pla
 		return "", err
 	}
 	if manifest.Identity != expected {
-		return "", errors.New("installed updater source differs from the running panel")
+		return "", fmt.Errorf("installed %s source differs from the running panel", label)
 	}
-	want := manifest.Files["update.sh"]
+	want := manifest.Files[name]
 	if want.Size > 2<<20 {
-		return "", errors.New("installed updater exceeds size limit")
+		return "", fmt.Errorf("installed %s exceeds size limit", label)
 	}
-	info, err := root.Lstat("update.sh")
+	info, err := root.Lstat(name)
 	if err != nil {
 		return "", err
 	}
 	if !info.Mode().IsRegular() || info.Mode()&0o111 == 0 || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 || info.Size() != want.Size {
-		return "", errors.New("installed updater type, size or executable mode differs from its manifest")
+		return "", fmt.Errorf("installed %s type, size or executable mode differs from its manifest", label)
 	}
-	source, err := root.Open("update.sh")
+	source, err := root.Open(name)
 	if err != nil {
 		return "", err
 	}
 	opened, statErr := source.Stat()
 	if statErr != nil || !os.SameFile(info, opened) {
-		return "", errors.Join(errors.New("installed updater changed while opening"), statErr, source.Close())
+		return "", errors.Join(fmt.Errorf("installed %s changed while opening", label), statErr, source.Close())
 	}
 	data, readErr := io.ReadAll(io.LimitReader(contextReader{ctx, source}, want.Size+1))
 	if err := errors.Join(readErr, source.Close()); err != nil {
@@ -71,9 +88,9 @@ func PrepareInstalledUpdater(ctx context.Context, directory, parent, commit, pla
 	}
 	digest := sha256.Sum256(data)
 	if int64(len(data)) != want.Size || hex.EncodeToString(digest[:]) != want.SHA256 {
-		return "", errors.New("installed updater checksum differs from its manifest")
+		return "", fmt.Errorf("installed %s checksum differs from its manifest", label)
 	}
-	file, err := os.CreateTemp(staging, "3x-ui-update-*.sh")
+	file, err := os.CreateTemp(staging, pattern)
 	if err != nil {
 		return "", err
 	}

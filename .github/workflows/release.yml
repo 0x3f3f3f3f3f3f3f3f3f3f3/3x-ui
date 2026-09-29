@@ -188,6 +188,10 @@ jobs:
           cd release-assets
           sha256sum "x-ui-linux-${{ matrix.platform }}.tar.gz" > "x-ui-linux-${{ matrix.platform }}.tar.gz.sha256"
           sha256sum "update-stage-linux-${{ matrix.platform }}" > "update-stage-linux-${{ matrix.platform }}.sha256"
+          if [[ "${{ matrix.platform }}" == amd64 ]]; then
+            cp ../x-ui/install.sh install.sh
+            sha256sum install.sh > install.sh.sha256
+          fi
 
       - name: Upload files to Artifacts
         uses: actions/upload-artifact@v7

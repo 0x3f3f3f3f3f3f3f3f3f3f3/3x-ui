@@ -139,15 +139,17 @@ if len(sys.argv) > 1 and sys.argv[1] == '--child':
         raise SystemExit(0)
     if env.pop('FIXTURE_MENU', ''):
         command = env.pop('FIXTURE_MENU_COMMAND')
-        os.execve('/bin/bash', ['bash', '/usr/bin/x-ui', command], env)
-    script = '/install.sh' if env.pop('FIXTURE_INSTALL', '') else '/update.sh'
+        invocation = ['bash', '/usr/bin/x-ui'] + ([command] if command else [])
+    else:
+        script = '/install.sh' if env.pop('FIXTURE_INSTALL', '') else '/update.sh'
+        invocation = ['bash', script]
     if env.pop('FIXTURE_INSTALL_SUCCESS', ''):
-        installed = subprocess.run(['bash', script], env=env, text=True, capture_output=True, timeout=90)
+        installed = subprocess.run(invocation, env=env, text=True, capture_output=True, timeout=90)
         Path('/fixture/install.log').write_text(installed.stdout + installed.stderr)
         assert installed.returncode == 0, installed.stderr[-1000:]
         web_fixture(env, 'installed')
         raise SystemExit(0)
-    os.execve('/bin/bash', ['bash', script], env)
+    os.execve('/bin/bash', invocation, env)
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--helper', required=True, type=Path)
@@ -155,13 +157,15 @@ parser.add_argument('--panel', required=True, type=Path)
 parser.add_argument('--managed-core', required=True, type=Path)
 parser.add_argument('--stock-core', required=True, type=Path)
 parser.add_argument('--menu', action='store_true', help='exercise actual stable/dev menu update entry points')
+parser.add_argument('--menu-maintenance', action='store_true', help='exercise menu refresh, release selection and installer bootstrap')
+parser.add_argument('--case', help='run one named case from the selected probe mode')
 parser.add_argument('--web', action='store_true', help='exercise authenticated HTTP and detached update entry points')
 parser.add_argument('--install', action='store_true', help='exercise the actual installer before activation')
 parser.add_argument('--fresh-install', action='store_true', help='installer fixture with no existing installation')
 parser.add_argument('--install-success', action='store_true', help='fresh SQLite installation and actual installed-panel HTTP startup')
 parser.add_argument('--dirty-source-rejection', action='store_true', help='web rejection probe with an actually modified-source build')
 args = parser.parse_args()
-assert sum([args.menu, args.web, args.install]) <= 1, 'choose menu, web or installer probe'
+assert sum([args.menu, args.web, args.install, args.menu_maintenance]) <= 1, 'choose menu, web or installer probe'
 assert not args.fresh_install or args.install, 'fresh installation requires --install'
 assert not args.install_success or args.fresh_install, 'success probe requires --fresh-install'
 assert not args.dirty_source_rejection or args.web, 'dirty-source probe requires --web'
@@ -201,6 +205,15 @@ case "$url" in
         printf '%064d  update-stage-%s\n' 0 "$(cat /fixture/platform)" ;;
     https://github.com/0x3f3f3f3f3f3f3f3f3f3f3/3x-ui/releases/*/update-stage-*)
         cat /fixture/helper ;;
+    https://github.com/0x3f3f3f3f3f3f3f3f3f3/3x-ui/releases/*/install.sh.sha256)
+        case $(cat /fixture/mode) in
+            menu-install-missing-checksum) exit 22 ;;
+            menu-install-wrong-checksum) printf '%064d  install.sh\n' 0 ;;
+            menu-install-checksum-name) printf '%064d  unexpected.sh\n' 0 ;;
+            *) sum=$(sha256sum /fixture/installer); printf '%s  install.sh\n' "${sum%% *}" ;;
+        esac ;;
+    https://github.com/0x3f3f3f3f3f3f3f3f3f3/3x-ui/releases/*/install.sh)
+        cat /fixture/installer ;;
     *) printf 'unexpected curl request\n' >&2; exit 91 ;;
 esac
 '''
@@ -214,7 +227,16 @@ if args.fresh_install:
     cases[-1] = 'dependency-failure'
 if args.install_success:
     cases = ['first-install-success']
+if args.menu_maintenance:
+    cases = ['menu-refresh', 'menu-refresh-changed', 'menu-refresh-missing', 'menu-legacy',
+             'menu-legacy-invalid', 'menu-install-missing-checksum', 'menu-install-wrong-checksum',
+             'menu-install-checksum-name', 'menu-install-oversized', 'menu-install-success']
+if args.case:
+    assert args.case in cases, 'case does not belong to the selected probe mode'
+    cases = [args.case]
 for mode in cases:
+    menu_install = mode.startswith('menu-install-')
+    install_success = args.install_success or mode == 'menu-install-success'
     with tempfile.TemporaryDirectory(prefix='3x-ui-update-probe-', dir='/tmp') as tmp:
         root = Path(tmp)
         marker = os.urandom(16).hex()
@@ -226,7 +248,7 @@ for mode in cases:
         shutil.copy2(busybox, root / 'bin/busybox')
         for applet in ['uname','which','dirname','readlink','basename','rm','mkdir','mv',
                        'awk','sed','sha256sum','tar','gzip','date','cat','tr','grep','touch',
-                       'chmod','chown','cp','head','wc','mktemp','cut','ps','tail','install']:
+                       'chmod','chown','cp','head','wc','mktemp','cut','ps','tail','install','clear']:
             (root / 'bin' / applet).symlink_to('busybox')
         for path in ['proc','tmp','etc/x-ui','usr/bin','etc/init.d']:
             (root/path).mkdir(parents=True, exist_ok=True)
@@ -260,7 +282,7 @@ for mode in cases:
                 entry.size, entry.mode = len(payload), 0o755
                 tar.addfile(entry, io.BytesIO(payload))
         commit = info['commit']
-        if args.menu or args.web or args.install_success or mode in ['missing-panel','missing-unit','wrong-source','stock-core','service-stop-failure','dependency-failure']:
+        if args.menu or args.web or args.menu_maintenance or install_success or mode in ['missing-panel','missing-unit','wrong-source','stock-core','service-stop-failure','dependency-failure']:
             source = root / 'fixture/source'
             (source/'bin').mkdir(parents=True)
             for name in ['update.sh','install.sh','x-ui.sh','x-ui.rc','x-ui.service.debian','x-ui.service.arch','x-ui.service.rhel']:
@@ -269,7 +291,7 @@ for mode in cases:
             shutil.copy2(args.helper, source/'update-stage')
             shutil.copy2(args.panel, source/'x-ui')
             shutil.copy2(args.stock_core if mode == 'stock-core' else args.managed_core, source/'bin'/core_name)
-            if args.install_success:
+            if install_success:
                 write(source, '/bin/tuic-server', '#!/bin/sh\nexit 97\n', True)
             if mode == 'missing-panel': (source/'x-ui').unlink()
             if mode == 'missing-unit': (source/'x-ui.service.debian').unlink()
@@ -279,13 +301,13 @@ for mode in cases:
             (source/'release.json').write_text(json.dumps({'schema':1, 'policyABI':1, 'routingABI':1,
                 'identity':{'repository':info['repository'],'commit':commit,'tag':'fixture-release','platform':platform},
                 'files':inventory}))
-            if args.menu or args.web:
+            if args.menu or args.web or args.menu_maintenance:
                 shutil.copytree(source, root/'usr/local/x-ui', dirs_exist_ok=True)
                 shutil.copy2(repo/'x-ui.sh', root/'usr/bin/x-ui')
                 write(root, '/usr/local/x-ui/bin/runtime.json', 'existing runtime configuration')
                 if mode in ['menu-changed-script', 'web-changed-script']:
                     write(root, '/usr/local/x-ui/update.sh', 'altered installed updater', True)
-            else:
+            if not (args.menu or args.web) or install_success:
                 with tarfile.open(archive, 'w:gz', format=tarfile.GNU_FORMAT, compresslevel=1) as tar:
                     tar.add(source, arcname='x-ui')
         preserved_paths = ['usr/local/x-ui/x-ui','usr/local/x-ui/bin/'+core_name,
@@ -293,19 +315,30 @@ for mode in cases:
         if not args.web:
             preserved_paths.append('etc/x-ui/x-ui.db')
         absent_paths = []
-        if args.fresh_install:
+        if args.fresh_install or menu_install:
             absent_paths = ['usr/local/x-ui', 'usr/bin/x-ui', 'etc/systemd/system/x-ui.service']
+            if menu_install:
+                absent_paths.remove('usr/bin/x-ui')
             for path in absent_paths:
                 if (root/path).is_dir():
                     shutil.rmtree(root/path)
                 else:
                     (root/path).unlink()
             preserved_paths = ['etc/x-ui/x-ui.db']
-        if args.install_success:
+        if install_success:
             (root/'etc/x-ui/x-ui.db').unlink()
             write(root, '/fixture/unrelated-file', 'preserved outside the installation')
             preserved_paths = ['fixture/unrelated-file']
             absent_paths = []
+        if mode.startswith('menu-refresh'):
+            with (root/'usr/bin/x-ui').open('a') as menu:
+                menu.write('\n# obsolete installed menu copy\n')
+            if mode == 'menu-refresh':
+                preserved_paths.remove('usr/bin/x-ui')
+            elif mode == 'menu-refresh-changed':
+                write(root, '/usr/local/x-ui/x-ui.sh', 'modified installed menu', True)
+            elif mode == 'menu-refresh-missing':
+                (root/'usr/local/x-ui/release.json').unlink()
         sentinels = {p: sha(root/p) for p in preserved_paths}
         digest = '0'*64 if mode == 'bad-checksum' else sha(archive)
         env = {'PATH':'/bin','LANG':'C','TMPDIR':'/tmp','XUI_UPDATE_TAG':'fixture-release',
@@ -320,13 +353,18 @@ for mode in cases:
             env['FIXTURE_MENU'] = 'true'
             env['FIXTURE_MENU_COMMAND'] = 'update-dev' if mode == 'menu-dev' else 'update'
             env.pop('XUI_UPDATE_TAG')
-        elif not mode.startswith('bootstrap-'):
+        elif args.menu_maintenance:
+            env['FIXTURE_MENU'] = 'true'
+            env['FIXTURE_MENU_COMMAND'] = 'install' if menu_install else 'legacy' if mode.startswith('menu-legacy') else ''
+            if not menu_install:
+                env.pop('XUI_UPDATE_TAG')
+        if install_success or not (args.menu or args.web or args.menu_maintenance or mode.startswith('bootstrap-')):
             env.update({'XUI_UPDATE_ARCHIVE':'/fixture/archive','XUI_UPDATE_SHA256':digest,
                         'XUI_UPDATE_COMMIT':commit,'XUI_UPDATE_HELPER':'/fixture/helper',
                         'XUI_UPDATE_HELPER_SHA256':helper_sha})
         if args.install:
             env['FIXTURE_INSTALL'] = 'true'
-        if args.install_success:
+        if install_success:
             env.update({'FIXTURE_INSTALL_SUCCESS':'true', 'XUI_NONINTERACTIVE':'1', 'XUI_DB_TYPE':'sqlite',
                         'XUI_DB_DSN':'', 'XUI_DB_FOLDER':'/etc/x-ui', 'XUI_USERNAME':'fixture-admin',
                         'XUI_PASSWORD':'owned-fixture-only', 'XUI_PANEL_PORT':'18080',
@@ -334,21 +372,31 @@ for mode in cases:
         write(root, '/fixture/env.json', json.dumps(env))
         shutil.copy2(repo/'update.sh', root/'update.sh')
         shutil.copy2(repo/'install.sh', root/'install.sh')
+        shutil.copy2(repo/'install.sh', root/'fixture/installer')
+        if mode == 'menu-install-oversized':
+            with (root/'fixture/installer').open('ab') as installer:
+                installer.write(b'#' * (2 << 20))
+        input_text = 'y\n\n0\n' if args.menu else None
+        if mode.startswith('menu-refresh'):
+            input_text = '4\ny\n'
+        elif mode.startswith('menu-legacy'):
+            input_text = 'fixture-release;touch /fixture/injected\n' if mode.endswith('invalid') else 'fixture-release\n'
         proc = subprocess.run(['unshare','--mount-proc','--net','--pid','--fork','--kill-child=SIGKILL',
             sys.executable,str(Path(__file__).resolve()),'--child',tmp,os.readlink('/proc/self/ns/net'),
-            os.readlink('/proc/self/ns/mnt'),marker], input='y\n\n0\n' if args.menu else None,
-            text=True,capture_output=True,timeout=8 if args.menu else 120 if args.install_success else 65 if args.web else 40)
+            os.readlink('/proc/self/ns/mnt'),marker], input=input_text,
+            text=True,capture_output=True,timeout=8 if args.menu else 120 if install_success else 65 if args.web else 40)
         actions = (root/'fixture/actions').read_text().splitlines()
         preserved = all((root/p).is_file() and sha(root/p)==digest for p,digest in sentinels.items())
         stopped = 'systemctl stop x-ui' in actions
         case = {'case':mode,'exit_code':proc.returncode,'old_files_preserved':preserved,
+                'unexpected_marker_created':(root/'fixture/injected').exists(),
                 'service_stop_attempted':stopped,'actions':actions,'stderr':proc.stderr[-1500:],
                 'output_tail':proc.stdout.splitlines()[-6:]}
         report.append(case)
         print(json.dumps(case), flush=True)
-        assert (proc.returncode == 0 if args.web or args.install_success else proc.returncode != 0) and preserved, case
+        assert (proc.returncode == 0 if args.web or install_success or mode == 'menu-refresh' else proc.returncode != 0) and preserved, case
         assert all(not (root/path).exists() for path in absent_paths), case
-        if args.install_success:
+        if install_success:
             assert 'installedPanelHTTP' in proc.stdout and not stopped, case
             assert (root/'etc/x-ui/install-result.env').stat().st_mode & 0o777 == 0o600
             for name in inventory:
@@ -359,7 +407,32 @@ for mode in cases:
             assert not any(x.startswith('systemctl restart') for x in actions), case
             assert 'MigrationRequirements failed' not in (root/'fixture/install.log').read_text(), case
             assert not list((root/'usr/local').glob('.x-ui-update-*')), case
+            assert not list((root/'tmp').glob('.x-ui-install-*')), case
             assert not any('MHSanaei' in x or 'raw.githubusercontent.com' in x or x.startswith('pkill') for x in actions), case
+            continue
+        if args.menu_maintenance:
+            assert not stopped and not any(x.startswith(('apt-get', 'pkill', 'systemctl start', 'systemctl restart')) for x in actions), case
+            assert not any('MHSanaei' in x or 'mhsanaei' in x or 'raw.githubusercontent.com' in x for x in actions), case
+            assert not (root/'fixture/injected').exists(), case
+            assert not list((root/'tmp').glob('3x-ui-*.sh')), case
+            assert not list((root/'usr/bin').glob('.x-ui-menu-*')), case
+            assert not list((root/'tmp').glob('.x-ui-install-*')), case
+            if mode.startswith('menu-refresh'):
+                assert not any(x.startswith('curl') for x in actions), case
+                if mode == 'menu-refresh':
+                    assert sha(root/'usr/bin/x-ui') == inventory['x-ui.sh']['sha256'], case
+                    assert (root/'usr/bin/x-ui').stat().st_mode & 0o777 == 0o755
+            elif mode == 'menu-legacy':
+                assert 'helper checksum mismatch' in proc.stdout + proc.stderr, case
+                assert any('/download/fixture-release/update-stage-' in x for x in actions), case
+            elif mode == 'menu-legacy-invalid':
+                assert 'Invalid release tag' in proc.stdout + proc.stderr and not any(x.startswith('curl') for x in actions), case
+            else:
+                expected = {'menu-install-wrong-checksum': 'checksum mismatch',
+                            'menu-install-checksum-name': 'Invalid installer checksum file'}.get(mode, 'Failed to download')
+                output = proc.stdout + proc.stderr
+                assert expected in output or (mode == 'menu-install-oversized' and 'invalid size' in output), case
+                assert not any('update-stage-' in x for x in actions), case
             continue
         expected_failure = {
             'bootstrap-missing-checksum': 'Failed to download',
