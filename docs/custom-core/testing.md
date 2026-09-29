@@ -608,3 +608,28 @@ This increment retains the existing lifecycle Runtime ordering. Moving those
 calls outside the serial writer, stale-plan revalidation, ordinary activation,
 legacy crash recovery and a verified final drain are separate unfinished work.
 No production core or frontend source changes in this increment.
+
+
+### Local reservation and remote attachment fence
+
+A client with a prepared local policy cannot acquire a remote binding until
+coordinated budgets are available. Conversely, a remote binding prevents local
+policy preparation. Both operations lock the same stable client rows in sorted
+chunks and refresh records after the lock; a stale pre-lock read cannot bypass
+the reservation check. This is a topology fence, not a global budget allocator.
+
+The regressions first reproduced both invalid orderings and a PostgreSQL
+interleave that paused attachment after its initial read while preparation
+committed. The isolated increment then passed the broader SQLite race selection
+in 20.481 s package time and the PostgreSQL race selection in 609.62 s wall time,
+including the original 5,000/20,000/50,000/100,000-client bulk scale cases.
+The first broad PostgreSQL run exceeded its 300 s suite deadline; the unchanged
+selection passed with a 1,800 s deadline. A lint-only embedded selector issue
+was corrected afterward. Final lint reported zero issues, the complete shuffled
+panel suite passed in 245.55 s wall time, and the build passed in 9.88 s.
+
+CI explicitly requires `TestClientPolicyLocalReservationRejectsRemoteMembership`
+in both database jobs and `TestClientPolicyLocalReservationSerializesAgainstRemoteLink`
+in PostgreSQL. Existing conflicting topologies restored through a whole-database
+backup still require validation; this increment does not implement global leases,
+remote budget coordination or automatic managed activation.

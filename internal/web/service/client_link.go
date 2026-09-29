@@ -138,6 +138,10 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 		}
 	}
 
+	if err := guardRemoteClientPolicyAttachments(tx, inboundId, existing); err != nil {
+		return err
+	}
+
 	idByEmail := make(map[string]int, len(emails))
 	pending := make(map[string]*model.ClientRecord, len(emails))
 	toCreate := make([]*model.ClientRecord, 0, len(emails))

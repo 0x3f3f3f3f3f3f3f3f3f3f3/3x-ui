@@ -151,3 +151,19 @@ are neither frozen migration seeds nor an additional billing authority. The
 initialization seed is retained in the policy receipt. This collector cannot
 recover legacy bytes that were never observed before a core crash. A verified
 final accounting drain and automatic legacy-to-managed handoff remain open.
+
+## Local allocation scope guard
+
+Policy preparation locks each stable client record and checks for remote inbound
+membership before reserving a local desired policy version. Remote attachment
+uses the same stable-ID lock order, reloads the record after locking and rejects
+an already prepared local policy before writing client fields or links. Thus an
+attachment cannot race a local preparation into giving the same identity a full
+local budget while also serving it remotely. Ordinary unprepared remote clients
+retain their existing attachment behavior.
+
+This guard covers service-layer full sync and link deltas, including batch
+edits and node snapshots. It does not implement a global budget or global rate
+limit, repair conflicting topologies imported through a whole-database restore,
+or provide a general SQL-to-runtime revision fence. Cross-node managed policy
+allocation remains unfinished and is explicitly rejected at this boundary.

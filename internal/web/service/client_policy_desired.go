@@ -43,14 +43,8 @@ func prepareClientPolicies(clientIDs []string, compiled map[string]model.ClientR
 		if err != nil {
 			return err
 		}
-		if len(resets) > 0 {
-			resetIDs := make([]string, 0, len(resets))
-			for id := range resets {
-				resetIDs = append(resetIDs, id)
-			}
-			if err := validateLocalClientPolicyResetScope(tx, resetIDs); err != nil {
-				return err
-			}
+		if err := validateLocalClientPolicyResetScope(tx, clientIDs); err != nil {
+			return err
 		}
 		for _, client := range clients {
 			if prior, exists := compiled[client.StableID]; exists && (client.UUID != prior.UUID || client.Password != prior.Password || client.Email != prior.Email) {
