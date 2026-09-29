@@ -1,6 +1,8 @@
 package scenarios
 
 import (
+	"fmt"
+	"io"
 	"testing"
 	"time"
 
@@ -22,6 +24,50 @@ import (
 	"github.com/xtls/xray-core/testing/servers/udp"
 	"golang.org/x/sync/errgroup"
 )
+
+func pickTunnelPortRange(t *testing.T, network string, count uint32) uint32 {
+	t.Helper()
+	for range 128 {
+		var held []io.Closer
+		var first uint32
+		for offset := uint32(0); offset < count; offset++ {
+			address := "127.0.0.1:0"
+			if offset != 0 {
+				address = fmt.Sprintf("127.0.0.1:%d", first+offset)
+			}
+			if network == "tcp" {
+				listener, err := net.Listen("tcp4", address)
+				if err != nil {
+					break
+				}
+				held = append(held, listener)
+				if offset == 0 {
+					first = uint32(listener.Addr().(*net.TCPAddr).Port)
+				}
+			} else {
+				listener, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.LocalHostIP.IP(), Port: int(first + offset)})
+				if err != nil {
+					break
+				}
+				held = append(held, listener)
+				if offset == 0 {
+					first = uint32(listener.LocalAddr().(*net.UDPAddr).Port)
+				}
+			}
+			if first+count-1 > 65535 {
+				break
+			}
+		}
+		for _, listener := range held {
+			listener.Close()
+		}
+		if uint32(len(held)) == count {
+			return first
+		}
+	}
+	t.Fatal("could not reserve the complete Tunnel port range")
+	return 0
+}
 
 func TestDokodemoTCP(t *testing.T) {
 	tcpServer := tcp.Server{
@@ -71,7 +117,7 @@ func TestDokodemoTCP(t *testing.T) {
 
 	clientPortRange := uint32(5)
 	retry := 1
-	clientPort := uint32(tcp.PickPort())
+	clientPort := pickTunnelPortRange(t, "tcp", clientPortRange+1)
 	for {
 		clientConfig := &core.Config{
 			App: []*serial.TypedMessage{
@@ -115,11 +161,14 @@ func TestDokodemoTCP(t *testing.T) {
 			defer CloseServer(server)
 			break
 		}
+		if server != nil {
+			CloseServer(server)
+		}
 		retry++
 		if retry > 5 {
 			t.Fatal("All attempts failed to start client")
 		}
-		clientPort = uint32(tcp.PickPort())
+		clientPort = pickTunnelPortRange(t, "tcp", clientPortRange+1)
 	}
 
 	for port := clientPort; port <= clientPort+clientPortRange; port++ {
@@ -171,7 +220,7 @@ func TestDokodemoUDP(t *testing.T) {
 
 	clientPortRange := uint32(3)
 	retry := 1
-	clientPort := uint32(udp.PickPort())
+	clientPort := pickTunnelPortRange(t, "udp", clientPortRange+1)
 	for {
 		clientConfig := &core.Config{
 			Inbound: []*core.InboundHandlerConfig{
@@ -209,11 +258,14 @@ func TestDokodemoUDP(t *testing.T) {
 			defer CloseServer(server)
 			break
 		}
+		if server != nil {
+			CloseServer(server)
+		}
 		retry++
 		if retry > 5 {
 			t.Fatal("All attempts failed to start client")
 		}
-		clientPort = uint32(udp.PickPort())
+		clientPort = pickTunnelPortRange(t, "udp", clientPortRange+1)
 	}
 
 	var errg errgroup.Group
