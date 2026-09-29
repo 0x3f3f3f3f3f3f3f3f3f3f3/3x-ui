@@ -148,7 +148,8 @@ they cannot enforce rather than silently running unrestricted.
 
 - Snell: separate v4, v5 and beta v6 binaries until each compatibility pairing
   is verified. One client per process/listener; describe memory/process/port
-  costs. Test ordinary UDP and v5/v6 QUIC mode separately. Official binary
+  costs. Test ordinary UDP and v5 QUIC mode separately; v6 removes QUIC Proxy
+  Mode. See the [observed backend audit](snell-backend-audit.md). Official binary
   provenance/hash/architecture checks, license review and Linux capability
   gating are required. Real Surge clients are currently unavailable here.
 - mieru: prefer its native user model. Its rolling-window quota and panel
