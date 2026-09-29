@@ -195,6 +195,7 @@ remain open. SSH source observation bypasses native host-wide fail2ban bans.
 ## Task 6: mieru vertical integration
 
 Files: new `internal/mieru`, protocol registry/model/Runtime and existing UI.
+Public integration follows the [ordered implementation plan](mieru-integration-plan.md).
 
 - [x] Pin v3.38.0 API/config and official client/server; test TCP and UDP.
 - [ ] Native multiuser identity preserved into policy-aware dispatch/routing.

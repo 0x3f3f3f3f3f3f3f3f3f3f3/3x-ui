@@ -117,6 +117,14 @@ names belong to trusted runtimes, not client-provided labels. This fences
 counter ownership, but does not implement distributed rate shares or node
 leases. Only one controller per client/source may be installed by a runtime.
 
+Local managed protocol managers now share the actual controller through
+reference-counted database-handle leases. SSH uses this owner; native mieru
+integration tests acquire the same owner. Stopping SSH releases its reference
+after its listeners and watcher stop. A surviving owner retains the same rate
+buckets, active-flow limit and meter. Last release closes the controller; a
+later acquisition preserves durable usage and claims a fresh source epoch.
+This is local ownership, not a distributed/node rate allocation mechanism.
+
 Admission inspects durability settings on its actual transaction connection.
 SQLite requires WAL with FULL/EXTRA, or a rollback journal with EXTRA; memory
 and disabled journals are rejected. PostgreSQL requires fsync on and a commit

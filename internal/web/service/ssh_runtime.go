@@ -37,6 +37,7 @@ var sshRuntimeState struct {
 type sshRuntimeManager struct {
 	mu         sync.Mutex
 	db         *gorm.DB
+	policy     *managedPolicyLease
 	controller *policyflow.Controller
 	entries    map[int]*sshRuntimeEntry
 	expected   [32]byte
@@ -71,7 +72,8 @@ func managedSSHRuntime() *sshRuntimeManager {
 	if sshRuntimeState.manager == nil {
 		ctx, cancel := context.WithCancel(context.Background())
 		db := database.GetDB()
-		m := &sshRuntimeManager{db: db, controller: policyflow.NewController(database.NewClientUsageLedger(db), "local/managed-services"), entries: make(map[int]*sshRuntimeEntry), cancel: cancel, done: make(chan struct{})}
+		policy := acquireManagedPolicy(db)
+		m := &sshRuntimeManager{db: db, policy: policy, controller: policy.controller, entries: make(map[int]*sshRuntimeEntry), cancel: cancel, done: make(chan struct{})}
 		sshRuntimeState.manager = m
 		go m.watch(ctx)
 	}
@@ -95,7 +97,7 @@ func (m *sshRuntimeManager) close() {
 	for _, entry := range m.entries {
 		entry.stop()
 	}
-	m.controller.Close()
+	m.policy.Close()
 }
 
 func (entry *sshRuntimeEntry) stop() {
