@@ -4655,3 +4655,57 @@ with `XUI_E2E_PANEL=/tmp/3x-ui-awg-forward-close-panel`. Full log:
 frontend assets changed during the run. Frontend checks were not repeated for
 this backend-only change. This evidence covers connection revocation and
 closure; AWG payload accounting, shaping and quota admission remain open.
+
+
+## Release archive staging component
+
+The new staging helper is documented in [update-staging.md](update-staging.md).
+It is not yet wired into the installer or updater and does not establish
+fork provenance, managed-core compatibility or transactional upgrade rollback.
+No host installation or service was changed during this validation.
+
+The package and CLI initially failed to compile because their new entry points
+did not exist. After implementation, a subprocess test exposed blocking on a
+FIFO before regular-file validation (2.008s, exit 1). Linux input now uses
+nonblocking open and refuses a final-component symlink. Non-Linux command builds
+return an explicit unsupported-platform error.
+
+Affected race/shuffle checks passed **18 top-level tests / 73 subtests**, no
+skips, across two packages (1.213s and 2.045s). These Go totals include the fuzz
+seed cases and the subprocess helper entry. Full repository lint reported
+**0 issues**. The Linux arm64 command built as a static binary with CGo disabled;
+Windows amd64 and Darwin arm64 cross-builds also passed. Those two checks are
+compile-only evidence, not non-Linux runtime acceptance.
+
+Mutation controls used Go overlays without modifying the worktree. Removing
+member validation accepted 19 unsafe cases while both ordinary GNU/USTAR
+controls continued to pass. Removing only the final compressed SHA256 comparison
+accepted an incorrect, well-formed digest; the valid archive controls passed.
+
+Initial 30-second fuzzing exited successfully but reported only 4 executions.
+A 100-execution diagnostic completed in 0.123s. Explicitly bounding each
+minimization to one second then completed **6861 executions in 30.495s**, with
+31 new interesting inputs and no failure. This records the exercised scope;
+the initial low-throughput run is not presented as broad parser coverage.
+
+The built command staged an archive containing the actual 99,131,648-byte panel
+and 46,374,476-byte managed Xray binary. Both extracted files matched their
+source SHA256s; their version commands returned panel **3.8.5** and
+**Xray 26.9.9 / 3x-ui-managed-1**. Building the 72,211,900-byte compressed fixture
+and staging/verifying it took 4.134s in this local run. Mutating its gzip trailer
+and recomputing the outer SHA256 produced exit 2 with `gzip: invalid checksum`,
+removed the partial stage and preserved the old-install sentinel. This checks
+real artifact extraction and version execution, not an upgrade or database
+migration.
+
+Logs under `/tmp/3x-ui-rate-trace/`: `update-stage-final-race.jsonl`,
+`update-stage-full-lint.log`, `update-stage-fifo-red.jsonl`,
+`update-stage-member-mutation-red.jsonl`,
+`update-stage-checksum-mutation-red.jsonl`,
+`update-stage-restored-race.jsonl`, `update-stage-fuzz-bounded-minimize.log` and `update-stage-real-bundle.json`.
+After the overlays, the unmodified source again passed **18 top-level / 73
+subtests** under race/shuffle (1.213s and 2.046s), with no skips.
+The existing installer defect remains open until integration and rollback tests
+pass. Full-root Go regression will be repeated after those existing application
+paths change; this independent package/CLI change used affected race tests and
+full repository lint.
