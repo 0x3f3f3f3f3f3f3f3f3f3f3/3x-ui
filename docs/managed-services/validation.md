@@ -4346,3 +4346,120 @@ Log: `/tmp/3x-ui-rate-trace/xray-child-lifetime-full-go.jsonl`. No frontend
 source or assets changed in this increment, so frontend tests/build were not
 repeated. The separate Snell audit documentation committed during this run
 changed no Go source under test.
+
+## 2026-09-29: Linux TCP FIN/RST behind full native queues
+
+`TestOfficialTCPTransportLossReclaimsFullQueues` uses the unchanged official
+v3.38.0 client, actual loopback TCP transport and TCP/UDP payload targets, a
+temporary SQLite ledger and two independent same-IP users. The first uploads a
+finite 512 KiB workload at 64 B/s until native queues hold at least 240 KiB.
+Closing its captured physical socket precedes `Client.Stop`, preventing a native
+session-close message from explaining server cleanup. FIN and `SetLinger(0)` RST
+are separate cases. Within the predeclared **two seconds from physical close**,
+only the healthy user's native lease/presence may remain and native retained
+payload must be zero. Its already-open flow still echoes; the lost account's
+settled counters stop growing even after removing shaping, and a fresh official
+connection succeeds. The lossless paused-admission and connection-scoped
+backpressure tests supply healthy saturated controls.
+
+Initial 1 MiB and 512 KiB FIN fixtures retained kernel `ESTABLISHED`: FIN had
+not entered the full TCP receive window, so these failures did **not** establish
+a native cleanup defect. A smaller 320 KiB TCP workload passed existing code
+with FIN/RST cleanup around 1.08s. The UDP fixture cleaned up promptly but its
+fresh-connection check incorrectly ignored already-settled whole-packet debt:
+a 2048-byte admitted datagram at 64 B/s can leave about 32s of debt. The final
+fixture explicitly removes the rate after cleanup and the accounting snapshot;
+it does not refund admitted bytes or relax the cleanup deadline.
+
+Only the final fixture's owned TCP receive buffers are set to 2 MiB, allowing
+the finite workload's FIN to arrive without changing production socket options
+or native queue caps. The original implementation then fails with kernel
+`CLOSE_WAIT`, **two sessions / 262144 retained bytes / two online users** beyond
+two seconds (`mieru-tcp-loss-window-sized-red.jsonl`, package 2.516s). RST also
+fails with retained resources (`mieru-tcp-loss-rst-red.jsonl`, 3.586s including
+cleanup). Both are actual socket-loss failures, not synthetic session closure.
+
+The fix checks Linux kernel shutdown without consuming wire bytes while the
+managed receive path is blocked. `RawConn.Control` protects the descriptor,
+zero-timeout `poll` requests `POLLRDHUP`, and HUP/ERR also end that underlay.
+The check is throttled to 100ms within a blocked delivery. No additional worker,
+unbounded buffering or changed native idle timer is involved. Other platforms
+retain ordinary EOF detection; this does not bound network delivery of FIN.
+The maintained native patch reproduces the pinned source and license exactly.
+
+```sh
+go test -p 1 -count=1 -json \
+  -run '^(TestOfficialTCPTransportLossReclaimsFullQueues|TestNativeTCPMultiplexingBackpressureIsConnectionScoped)$' \
+  ./internal/mieru
+python3 tools/managed-mieru/prepare.py --verify
+```
+
+The first fixed focused run passed **2 top-level / 4 subtests**, zero skips, in
+7.236s. Measured FIN TCP/UDP cleanup was 1.092s / 2.813ms and RST TCP/UDP was
+1.080s / 100.305ms, including the official client's stop call. Settled raw up /
+down / billed counters were 17 / 5 / 44 for TCP and 2053 / 5 / 4116 for UDP at
+2x. Logs live under `/tmp/3x-ui-rate-trace/`; complete affected regression and
+full-root verification are recorded below when terminal results are available.
+
+The complete affected race/shuffle run finished with exit zero: **111 top-level /
+1887 subtests passed**, no failures, and **one top-level skip** because that
+invocation omitted `XUI_MANAGED_XRAY_E2E_BINARY`. The skipped
+`TestOfficialClientsThroughManagedCoreBillOnceAndRevoke` was then run separately
+with the pinned actual core: **1 top-level / 2 subtests passed**, zero skips,
+4.830s. The first skip remains recorded and is not counted as a pass. Native
+protocol and adapter package times were 40.256s and 252.717s. These runs include
+the lossless 1.8 MiB paused-admission control on both transports and the new four
+physical TCP-loss cases. Affected-package lint reported **0 issues**.
+
+```sh
+go test -p 1 -race -shuffle=on -count=1 -timeout=15m -json ./internal/mieru/...
+XUI_MANAGED_XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+  go test -p 1 -race -count=1 -json \
+  -run '^TestOfficialClientsThroughManagedCoreBillOnceAndRevoke$' ./internal/mieru
+golangci-lint run ./internal/mieru/...
+```
+
+An attempted Windows adapter test cross-build with `CGO_ENABLED=0` failed in
+the existing database backup dependency: `sqlite3.SQLiteConn.Backup` is absent
+from the no-CGo stub (`internal/database/db.go:2975`). The repository requires
+CGo for SQLite, and this host has no Windows/macOS C cross-toolchain. This is
+not a successful adapter/platform build; native-protocol-only compilation is
+checked separately below. Logs: `mieru-tcp-loss-full-race.jsonl`,
+`mieru-tcp-loss-bridge-race.jsonl`, `mieru-tcp-loss-lint.log`, and
+`mieru-tcp-loss-windows-build.log`.
+
+Native-protocol test binaries cross-compiled successfully for Windows amd64 and
+macOS arm64. These exclude the adapter's database dependency and establish only
+compilation, not platform runtime acceptance. The actual Linux panel also built
+successfully; its executable is used by the subsequent full-root regression.
+
+```sh
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go test -c ./internal/mieru/native \
+  -o /tmp/3x-ui-rate-trace/mieru-tcp-loss-native-windows.test.exe
+GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go test -c ./internal/mieru/native \
+  -o /tmp/3x-ui-rate-trace/mieru-tcp-loss-native-darwin.test
+go build -p 1 -o /tmp/3x-ui-tcp-loss-panel .
+```
+
+Final full-root backend regression completed with exit zero: **53 test packages,
+2678 top-level / 4674 subtests passed**, no failures, **28 top-level / 14 subtest
+skips**, and seven packages without tests. The 42 skipped test names exactly
+match the preceding `xray-child-lifetime-full-go.jsonl`; none was added or
+removed and none counts as a pass. This includes the four new physical TCP-loss
+cases, the actual Linux panel process matrix and real core/client tests.
+
+```sh
+XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+XUI_MANAGED_XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+XUI_MIHOMO_E2E_BINARY=/tmp/3x-ui-mihomo-v1.19.30 \
+XUI_E2E_PANEL=/tmp/3x-ui-tcp-loss-panel \
+XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' \
+XUI_E2E_PG_DSN='postgresql://nobody@127.0.0.1:55432/postgres?sslmode=disable' \
+go test -p 1 -shuffle=on -count=1 -timeout=25m ./... -json
+```
+
+Log: `/tmp/3x-ui-rate-trace/mieru-tcp-loss-full-go.jsonl`. No Go source changed
+during the run. The separately committed isolated-network probe and audit
+documentation changed no tested Go package. Frontend source/assets were unchanged
+and frontend verification was not repeated. This completes this scoped Linux
+TCP-loss fix; full Task 6 and the original multi-backend goal remain incomplete.

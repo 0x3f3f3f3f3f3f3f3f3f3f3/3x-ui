@@ -82,3 +82,10 @@ continuous invalid packets therefore cannot postpone the existing one-minute
 idle check. Already-expired managed sessions close with a timeout error, without
 waiting for their stalled graceful-close queue. No extra maintenance worker,
 wire-format change or client modification is required.
+
+Managed TCP delivery also accepts an optional `PeerReadClosed() bool` capability
+from its owned connection. The Linux adapter implements it with a non-consuming
+`poll` check while native delivery is blocked. Received FIN/RST can therefore
+end the underlay even when a full bounded queue prevents the wire reader from
+reaching EOF. Healthy backpressure remains lossless; other platforms retain
+ordinary EOF detection. This cannot detect a FIN not yet received by the kernel.

@@ -323,3 +323,31 @@ database preserves policy identity, rates, multiplier and settled usage. A
 depleted user remains denied while a healthy user's new TCP/UDP flows work.
 This checks process recovery and durable admission accounting; it does not
 assert that a UDP client detects a silent server death within two seconds.
+
+## Linux physical TCP loss during native backpressure
+
+A full managed receive queue prevents the TCP wire reader from reaching EOF.
+The Linux-owned stream exposes a non-consuming shutdown check using `poll`
+inside `syscall.RawConn.Control`; no descriptor escapes the protected callback.
+Managed TCP delivery checks it while waiting for byte or segment capacity, at
+most once per 100ms during each blocked delivery. A received peer shutdown or
+socket error ends that underlay, releasing its native sessions and canceling
+the existing adapter policy waits. Healthy saturated connections retain their
+queued payload and resume when the application makes progress. No additional
+reader, worker, payload queue, wire message or production socket-buffer change
+is introduced.
+
+This follows the native underlay's existing EOF semantics: the transport ends
+its sessions. It does not add TCP half-close support to the native protocol.
+The kernel can report shutdown behind unread bytes through `POLLRDHUP`; a FIN
+that has not yet entered a full TCP receive window cannot be detected this way.
+See [Linux poll semantics](https://man7.org/linux/man-pages/man2/poll.2.html).
+The official-client test enlarges only its owned server-side kernel buffers so
+the finite 512 KiB workload and FIN fit, without changing the 128 KiB native
+queue bounds. Original-source failure records kernel `CLOSE_WAIT` and 256 KiB
+retained beyond the predeclared two seconds. FIN and RST each cover TCP and UDP
+payload, existing healthy-user continuity and settled-accounting stability.
+Already-sent datagram debt remains attached to the account; the test explicitly
+unlimits the account before checking that canceled data stays canceled and a
+fresh connection works. Non-Linux streams retain ordinary EOF handling and do
+not claim this blocked-reader shutdown detection.

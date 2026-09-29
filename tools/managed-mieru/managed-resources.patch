@@ -138,7 +138,7 @@
 +}
 --- /dev/null
 +++ b/managed_resources.go
-@@ -0,0 +1,355 @@
+@@ -0,0 +1,356 @@
 +package protocol
 +
 +import (
@@ -347,33 +347,34 @@
 +	if r.released || s.closeRequested.Load() {
 +		return false
 +	}
-+	for !r.reserveReceived(len(seg.payload)) {
++	var nextPeerCheck time.Time
++	for {
++		if r.reserveReceived(len(seg.payload)) {
++			select {
++			case s.recvChan <- seg:
++				return true
++			default:
++			}
++			r.releaseReceived(len(seg.payload))
++		}
 +		if s.transportProtocol == common.PacketTransport {
 +			return true
++		}
++		// The wire reader cannot observe EOF while this bounded queue is full.
++		// Check kernel shutdown without draining or enlarging the payload queue.
++		if b.peerReadClosed != nil && time.Now().After(nextPeerCheck) {
++			if b.peerReadClosed() {
++				return false
++			}
++			nextPeerCheck = time.Now().Add(100 * time.Millisecond)
 +		}
 +		select {
 +		case <-s.closedChan:
 +			return false
++		case <-b.done:
++			return false
 +		case <-time.After(backPressureDelay):
 +		}
-+	}
-+	if s.transportProtocol == common.PacketTransport {
-+		select {
-+		case s.recvChan <- seg:
-+		default:
-+			r.releaseReceived(len(seg.payload))
-+		}
-+		return true
-+	}
-+	select {
-+	case s.recvChan <- seg:
-+		return true
-+	case <-s.closedChan:
-+		r.releaseReceived(len(seg.payload))
-+		return false
-+	case <-b.done:
-+		r.releaseReceived(len(seg.payload))
-+		return false
 +	}
 +}
 +
@@ -1177,7 +1178,7 @@
  		das, ok := seg.metadata.(*dataAckStruct)
 --- a/underlay_base.go
 +++ b/underlay_base.go
-@@ -60,7 +60,11 @@
+@@ -60,7 +60,12 @@
  	outBytes atomic.Int64
  
  	// ---- client fields ----
@@ -1187,10 +1188,11 @@
 +	pendingSessions chan struct{}
 +	startMutex      sync.Mutex
 +	closing         bool
++	peerReadClosed  func() bool
  }
  
  var (
-@@ -82,6 +86,9 @@
+@@ -82,6 +87,9 @@
  func (b *baseUnderlay) Accept() (net.Conn, error) {
  	select {
  	case session := <-b.readySessions:
@@ -1200,7 +1202,7 @@
  		return session, nil
  	case <-b.done:
  		return nil, io.ErrClosedPipe
-@@ -90,6 +97,11 @@
+@@ -90,6 +98,11 @@
  
  // Close implements net.Listener interface. The caller must hold closeMutex lock.
  func (b *baseUnderlay) Close() error {
@@ -1212,7 +1214,7 @@
  	select {
  	case <-b.done:
  		return nil
-@@ -98,11 +110,19 @@
+@@ -98,11 +111,19 @@
  
  	b.sessionMap.Range(func(k, v any) bool {
  		s := v.(*Session)
@@ -1233,7 +1235,7 @@
  	UnderlayCurrEstablished.Add(-1)
  	return nil
  }
-@@ -129,6 +149,9 @@
+@@ -129,6 +150,9 @@
  }
  
  func (b *baseUnderlay) AddSession(s *Session, remoteAddr net.Addr) error {
@@ -1243,7 +1245,7 @@
  	if s == nil {
  		return stderror.ErrNullPointer
  	}
-@@ -146,6 +169,9 @@
+@@ -146,6 +170,9 @@
  	}
  	if _, loaded := b.sessionMap.LoadOrStore(s.id, s); loaded {
  		return stderror.ErrAlreadyExist
@@ -1253,7 +1255,7 @@
  	}
  	s.conn = b
  	s.remoteAddr = remoteAddr
-@@ -171,7 +197,11 @@
+@@ -171,7 +198,11 @@
  		return fmt.Errorf("session %d is not attached to this underlay", s.id)
  	}
  
@@ -1266,7 +1268,7 @@
  	s.Close()
  	s.wg.Wait()
  	return nil
-@@ -219,6 +249,9 @@
+@@ -219,6 +250,9 @@
  // deliverSegmentToSession blocks for live sessions to preserve back pressure,
  // but returns when the session or underlay has been closed.
  func (b *baseUnderlay) deliverSegmentToSession(s *Session, seg *segment) bool {
@@ -1364,7 +1366,30 @@
  	go func() {
  		if err := s.runInputLoop(context.Background()); err != nil && !stderror.IsEOF(err) && !stderror.IsClosed(err) {
  			log.Debugf("%v runInputLoop(): %v", s, err)
-@@ -299,8 +306,12 @@
+@@ -186,6 +193,11 @@
+ 		return stderror.ErrNullPointer
+ 	}
+ 	defer t.conn.Close()
++	if t.serverResources != nil {
++		if peer, ok := t.conn.(interface{ PeerReadClosed() bool }); ok {
++			t.peerReadClosed = peer.PeerReadClosed
++		}
++	}
+ 
+ 	for {
+ 		select {
+@@ -272,7 +284,9 @@
+ 				}
+ 				continue
+ 			}
+-			t.deliverSegmentToSession(session.(*Session), seg)
++			if !t.deliverSegmentToSession(session.(*Session), seg) && t.peerReadClosed != nil && t.peerReadClosed() {
++				return io.EOF
++			}
+ 		} else {
+ 			log.Debugf("Ignore unknown protocol %d", seg.metadata.Protocol())
+ 		}
+@@ -299,8 +313,12 @@
  	if seg.serverUserAuthentication.Valid() {
  		policy = seg.serverUserAuthentication.Policy()
  	}

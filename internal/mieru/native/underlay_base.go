@@ -65,6 +65,7 @@ type baseUnderlay struct {
 	pendingSessions chan struct{}
 	startMutex      sync.Mutex
 	closing         bool
+	peerReadClosed  func() bool
 }
 
 var (

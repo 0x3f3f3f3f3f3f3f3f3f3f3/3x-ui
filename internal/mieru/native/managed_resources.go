@@ -206,33 +206,34 @@ func (b *baseUnderlay) deliverManagedSegment(s *Session, seg *segment) bool {
 	if r.released || s.closeRequested.Load() {
 		return false
 	}
-	for !r.reserveReceived(len(seg.payload)) {
+	var nextPeerCheck time.Time
+	for {
+		if r.reserveReceived(len(seg.payload)) {
+			select {
+			case s.recvChan <- seg:
+				return true
+			default:
+			}
+			r.releaseReceived(len(seg.payload))
+		}
 		if s.transportProtocol == common.PacketTransport {
 			return true
+		}
+		// The wire reader cannot observe EOF while this bounded queue is full.
+		// Check kernel shutdown without draining or enlarging the payload queue.
+		if b.peerReadClosed != nil && time.Now().After(nextPeerCheck) {
+			if b.peerReadClosed() {
+				return false
+			}
+			nextPeerCheck = time.Now().Add(100 * time.Millisecond)
 		}
 		select {
 		case <-s.closedChan:
 			return false
+		case <-b.done:
+			return false
 		case <-time.After(backPressureDelay):
 		}
-	}
-	if s.transportProtocol == common.PacketTransport {
-		select {
-		case s.recvChan <- seg:
-		default:
-			r.releaseReceived(len(seg.payload))
-		}
-		return true
-	}
-	select {
-	case s.recvChan <- seg:
-		return true
-	case <-s.closedChan:
-		r.releaseReceived(len(seg.payload))
-		return false
-	case <-b.done:
-		r.releaseReceived(len(seg.payload))
-		return false
 	}
 }
 

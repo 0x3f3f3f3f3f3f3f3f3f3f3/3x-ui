@@ -193,6 +193,11 @@ func (t *StreamUnderlay) RunEventLoop(ctx context.Context) error {
 		return stderror.ErrNullPointer
 	}
 	defer t.conn.Close()
+	if t.serverResources != nil {
+		if peer, ok := t.conn.(interface{ PeerReadClosed() bool }); ok {
+			t.peerReadClosed = peer.PeerReadClosed
+		}
+	}
 
 	for {
 		select {
@@ -279,7 +284,9 @@ func (t *StreamUnderlay) RunEventLoop(ctx context.Context) error {
 				}
 				continue
 			}
-			t.deliverSegmentToSession(session.(*Session), seg)
+			if !t.deliverSegmentToSession(session.(*Session), seg) && t.peerReadClosed != nil && t.peerReadClosed() {
+				return io.EOF
+			}
 		} else {
 			log.Debugf("Ignore unknown protocol %d", seg.metadata.Protocol())
 		}

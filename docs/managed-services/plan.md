@@ -48,6 +48,12 @@ Files: this directory; read existing models, Runtime, services, jobs, build/CI.
 - [ ] Probe official backend binaries, licenses and isolated network capabilities.
 - [x] Commit audit and push branch; verify remote SHA (3e226aea includes audit).
 
+The official Snell artifact audit and [isolated Linux networking probe](linux-network-prerequisites.md)
+now provide scoped prerequisite evidence. nft TPROXY preserves real TCP/UDP
+targets on IPv4/IPv6 and its tested batch/cleanup operations retain unrelated
+fixture resources. Real Snell interoperability, production firewall coexistence
+and full backend deployment remain open.
+
 ## Task 2: Exact accounting arithmetic
 
 Files: new `internal/clientpolicy/accounting.go` and `accounting_test.go`.
@@ -246,8 +252,12 @@ Native session completion now cancels adapter policy and first-use waits.
 Managed UDP idle maintenance also runs during quiet/invalid-packet reads and
 avoids waiting on expired graceful-close queues. Real official-client socket
 loss reclaimed both payload associations within the predeclared 67s idle bound,
-with stable usage and listener reuse. This scoped lifecycle evidence does not
-close TCP FIN detection behind full queues or the remaining public acceptance.
+with stable usage and listener reuse. Linux physical TCP FIN/RST detection now
+also observes kernel shutdown while full native queues block the wire reader.
+Official-client TCP/UDP payload tests retain the two-second cleanup bound and
+verify unrelated-user continuity, stable accounting and fresh admission. FIN
+network-delivery delay, non-Linux blocked-read detection and unrestricted public
+senders remain outside this scoped result.
 
 Public IPv6 loopback acceptance now covers both databases and native transports,
 actual TCP/UDP targets, preserved source and UDP reply peer, exact independent
