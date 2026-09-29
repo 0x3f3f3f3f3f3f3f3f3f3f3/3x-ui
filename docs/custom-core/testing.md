@@ -153,4 +153,20 @@ XRAY_E2E_BINARY="$PWD/build/custom-xray" XRAY_UPSTREAM_E2E_BINARY=/path/to/upstr
 
 With the rebuilt custom binary at core-source commit `26ccc460`, this passed (xray 2.819 s, Runtime 1.460 s). The broader Runtime/API race command including the existing real TCP API regression also passed. Full panel `GOFLAGS=-p=1 GOTOOLCHAIN=go1.27.1 make test-go`, focused vet and the custom-core build passed. CI now builds the pinned upstream binary and requires explicit PASS lines for these process tests; an unset binary environment variable and its resulting skip do not count as evidence.
 
-Production DB cutover, automatic state-file provisioning, policy reconciliation, durable polling/statistics projection and UI activation remain open. These process tests exercise the real executable and preparation boundary, not that unfinished whole-panel flow.
+Production DB cutover, automatic configuration generation, policy reconciliation, durable polling/statistics projection and UI activation remain open. These process tests exercise the real executable and preparation boundary, not that unfinished whole-panel flow.
+
+## Runtime database bootstrap — 2026-09-29
+
+State provisioning tests cover private file permissions, preservation of existing usage, concurrent retry after failed creation, and refusal to recreate missing activated state. A real child-process test seeds 100 upload / 200 download / 300 billed bytes, then exchanges 1024 bytes each way at multiplier 2 across each of two core lifetimes. Totals are 1124/1224/4396 and 2148/2248/8492, with duplicate settlement and no reset. Moving the panel cursor ahead of the core rejects startup and leaves the TCP listener closed. Removing the cursor check makes that test fail.
+
+The same test reproduced a Runtime mutex held across database preparation; a concurrent Runtime operation could not finish until preparation timed out. Narrowing the lock to core RPCs repaired the inversion. Final SQLite and real PostgreSQL 16.15 race runs passed in 3.855 s and 6.612 s, respectively. The sandbox-only attempt could not open a local test socket and is not counted as a passing run.
+
+```sh
+XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race -p=1 ./internal/web/service \
+  -run 'TestClientPolicy(StateProvisioning|RuntimeBootstrap)' -count=1
+# Repeat with XUI_DB_TYPE=postgres and XUI_DB_DSN pointing to an isolated test database.
+```
+
+The CI jobs now build the custom binary and require the child-process bootstrap test to pass explicitly in both databases. Their GitHub execution is not claimed as local evidence. Full production activation and coordinated backup rollback fencing remain unfinished.
+
+The full panel `GOFLAGS=-p=1 GOTOOLCHAIN=go1.27.1 make test-go` passed after this change (service package 50.934 s). Focused `go vet -p=1 ./internal/web/runtime ./internal/web/service` also passed.

@@ -1,0 +1,178 @@
+package service
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/mhsanaei/3x-ui/v3/internal/database"
+	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
+	panelruntime "github.com/mhsanaei/3x-ui/v3/internal/web/runtime"
+	"github.com/mhsanaei/3x-ui/v3/internal/xray"
+	"github.com/xtls/xray-core/app/clientpolicy"
+	command "github.com/xtls/xray-core/app/clientpolicy/command"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+func TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts(t *testing.T) {
+	binary := os.Getenv("XRAY_E2E_BINARY")
+	if binary == "" {
+		t.Skip("set XRAY_E2E_BINARY to the built custom core")
+	}
+	setupPolicyLedgerDB(t)
+	dir, err := os.MkdirTemp("", "runtime-bootstrap-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	t.Setenv("XUI_BIN_FOLDER", dir)
+	t.Setenv("XUI_LOG_FOLDER", dir)
+	if err := os.Symlink(binary, filepath.Join(dir, xray.GetBinaryName())); err != nil {
+		t.Fatal(err)
+	}
+	client := model.ClientRecord{Email: "bootstrap-owner", Enable: true, TotalGB: 100000}
+	if err := database.GetDB().Create(&client).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.GetDB().Create(&xray.ClientTraffic{Email: client.Email, Up: 100, Down: 200}).Error; err != nil {
+		t.Fatal(err)
+	}
+	state, err := EnsureLocalClientPolicyState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policies := []clientpolicy.Policy{{ClientID: client.StableID, Version: 1, Enabled: true, Multiplier: 2000000, QuotaBytes: 100000, BurstBytes: 65536}}
+	state.Policies = policies
+	policyConfig, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer target.Close()
+	go func() {
+		for {
+			conn, err := target.Accept()
+			if err != nil {
+				return
+			}
+			go func() { defer conn.Close(); _, _ = io.Copy(conn, conn) }()
+		}
+	}()
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := probe.Addr().(*net.TCPAddr).Port
+	_ = probe.Close()
+	socket := filepath.Join(dir, "control.sock")
+	raw := fmt.Sprintf(`{"log":{"loglevel":"error"},"api":{"tag":"control","listen":%q,"services":["ClientPolicyServiceV1","HandlerService"]},"clientPolicy":%s,"inbounds":[{"tag":"owned","listen":"127.0.0.1","port":%d,"protocol":"tunnel","settings":{"network":"tcp","address":"127.0.0.1","port":%d,"clientId":%q}}],"outbounds":[{"protocol":"freedom","settings":{"finalRules":[{"action":"allow","ip":["127.0.0.1"]}]}}]}`, socket, policyConfig, port, target.Addr().(*net.TCPAddr).Port, client.StableID)
+	var config xray.Config
+	if err := json.Unmarshal([]byte(raw), &config); err != nil {
+		t.Fatal(err)
+	}
+	local := panelruntime.NewLocal(panelruntime.LocalDeps{})
+	for round := int64(1); round <= 2; round++ {
+		process := xray.NewTestProcess(&config, filepath.Join(dir, "bootstrap.json"))
+		t.Cleanup(func() { _ = process.Stop() })
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		t.Cleanup(cancel)
+		if err := local.StartManagedProcess(ctx, process, func(_ context.Context, caps *command.Capabilities) (*panelruntime.ManagedPolicyBootstrap, error) {
+			done := make(chan error, 1)
+			go func() { done <- local.DelInbound(ctx, &model.Inbound{Tag: "not-ready", Protocol: model.Tunnel}) }()
+			select {
+			case err := <-done:
+				if err == nil || err.Error() != "local xray is not running" {
+					return nil, fmt.Errorf("unexpected concurrent runtime result: %v", err)
+				}
+			case <-time.After(2 * time.Second):
+				return nil, fmt.Errorf("Runtime held its RPC mutex during database preparation")
+			}
+			return PrepareLocalClientPolicyBootstrap(caps, state)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
+		payload := bytes.Repeat([]byte{0x43}, 1024)
+		if _, err := conn.Write(payload); err != nil {
+			conn.Close()
+			t.Fatal(err)
+		}
+		reply := make([]byte, len(payload))
+		if _, err := io.ReadFull(conn, reply); err != nil || !bytes.Equal(reply, payload) {
+			conn.Close()
+			t.Fatalf("managed Runtime traffic: %v", err)
+		}
+		conn.Close()
+		api, err := xray.DialClientPolicy(ctx, socket, state.InstanceID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = api.Close() })
+		if err := api.Checkpoint(ctx); err != nil {
+			t.Fatal(err)
+		}
+		after, err := ClientPolicyLedgerCursor(state.InstanceID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		page, err := api.ReadLedger(ctx, after, 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for range 2 {
+			if err := SettleClientPolicyLedger(state.InstanceID, api.Capabilities().Epoch, after, page); err != nil {
+				t.Fatal(err)
+			}
+		}
+		total := policyLedgerTotal(t, client.StableID)
+		if total.RawUpload != 100+round*1024 || total.RawDownload != 200+round*1024 || total.BilledBytes != 300+round*4096 || total.UncertainBytes != 0 {
+			t.Fatalf("bootstrap reset or double-counted usage: %+v", total)
+		}
+		api.Close()
+		if err := process.Stop(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Run("core-behind-panel-cursor", func(t *testing.T) {
+		if err := database.GetDB().Model(&model.ClientPolicySource{}).Where("instance_id = ?", state.InstanceID).Update("sequence", 1000000).Error; err != nil {
+			t.Fatal(err)
+		}
+		process := xray.NewTestProcess(&config, filepath.Join(dir, "rollback-bootstrap.json"))
+		t.Cleanup(func() { _ = process.Stop() })
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		err := local.StartManagedProcess(ctx, process, func(_ context.Context, caps *command.Capabilities) (*panelruntime.ManagedPolicyBootstrap, error) {
+			return PrepareLocalClientPolicyBootstrap(caps, state)
+		})
+		if status.Code(err) != codes.FailedPrecondition || !strings.Contains(err.Error(), "core is behind the panel ledger") {
+			t.Fatalf("core ledger rollback was not rejected: %v", err)
+		}
+		if process.IsRunning() || process.IsControlReady() {
+			t.Fatal("core ledger rollback left the child available")
+		}
+		if conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), time.Second); err == nil {
+			conn.Close()
+			t.Fatal("core ledger rollback reopened the business listener")
+		}
+		total := policyLedgerTotal(t, client.StableID)
+		if total.RawUpload != 2148 || total.RawDownload != 2248 || total.BilledBytes != 8492 {
+			t.Fatalf("rejected rollback changed committed totals: %+v", total)
+		}
+	})
+}

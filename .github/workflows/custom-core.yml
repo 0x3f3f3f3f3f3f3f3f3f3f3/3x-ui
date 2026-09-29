@@ -42,6 +42,12 @@ jobs:
           for test in TestManagedProcessNegotiatesAndSeedsBeforeOpeningListeners TestManagedProcessRejectsUnmodifiedCoreBeforeBusinessTraffic TestLocalRuntimeUsesPrivateControlForHandlersRoutingAndStats; do
             grep -q -- "^--- PASS: $test " /tmp/policy-process.log
           done
+      - name: SQLite state provisioning and Runtime database bootstrap
+        run: |
+          set -o pipefail
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race ./internal/web/service \
+            -run 'TestClientPolicy(StateProvisioning|RuntimeBootstrap)' -count=1 -v | tee /tmp/policy-bootstrap.log
+          grep -q -- '^--- PASS: TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts ' /tmp/policy-bootstrap.log
   policy-postgres:
     runs-on: ubuntu-latest
     services:
@@ -66,10 +72,12 @@ jobs:
         with:
           go-version-file: go.mod
       - run: make dist-stub
+      - name: Build custom core for database bootstrap
+        run: bash tools/build-custom-core.sh
       - name: Real PostgreSQL migrations, commit failure and Tunnel ledger
         run: |
           set -o pipefail
-          go test -race ./internal/database ./internal/web/service -run 'TestClientStableIdentityMigrationPostgres|TestClientPolicyCrossDatabaseMigration|TestClientPolicyLedger' -count=1 -v | tee /tmp/policy-postgres.log
-          for test in TestClientStableIdentityMigrationPostgres TestClientPolicyCrossDatabaseMigration TestClientPolicyLedgerPostgresCommitFailure TestClientPolicyLedgerRealTunnelAndRestart; do
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race ./internal/database ./internal/web/service -run 'TestClientStableIdentityMigrationPostgres|TestClientPolicyCrossDatabaseMigration|TestClientPolicy(Ledger|StateProvisioning|RuntimeBootstrap)' -count=1 -v | tee /tmp/policy-postgres.log
+          for test in TestClientStableIdentityMigrationPostgres TestClientPolicyCrossDatabaseMigration TestClientPolicyLedgerPostgresCommitFailure TestClientPolicyLedgerRealTunnelAndRestart TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts; do
             grep -q -- "^--- PASS: $test " /tmp/policy-postgres.log
           done
