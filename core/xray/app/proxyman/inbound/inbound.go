@@ -228,3 +228,6 @@ func init() {
 		return NewHandler(ctx, config.(*core.InboundHandlerConfig))
 	}))
 }
+
+// CloseForTrafficDrain permanently rejects handler admission and closes all owned handlers.
+func (m *Manager) CloseForTrafficDrain() error { return m.Close() }

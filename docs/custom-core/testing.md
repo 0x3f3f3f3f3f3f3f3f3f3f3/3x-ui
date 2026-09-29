@@ -865,3 +865,21 @@ for this ownership increment. Final root gates passed: complete shuffled core
 suite 630.02 s, custom-core build 11.46 s, expanded race suite 76.02 s, complete
 shuffled panel suite 299.64 s, lint with zero issues 26.27 s and panel build
 8.31 s. Go formatting, workflow parsing and embedded shell validation pass.
+
+
+Boot-scoped drain candidate (2026-09-29): missing control capability, canceled
+startup, failed closure behind active IO, unbounded RPC responses and invalid
+initial cursor side effects each have observed RED regressions. Core race tests
+pass in 1.383 s and private RPC race tests in 7.639 s. The default gRPC client
+reads 200002 counters for 100001 users across two endpoints sharing one instance;
+the former all-at-once response failed at 13167150 bytes against the default
+4194304-byte limit. Long counter names also exercise the 1 MiB page byte budget.
+Independent JSON configuration and private transport validation pass. Real direct,
+VMess and mux TCP/UDP flows pass final user accounting, connection closure and
+port-release checks. Source review fixes are included. Complete root gates passed: shuffled core suite
+653.92 s (scenarios 340.132 s), custom build 1.69 s, expanded core race 93.51 s,
+focused core drain race 3.35 s, and all 51 panel package results. A daemon restart
+lost the runner session after the panel stage; its complete log was audited and
+the remaining lint/build steps were run with persisted exit codes. Lint reports
+zero issues (29.81 s), panel build passes (8.23 s), and formatting plus all 18
+workflow shell blocks pass. No panel handoff is enabled by these tests.

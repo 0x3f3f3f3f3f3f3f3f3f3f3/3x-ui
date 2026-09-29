@@ -1,0 +1,26 @@
+syntax = "proto3";
+package xray.app.trafficcontrol.v1;
+option go_package = "github.com/xtls/xray-core/app/trafficcontrol";
+
+message Empty {}
+message Capabilities {
+ uint32 api_version = 1;
+ string core_version = 2;
+ string boot_id = 3;
+ repeated string capabilities = 4;
+}
+message DrainRequest {
+ string expected_boot_id = 1;
+ string after_name = 2;
+ uint32 limit = 3;
+}
+message DrainResponse {
+ string boot_id = 1;
+ map<string, int64> counters = 2;
+ string next_name = 3;
+}
+service TrafficControlService {
+ rpc GetCapabilities(Empty) returns (Capabilities);
+ rpc Drain(DrainRequest) returns (DrainResponse);
+}
+message Config {}

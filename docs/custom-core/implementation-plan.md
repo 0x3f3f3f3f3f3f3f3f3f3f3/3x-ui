@@ -287,3 +287,12 @@ race checks pass after extending the core payload-comparison test timeout; sourc
 review is complete. Complete core/panel suites, expanded race checks, lint and
 both builds pass. Boot-scoped drain/settlement,
 remaining transport ownership and the overall goal remain open.
+
+
+Task 6 boot-scoped drain checkpoint: a separate private control API shares one
+instance boot ID and irreversible drain operation, waits for manager closure and
+counter IO, and exposes bounded immutable final pages. Cancellation, failure,
+100001-user pagination and real TCP/UDP/mux tests pass. Complete core/panel
+suites, race checks, lint and builds pass. Panel-owned boot pinning, atomic final
+settlement and activation
+integration remain required before enabling healthy live legacy handoff.

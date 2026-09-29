@@ -264,10 +264,9 @@ Concurrent closes wait for cancellation to be issued. Pool closure does not by
 itself prove every proxy IO goroutine has exited; the counter barrier establishes
 the final accounting boundary after cancellation.
 
-This is an internal prerequisite, not an exposed drain capability. The caller
-must cancel all IO owners before waiting, including idle observer/WireGuard
-and raw sockets. Independent private control, boot-scoped acknowledgement, final
-panel settlement and healthy legacy cutover remain unimplemented. Ordinary
+These internal primitives are used by the private boot-scoped drain described
+below. Cancellation and the counter barrier together establish final accounting.
+Panel final settlement and healthy legacy cutover remain unimplemented; ordinary
 managed activation still rejects a running legacy core before preparation.
 
 ## Ordinary outbound ownership prerequisite
@@ -285,10 +284,9 @@ are published under the same lock as closure; a late result is closed. Deadline
 calls before that handshake finishes now return an explicit error instead of
 panicking through a nil embedded connection.
 
-This still does not expose a complete drain capability. Manager admission and
-removed-handler ownership, remaining transport shutdown and UDP-hop closure
-require further work.
-Independent boot-scoped control and final panel settlement remain unimplemented.
+The manager ownership and private accounting drain below build on this work.
+Complete transport shutdown, UDP-hop closure and final panel settlement still
+require integration.
 
 
 ## Transport cancellation prerequisite
@@ -316,8 +314,8 @@ dials close both transport and packet socket. Successful QUIC connections have
 explicit client ownership even if the HTTP transport loses its cache entry.
 
 This does not establish complete transport/handler drainage. Idle raw H1 pool
-ownership, browser-dialer/UDP-hop shutdown, manager lifecycle and independent
-boot-scoped final settlement remain open. No drain capability is advertised.
+ownership and browser-dialer/UDP-hop shutdown remain open. The accounting drain
+below waits on counter leases; it does not claim complete transport teardown.
 
 
 ## Manager and reverse-resource ownership prerequisite
@@ -339,5 +337,35 @@ routes. Static mux pickers seal worker admission, close existing/late workers an
 stop their maintenance timers. The counter IO barrier still supplies the final
 accounting join; these closes alone do not prove every IO goroutine has exited.
 
-Private boot-scoped drain acknowledgement and final panel settlement remain
-unimplemented; live legacy activation is still refused before preparation.
+The private boot-scoped acknowledgement below uses these managers. Final panel
+settlement remains unimplemented; live legacy activation is still refused before
+preparation.
+
+
+## Boot-scoped final counter drain
+
+A separate `trafficControl: {"listen":"/private/control.sock"}` endpoint leaves
+the ordinary API configuration intact. The socket requires a private parent and
+0600 mode. TrafficControlServiceV1 checks Unix peers on every RPC and does not
+require ClientPolicyManager. Capabilities expose one random boot ID shared by
+all control services in a core instance. Noop statistics or managers without
+permanent admission closure cannot advertise final counter support.
+
+Drain requires that boot ID, closes both managers concurrently and seals counter
+IO. A request deadline stops its wait, while the single owned operation continues.
+Only successful owner closure and completion of every prior IO lease produce a
+final snapshot. An explicit owner failure cancels the internal barrier wait and
+returns the failure without reopening IO; another blocked owner remains closing.
+Wrong boot IDs, initially canceled requests, excessive limits and a nonempty
+initial page cursor are rejected before starting closure.
+
+Final counters are immutable and sorted for pagination. Drain defaults to at most
+1000 counters per page, with a 1 MiB response budget including the returned cursor.
+Pass next_name as after_name on the next request; an empty next_name ends the
+snapshot. Each page and every retry carry the same boot ID. An individual name
+that cannot fit a bounded page returns an explicit size error. This response
+proves the final accounting boundary, not that every background goroutine or
+idle transport resource has exited.
+
+Panel boot pinning, final SQL receipt settlement and live legacy activation are
+still pending. The panel continues to refuse live legacy activation.

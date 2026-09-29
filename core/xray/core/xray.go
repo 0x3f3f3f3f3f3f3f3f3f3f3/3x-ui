@@ -81,6 +81,7 @@ func (r *resolution) callbackResolution(allFeatures []features.Feature) error {
 
 // Instance combines all Xray features.
 type Instance struct {
+	trafficDrain               trafficDrainState
 	statusLock                 sync.Mutex
 	features                   []features.Feature
 	pendingResolutions         []resolution

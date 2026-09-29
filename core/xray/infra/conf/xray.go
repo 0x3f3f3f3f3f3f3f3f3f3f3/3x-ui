@@ -386,7 +386,8 @@ func (c EnvConfig) Override(o EnvConfig) {
 }
 
 type Config struct {
-	ClientPolicy *ClientPolicyConfig `json:"clientPolicy"`
+	TrafficControl *TrafficControlConfig `json:"trafficControl"`
+	ClientPolicy   *ClientPolicyConfig   `json:"clientPolicy"`
 	// Deprecated: Global transport config is no longer used
 	// left for returning error
 	Transport map[string]json.RawMessage `json:"transport"`
@@ -433,6 +434,9 @@ func (c *Config) findOutboundTag(tag string) int {
 
 // Override method accepts another Config overrides the current attribute
 func (c *Config) Override(o *Config, fn string) {
+	if o.TrafficControl != nil {
+		c.TrafficControl = o.TrafficControl
+	}
 	if o.ClientPolicy != nil {
 		c.ClientPolicy = o.ClientPolicy
 	}
@@ -555,6 +559,13 @@ func (c *Config) Build() (*core.Config, error) {
 			return nil, errors.New("failed to build API configuration").Base(err)
 		}
 		config.App = append(config.App, serial.ToTypedMessage(apiConf))
+	}
+	if c.TrafficControl != nil {
+		control, err := c.TrafficControl.Build()
+		if err != nil {
+			return nil, errors.New("failed to build traffic control").Base(err)
+		}
+		config.App = append(config.App, serial.ToTypedMessage(control))
 	}
 	if c.ClientPolicy != nil {
 		managed, err := c.ClientPolicy.Build()
