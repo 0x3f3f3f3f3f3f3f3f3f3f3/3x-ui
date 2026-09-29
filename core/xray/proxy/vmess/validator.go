@@ -96,6 +96,7 @@ func (v *TimedUserValidator) Remove(email string) bool {
 			var cmdkeyfl [16]byte
 			copy(cmdkeyfl[:], u.Account.(*MemoryAccount).ID.CmdKey())
 			v.aeadDecoderHolder.RemoveUser(cmdkeyfl)
+			u.RevokeCredential()
 			break
 		}
 	}

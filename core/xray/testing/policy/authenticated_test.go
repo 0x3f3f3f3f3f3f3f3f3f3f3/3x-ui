@@ -2,6 +2,7 @@ package policy_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -10,6 +11,9 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/app/clientpolicy"
+	"github.com/xtls/xray-core/app/proxyman/command"
+	"github.com/xtls/xray-core/features/inbound"
+	"github.com/xtls/xray-core/proxy"
 )
 
 func TestAuthenticatedProtocolsShareTunnelIdentityAndDisconnect(t *testing.T) {
@@ -151,6 +155,34 @@ func TestAuthenticatedProtocolsShareTunnelIdentityAndDisconnect(t *testing.T) {
 			if err != nil || snap.Usage != (clientpolicy.Usage{RawUpload: 65867, RawDownload: 65867, BilledBytes: 197575}) {
 				t.Fatalf("rate or multiplier change rewrote historical usage: %+v, %v", snap, err)
 			}
+			manager := server.GetFeature(inbound.ManagerType()).(inbound.Manager)
+			handler, err := manager.GetHandler(context.Background(), "authenticated")
+			if err != nil {
+				t.Fatal(err)
+			}
+			users := handler.(proxy.GetInbound).GetInbound().(proxy.UserManager).GetUsers(context.Background())
+			if len(users) != 1 {
+				t.Fatalf("expected one authenticated credential, got %d", len(users))
+			}
+			if err := (&command.RemoveUserOperation{Email: users[0].Email}).ApplyInbound(context.Background(), handler); err != nil {
+				t.Fatal(err)
+			}
+			for _, c := range []net.Conn{first, second} {
+				_ = c.SetReadDeadline(time.Now().Add(2 * time.Second))
+				if _, err := c.Read(make([]byte, 1)); err == nil || os.IsTimeout(err) {
+					t.Fatalf("credential removal left an existing protocol stream alive: %v", err)
+				}
+			}
+			_ = udp.SetDeadline(time.Now().Add(200 * time.Millisecond))
+			_, _ = udp.Write([]byte("removed"))
+			if n, err := udp.Read(make([]byte, 32)); n != 0 || err == nil {
+				t.Fatalf("removed credential returned UDP payload: n=%d err=%v", n, err)
+			}
+			exchange(t, tunnel, []byte("survivor"))
+			snap, err = engine.Snapshot("owner")
+			if err != nil || snap.ActiveSessions != 1 || snap.Usage != (clientpolicy.Usage{RawUpload: 65875, RawDownload: 65875, BilledBytes: 197583}) {
+				t.Fatalf("credential removal affected sibling identity or usage: %+v, %v", snap, err)
+			}
 			policy.Version++
 			policy.Enabled = false
 			deadline := time.Now().Add(2 * time.Second)
@@ -169,7 +201,7 @@ func TestAuthenticatedProtocolsShareTunnelIdentityAndDisconnect(t *testing.T) {
 				t.Fatalf("disabled UDP session returned payload: n=%d err=%v", n, err)
 			}
 			snap, err = engine.Snapshot("owner")
-			if err != nil || snap.ActiveSessions != 0 || snap.Reasons != clientpolicy.ReasonDisabled || snap.Usage.BilledBytes != 197575 {
+			if err != nil || snap.ActiveSessions != 0 || snap.Reasons != clientpolicy.ReasonDisabled || snap.Usage.BilledBytes != 197583 {
 				t.Fatalf("disable altered shared accounting or retained sessions: %+v, %v", snap, err)
 			}
 		})

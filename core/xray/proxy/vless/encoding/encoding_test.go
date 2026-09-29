@@ -48,7 +48,7 @@ func TestRequestSerialization(t *testing.T) {
 	_, actualRequest, actualAddons, _, err := DecodeRequestHeader(false, nil, &buffer, Validator)
 	common.Must(err)
 
-	if r := cmp.Diff(actualRequest, expectedRequest, cmp.AllowUnexported(protocol.ID{})); r != "" {
+	if r := cmp.Diff(actualRequest, expectedRequest, cmp.Comparer(func(a, b *protocol.MemoryUser) bool { return a == b })); r != "" {
 		t.Error(r)
 	}
 
@@ -120,7 +120,7 @@ func TestMuxRequest(t *testing.T) {
 	_, actualRequest, actualAddons, _, err := DecodeRequestHeader(false, nil, &buffer, Validator)
 	common.Must(err)
 
-	if r := cmp.Diff(actualRequest, expectedRequest, cmp.AllowUnexported(protocol.ID{})); r != "" {
+	if r := cmp.Diff(actualRequest, expectedRequest, cmp.Comparer(func(a, b *protocol.MemoryUser) bool { return a == b })); r != "" {
 		t.Error(r)
 	}
 

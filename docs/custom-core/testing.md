@@ -478,3 +478,39 @@ failed in unchanged tests: the public AdGuard QUIC DNS query timed out, and an
 AmneziaWG test found its fixed TCP port 58912 occupied. An isolated DNS repeat
 passed once and then timed out. The final panel and core suites ran sequentially;
 no test assertion, timeout or source was changed to obtain the passing runs.
+
+## Revoking authenticated credentials — 2026-09-29
+
+Managed sessions now remain tied to the actual authenticated `MemoryUser`.
+VLESS, VMess, Trojan and Shadowsocks validator removal permanently revokes that
+object, closes its registered sessions and rejects requests that finish
+authentication or enter dispatch later. A replacement credential gets its own
+object; sibling credentials keep the same client ledger and remain usable.
+The private API advertises `authenticated-credential-revocation-v1`.
+
+Twelve validator/dispatcher cases first admitted removed credentials or stale
+payload. A real VLESS header decoder also reproduced removal between UUID
+validation and the remaining header reads. The dispatcher now fences session
+registration against revocation; a concurrent registration/removal case checks
+the resulting admitted bytes and absence of leaked sessions. The focused race
+checks pass. An overlay that removes dispatcher registration fails again.
+
+The existing four-protocol TCP/UDP scenarios now remove credentials through the
+handler API operation in both plain and mux modes. All eight cases initially
+retained old streams under the omission overlay, and pass with the fix. The
+sibling Tunnel still forwards and the final ledger remains exactly 65875 bytes
+in each direction / 197583 billed bytes after the rate and multiplier changes.
+
+The first complete core run exposed VLESS/VMess comparison tests traversing the
+new private runtime state. Their roundtrip checks now require the decoder to
+return the same authenticated user object, while still comparing the remaining
+header fields. Both codec race suites pass; copying the authenticated user under
+an overlay makes all four serialization/mux checks fail. No runtime field is
+serialized into the protocol or accepted from a client.
+
+This increment was verified independently at `0496f115`, with thirteen core
+source/test files and without the panel activation work. Core race checks,
+the core build, Go lint (zero issues), the complete shuffled panel suite
+(239.65 s wall) and panel build pass. The final complete shuffled core rerun
+also passes, including the repaired codecs and scenarios (343.209 s). The
+initial comparison-test failures remain recorded separately.

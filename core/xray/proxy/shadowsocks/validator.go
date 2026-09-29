@@ -67,6 +67,7 @@ func (v *Validator) Del(email string) error {
 	}
 	ulen := len(v.users)
 
+	v.users[idx].RevokeCredential()
 	v.users[idx] = v.users[ulen-1]
 	v.users[ulen-1] = nil
 	v.users = v.users[:ulen-1]

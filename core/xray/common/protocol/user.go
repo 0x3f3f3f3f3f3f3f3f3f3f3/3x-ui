@@ -50,7 +50,8 @@ func ToProtoUser(mu *MemoryUser) *User {
 
 // MemoryUser is a parsed form of User, to reduce number of parsing of Account proto.
 type MemoryUser struct {
-	ClientID string
+	credential credentialState
+	ClientID   string
 	// Account is the parsed account of the protocol.
 	Account Account
 	Email   string

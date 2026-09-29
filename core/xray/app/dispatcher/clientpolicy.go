@@ -37,9 +37,14 @@ func (d *DefaultDispatcher) manageLink(ctx context.Context, destination net.Dest
 		cancel()
 		return ctx, nil, err
 	}
+	untrack, err := in.User.TrackSession(s.Close)
+	if err != nil {
+		s.Close()
+		return ctx, nil, err
+	}
 	link.Reader = &managedReader{Reader: reader, session: s}
 	link.Writer = &managedWriter{Writer: writer, session: s}
-	return child, func() { s.Release(); cancel() }, nil
+	return child, func() { untrack(); s.Release(); cancel() }, nil
 }
 
 type managedReader struct {
