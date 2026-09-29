@@ -81,6 +81,7 @@ Produces: capability v1, versioned policy/connection/event APIs and durable rese
 Files: core inbound account parsers, mux, dispatcher, Vision/XTLS, routing context; panel account mapping.
 
 - [ ] Write credential-rotation and cross-protocol aggregation regressions before extending trusted account mapping.
+- [x] Scoped VLESS/VMess/Trojan/classic AEAD TCP/UDP/Mux and Tunnel aggregation, shared upload bucket, multiplier boundary, disable, and private Runtime VLESS credential rotation.
 - [ ] Cover VLESS/VMess/Trojan/Shadowsocks/Mixed/HTTP/Hysteria/WireGuard/TUN as applicable; distinguish IP-packet accounting.
 - [ ] Audit nested dispatch, loopback, mux/XUDP, sniff cache and raw/splice/Vision for bypass/double charging.
 - [ ] Test authenticated client-ID routing, original versus rewritten target, DNS/balancer/block and loop detection.
@@ -178,3 +179,5 @@ Runtime bootstrap checkpoint: private state provisioning and Local Runtime datab
 Task 6 policy-edit checkpoint: optional settings survive legacy client edits and attached settings export; bounded desired batches use durable monotonic versions derived from enforcement fields. The normal client-edit service dispatches changes for already activated local clients through Runtime. Real child-process tests cover live rate/multiplier changes and manual disable. General activation, all lifecycle entry points, first-use expiry/reset windows, projection and UI remain open.
 
 Task 6 collection checkpoint: the existing traffic polling entrypoint now collects committed ledger pages through Runtime and resumes from the SQL cursor after failures. Cursor validation occurs before checkpointing, and the core avoids rewriting unchanged clients. Automatic owner/config activation and the legacy raw/billed statistics, reset and expiry cutover still remain open.
+
+Task 5 partial checkpoint: four authenticated account adapters now preserve server-side client identity and advertise individual capabilities. Handler mutations verify private transport and required capabilities before changes. Tests cover TCP/UDP/Mux payloads sharing a Tunnel policy, a live shared rate change, exact historical billing and Runtime credential rotation. Vision, the other account families, full panel-generated identity binding, account deletion/bulk lifecycle and production activation remain open. The Shadowsocks 2022 audit found mutable table/index and authentication-context lifetime concerns; managed 2022 is rejected until its adapter is repaired and verified.

@@ -104,6 +104,7 @@ type TrojanInboundFallback struct {
 
 // TrojanUserConfig is user configuration
 type TrojanUserConfig struct {
+	ClientID string `json:"clientId"`
 	Password string `json:"password"`
 	Level    byte   `json:"level"`
 	Email    string `json:"email"`
@@ -136,8 +137,9 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 		}
 
 		config.Users[idx] = &protocol.User{
-			Level: uint32(rawUser.Level),
-			Email: rawUser.Email,
+			ClientId: rawUser.ClientID,
+			Level:    uint32(rawUser.Level),
+			Email:    rawUser.Email,
 			Account: serial.ToTypedMessage(&trojan.Account{
 				Password: rawUser.Password,
 			}),

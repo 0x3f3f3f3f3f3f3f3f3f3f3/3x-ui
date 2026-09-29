@@ -52,6 +52,7 @@ type XrayAPI struct {
 	StatsServiceClient   *statsService.StatsServiceClient
 	RoutingServiceClient *routerService.RoutingServiceClient
 	grpcClient           *grpc.ClientConn
+	endpoint             string
 	isConnected          bool
 	StatsLastValues      map[string]int64
 }
@@ -102,6 +103,7 @@ func (x *XrayAPI) InitEndpoint(endpoint string) error {
 
 	x.Close()
 	x.grpcClient = conn
+	x.endpoint = endpoint
 	x.isConnected = true
 	if x.StatsLastValues == nil {
 		x.StatsLastValues = make(map[string]int64)
@@ -127,6 +129,7 @@ func (x *XrayAPI) Close() {
 	x.StatsServiceClient = nil
 	x.RoutingServiceClient = nil
 	x.isConnected = false
+	x.endpoint = ""
 }
 
 // handlerRPCTimeout bounds per-call gRPC handler operations (add/remove inbound,
@@ -156,6 +159,23 @@ func (x *XrayAPI) AddInbound(inbound []byte) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), handlerRPCTimeout)
 	defer cancel()
+	proxyConfig, err := config.ProxySettings.GetInstance()
+	if err != nil {
+		return err
+	}
+	required := make(map[string]bool)
+	if err := managedIdentityCapabilities(proxyConfig.ProtoReflect(), required); err != nil {
+		return err
+	}
+	if len(required) != 0 {
+		capabilities := make([]string, 0, len(required))
+		for name := range required {
+			capabilities = append(capabilities, name)
+		}
+		if err := x.requireManagedControl(ctx, capabilities); err != nil {
+			return err
+		}
+	}
 	_, err = client.AddInbound(ctx, &inboundConfig)
 
 	return err
@@ -698,10 +718,21 @@ func (x *XrayAPI) AddUser(Protocol string, inboundTag string, user map[string]an
 	if err != nil {
 		return err
 	}
+	clientID, err := getOptionalUserString(user, "clientId")
+	if err != nil {
+		return err
+	}
 
 	account, err := buildUserAccount(Protocol, user)
 	if err != nil {
 		return err
+	}
+	var capability string
+	if clientID != "" {
+		capability, err = managedUserCapability(account.GetType())
+		if err != nil {
+			return err
+		}
 	}
 	if account == nil {
 		return nil
@@ -712,18 +743,24 @@ func (x *XrayAPI) AddUser(Protocol string, inboundTag string, user map[string]an
 	}
 	client := *x.HandlerServiceClient
 
+	ctx, cancel := context.WithTimeout(context.Background(), handlerRPCTimeout)
+	defer cancel()
+	if clientID != "" {
+		if err := x.requireManagedControl(ctx, []string{capability}); err != nil {
+			return err
+		}
+	}
 	if account.Type == legacyShadowsocksAccountType {
 		_ = x.RemoveUser(inboundTag, userEmail)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), handlerRPCTimeout)
-	defer cancel()
 	_, err = client.AlterInbound(ctx, &command.AlterInboundRequest{
 		Tag: inboundTag,
 		Operation: serial.ToTypedMessage(&command.AddUserOperation{
 			User: &protocol.User{
-				Email:   userEmail,
-				Account: account,
+				ClientId: clientID,
+				Email:    userEmail,
+				Account:  account,
 			},
 		}),
 	})

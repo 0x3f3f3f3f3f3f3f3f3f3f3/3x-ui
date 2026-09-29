@@ -54,8 +54,8 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 	}
 	processClient := func(idx int) error {
 		rawUser := c.Users[idx]
-		user := new(protocol.User)
-		if err := json.Unmarshal(rawUser, user); err != nil {
+		user, err := parseInboundUser(rawUser)
+		if err != nil {
 			return errors.New(`VLESS users: invalid user`).Base(err)
 		}
 		account := new(vless.Account)

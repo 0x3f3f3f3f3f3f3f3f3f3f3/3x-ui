@@ -15,8 +15,13 @@ import (
 	"github.com/xtls/xray-core/app/clientpolicy"
 	_ "github.com/xtls/xray-core/app/proxyman/inbound"
 	_ "github.com/xtls/xray-core/app/proxyman/outbound"
+	xnet "github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/infra/conf"
+	"github.com/xtls/xray-core/proxy/vless"
+	vlessencoding "github.com/xtls/xray-core/proxy/vless/encoding"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
@@ -76,10 +81,15 @@ func TestLocalRuntimeUsesPrivateControlForHandlersRoutingAndStats(t *testing.T) 
 	}
 	t.Cleanup(func() { _ = target.Close() })
 	go func() {
-		conn, err := target.Accept()
-		if err == nil {
-			defer conn.Close()
-			_, _ = io.Copy(conn, conn)
+		for {
+			conn, err := target.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer conn.Close()
+				_, _ = io.Copy(conn, conn)
+			}()
 		}
 	}()
 	probe, err := net.Listen("tcp", "127.0.0.1:0")
@@ -143,4 +153,79 @@ func TestLocalRuntimeUsesPrivateControlForHandlersRoutingAndStats(t *testing.T) 
 		unexpected.Close()
 		t.Fatal("removed Tunnel still accepts connections")
 	}
+	t.Run("managed-user-credential-rotation", func(t *testing.T) {
+		before, err := policyAPI.GetClient(ctx, "owner")
+		if err != nil {
+			t.Fatal(err)
+		}
+		auth := &model.Inbound{Tag: "authenticated", Protocol: model.VLESS, Listen: "127.0.0.1", Port: port, Enable: true, Settings: `{"decryption":"none","clients":[]}`}
+		if err := local.AddInbound(ctx, auth); err != nil {
+			t.Fatal(err)
+		}
+		const oldID = "936997e1-3b0c-4de9-9eea-047ee5829d3e"
+		const newID = "01dc4f70-3902-446a-98cb-c00992d1a6c5"
+		open := func(id string, size int) (net.Conn, error) {
+			user, err := (&protocol.User{Account: serial.ToTypedMessage(&vless.Account{Id: id})}).ToMemoryUser()
+			if err != nil {
+				return nil, err
+			}
+			c, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), time.Second)
+			if err != nil {
+				return nil, err
+			}
+			t.Cleanup(func() { _ = c.Close() })
+			_ = c.SetDeadline(time.Now().Add(time.Second))
+			request := &protocol.RequestHeader{User: user, Command: protocol.RequestCommandTCP, Address: xnet.LocalHostIP, Port: xnet.Port(target.Addr().(*net.TCPAddr).Port)}
+			if err := vlessencoding.EncodeRequestHeader(c, request, &vlessencoding.Addons{}); err != nil {
+				return c, err
+			}
+			payload := bytes.Repeat([]byte{0x62}, size)
+			if _, err := c.Write(payload); err != nil {
+				return c, err
+			}
+			if _, err := vlessencoding.DecodeResponseHeader(c, request); err != nil {
+				return c, err
+			}
+			reply := make([]byte, size)
+			if _, err := io.ReadFull(c, reply); err != nil {
+				return c, err
+			}
+			if !bytes.Equal(reply, payload) {
+				return c, fmt.Errorf("authenticated payload changed")
+			}
+			return c, nil
+		}
+		if err := local.AddUser(ctx, auth, map[string]any{"email": "old-display", "id": oldID, "clientId": "owner"}); err != nil {
+			t.Fatal(err)
+		}
+		first, err := open(oldID, 32)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = first.Close()
+		if err := local.RemoveUser(ctx, auth, "old-display"); err != nil {
+			t.Fatal(err)
+		}
+		if err := local.AddUser(ctx, auth, map[string]any{"email": "new-display", "id": newID, "clientId": "owner"}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := open(oldID, 11); err == nil {
+			t.Fatal("rotated credential still authenticates")
+		}
+		current, err := open(newID, 17)
+		if err != nil {
+			t.Fatal(err)
+		}
+		after, err := policyAPI.GetClient(ctx, "owner")
+		if err != nil || after.Policy.Version != 1 || after.Usage.RawUpload != before.Usage.RawUpload+49 || after.Usage.RawDownload != before.Usage.RawDownload+49 || after.Usage.BilledBytes != before.Usage.BilledBytes+98 {
+			t.Fatalf("Runtime account rotation lost or reassigned usage: %+v, %v", after, err)
+		}
+		if err := policyAPI.Apply(ctx, []*clientpolicy.PolicyConfig{{ClientId: "owner", Version: 2, Enabled: false, MultiplierMicros: 1000000, BurstBytes: 65536}}); err != nil {
+			t.Fatal(err)
+		}
+		_ = current.SetReadDeadline(time.Now().Add(2 * time.Second))
+		if _, err := current.Read(make([]byte, 1)); err == nil || os.IsTimeout(err) {
+			t.Fatalf("disable retained Runtime-authenticated connection: %v", err)
+		}
+	})
 }

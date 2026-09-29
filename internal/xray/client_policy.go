@@ -51,9 +51,16 @@ func DialClientPolicy(ctx context.Context, socket, expectedInstance string) (*Cl
 		}
 		return nil, fmt.Errorf("client policy capability query: %w", err)
 	}
-	if capabilities.ApiVersion != 1 || capabilities.InstanceId != expectedInstance {
+	if err := validateClientPolicyCapabilities(capabilities, expectedInstance); err != nil {
 		conn.Close()
-		return nil, fmt.Errorf("%w: API version or instance identity mismatch", ErrClientPolicyCapability)
+		return nil, err
+	}
+	return &ClientPolicyAPI{conn: conn, client: client, capabilities: capabilities}, nil
+}
+
+func validateClientPolicyCapabilities(capabilities *policycommand.Capabilities, expectedInstance string) error {
+	if expectedInstance == "" || capabilities.GetApiVersion() != 1 || capabilities.GetInstanceId() != expectedInstance {
+		return fmt.Errorf("%w: API version or instance identity mismatch", ErrClientPolicyCapability)
 	}
 	present := make(map[string]bool, len(capabilities.Capabilities))
 	for _, name := range capabilities.Capabilities {
@@ -61,11 +68,10 @@ func DialClientPolicy(ctx context.Context, socket, expectedInstance string) (*Cl
 	}
 	for _, name := range []string{"trusted-tunnel-client-id-v1", "shared-directional-rate-v1", "fixed-point-billing-v1", "live-session-control-v1", "local-durable-reservations-v1", "committed-cumulative-ledger-v1", "create-only-usage-seed-v1"} {
 		if !present[name] {
-			conn.Close()
-			return nil, fmt.Errorf("%w: missing %s", ErrClientPolicyCapability, name)
+			return fmt.Errorf("%w: missing %s", ErrClientPolicyCapability, name)
 		}
 	}
-	return &ClientPolicyAPI{conn: conn, client: client, capabilities: capabilities}, nil
+	return nil
 }
 
 func (c *ClientPolicyAPI) Close() error { return c.conn.Close() }

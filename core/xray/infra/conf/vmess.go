@@ -76,8 +76,8 @@ func (c *VMessInboundConfig) Build() (proto.Message, error) {
 	config.User = make([]*protocol.User, len(c.Users))
 	processUser := func(idx int) error {
 		rawData := c.Users[idx]
-		user := new(protocol.User)
-		if err := json.Unmarshal(rawData, user); err != nil {
+		user, err := parseInboundUser(rawData)
+		if err != nil {
 			return errors.New("invalid VMess user").Base(err)
 		}
 		account := new(VMessAccount)

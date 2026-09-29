@@ -5,6 +5,7 @@ import (
 	goerrors "errors"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -24,7 +25,7 @@ type connEntry struct {
 	link   *transport.Link
 	timer  *signal.ActivityTimer
 	cancel context.CancelFunc
-	closed bool
+	closed atomic.Bool
 }
 
 func (c *connEntry) Close() error {
@@ -33,10 +34,9 @@ func (c *connEntry) Close() error {
 }
 
 func (c *connEntry) terminate() {
-	if c.closed {
+	if c.closed.Swap(true) {
 		panic("terminate called more than once")
 	}
-	c.closed = true
 	c.cancel()
 	common.Interrupt(c.link.Reader)
 	common.Interrupt(c.link.Writer)
@@ -77,7 +77,7 @@ func (v *Dispatcher) getInboundRay(ctx context.Context, dest net.Destination) (*
 	}
 
 	if v.conn != nil {
-		if v.conn.closed {
+		if v.conn.closed.Load() {
 			v.conn = nil
 		} else {
 			return v.conn, nil

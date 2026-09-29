@@ -6,10 +6,10 @@ This is the initial source-audit matrix, not a support announcement. `E/U` = exi
 
 | Protocol/path | Inbound/outbound baseline | Client lifecycle / export | Unified stable ID/rate/billing/quota/live close | Required evidence |
 | --- | --- | --- | --- | --- |
-| VLESS | E/U both | E/U | N | authenticated rotation, TCP/UDP/mux/Vision, real client regression |
-| VMess | E/U both | E/U | N | TCP/UDP/mux and account lifecycle |
-| Trojan | E/U both | E/U | N | TCP/UDP/fallback and account lifecycle |
-| Shadowsocks/2022 | E/U both | E/U | N | cipher variants, TCP/UDP/relay, identity |
+| VLESS | E/U both | private Runtime credential rotation I/V; full lifecycle/export E/U | I/V scoped TCP/UDP/Mux identity, shared rate/billing/live close; production activation N | Vision, complete account lifecycle, independent client regression |
+| VMess | E/U both | E/U | I/V scoped TCP/UDP/Mux identity, shared rate/billing/live close; production activation N | complete account lifecycle and independent client regression |
+| Trojan | E/U both | E/U | I/V scoped TCP/UDP/Mux identity, shared rate/billing/live close; production activation N | fallback and complete account lifecycle |
+| Shadowsocks/2022 | E/U both | E/U | classic AEAD TCP/UDP/Mux scoped I/V; 2022 managed identity N | other cipher variants, 2022 user-update isolation/relay, complete lifecycle |
 | Mixed/SOCKS | E/U both (outbound socks) | E/U | N | authenticated user versus anonymous listener, UDP |
 | HTTP | E/U both | E/U | N | auth, CONNECT, normal request path, raw-copy |
 | Hysteria2 | E/U both | E/U | N | QUIC/mux/UDP and auth updates |
@@ -77,3 +77,5 @@ Core listener removal increment (2026-09-29): real Tunnel tests cover establishe
 Policy-edit increment: optional rate/multiplier persistence, omission preservation, exact validation and transactionally versioned desired policies are implemented. The normal client-edit service can hot-apply policies for an already activated local client through Runtime; an actual core test verifies existing-stream rate change, historical billing and disable. Automatic initial activation, the user-facing forms, remaining lifecycle/bulk paths, period resets, first-use expiry and global allocation are unfinished. See testing.md for the exact database and real-process evidence; no full protocol/lifecycle row is upgraded by this increment.
 
 Ledger-collection increment: the existing traffic collector now polls committed client receipts through Runtime for an already managed local process. Bounded pagination, atomic page settlement and cursor validation precede legacy operational-counter reads. Core idle checkpoint writes are avoided. Real-child and database regression evidence is recorded in testing.md. Legacy statistics projection and quota/reset cutover are still unfinished, so this does not establish complete production activation or UI support.
+
+Authenticated-account increment: VLESS/VMess/Trojan/classic Shadowsocks AEAD server accounts can carry the trusted `clientId`. Eight real loopback cases exercise TCP and UDP with and without Mux, alongside an owned Tunnel, exact multiplier boundaries, a shared upload bucket and live disable. Handler mutations require a private endpoint and the appropriate per-protocol capability before changing the core. A real Runtime VLESS rotation changes credential/email while preserving the existing policy and usage. These tests use the existing codec implementations as peers; they do not establish Vision, every cipher/transport or independent official-client interoperability. Automatic DB-to-account binding and complete lifecycle/UI remain N. Managed Shadowsocks 2022 is explicitly rejected pending repair of its mutable user table and authentication-context lifetime; legacy unmanaged 2022 configurations remain supported.

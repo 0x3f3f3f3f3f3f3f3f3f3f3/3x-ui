@@ -226,3 +226,23 @@ go test -race -p=1 ./internal/web/runtime -run '^TestLocalRuntimeUsesPrivateCont
 These are core/Runtime removal checks, not evidence of completed panel ownership assignment or final legacy traffic handoff.
 
 Final removal gate: the full core suite passed, including protocol scenarios in 368.015 s. Private-control/real-child race checks passed for process (13.567 s), Runtime (1.297 s) and service (18.231 s), using a binary built from the removal patch; they include restart recovery and the 1001-client polling case. The complete serial panel suite passed (service 62.303 s), and panel lint reported zero issues. No frontend or database schema changed in this increment.
+
+## Authenticated accounts sharing Tunnel policy — 2026-09-29
+
+The real VLESS/VMess/Trojan/classic Shadowsocks tests first failed because only the Tunnel's 17 upload / 17 download / 51 billed bytes reached the engine. Preserving each authenticated account's configured `clientId` made all four TCP cases pass, then all eight plain/Mux cases. Adding UDP exposed a race between the shared UDP dispatcher's timer termination and its next packet reading `closed`; this flag is now atomic. The TCP/UDP/Mux cases passed three consecutive race runs (18.964 s) after that repair.
+
+Each expanded case first records 318 upload / 318 download / 954 billed bytes at multiplier 1.5 across two authenticated TCP streams, UDP and an owned Tunnel. Setting upload to 1 B/s and consuming the 65,536-byte burst through an authenticated stream makes the Tunnel wait. Changing the shared rate to unlimited and multiplier to 0.5 releases its queued 13-byte echo within two seconds. Historical billing is preserved: final counters are 65,867 upload / 65,867 download / 197,575 billed bytes. Disable terminates existing TCP streams and prevents the UDP session delivering another payload. This expanded race run passed in 8.737 s.
+
+The Handler API tests independently reproduced discarded identity fields, mutations accepted by a service without policy support, and managed accounts silently accepted by a core lacking the relevant protocol capability. Rejections now precede handler mutations, and legacy requests without managed identity still work. Config tests preserve email/level and the VLESS/VMess legacy identity spelling while rejecting conflicting aliases. They also verify that unsupported managed Shadowsocks 2022 is rejected without rejecting the unchanged legacy configuration.
+
+Runtime's private-control test now adds a real VLESS account, transfers 32 bytes each way, rotates credential/email, rejects the old credential and transfers another 17 bytes each way under the same client ID. Its existing usage increases by exactly 98 billed bytes while policy version remains 1; disable ends the new connection. Runtime/adapter race checks passed in 1.310 s / 1.195 s. The peer uses the core's existing wire encoder; this is real protocol traffic, not an independent-client interoperability claim.
+
+```sh
+(cd core/xray && go test -race -p=1 ./app/clientpolicy/... ./app/dispatcher ./infra/conf ./transport/internet/udp ./testing/policy -count=1)
+go test -race -p=1 ./internal/xray ./internal/web/runtime \
+  -run '^TestManagedMutation|^TestClientPolicyAdapter|^TestLocalRuntimeUsesPrivateControl' -count=1
+```
+
+The final scoped core race run passed (policy 4.911 s, API 1.039 s, dispatcher 1.028 s, config 1.238 s, UDP 2.027 s, real policy traffic 11.148 s). The final adapter/Runtime race checks passed in 1.208 s / 1.342 s. Focused core vet and panel lint passed with zero lint issues. The complete serial, shuffled core suite passed, including scenarios in 353.533 s. The complete panel suite passed with the current custom binary and unmodified upstream binary enabled (service 67.008 s, Xray 14.660 s). No frontend or SQL schema changed in this increment.
+
+Ordinary panel identity compilation/activation, Vision, remaining account adapters and complete account lifecycle are not established by these tests.

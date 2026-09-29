@@ -30,6 +30,7 @@ func cipherFromString(c string) shadowsocks.CipherType {
 }
 
 type ShadowsocksUserConfig struct {
+	ClientID string   `json:"clientId"`
 	Cipher   string   `json:"method"`
 	Password string   `json:"password"`
 	Level    byte     `json:"level"`
@@ -79,9 +80,10 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 					return errors.New("unsupported cipher method: ", user.Cipher)
 				}
 				config.Users[idx] = &protocol.User{
-					Email:   user.Email,
-					Level:   uint32(user.Level),
-					Account: serial.ToTypedMessage(account),
+					ClientId: user.ClientID,
+					Email:    user.Email,
+					Level:    uint32(user.Level),
+					Account:  serial.ToTypedMessage(account),
 				}
 				return nil
 			}
@@ -111,6 +113,11 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 }
 
 func buildShadowsocks2022(v *ShadowsocksServerConfig) (proto.Message, error) {
+	for _, user := range v.Users {
+		if user.ClientID != "" {
+			return nil, errors.New("managed client identity is not implemented for shadowsocks 2022")
+		}
+	}
 	if len(v.Users) == 0 {
 		config := new(shadowsocks_2022.ServerConfig)
 		config.Method = v.Cipher
