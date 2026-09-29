@@ -4828,3 +4828,67 @@ throughout the run. No frontend behavior changed in this increment.
 No Docker image, release publication or host installation was executed. The
 Dockerfile's scoped change builds the whole root package so the new CLI file is
 linked; managed-core image/release assembly remains a separate delivery step.
+
+## Managed release assembly and source export
+
+The shared assembler and its distribution wiring are described in
+[tools/managed-release](../../tools/managed-release/README.md). The Linux release
+and Docker paths now build the managed core from its verified pin/patches and
+assemble the scripts, static staging helper, units, source archive, license and
+manifest. The candidate runs `verify-release` before archive/image production.
+The Windows workflow builds the managed executable and includes a real bridge
+test gate, while retaining upstream support files. Workflow wiring does not
+constitute an executed Windows, foreign-architecture or Docker acceptance run.
+
+The native probe first failed because the assembly command did not exist. Its
+first actual build then failed the repeated-source-archive comparison. Diagnostic
+reproduction found **zero source-content differences** and **1229 metadata
+differences**, including directory timestamps five seconds apart. The core
+binaries already matched. Sorted GNU tar entries, fixed times/numeric owners,
+normalized modes and `gzip -n` corrected the source export without weakening
+the byte-equality assertion.
+
+```sh
+GOFLAGS=-p=1 python3 tools/managed-release/probe_linux.py \
+  --panel /tmp/3x-ui-release-preflight-panel-final
+```
+
+The final Linux arm64 fixture passed: **12 inventoried files**, compressed
+archive **71,910,795 bytes**, byte-identical repeated core/source builds,
+mandatory archive SHA256 and selected manifest verification, followed by the
+staged panel's actual authenticated managed-core probe. The previous-install
+sentinel remained intact and probe temporary files were removed. Its panel
+source stamp was the explicitly declared `f` repeated 40 times fixture identity,
+not an actual source revision. No installer, service manager or business
+database was exercised by this assembly probe. Five invalid-input/existing-
+manifest checks exited 2 without changing their existing fixture files.
+
+A separately retained core built by the same command was a static Linux arm64
+ELF. Its complete `internal/routedbridge` race/shuffle suite passed **15 top-level
+tests / 26 subtests**, no skips, in **5.372s**, using the actual stock core for
+rejection tests. This covers authentication, actual UDP peers and datagram
+boundaries, route decisions, hot additions, cancellation and core-exit cleanup.
+
+- Core SHA256: `e8209436effac620d60a3790cffd4ddbfb4ba18e279fcccf2d6ba172258b2f1f`.
+- Exported source SHA256: `57b6472d2f1efdb19df1461fade46dc3040e490d492f018dcee5cef6e7e91ccc`.
+
+Both modified workflows passed **actionlint 1.7.12**; shell syntax, Python AST
+and YAML parsing also passed. Official **Compose 5.5.1** evaluated the actual
+compose file without starting a daemon: missing `XUI_SOURCE_COMMIT` exited 1;
+providing the full commit produced the expected source argument and default
+`local` tag with exit 0. Both standalone validation tools were downloaded from
+their official releases and checked against the published SHA256s.
+
+Logs under `/tmp/3x-ui-rate-trace/`: `release-packaging-red.log`,
+`release-packaging-first-build.log`, `release-packaging-source-diagnostic.log`,
+`release-packaging-native-green.log`, `release-packaging-core-race.jsonl` and
+`release-packaging-actionlint.log`. No application Go or embedded asset changed
+in this packaging increment, so the preceding complete Go regression remains
+the application-source check; the fresh core used the focused data-path suite.
+
+No Docker engine or Windows runtime was available here, and the release/image
+workflows were not dispatched. Optional geodata/MTProto and toolchain/image
+selection still contain dynamic upstream inputs; full artifact reproducibility
+is not established by the managed-core/source comparison. Existing installer,
+menu and web updater activation/rollback remain unfinished. No release or image
+was published, and no host installation or service was changed.

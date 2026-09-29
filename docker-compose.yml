@@ -3,6 +3,9 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
+      args:
+        SOURCE_COMMIT: ${XUI_SOURCE_COMMIT:?Set XUI_SOURCE_COMMIT to the full source commit before building}
+        RELEASE_TAG: ${XUI_RELEASE_TAG:-local}
     container_name: 3xui_app
     # hostname: yourhostname <- optional
     # Optional hard memory cap. When set, the panel derives its Go soft limit

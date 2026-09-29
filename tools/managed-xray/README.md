@@ -19,13 +19,14 @@ No upstream source is modified in the module cache. `prepare.sh` verifies the
 Go module cache, copies source into a new directory and applies the patches
 with `git apply --check`. Patch drift fails the build.
 
-Use Go 1.27+, Git and a POSIX shell. Output directories must already exist;
+Use Go 1.27+, Git and a POSIX shell. Source export also needs GNU tar and gzip.
+Output directories must already exist;
 source and binary output paths must not exist:
 
 ```sh
 sh tools/managed-xray/prepare.sh /tmp/xui-core-source
 (cd /tmp/xui-core-source && go test -race -count=1 ./common/buf ./transport/pipe ./proxy/trojan ./proxy/freedom)
-sh tools/managed-xray/build.sh /tmp/xui-core
+sh tools/managed-xray/build.sh /tmp/xui-core /tmp/xui-core-source.tar.gz
 XUI_MANAGED_XRAY_E2E_BINARY=/tmp/xui-core go test -race -count=1 ./internal/routedbridge
 XUI_MANAGED_XRAY_E2E_BINARY=/tmp/xui-core go test -race -count=1 ./internal/mieru
 ```
@@ -36,9 +37,12 @@ is skipped; it is not counted as successful stock interoperability.
 
 The binary reports `3x-ui-managed-1` alongside the original Xray version. The
 build uses the pinned core's own module graph and disables VCS stamping and
-local source paths. No release has been published and no installer currently
-selects this build. Public Runtime capability enforcement and packaging remain
-open; the private bridge verifies a nonce-bound HMAC before sending a target.
+local source paths. The optional second output exports the actual prepared source with deterministic
+archive metadata. [Distribution builders](../managed-release/README.md) now select
+this build and include its source/license; image and foreign-platform acceptance
+remain unverified here. No release has been published, and installer/update
+activation still needs integration. The private bridge verifies a nonce-bound
+HMAC before sending a target.
 
 Patch 0001 keeps one complete UDP payload in one buffer, sizes framing for a
 255-byte domain and the full two-byte payload length, validates packet CRLF,

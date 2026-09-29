@@ -137,6 +137,17 @@ The source SQLite file is left untouched; remove it manually once you have verif
 
 ### Docker
 
+Build this fork from a committed checkout and supply its full source commit:
+
+```sh
+export XUI_SOURCE_COMMIT="$(git rev-parse HEAD)"
+docker compose build
+```
+
+The build includes the managed core and checks its authenticated routing
+capability. See [managed release build notes](tools/managed-release/README.md)
+for the verification scope and remaining deployment work.
+
 The default `docker compose up -d` keeps using SQLite. To run with the bundled PostgreSQL service, uncomment the two `XUI_DB_*` env lines in `docker-compose.yml` and start with the profile:
 
 ```bash

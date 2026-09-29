@@ -15,6 +15,8 @@ It is not a declaration that the protocols or policy enforcement are ready.
 - [Authenticated UDP core bridge and source patch plan](xray-datagram-bridge.md)
 - [Accounting and enforcement semantics](semantics.md)
 - [Verification evidence](validation.md)
+- [Release staging and runtime preflight](update-staging.md)
+- [Managed release assembly](../../tools/managed-release/README.md)
 - [Installation, recovery and rollback](operations.md)
 
 Completion requires working database, service, API, UI, backend, deployment,

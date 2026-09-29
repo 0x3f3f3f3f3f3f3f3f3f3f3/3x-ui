@@ -1,4 +1,5 @@
 .git
+.superpowers
 **/node_modules
 internal/web/dist
 build

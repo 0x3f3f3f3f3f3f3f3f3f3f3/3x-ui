@@ -1,7 +1,7 @@
 # ========================================================
 # Stage: Frontend (Vite)
 # ========================================================
-FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend
+FROM --platform=$BUILDPLATFORM node:26-alpine AS frontend
 WORKDIR /src/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
@@ -15,10 +15,16 @@ RUN npm run build
 FROM golang:1.27-alpine AS builder
 WORKDIR /app
 ARG TARGETARCH
+ARG TARGETVARIANT
+ARG SOURCE_COMMIT
+ARG RELEASE_TAG=local
 
 RUN apk --no-cache --update add \
   build-base \
   gcc \
+  git \
+  tar \
+  gzip \
   curl \
   unzip
 
@@ -27,8 +33,14 @@ COPY --from=frontend /src/internal/web/dist ./internal/web/dist
 
 ENV CGO_ENABLED=1
 ENV CGO_CFLAGS="-D_LARGEFILE64_SOURCE"
-RUN go build -ldflags "-w -s" -o build/x-ui .
-RUN ./DockerInit.sh "$TARGETARCH"
+RUN case "$SOURCE_COMMIT" in ''|*[!0-9a-f]*) exit 2 ;; esac \
+  && test "${#SOURCE_COMMIT}" -eq 40 \
+  && case "$TARGETARCH/$TARGETVARIANT" in \
+       arm/v5|arm/v6|arm/v7) export GOARM="${TARGETVARIANT#v}" ;; \
+       arm/*) echo "Unsupported ARM variant" >&2; exit 2 ;; \
+     esac \
+  && go build -buildvcs=false -ldflags "-w -s -X github.com/mhsanaei/3x-ui/v3/internal/config.buildSourceCommit=$SOURCE_COMMIT" -o build/x-ui .
+RUN ./DockerInit.sh "$TARGETARCH" "$TARGETVARIANT" "$SOURCE_COMMIT" "$RELEASE_TAG"
 
 # ========================================================
 # Stage: Final Image of 3x-ui
@@ -46,8 +58,7 @@ RUN apk add --no-cache --update \
   openssl
 
 COPY --from=builder /app/build/ /app/
-COPY --from=builder /app/DockerEntrypoint.sh /app/
-COPY --from=builder /app/x-ui.sh /usr/bin/x-ui
+COPY --from=builder /app/build/x-ui.sh /usr/bin/x-ui
 COPY --from=builder /app/internal/web/translation /app/internal/web/translation
 
 

@@ -137,6 +137,16 @@ systemctl restart x-ui
 
 ### Docker
 
+请从已提交的工作区构建本 fork，并传入完整源码提交号：
+
+```sh
+export XUI_SOURCE_COMMIT="$(git rev-parse HEAD)"
+docker compose build
+```
+
+构建会包含受管核心，并检查其路由认证能力。已验证范围和仍未完成的部署工作见
+[受管发布构建说明](tools/managed-release/README.md)。
+
 默认的 `docker compose up -d` 仍使用 SQLite。若要使用捆绑的 PostgreSQL 服务运行，请取消注释 `docker-compose.yml` 中的两行 `XUI_DB_*` 环境变量，并使用该 profile 启动：
 
 ```bash
