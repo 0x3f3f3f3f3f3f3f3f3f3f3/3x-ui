@@ -1202,6 +1202,11 @@ func (s *XrayService) GetXrayTraffic() ([]*xray.Traffic, []*xray.ClientTraffic, 
 		if err == nil {
 			err = reconcileLocalClientPolicyResets(ctx, process)
 		}
+		if err == nil {
+			if resetErr := resumeScheduledTrafficResets(ctx); resetErr != nil {
+				logger.Warning("Pending scheduled traffic reset:", resetErr)
+			}
+		}
 		cancel()
 		if err != nil {
 			logger.Warning("Failed to collect managed client ledger:", err)

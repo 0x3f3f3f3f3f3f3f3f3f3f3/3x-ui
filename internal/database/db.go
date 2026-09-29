@@ -79,6 +79,7 @@ func allModels() []any {
 		&model.ClientPolicyReceipt{},
 		&model.ClientPolicyReset{},
 		&model.ClientTrafficResetBatch{},
+		&model.ClientTrafficResetTime{},
 		&model.ClientInbound{},
 		&model.ClientHwid{},
 		&model.ClientExternalLink{},

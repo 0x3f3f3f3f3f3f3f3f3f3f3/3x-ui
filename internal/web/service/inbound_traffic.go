@@ -636,7 +636,7 @@ func (s *InboundService) ResetClientTrafficByEmail(clientEmail string) error {
 func (s *InboundService) resetLegacyClientTrafficByEmail(clientEmail, expectedClientID string) error {
 	err := submitTrafficWrite(func() error {
 		return database.GetDB().Transaction(func(tx *gorm.DB) error {
-			if err := guardLegacyClientTrafficReset(tx, clientEmail, expectedClientID); err != nil {
+			if err := prepareLegacyClientTrafficReset(tx, clientEmail, expectedClientID); err != nil {
 				return err
 			}
 			if err := adjustGroupBaselinesForRemovedTraffic(tx, []string{clientEmail}); err != nil {
@@ -754,7 +754,7 @@ func (s *InboundService) resetClientTrafficLocked(id int, clientEmail, expectedC
 		return false, nil, err
 	}
 	if err := db.Transaction(func(tx *gorm.DB) error {
-		if err := guardLegacyClientTrafficReset(tx, clientEmail, expectedClientID); err != nil {
+		if err := prepareLegacyClientTrafficReset(tx, clientEmail, expectedClientID); err != nil {
 			return err
 		}
 		if err := adjustGroupBaselinesForRemovedTraffic(tx, []string{clientEmail}); err != nil {

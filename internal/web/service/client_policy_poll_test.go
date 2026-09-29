@@ -17,6 +17,7 @@ import (
 
 	"github.com/xtls/xray-core/app/clientpolicy"
 	command "github.com/xtls/xray-core/app/clientpolicy/command"
+	"github.com/xtls/xray-core/infra/conf"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"gorm.io/gorm"
@@ -221,6 +222,79 @@ func TestClientPolicyPollingRetriesCommittedTraffic(t *testing.T) {
 		t.Fatalf("polling skipped the pending reset in its last policy batch: %+v, %v", last, err)
 	}
 	testManagedResetBatch(t, ctx, process, state.InstanceID, client.StableID, lastID, append(ids, client.StableID))
+	testManagedScheduledResetRecovery(t, ctx, process, client.StableID, lastID)
+}
+
+func testManagedScheduledResetRecovery(t *testing.T, ctx context.Context, process *xray.Process, activeID, disabledID string) {
+	t.Helper()
+	db := database.GetDB()
+	if err := db.Model(&model.ClientRecord{}).Where("stable_id IN ?", []string{activeID, disabledID}).Update("traffic_reset", "daily").Error; err != nil {
+		t.Fatal(err)
+	}
+	var before int64
+	if err := db.Model(&model.ClientPolicyReset{}).Count(&before).Error; err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().UTC().AddDate(0, 0, 2)
+	now := time.Date(future.Year(), future.Month(), future.Day(), 0, 0, 0, 0, time.UTC)
+	xrayState.replace(nil)
+	svc := &ClientService{}
+	olderErr := svc.RunScheduledTrafficReset(ctx, "daily", now.AddDate(0, 0, -1))
+	newerErr := svc.RunScheduledTrafficReset(ctx, "daily", now)
+	xrayState.replace(process)
+	for _, err := range []error{olderErr, newerErr} {
+		if err == nil || !strings.Contains(err.Error(), "managed core is not ready") {
+			t.Fatalf("offline calendar reset did not retain its pending intent: %v", err)
+		}
+	}
+	unconfigured := model.ClientRecord{Email: "calendar-unconfigured", Enable: true, TrafficReset: "weekly"}
+	if err := db.Create(&unconfigured).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&model.ClientPolicyTotal{ClientID: unconfigured.StableID}).Error; err != nil {
+		t.Fatal(err)
+	}
+	var badOperation model.ClientTrafficResetBatch
+	for i := 1; i <= 9; i++ {
+		var err error
+		badOperation, err = captureScheduledTrafficReset(ctx, "weekly", now.AddDate(0, 0, 7*i))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for range 2 {
+		if _, _, err := (&XrayService{}).GetXrayTraffic(); err != nil {
+			t.Fatalf("unconfigured calendar member stopped ordinary traffic collection: %v", err)
+		}
+	}
+	var after int64
+	if err := db.Model(&model.ClientPolicyReset{}).Count(&after).Error; err != nil || after != before+2 {
+		t.Fatalf("ordinary polling did not recover only the newest scheduled window: before=%d, after=%d, %v", before, after, err)
+	}
+	var pending int64
+	if err := db.Model(&model.ClientTrafficResetBatch{}).Where("scheduled_at > 0 AND applied = ?", false).Count(&pending).Error; err != nil || pending != 9 {
+		t.Fatalf("calendar recovery left stale pending work: %d, %v", pending, err)
+	}
+	if err := db.First(&badOperation, "request_id = ?", badOperation.RequestID).Error; err != nil || badOperation.Applied {
+		t.Fatalf("recovery hid the unconfigured calendar failure: %+v, %v", badOperation, err)
+	}
+	endpoint, err := process.GetAPIEndpoint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config conf.ClientPolicyConfig
+	if err := json.Unmarshal(process.GetConfig().ClientPolicy, &config); err != nil {
+		t.Fatal(err)
+	}
+	api, err := xray.DialClientPolicy(ctx, endpoint, config.InstanceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer api.Close()
+	state, err := api.GetClient(ctx, disabledID)
+	if err != nil || state.Policy.Enabled {
+		t.Fatalf("scheduled reset cleared manual disable: %+v, %v", state, err)
+	}
 }
 
 type measuredResetRuntime struct {

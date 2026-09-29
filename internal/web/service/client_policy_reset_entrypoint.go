@@ -76,7 +76,7 @@ func requiresManagedClientTrafficReset(tx *gorm.DB, clientID string) (bool, erro
 }
 
 // Bootstrap locks the same client row before capturing its immutable legacy seed.
-func guardLegacyClientTrafficReset(tx *gorm.DB, email, expectedClientID string) error {
+func prepareLegacyClientTrafficReset(tx *gorm.DB, email, expectedClientID string) error {
 	var client model.ClientRecord
 	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("stable_id").First(&client, "email = ?", email).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) && expectedClientID == "" {
@@ -95,5 +95,5 @@ func guardLegacyClientTrafficReset(tx *gorm.DB, email, expectedClientID string) 
 	if prepared {
 		return ErrClientPolicyLegacyReset
 	}
-	return nil
+	return recordClientTrafficResetTimes(tx, []string{client.StableID}, time.Now().UnixMilli())
 }

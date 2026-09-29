@@ -25,8 +25,9 @@ import (
 )
 
 type clientResetTarget struct {
-	ClientID string `json:"clientId"`
-	Email    string `json:"email"`
+	ClientID     string `json:"clientId"`
+	Email        string `json:"email"`
+	EnableLegacy bool   `json:"enableLegacy,omitempty"`
 }
 
 func (s *ClientService) BulkResetTrafficWithRequest(ctx context.Context, inboundSvc *InboundService, emails []string, requestID string) (int, error) {
@@ -234,6 +235,11 @@ func (s *ClientService) resetTrafficBatch(ctx context.Context, inboundSvc *Inbou
 	if err != nil {
 		return 0, false, err
 	}
+	return s.applyTrafficResetBatch(ctx, inboundSvc, operation)
+}
+
+func (s *ClientService) applyTrafficResetBatch(ctx context.Context, inboundSvc *InboundService, operation model.ClientTrafficResetBatch) (int, bool, error) {
+	scope := operation.Scope
 	records, _, err := resolveClientResetTargets(database.GetDB().WithContext(ctx), operation.TargetsJSON, false)
 	if err != nil {
 		return 0, false, err
@@ -247,8 +253,10 @@ func (s *ClientService) resetTrafficBatch(ctx context.Context, inboundSvc *Inbou
 	var legacy []model.ClientRecord
 	var legacyEmails []string
 	var enabledInbounds map[int][]string
+	var scheduledInbounds []int
 	legacyAffected := 0
 	committed := false
+	fresh := false
 	prepare := func(instanceID string) ([]clientpolicy.Policy, error) {
 		var policies []clientpolicy.Policy
 		err := runSerializedTx(func(tx *gorm.DB) error {
@@ -267,7 +275,24 @@ func (s *ClientService) resetTrafficBatch(ctx context.Context, inboundSvc *Inbou
 			if !slices.Equal(current, managed) {
 				return fmt.Errorf("%w: managed membership changed from %d to %d", ErrClientPolicyLegacyReset, len(managed), len(current))
 			}
-			if len(managed) > 0 {
+			activeManaged := managed
+			resetAt := time.Now().UnixMilli()
+			if operation.ScheduledAt > 0 {
+				resetAt = operation.ScheduledAt
+				if !operation.Applied {
+					records, err = scheduledResetEligibleClients(tx, records, operation, managed)
+					if err != nil {
+						return err
+					}
+					activeManaged = nil
+					for _, record := range records {
+						if _, found := slices.BinarySearch(managed, record.StableID); found {
+							activeManaged = append(activeManaged, record.StableID)
+						}
+					}
+				}
+			}
+			if len(activeManaged) > 0 {
 				if operation.Applied {
 					for _, batch := range chunkStrings(managed, 1000) {
 						var count int64
@@ -279,7 +304,7 @@ func (s *ClientService) resetTrafficBatch(ctx context.Context, inboundSvc *Inbou
 						}
 					}
 				}
-				policies, err = prepareClientPolicyResetsTx(tx, instanceID, managed, policyRequest)
+				policies, err = prepareClientPolicyResetsAtTx(tx, instanceID, activeManaged, policyRequest, resetAt)
 				if err != nil {
 					return err
 				}
@@ -298,8 +323,20 @@ func (s *ClientService) resetTrafficBatch(ctx context.Context, inboundSvc *Inbou
 			if err != nil {
 				return err
 			}
+			legacyIDs := make([]string, len(legacy))
+			for i, record := range legacy {
+				legacyIDs[i] = record.StableID
+			}
+			if err := recordClientTrafficResetTimes(tx, legacyIDs, resetAt); err != nil {
+				return err
+			}
 			if scope == "bulk" {
 				enabledInbounds, err = enableLegacyResetClients(tx, legacy)
+				if err != nil {
+					return err
+				}
+			} else if operation.ScheduledAt > 0 {
+				enabledInbounds, scheduledInbounds, err = prepareScheduledLegacyReset(tx, operation, legacy)
 				if err != nil {
 					return err
 				}
@@ -314,12 +351,13 @@ func (s *ClientService) resetTrafficBatch(ctx context.Context, inboundSvc *Inbou
 					return err
 				}
 			}
-			raw, err := json.Marshal(managed)
+			raw, err := json.Marshal(activeManaged)
 			if err != nil {
 				return err
 			}
-			operation.Applied, operation.Affected, operation.ManagedIDsJSON = true, affected+len(managed), string(raw)
+			operation.Applied, operation.Affected, operation.ManagedIDsJSON = true, affected+len(activeManaged), string(raw)
 			legacyAffected = affected
+			fresh = true
 			return tx.Model(&operation).Select("applied", "affected", "managed_ids_json").Updates(&operation).Error
 		})
 		if err != nil {
@@ -345,6 +383,9 @@ func (s *ClientService) resetTrafficBatch(ctx context.Context, inboundSvc *Inbou
 			needRestart = true
 			logger.Warning("Failed to apply committed traffic reset enable:", applyErr)
 		}
+	}
+	if fresh && operation.ScheduledAt > 0 {
+		applyScheduledLegacyReset(ctx, inboundSvc, operation, legacy, scheduledInbounds)
 	}
 	return operation.Affected, needRestart, err
 }

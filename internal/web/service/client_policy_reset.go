@@ -3,6 +3,7 @@ package service
 import (
 	"math"
 	"slices"
+	"time"
 
 	"github.com/xtls/xray-core/app/clientpolicy"
 	"gorm.io/gorm"
@@ -64,6 +65,10 @@ func PrepareClientPolicyResets(instanceID string, clientIDs []string, requestID 
 }
 
 func prepareClientPolicyResetsTx(tx *gorm.DB, instanceID string, ids []string, requestID string) ([]clientpolicy.Policy, error) {
+	return prepareClientPolicyResetsAtTx(tx, instanceID, ids, requestID, time.Now().UnixMilli())
+}
+
+func prepareClientPolicyResetsAtTx(tx *gorm.DB, instanceID string, ids []string, requestID string, at int64) ([]clientpolicy.Policy, error) {
 	var source model.ClientPolicySource
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&source, "instance_id = ?", instanceID).Error; err != nil {
 		return nil, err
@@ -73,7 +78,7 @@ func prepareClientPolicyResetsTx(tx *gorm.DB, instanceID string, ids []string, r
 	}
 	var policies []clientpolicy.Policy
 	for _, batch := range chunkStrings(ids, 1000) {
-		prepared, err := prepareClientPolicyResetBatch(tx, source, batch, requestID)
+		prepared, err := prepareClientPolicyResetBatch(tx, source, batch, requestID, at)
 		if err != nil {
 			return nil, err
 		}
@@ -96,7 +101,7 @@ func clientPolicyResetIDs(clientIDs []string) ([]string, error) {
 	return ids, nil
 }
 
-func prepareClientPolicyResetBatch(tx *gorm.DB, source model.ClientPolicySource, ids []string, requestID string) ([]clientpolicy.Policy, error) {
+func prepareClientPolicyResetBatch(tx *gorm.DB, source model.ClientPolicySource, ids []string, requestID string, at int64) ([]clientpolicy.Policy, error) {
 	var clients []model.ClientRecord
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("stable_id IN ?", ids).Order("stable_id").Find(&clients).Error; err != nil {
 		return nil, err
@@ -141,6 +146,7 @@ func prepareClientPolicyResetBatch(tx *gorm.DB, source model.ClientPolicySource,
 		retries[reset.ClientID] = true
 	}
 	policies := make([]clientpolicy.Policy, 0, len(clients))
+	var resetIDs []string
 	for i, client := range clients {
 		receipt, ok := byID[client.StableID]
 		if !ok || receipt.InstanceID != source.InstanceID || receipt.Epoch > source.Epoch || receipt.Sequence > source.Sequence || receipt.PolicyVersion <= 0 || receipt.PolicyVersion > client.DesiredPolicyVersion || receipt.ReservedBytes < 0 || receipt.Revoked {
@@ -166,10 +172,11 @@ func prepareClientPolicyResetBatch(tx *gorm.DB, source model.ClientPolicySource,
 			if err := tx.Create(reset).Error; err != nil {
 				return nil, err
 			}
+			resetIDs = append(resetIDs, client.StableID)
 		}
 		policies = append(policies, policy)
 	}
-	return policies, nil
+	return policies, recordClientTrafficResetTimes(tx, resetIDs, at)
 }
 
 func validateLocalClientPolicyResetScope(tx *gorm.DB, clientIDs []string) error {

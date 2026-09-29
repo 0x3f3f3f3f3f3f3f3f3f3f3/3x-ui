@@ -553,16 +553,6 @@ func (s *InboundService) GetAllInbounds() ([]*model.Inbound, error) {
 	return inbounds, nil
 }
 
-func (s *InboundService) GetInboundsByTrafficReset(period string) ([]*model.Inbound, error) {
-	db := database.GetDB()
-	var inbounds []*model.Inbound
-	err := db.Model(model.Inbound{}).Where("traffic_reset = ?", period).Find(&inbounds).Error
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
-	}
-	return inbounds, nil
-}
-
 func (s *InboundService) GetClients(inbound *model.Inbound) ([]model.Client, error) {
 	return ParseInboundSettingsClients(inbound.Settings)
 }

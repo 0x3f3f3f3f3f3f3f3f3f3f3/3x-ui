@@ -42,8 +42,9 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	total := model.ClientPolicyTotal{ClientID: clients[0].StableID, RawUpload: 11, RawDownload: 22, BilledBytes: 66, UncertainBytes: 5}
 	receipt := model.ClientPolicyReceipt{InstanceID: source.InstanceID, ClientID: total.ClientID, Epoch: 2, Sequence: 17, PolicyVersion: 4, RawUpload: 11, RawDownload: 22, BilledBytes: 66, UncertainBytes: 5, Remainder: 1234}
 	reset := model.ClientPolicyReset{ClientID: clients[0].StableID, RequestID: "migrated-reset", InstanceID: source.InstanceID, Epoch: 2, Sequence: 10, RawUpload: 4, RawDownload: 5, BilledBytes: 9, Remainder: 500000, UncertainBytes: 2, PolicyVersion: 3, CreatedAt: 123456}
-	batch := model.ClientTrafficResetBatch{RequestID: "migrated-batch", Scope: "all", SelectionHash: "selected-members", TargetsJSON: `[{"clientId":"original-identity","email":"original-email"}]`, ManagedIDsJSON: `["original-identity"]`, Applied: true, Affected: 1, CreatedAt: 123456}
-	for _, row := range []any{&source, &total, &receipt, &reset, &batch} {
+	batch := model.ClientTrafficResetBatch{RequestID: "migrated-batch", Scope: "calendar:daily:original", ScheduledAt: 123000, InboundIDsJSON: `[3,8]`, SelectionHash: "selected-members", TargetsJSON: `[{"clientId":"original-identity","email":"original-email","enableLegacy":true}]`, ManagedIDsJSON: `["original-identity"]`, Applied: true, Affected: 1, CreatedAt: 123456}
+	resetTime := model.ClientTrafficResetTime{ClientID: clients[0].StableID, EffectiveAt: 123456}
+	for _, row := range []any{&source, &total, &receipt, &reset, &batch, &resetTime} {
 		if err := src.Create(row).Error; err != nil {
 			t.Fatal(err)
 		}
@@ -69,6 +70,10 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	if err := dst.First(&gotBatch).Error; err != nil || gotBatch != batch {
 		t.Fatalf("reset batch migration lost immutable membership or completion: %+v %v", gotBatch, err)
 	}
+	var gotTime model.ClientTrafficResetTime
+	if err := dst.First(&gotTime).Error; err != nil || gotTime != resetTime {
+		t.Fatalf("reset migration lost calendar ordering: %+v, %v", gotTime, err)
+	}
 	var gotTotal model.ClientPolicyTotal
 	if err := dst.First(&gotTotal).Error; err != nil || gotTotal != total {
 		t.Fatalf("total migration lost state: %+v %v", gotTotal, err)
@@ -79,6 +84,36 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	}
 	if gotClient.Policy == nil || *gotClient.Policy != *clients[0].Policy || gotClient.DesiredPolicyVersion != 7 || gotClient.PolicyFingerprint != "stored-policy-fingerprint" {
 		t.Fatalf("policy migration lost settings/version: %+v", gotClient)
+	}
+	if err := src.Migrator().DropIndex(&model.ClientTrafficResetBatch{}, "idx_reset_calendar"); err != nil {
+		t.Fatal(err)
+	}
+	if err := src.Migrator().DropIndex(&model.ClientTrafficResetBatch{}, "idx_reset_pending"); err != nil {
+		t.Fatal(err)
+	}
+	for _, column := range []string{"scheduled_at", "inbound_ids_json", "last_attempt_at"} {
+		if err := src.Migrator().DropColumn(&model.ClientTrafficResetBatch{}, column); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := MigrateData(path, os.Getenv("XUI_DB_DSN")); err != nil {
+		t.Fatalf("pre-calendar batch columns migration: %v", err)
+	}
+	legacyBatch := model.ClientTrafficResetBatch{}
+	wantLegacy := batch
+	wantLegacy.ScheduledAt, wantLegacy.InboundIDsJSON = 0, "[]"
+	if err := dst.First(&legacyBatch).Error; err != nil || legacyBatch != wantLegacy {
+		t.Fatalf("legacy batch migration invented calendar metadata or lost membership: %+v, %v", legacyBatch, err)
+	}
+	if err := src.Migrator().DropTable(&model.ClientTrafficResetTime{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateData(path, os.Getenv("XUI_DB_DSN")); err != nil {
+		t.Fatalf("pre-calendar ledger schema migration: %v", err)
+	}
+	var timeCount int64
+	if err := dst.Model(&model.ClientTrafficResetTime{}).Count(&timeCount).Error; err != nil || timeCount != 0 {
+		t.Fatalf("old schema fabricated calendar ordering: %d, %v", timeCount, err)
 	}
 	if err := src.Migrator().DropTable(&model.ClientTrafficResetBatch{}); err != nil {
 		t.Fatal(err)

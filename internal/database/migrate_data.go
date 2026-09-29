@@ -52,6 +52,7 @@ func migrationModels() []any {
 		&model.ClientPolicyReceipt{},
 		&model.ClientPolicyReset{},
 		&model.ClientTrafficResetBatch{},
+		&model.ClientTrafficResetTime{},
 		&model.ClientInbound{},
 		&model.ClientHwid{},
 		&model.ClientExternalLink{},
@@ -105,6 +106,7 @@ func MigrateData(srcPath, dstDSN string) error {
 	}
 	hasPolicyResets := src.Migrator().HasTable(&model.ClientPolicyReset{})
 	hasResetBatches := src.Migrator().HasTable(&model.ClientTrafficResetBatch{})
+	hasResetTimes := src.Migrator().HasTable(&model.ClientTrafficResetTime{})
 	if hasPolicyResets && policyTableCount != len(policyTables) {
 		return errors.New("source has client policy resets without a complete ledger")
 	}
@@ -150,6 +152,9 @@ func MigrateData(srcPath, dstDSN string) error {
 		}
 
 		for _, m := range migrationModels() {
+			if _, ok := m.(*model.ClientTrafficResetTime); ok && !hasResetTimes {
+				continue
+			}
 			if _, ok := m.(*model.ClientTrafficResetBatch); ok && !hasResetBatches {
 				continue
 			}
@@ -278,6 +283,9 @@ func copyTable(src, dst *gorm.DB, mdl any) (int, error) {
 				if err := client.BeforeCreate(nil); err != nil {
 					return total, err
 				}
+			}
+			if reset, ok := slice.Index(i).Interface().(*model.ClientTrafficResetBatch); ok && reset.ScheduledAt == 0 && reset.InboundIDsJSON == "" {
+				reset.InboundIDsJSON = "[]"
 			}
 			rv := reflect.Indirect(slice.Index(i))
 			row := make(map[string]any, len(columns))

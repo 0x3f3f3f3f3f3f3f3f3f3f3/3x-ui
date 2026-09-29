@@ -15,10 +15,19 @@ type ClientPolicyTotal struct {
 	UncertainBytes int64  `gorm:"not null"`
 }
 
+// A delayed calendar task cannot advance a window past a newer reset.
+type ClientTrafficResetTime struct {
+	ClientID    string `gorm:"primaryKey;size:36"`
+	EffectiveAt int64  `gorm:"not null"`
+}
+
 // Membership is captured before execution so retries cannot reset newly created clients.
 type ClientTrafficResetBatch struct {
 	RequestID      string `gorm:"primaryKey;size:128;<-:create"`
-	Scope          string `gorm:"not null;size:128;<-:create"`
+	Scope          string `gorm:"not null;size:128;<-:create;uniqueIndex:idx_reset_calendar,priority:1,where:scheduled_at > 0"`
+	ScheduledAt    int64  `gorm:"not null;default:0;<-:create;uniqueIndex:idx_reset_calendar,priority:2,where:scheduled_at > 0;index:idx_reset_pending,priority:2,sort:desc,where:scheduled_at > 0 AND applied = false"`
+	LastAttemptAt  int64  `gorm:"not null;default:0;index:idx_reset_pending,priority:1,where:scheduled_at > 0 AND applied = false"`
+	InboundIDsJSON string `gorm:"not null;type:text;default:'[]';<-:create"`
 	SelectionHash  string `gorm:"not null;size:64;<-:create"`
 	TargetsJSON    string `gorm:"not null;type:text;<-:create"`
 	ManagedIDsJSON string `gorm:"not null;type:text"`
