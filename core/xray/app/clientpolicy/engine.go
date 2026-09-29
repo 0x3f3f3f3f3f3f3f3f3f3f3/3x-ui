@@ -31,6 +31,7 @@ type clientState struct {
 	uncertain          uint64
 	sequence           uint64
 	reservationLeft    uint64
+	checkpointDirty    bool
 	mu                 sync.Mutex
 	policy             Policy
 	usage              Usage
@@ -315,6 +316,7 @@ func (s *Session) Admit(direction Direction, n uint64) error {
 			}
 			if c.engine.store != nil {
 				c.reservationLeft -= n
+				c.checkpointDirty = true
 			}
 			if b.rate != 0 {
 				b.tokens -= float64(n)

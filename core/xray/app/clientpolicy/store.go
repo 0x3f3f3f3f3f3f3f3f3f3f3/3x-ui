@@ -228,6 +228,7 @@ func (c *clientState) persistLocked(p Policy, revoked bool, reserved uint64) err
 		return fmt.Errorf("%w: commit: %w", ErrStorage, err)
 	}
 	c.sequence, c.reservationLeft = seq, 0
+	c.checkpointDirty = reserved != 0
 	return nil
 }
 
@@ -331,6 +332,10 @@ func (e *Engine) Checkpoint() error {
 		if c.closed {
 			c.mu.Unlock()
 			return ErrEngineClosed
+		}
+		if !c.checkpointDirty {
+			c.mu.Unlock()
+			continue
 		}
 		err := c.persistLocked(c.policy, c.revoked, 0)
 		c.mu.Unlock()

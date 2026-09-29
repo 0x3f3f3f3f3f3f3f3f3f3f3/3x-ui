@@ -90,6 +90,7 @@ func (e *Engine) applyBatch(policies []Policy, commit bool) error {
 		}
 		recordIndex++
 		c.reservationLeft = 0
+		c.checkpointDirty = false
 		c.policy = p
 		e.clients[p.ClientID] = c
 		c.buckets[Upload].update(p.UploadRate, p.BurstBytes, now)
