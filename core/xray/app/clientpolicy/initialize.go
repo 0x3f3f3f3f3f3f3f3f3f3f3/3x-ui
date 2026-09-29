@@ -67,9 +67,7 @@ func (e *Engine) Initialize(p Policy, seed Usage) error {
 	c.buckets[Upload].update(p.UploadRate, p.BurstBytes, now)
 	c.buckets[Download].update(p.DownloadRate, p.BurstBytes, now)
 	e.clients[p.ClientID] = c
-	if p.ExpiresAt != 0 {
-		c.expiry = time.AfterFunc(time.Until(time.UnixMilli(p.ExpiresAt)), c.expire)
-	}
+	c.armExpiryLocked()
 	e.mu.Unlock()
 	return nil
 }

@@ -26,6 +26,7 @@ type Engine struct {
 }
 
 type clientState struct {
+	firstUsedAt        int64
 	initializationHash string
 	engine             *Engine
 	uncertain          uint64
@@ -102,7 +103,7 @@ func (e *Engine) Snapshot(id string) (Snapshot, error) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return Snapshot{InstanceID: e.instanceID, Epoch: e.epoch, Sequence: c.sequence, UncertainBytes: c.uncertain, Usage: c.usage, PolicyVersion: c.policy.Version, Reasons: c.reasonsLocked(time.Now()), ActiveSessions: len(c.sessions)}, nil
+	return Snapshot{FirstUsedAt: c.firstUsedAt, InstanceID: e.instanceID, Epoch: e.epoch, Sequence: c.sequence, UncertainBytes: c.uncertain, Usage: c.usage, PolicyVersion: c.policy.Version, Reasons: c.reasonsLocked(time.Now()), ActiveSessions: len(c.sessions)}, nil
 }
 
 func (e *Engine) Remove(id string) error { return e.RemoveVersion(id, 0) }
@@ -307,12 +308,26 @@ func (s *Session) Admit(direction Direction, n uint64) error {
 			return err
 		}
 		if delay == 0 {
+			starting := n > 0 && c.policy.ExpiresAt < 0 && c.firstUsedAt == 0
+			if starting {
+				if _, err := c.policy.effectiveExpiry(now.UnixMilli()); err != nil {
+					c.mu.Unlock()
+					return err
+				}
+				c.firstUsedAt = now.UnixMilli()
+			}
 			if err := c.reserveLocked(n); err != nil {
+				if starting {
+					c.firstUsedAt = 0
+				}
 				c.mu.Unlock()
 				if errors.Is(err, ErrStorage) {
 					return c.engine.storageFailed(err)
 				}
 				return err
+			}
+			if starting {
+				c.armExpiryLocked()
 			}
 			if c.engine.store != nil {
 				c.reservationLeft -= n

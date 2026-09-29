@@ -203,3 +203,10 @@ Task 6 batch reset checkpoint: original membership and completion are durable fo
 Task 6 scheduled-reset checkpoint: the ordinary cron entrypoint now captures one calendar operation with immutable stable-client/inbound membership, coalesces overlapping cycles, preserves newer reset boundaries, and resumes pending local managed operations fairly from normal polling. Existing legacy node calls remain bounded best-effort propagation. Continue with renewal, legacy first-use/quota enforcement cutover and activation/configuration fencing before enabling ordinary managed startup; Task 6 remains open.
 
 Task 6 renewal checkpoint: normal polling renews already-managed local clients from durable receipt boundaries, preserves manual disable/lifetime usage, and retries expiry-only desired versions after control loss. Legacy raw-quota/expiry/renewal writers now exclude prepared and active managed identities. Durable first-use activation and lifecycle/configuration fencing remain prerequisites for ordinary managed startup.
+
+Task 6 first-use checkpoint: the core persists the first admitted payload time
+before forwarding and enforces the resulting deadline across crash/restart.
+Version-checked SQL settlement converts the duration atomically and normal
+polling applies the absolute expiry without changing manual restrictions or
+lifetime usage. Next: ordinary managed activation, historical counter handoff
+and configuration/lifecycle fences; Task 6 remains open.

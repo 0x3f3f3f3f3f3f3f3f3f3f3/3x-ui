@@ -51,3 +51,20 @@ Regenerate the policy message with:
 cd core/xray
 protoc --go_out=. --go_opt=paths=source_relative app/clientpolicy/config.proto
 ```
+
+`durable-first-use-expiry-v1` adds signed first-use expiry without changing the
+policy version in the data plane. A negative `expiresAt` is a duration in
+milliseconds. The first nonzero admitted payload persists `firstUsedAt` with its
+budget reservation before releasing bytes; idle connections and zero-byte
+admissions do not start the clock. The core closes sessions at the resulting
+deadline even while the panel is unavailable. Recovery retains the original
+timestamp after both graceful shutdown and abrupt exit.
+
+ClientState field 6 and LedgerRecord field 10 expose `first_used_at`. Unrelated
+policy changes retain it; changing to a different negative expiry setting rearms
+first use. Absolute expiry keeps its existing meaning. Invalid timestamps and
+overflow are rejected. The panel requires this capability before applying or
+initializing a negative expiry and converts it to an absolute deadline only when
+the receipt's version still matches the desired policy. Receipt, client, traffic
+row, attached settings and the next desired version commit together. Replay does
+not renew the deadline, and a newer operator edit is preserved.

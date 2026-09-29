@@ -56,12 +56,16 @@ func (e *Engine) applyBatch(policies []Policy, commit bool) error {
 			unlock()
 			return ErrPolicyVersion
 		}
+		if _, err := p.effectiveExpiry(c.firstUseForPolicyLocked(p)); err != nil {
+			unlock()
+			return err
+		}
 		if _, err := p.quotaUsage(c.usage, c.uncertain); err != nil {
 			unlock()
 			return err
 		}
 		if p != c.policy {
-			records = append(records, storedClient{Policy: p, Usage: c.usage, UncertainBytes: c.uncertain, InitializationHash: c.initializationHash})
+			records = append(records, storedClient{FirstUsedAt: c.firstUseForPolicyLocked(p), Policy: p, Usage: c.usage, UncertainBytes: c.uncertain, InitializationHash: c.initializationHash})
 		}
 	}
 	if len(e.clients)+additions > maxStoredClients {
@@ -95,17 +99,13 @@ func (e *Engine) applyBatch(policies []Policy, commit bool) error {
 		recordIndex++
 		c.reservationLeft = 0
 		c.checkpointDirty = false
+		c.firstUsedAt = c.firstUseForPolicyLocked(p)
 		c.policy = p
 		e.clients[p.ClientID] = c
 		c.buckets[Upload].update(p.UploadRate, p.BurstBytes, now)
 		c.buckets[Download].update(p.DownloadRate, p.BurstBytes, now)
 		c.notifyLocked()
-		if c.expiry != nil {
-			c.expiry.Stop()
-		}
-		if p.ExpiresAt != 0 {
-			c.expiry = time.AfterFunc(time.Until(time.UnixMilli(p.ExpiresAt)), c.expire)
-		}
+		c.armExpiryLocked()
 		if c.reasonsLocked(now) != 0 {
 			closeList = append(closeList, c.sessionsLocked()...)
 		}

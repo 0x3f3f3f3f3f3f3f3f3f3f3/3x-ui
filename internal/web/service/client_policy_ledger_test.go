@@ -103,24 +103,29 @@ func TestClientPolicyLedgerRejectsInvalidPagesAtomically(t *testing.T) {
 	}
 	a, b := policyLedgerClient(t, "a", 0, 0), policyLedgerClient(t, "b", 0, 0)
 	first := policyLedgerPage(a, 3, 10, 20, 60)
+	first.Records[0].FirstUsedAt = 1000
 	if err := SettleClientPolicyLedger("core-a", 1, 0, first); err != nil {
 		t.Fatal(err)
 	}
 	for name, mutate := range map[string]func(*command.LedgerPage){
-		"raw regression":    func(p *command.LedgerPage) { p.Records[1].Usage.RawUpload = 9 },
-		"billed regression": func(p *command.LedgerPage) { p.Records[1].Usage.BilledBytes = 59 },
-		"overflow":          func(p *command.LedgerPage) { p.Records[1].Usage.BilledBytes = math.MaxUint64 },
-		"bad remainder":     func(p *command.LedgerPage) { p.Records[1].Usage.Remainder = 1000000 },
-		"wrong instance":    func(p *command.LedgerPage) { p.Records[1].InstanceId = "other" },
-		"future epoch":      func(p *command.LedgerPage) { p.Records[1].Epoch = 2 },
-		"unknown client":    func(p *command.LedgerPage) { p.Records[1].ClientId = "missing" },
-		"unsorted":          func(p *command.LedgerPage) { p.Records[1].Sequence = 4 },
-		"wrong next":        func(p *command.LedgerPage) { p.NextSequence = 99 },
-		"nil usage":         func(p *command.LedgerPage) { p.Records[1].Usage = nil },
+		"raw regression":     func(p *command.LedgerPage) { p.Records[1].Usage.RawUpload = 9 },
+		"billed regression":  func(p *command.LedgerPage) { p.Records[1].Usage.BilledBytes = 59 },
+		"overflow":           func(p *command.LedgerPage) { p.Records[1].Usage.BilledBytes = math.MaxUint64 },
+		"bad remainder":      func(p *command.LedgerPage) { p.Records[1].Usage.Remainder = 1000000 },
+		"wrong instance":     func(p *command.LedgerPage) { p.Records[1].InstanceId = "other" },
+		"future epoch":       func(p *command.LedgerPage) { p.Records[1].Epoch = 2 },
+		"unknown client":     func(p *command.LedgerPage) { p.Records[1].ClientId = "missing" },
+		"unsorted":           func(p *command.LedgerPage) { p.Records[1].Sequence = 4 },
+		"wrong next":         func(p *command.LedgerPage) { p.NextSequence = 99 },
+		"nil usage":          func(p *command.LedgerPage) { p.Records[1].Usage = nil },
+		"negative first use": func(p *command.LedgerPage) { p.Records[1].FirstUsedAt = -1 },
+		"changed first use":  func(p *command.LedgerPage) { p.Records[1].FirstUsedAt = 1001 },
+		"cleared first use":  func(p *command.LedgerPage) { p.Records[1].FirstUsedAt = 0 },
 	} {
 		t.Run(name, func(t *testing.T) {
 			page := policyLedgerPage(b, 4, 1, 2, 3)
 			page.Records = append(page.Records, policyLedgerPage(a, 5, 11, 21, 62).Records[0])
+			page.Records[1].FirstUsedAt = 1000
 			page.NextSequence = 5
 			mutate(page)
 			if err := SettleClientPolicyLedger("core-a", 1, 3, page); err == nil {

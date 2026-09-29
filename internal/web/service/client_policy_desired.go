@@ -67,8 +67,8 @@ func desiredClientPolicy(client model.ClientRecord) (clientpolicy.Policy, error)
 	if err := client.Policy.Validate(); err != nil {
 		return clientpolicy.Policy{}, err
 	}
-	if client.TotalGB < 0 || client.ExpiryTime < 0 {
-		return clientpolicy.Policy{}, fmt.Errorf("%w: managed quota must be nonnegative and first-use expiry requires activation support", clientpolicy.ErrInvalidPolicy)
+	if client.TotalGB < 0 {
+		return clientpolicy.Policy{}, fmt.Errorf("%w: managed quota must be nonnegative", clientpolicy.ErrInvalidPolicy)
 	}
 	multiplier, err := client.Policy.MultiplierMicros()
 	if err != nil {

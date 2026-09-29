@@ -99,3 +99,11 @@ Batched reset increment: manual bulk/all HTTP and inbound-client service resets 
 Scheduled reset increment: the existing periodic job uses durable calendar membership, bounded managed batches, monotonic reset ordering and normal-poll recovery; duplicate/old tasks preserve later usage and independent restrictions. Legacy node propagation remains best effort. This does not establish automatic managed activation, renewal, global node budgets or full lifecycle completeness.
 
 Managed local renewal is implemented for already-activated identities, including finite catch-up and recovery of committed expiry-only versions. Legacy writers no longer override these identities. This scoped result does not establish durable first-use activation, ordinary startup activation or coordinated node renewal.
+
+First-use expiry increment: a negative duration starts at the first admitted
+payload, persists before forwarding and survives an abrupt core exit. Private
+ledger/state replies carry that timestamp. Panel settlement preserves newer
+operator edits and manual disable, and normal polling applies the absolute
+deadline. Real Tunnel/child-restart and SQLite/PostgreSQL checks are recorded in
+testing.md. Ordinary managed startup, global allocation and remaining protocol
+adapters are still unfinished.

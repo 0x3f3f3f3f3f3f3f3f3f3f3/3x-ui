@@ -110,7 +110,7 @@ func validateLedgerPage(instanceID string, epoch, after uint64, page *command.Le
 	last := after
 	seen := make(map[string]bool, len(page.Records))
 	for _, r := range page.Records {
-		if r == nil || r.Usage == nil || r.InstanceId != instanceID || r.ClientId == "" || seen[r.ClientId] || r.Epoch == 0 || r.Epoch > epoch || r.Sequence <= last || r.PolicyVersion == 0 || r.Usage.Remainder >= clientpolicy.MultiplierScale {
+		if r == nil || r.Usage == nil || r.InstanceId != instanceID || r.ClientId == "" || seen[r.ClientId] || r.Epoch == 0 || r.Epoch > epoch || r.Sequence <= last || r.PolicyVersion == 0 || r.FirstUsedAt < 0 || r.Usage.Remainder >= clientpolicy.MultiplierScale {
 			return ErrClientPolicyLedger
 		}
 		for _, v := range []uint64{r.Sequence, r.PolicyVersion, r.Usage.RawUpload, r.Usage.RawDownload, r.Usage.BilledBytes, r.UncertainBytes, r.ReservedBytes} {
@@ -171,6 +171,9 @@ func settleClientPolicyReceipt(tx *gorm.DB, r *command.LedgerRecord) error {
 	if int64(r.Epoch) < old.Epoch || int64(r.Sequence) <= old.Sequence || int64(r.PolicyVersion) < old.PolicyVersion || int64(r.UncertainBytes) < old.UncertainBytes || old.Revoked && !r.Revoked {
 		return ErrClientPolicyLedger
 	}
+	if old.FirstUsedAt < 0 || old.FirstUsedAt > 0 && r.FirstUsedAt != old.FirstUsedAt && int64(r.PolicyVersion) == old.PolicyVersion {
+		return ErrClientPolicyLedger
+	}
 	if int64(r.Usage.BilledBytes) == old.BilledBytes && int64(r.Usage.Remainder) < old.Remainder {
 		return ErrClientPolicyLedger
 	}
@@ -196,11 +199,15 @@ func settleClientPolicyReceipt(tx *gorm.DB, r *command.LedgerRecord) error {
 	if total.BilledBytes > math.MaxInt64-total.UncertainBytes {
 		return ErrClientPolicyLedger
 	}
+	old.FirstUsedAt = r.FirstUsedAt
 	old.Epoch, old.Sequence, old.PolicyVersion = int64(r.Epoch), int64(r.Sequence), int64(r.PolicyVersion)
 	old.RawUpload, old.RawDownload, old.BilledBytes, old.Remainder = int64(r.Usage.RawUpload), int64(r.Usage.RawDownload), int64(r.Usage.BilledBytes), int64(r.Usage.Remainder)
 	old.UncertainBytes, old.ReservedBytes, old.Revoked = int64(r.UncertainBytes), int64(r.ReservedBytes), r.Revoked
 	if err := tx.Save(&old).Error; err != nil {
 		return err
 	}
-	return tx.Save(&total).Error
+	if err := tx.Save(&total).Error; err != nil {
+		return err
+	}
+	return activateClientPolicyFirstUse(tx, r)
 }

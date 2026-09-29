@@ -85,7 +85,7 @@ func (c *ClientPolicyAPI) GetClient(ctx context.Context, id string) (*policycomm
 }
 
 func (c *ClientPolicyAPI) Initialize(ctx context.Context, policy *clientpolicy.PolicyConfig, seed *policycommand.Usage) error {
-	if err := c.requireQuotaWindowCapability([]*clientpolicy.PolicyConfig{policy}); err != nil {
+	if err := c.requirePolicyCapabilities([]*clientpolicy.PolicyConfig{policy}); err != nil {
 		return err
 	}
 	_, err := c.client.InitializeClient(ctx, &policycommand.InitializeRequest{Policy: policy, Usage: seed})
@@ -93,7 +93,7 @@ func (c *ClientPolicyAPI) Initialize(ctx context.Context, policy *clientpolicy.P
 }
 
 func (c *ClientPolicyAPI) Apply(ctx context.Context, policies []*clientpolicy.PolicyConfig) error {
-	if err := c.requireQuotaWindowCapability(policies); err != nil {
+	if err := c.requirePolicyCapabilities(policies); err != nil {
 		return err
 	}
 	_, err := c.client.ApplyPolicies(ctx, &policycommand.ApplyRequest{Policies: policies})
@@ -126,8 +126,11 @@ func (c *ClientPolicyAPI) ReadLedger(ctx context.Context, after uint64, limit ui
 	return c.client.ReadLedger(ctx, &policycommand.LedgerRequest{AfterSequence: after, Limit: limit})
 }
 
-func (c *ClientPolicyAPI) requireQuotaWindowCapability(policies []*clientpolicy.PolicyConfig) error {
+func (c *ClientPolicyAPI) requirePolicyCapabilities(policies []*clientpolicy.PolicyConfig) error {
 	for _, p := range policies {
+		if p.GetExpiresAt() < 0 && !slices.Contains(c.capabilities.GetCapabilities(), "durable-first-use-expiry-v1") {
+			return fmt.Errorf("%w: missing durable-first-use-expiry-v1", ErrClientPolicyCapability)
+		}
 		if (p.GetQuotaBaselineBytes() != 0 || p.GetQuotaBaselineRemainder() != 0) && !slices.Contains(c.capabilities.GetCapabilities(), "quota-window-baseline-v1") {
 			return fmt.Errorf("%w: missing quota-window-baseline-v1", ErrClientPolicyCapability)
 		}

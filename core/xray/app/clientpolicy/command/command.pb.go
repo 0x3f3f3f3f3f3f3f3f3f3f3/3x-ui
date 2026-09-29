@@ -269,6 +269,7 @@ type ClientState struct {
 	UncertainBytes uint64                     `protobuf:"varint,3,opt,name=uncertain_bytes,json=uncertainBytes,proto3" json:"uncertain_bytes,omitempty"`
 	Reasons        uint32                     `protobuf:"varint,4,opt,name=reasons,proto3" json:"reasons,omitempty"`
 	ActiveSessions uint32                     `protobuf:"varint,5,opt,name=active_sessions,json=activeSessions,proto3" json:"active_sessions,omitempty"`
+	FirstUsedAt    int64                      `protobuf:"varint,6,opt,name=first_used_at,json=firstUsedAt,proto3" json:"first_used_at,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -334,6 +335,13 @@ func (x *ClientState) GetReasons() uint32 {
 func (x *ClientState) GetActiveSessions() uint32 {
 	if x != nil {
 		return x.ActiveSessions
+	}
+	return 0
+}
+
+func (x *ClientState) GetFirstUsedAt() int64 {
+	if x != nil {
+		return x.FirstUsedAt
 	}
 	return 0
 }
@@ -669,6 +677,7 @@ type LedgerRecord struct {
 	UncertainBytes uint64                 `protobuf:"varint,7,opt,name=uncertain_bytes,json=uncertainBytes,proto3" json:"uncertain_bytes,omitempty"`
 	ReservedBytes  uint64                 `protobuf:"varint,8,opt,name=reserved_bytes,json=reservedBytes,proto3" json:"reserved_bytes,omitempty"`
 	Revoked        bool                   `protobuf:"varint,9,opt,name=revoked,proto3" json:"revoked,omitempty"`
+	FirstUsedAt    int64                  `protobuf:"varint,10,opt,name=first_used_at,json=firstUsedAt,proto3" json:"first_used_at,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -764,6 +773,13 @@ func (x *LedgerRecord) GetRevoked() bool {
 		return x.Revoked
 	}
 	return false
+}
+
+func (x *LedgerRecord) GetFirstUsedAt() int64 {
+	if x != nil {
+		return x.FirstUsedAt
+	}
+	return 0
 }
 
 type LedgerPage struct {
@@ -877,13 +893,14 @@ const file_app_clientpolicy_command_command_proto_rawDesc = "" +
 	"raw_upload\x18\x01 \x01(\x04R\trawUpload\x12!\n" +
 	"\fraw_download\x18\x02 \x01(\x04R\vrawDownload\x12!\n" +
 	"\fbilled_bytes\x18\x03 \x01(\x04R\vbilledBytes\x12\x1c\n" +
-	"\tremainder\x18\x04 \x01(\x04R\tremainder\"\xf5\x01\n" +
+	"\tremainder\x18\x04 \x01(\x04R\tremainder\"\x99\x02\n" +
 	"\vClientState\x12;\n" +
 	"\x06policy\x18\x01 \x01(\v2#.xray.app.clientpolicy.PolicyConfigR\x06policy\x12=\n" +
 	"\x05usage\x18\x02 \x01(\v2'.xray.app.clientpolicy.command.v1.UsageR\x05usage\x12'\n" +
 	"\x0funcertain_bytes\x18\x03 \x01(\x04R\x0euncertainBytes\x12\x18\n" +
 	"\areasons\x18\x04 \x01(\rR\areasons\x12'\n" +
-	"\x0factive_sessions\x18\x05 \x01(\rR\x0eactiveSessions\"O\n" +
+	"\x0factive_sessions\x18\x05 \x01(\rR\x0eactiveSessions\x12\"\n" +
+	"\rfirst_used_at\x18\x06 \x01(\x03R\vfirstUsedAt\"O\n" +
 	"\fApplyRequest\x12?\n" +
 	"\bpolicies\x18\x01 \x03(\v2#.xray.app.clientpolicy.PolicyConfigR\bpolicies\"\x8f\x01\n" +
 	"\x11InitializeRequest\x12;\n" +
@@ -905,7 +922,7 @@ const file_app_clientpolicy_command_command_proto_rawDesc = "" +
 	"\x06closed\x18\x01 \x01(\rR\x06closed\"L\n" +
 	"\rLedgerRequest\x12%\n" +
 	"\x0eafter_sequence\x18\x01 \x01(\x04R\rafterSequence\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\rR\x05limit\"\xce\x02\n" +
+	"\x05limit\x18\x02 \x01(\rR\x05limit\"\xf2\x02\n" +
 	"\fLedgerRecord\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x12\x14\n" +
@@ -916,7 +933,9 @@ const file_app_clientpolicy_command_command_proto_rawDesc = "" +
 	"\x05usage\x18\x06 \x01(\v2'.xray.app.clientpolicy.command.v1.UsageR\x05usage\x12'\n" +
 	"\x0funcertain_bytes\x18\a \x01(\x04R\x0euncertainBytes\x12%\n" +
 	"\x0ereserved_bytes\x18\b \x01(\x04R\rreservedBytes\x12\x18\n" +
-	"\arevoked\x18\t \x01(\bR\arevoked\"{\n" +
+	"\arevoked\x18\t \x01(\bR\arevoked\x12\"\n" +
+	"\rfirst_used_at\x18\n" +
+	" \x01(\x03R\vfirstUsedAt\"{\n" +
 	"\n" +
 	"LedgerPage\x12H\n" +
 	"\arecords\x18\x01 \x03(\v2..xray.app.clientpolicy.command.v1.LedgerRecordR\arecords\x12#\n" +

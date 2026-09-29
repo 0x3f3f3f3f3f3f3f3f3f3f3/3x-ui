@@ -62,7 +62,7 @@ func (s *service) GetCapabilities(ctx context.Context, _ *Empty) (*Capabilities,
 	c := s.engine.Capabilities()
 	features := []string{"trusted-tunnel-client-id-v1", "trusted-vless-client-id-v1", "trusted-vmess-client-id-v1", "trusted-trojan-client-id-v1", "trusted-shadowsocks-aead-client-id-v1", "shared-directional-rate-v1", "fixed-point-billing-v1", "quota-window-baseline-v1", "live-session-control-v1"}
 	if c.Persistent {
-		features = append(features, "local-durable-reservations-v1", "committed-cumulative-ledger-v1", "create-only-usage-seed-v1")
+		features = append(features, "local-durable-reservations-v1", "committed-cumulative-ledger-v1", "create-only-usage-seed-v1", "durable-first-use-expiry-v1")
 	}
 	return &Capabilities{ApiVersion: 1, CoreVersion: core.VersionStatement()[0], InstanceId: c.InstanceID, Epoch: c.Epoch, Capabilities: features, ReservationRawBytes: c.ReservationRawBytes}, nil
 }
@@ -88,6 +88,7 @@ func (s *service) InitializeClient(ctx context.Context, r *InitializeRequest) (*
 	}
 	return &Empty{}, nil
 }
+
 func usage(u clientpolicy.Usage) *Usage {
 	return &Usage{RawUpload: u.RawUpload, RawDownload: u.RawDownload, BilledBytes: u.BilledBytes, Remainder: u.Remainder}
 }
@@ -100,7 +101,7 @@ func (s *service) GetClient(ctx context.Context, r *ClientRequest) (*ClientState
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	return &ClientState{Policy: policyConfig(p), Usage: usage(snap.Usage), UncertainBytes: snap.UncertainBytes, Reasons: uint32(snap.Reasons), ActiveSessions: uint32(snap.ActiveSessions)}, nil
+	return &ClientState{FirstUsedAt: snap.FirstUsedAt, Policy: policyConfig(p), Usage: usage(snap.Usage), UncertainBytes: snap.UncertainBytes, Reasons: uint32(snap.Reasons), ActiveSessions: uint32(snap.ActiveSessions)}, nil
 }
 
 func (s *service) ApplyPolicies(ctx context.Context, r *ApplyRequest) (*Empty, error) {
@@ -182,7 +183,7 @@ func (s *service) ReadLedger(ctx context.Context, r *LedgerRequest) (*LedgerPage
 	}
 	out := &LedgerPage{NextSequence: r.GetAfterSequence()}
 	for _, v := range records {
-		out.Records = append(out.Records, &LedgerRecord{InstanceId: v.InstanceID, Epoch: v.Epoch, Sequence: v.Sequence, ClientId: v.ClientID, PolicyVersion: v.PolicyVersion, Usage: usage(v.Usage), UncertainBytes: v.UncertainBytes, ReservedBytes: v.ReservedBytes, Revoked: v.Revoked})
+		out.Records = append(out.Records, &LedgerRecord{FirstUsedAt: v.FirstUsedAt, InstanceId: v.InstanceID, Epoch: v.Epoch, Sequence: v.Sequence, ClientId: v.ClientID, PolicyVersion: v.PolicyVersion, Usage: usage(v.Usage), UncertainBytes: v.UncertainBytes, ReservedBytes: v.ReservedBytes, Revoked: v.Revoked})
 		out.NextSequence = v.Sequence
 	}
 	return out, nil

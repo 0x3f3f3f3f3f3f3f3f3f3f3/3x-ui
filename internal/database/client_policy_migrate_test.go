@@ -40,7 +40,7 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	}
 	source := model.ClientPolicySource{InstanceID: "migrated-source", NodeKey: "local", Epoch: 3, Sequence: 17}
 	total := model.ClientPolicyTotal{ClientID: clients[0].StableID, RawUpload: 11, RawDownload: 22, BilledBytes: 66, UncertainBytes: 5}
-	receipt := model.ClientPolicyReceipt{InstanceID: source.InstanceID, ClientID: total.ClientID, Epoch: 2, Sequence: 17, PolicyVersion: 4, RawUpload: 11, RawDownload: 22, BilledBytes: 66, UncertainBytes: 5, Remainder: 1234}
+	receipt := model.ClientPolicyReceipt{FirstUsedAt: 123450, InstanceID: source.InstanceID, ClientID: total.ClientID, Epoch: 2, Sequence: 17, PolicyVersion: 4, RawUpload: 11, RawDownload: 22, BilledBytes: 66, UncertainBytes: 5, Remainder: 1234}
 	reset := model.ClientPolicyReset{ClientID: clients[0].StableID, RequestID: "migrated-reset", InstanceID: source.InstanceID, Epoch: 2, Sequence: 10, RawUpload: 4, RawDownload: 5, BilledBytes: 9, Remainder: 500000, UncertainBytes: 2, PolicyVersion: 3, CreatedAt: 123456}
 	batch := model.ClientTrafficResetBatch{RequestID: "migrated-batch", Scope: "calendar:daily:original", ScheduledAt: 123000, InboundIDsJSON: `[3,8]`, SelectionHash: "selected-members", TargetsJSON: `[{"clientId":"original-identity","email":"original-email","enableLegacy":true}]`, ManagedIDsJSON: `["original-identity"]`, Applied: true, Affected: 1, CreatedAt: 123456}
 	resetTime := model.ClientTrafficResetTime{ClientID: clients[0].StableID, EffectiveAt: 123456}
@@ -84,6 +84,18 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	}
 	if gotClient.Policy == nil || *gotClient.Policy != *clients[0].Policy || gotClient.DesiredPolicyVersion != 7 || gotClient.PolicyFingerprint != "stored-policy-fingerprint" {
 		t.Fatalf("policy migration lost settings/version: %+v", gotClient)
+	}
+	if err := src.Migrator().DropColumn(&model.ClientPolicyReceipt{}, "first_used_at"); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateData(path, os.Getenv("XUI_DB_DSN")); err != nil {
+		t.Fatalf("pre-first-use ledger migration: %v", err)
+	}
+	oldReceipt := model.ClientPolicyReceipt{}
+	wantOldReceipt := receipt
+	wantOldReceipt.FirstUsedAt = 0
+	if err := dst.First(&oldReceipt).Error; err != nil || oldReceipt != wantOldReceipt {
+		t.Fatalf("old ledger lost history or fabricated first use: %+v, %v", oldReceipt, err)
 	}
 	if err := src.Migrator().DropIndex(&model.ClientTrafficResetBatch{}, "idx_reset_calendar"); err != nil {
 		t.Fatal(err)

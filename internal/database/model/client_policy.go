@@ -55,6 +55,7 @@ type ClientPolicyReset struct {
 
 // Receipts survive client deletion so final usage cannot reach a replacement identity.
 type ClientPolicyReceipt struct {
+	FirstUsedAt    int64  `gorm:"not null;default:0"`
 	InstanceID     string `gorm:"primaryKey;size:128"`
 	ClientID       string `gorm:"primaryKey;size:36"`
 	Epoch          int64  `gorm:"not null"`

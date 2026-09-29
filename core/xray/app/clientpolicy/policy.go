@@ -2,6 +2,7 @@ package clientpolicy
 
 import (
 	"errors"
+	"math"
 	"strings"
 	"time"
 )
@@ -36,7 +37,7 @@ func (p Policy) Validate() error {
 	if p.ClientID == "" || len(p.ClientID) > 128 || strings.TrimSpace(p.ClientID) != p.ClientID || strings.ContainsAny(p.ClientID, "\x00\r\n") || p.Version == 0 {
 		return ErrInvalidPolicy
 	}
-	if p.Multiplier == 0 || p.Multiplier > MaxMultiplier || p.UploadRate > 1<<40 || p.DownloadRate > 1<<40 || p.BurstBytes == 0 || p.BurstBytes > 1<<20 || p.ExpiresAt < 0 || p.QuotaBaselineRemainder >= MultiplierScale {
+	if p.Multiplier == 0 || p.Multiplier > MaxMultiplier || p.UploadRate > 1<<40 || p.DownloadRate > 1<<40 || p.BurstBytes == 0 || p.BurstBytes > 1<<20 || p.ExpiresAt == math.MinInt64 || p.QuotaBaselineRemainder >= MultiplierScale {
 		return ErrInvalidPolicy
 	}
 	return nil
@@ -57,7 +58,7 @@ func (p Policy) reasons(u Usage, revoked bool, now time.Time) Reason {
 	if !p.Enabled {
 		r |= ReasonDisabled
 	}
-	if p.ExpiresAt != 0 && now.UnixMilli() >= p.ExpiresAt {
+	if p.ExpiresAt > 0 && now.UnixMilli() >= p.ExpiresAt {
 		r |= ReasonExpired
 	}
 	if p.QuotaBytes != 0 {
@@ -82,6 +83,7 @@ type Metadata struct {
 }
 
 type Snapshot struct {
+	FirstUsedAt    int64  `json:"firstUsedAt,omitempty"`
 	InstanceID     string `json:"instanceId"`
 	Epoch          uint64 `json:"epoch"`
 	Sequence       uint64 `json:"sequence"`

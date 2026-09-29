@@ -25,6 +25,7 @@ message ClientState {
  uint64 uncertain_bytes = 3;
  uint32 reasons = 4;
  uint32 active_sessions = 5;
+ int64 first_used_at = 6;
 }
 message ApplyRequest { repeated xray.app.clientpolicy.PolicyConfig policies = 1; }
 message InitializeRequest { xray.app.clientpolicy.PolicyConfig policy = 1; Usage usage = 2; }
@@ -49,6 +50,7 @@ message LedgerRecord {
  uint64 uncertain_bytes = 7;
  uint64 reserved_bytes = 8;
  bool revoked = 9;
+ int64 first_used_at = 10;
 }
 message LedgerPage { repeated LedgerRecord records = 1; uint64 next_sequence = 2; }
 service ClientPolicyService {

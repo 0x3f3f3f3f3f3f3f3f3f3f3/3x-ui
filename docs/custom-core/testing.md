@@ -376,3 +376,59 @@ A real private-core polling fixture starts with four identities: renewable, manu
 The first expanded PostgreSQL run exposed collisions in legacy automatic-renewal fixtures that reused the package schema; the shared fresh-database fixture now gives each case its own schema. The same test selection is retained. A mixed-inbound regression then reproduced all three legacy lifecycle paths rounding a managed sibling's quota 9007199254740993 through float64 JSON decoding. Those edits now preserve integer tokens; the regression also requires the legacy client's renewal/activation/disable action to occur, so simply skipping maintenance cannot pass.
 
 Final renewal checks pass: expanded SQLite races 60.960 s, PostgreSQL races 229.563 s, and the final mixed-inbound/legacy lifecycle PostgreSQL race run 70.051 s. The latter covers the subsequent integer-decoding repair; its SQLite compatibility run passes in 6.917 s. Go lint reports zero issues. The complete shuffled panel suite with actual custom/unmodified core binaries passes (230.69 s wall time), followed by `go build ./...` and `make gen-check`. Workflow YAML/all 11 shell blocks and `git diff --check` pass. This increment changes no frontend or core implementation.
+
+## Durable first-use expiry — 2026-09-29
+
+Negative expiry remains a versioned duration until a first nonzero admitted
+payload persists its timestamp with the durable reservation. Idle/zero-byte
+admissions do not start it. Core tests cover autonomous disconnect, unrelated
+policy edits, graceful restart and an abruptly exited child. Omitting the
+timestamp specifically from reservation saves makes the abrupt-exit test fail
+with an unexpired client and 65,536 uncertain bytes; the implementation was
+restored before the passing runs.
+
+The actual Tunnel/private API test first failed because the ledger lacked its
+first-use field. The adapter regression first reached an unimplemented Apply RPC
+instead of rejecting the absent capability. Both now pass. SQL tests first
+failed when the compiler rejected a negative duration; settlement now atomically
+updates the receipt, client, legacy traffic row, attached JSON and desired
+version, retaining manual disable and the exact quota 9007199254740993. Rollback,
+replay and a newer operator edit are exercised. Removing receipt timestamp
+guards makes the invalid-page tests fail; clearing the timestamp during database
+copy makes the migration's exact receipt comparison fail. Both mutations were
+restored. An old receipt schema without the column migrates with a zero default.
+
+The real panel-generated Tunnel fixture uses StartManagedProcess and ordinary
+GetXrayTraffic polling: four bytes each direction yield eight billed bytes, the
+negative duration becomes an acknowledged absolute expiry, and a child restart
+retains the original deadline and usage. This is not the ordinary RestartXray
+activation path. The initial runtime fixture omitted its required subscription
+identity and failed during attachment; that fixture was corrected before the
+passing run. A restricted-sandbox socket failure was rerun with local socket
+access; that failed invocation is not counted as a pass.
+
+Final scoped races passed with the newly built custom binary: SQLite service
+44.870 s and adapter 1.182 s; PostgreSQL migration 8.597 s and service 94.392 s.
+Both database logs explicitly contain PASS for settlement and the real child
+restart case. The PostgreSQL commit-failure case ran in its PostgreSQL job; its
+SQLite skip is not PostgreSQL evidence. Core policy/control/dispatcher/config/
+real-traffic race checks also passed. CI now requires both new panel tests' PASS
+records in both database jobs. Full regression and build results follow below.
+
+The initial complete core run failed in the unchanged
+`TestQUICNameServerWithIPv6Override`: its two-second public AdGuard QUIC request
+returned `record not found`. No DNS source, timeout or assertion was changed.
+Three isolated repetitions then passed (0.15 s, 0.43 s, 0.12 s), consistent with
+an intermittent external-query failure rather than evidence of a repaired DNS
+bug. The initial full run remains failed; the final full rerun is recorded
+separately below.
+
+The final complete core rerun passed without DNS changes (607.67 s wall time;
+DNS package 57.994 s, scenarios 335.253 s). The original failed run remains in
+the evidence log. No frontend source changed in this increment.
+
+Final panel lint reports zero issues. The complete shuffled panel suite with
+both real custom/upstream binaries passes (235.74 s wall time; service 71.562 s,
+Xray 14.710 s), followed by `go build ./...` and `make gen-check`. Workflow YAML,
+all 11 shell blocks and whitespace checks pass. This final panel run also
+includes the separately committed exhausted-renewal selection regression.

@@ -13,6 +13,7 @@ import (
 var ErrLedgerCursor = errors.New("ledger cursor is ahead of durable state")
 
 type LedgerRecord struct {
+	FirstUsedAt    int64
 	InstanceID     string
 	Epoch          uint64
 	Sequence       uint64
@@ -48,7 +49,7 @@ func (e *Engine) GetClient(id string) (Policy, Snapshot, error) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.policy, Snapshot{InstanceID: e.instanceID, Epoch: e.epoch, Sequence: c.sequence, Usage: c.usage, UncertainBytes: c.uncertain, PolicyVersion: c.policy.Version, Reasons: c.reasonsLocked(time.Now()), ActiveSessions: len(c.sessions)}, nil
+	return c.policy, Snapshot{FirstUsedAt: c.firstUsedAt, InstanceID: e.instanceID, Epoch: e.epoch, Sequence: c.sequence, Usage: c.usage, UncertainBytes: c.uncertain, PolicyVersion: c.policy.Version, Reasons: c.reasonsLocked(time.Now()), ActiveSessions: len(c.sessions)}, nil
 }
 
 func (e *Engine) Connections(id string) ([]Connection, error) {
@@ -94,7 +95,7 @@ func (e *Engine) ReadLedger(after uint64, limit int) ([]LedgerRecord, error) {
 	}
 	out := make([]LedgerRecord, 0, len(records))
 	for _, r := range records {
-		out = append(out, LedgerRecord{InstanceID: e.instanceID, Epoch: r.Epoch, Sequence: r.Sequence, ClientID: r.Policy.ClientID, PolicyVersion: r.Policy.Version, Usage: r.Usage, UncertainBytes: r.UncertainBytes, ReservedBytes: r.ReservedBytes, Revoked: r.Revoked})
+		out = append(out, LedgerRecord{FirstUsedAt: r.FirstUsedAt, InstanceID: e.instanceID, Epoch: r.Epoch, Sequence: r.Sequence, ClientID: r.Policy.ClientID, PolicyVersion: r.Policy.Version, Usage: r.Usage, UncertainBytes: r.UncertainBytes, ReservedBytes: r.ReservedBytes, Revoked: r.Revoked})
 	}
 	return out, nil
 }

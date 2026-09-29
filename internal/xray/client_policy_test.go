@@ -111,3 +111,21 @@ func TestClientPolicyAdapterNegotiatesVersionAndStableInstance(t *testing.T) {
 		t.Fatal("caller mutated trusted capability result")
 	}
 }
+
+func TestClientPolicyAdapterRejectsFirstUseExpiryWithoutCapability(t *testing.T) {
+	caps := &policycommand.Capabilities{ApiVersion: 1, InstanceId: "expected", Epoch: 4, Capabilities: []string{"trusted-tunnel-client-id-v1", "shared-directional-rate-v1", "fixed-point-billing-v1", "live-session-control-v1", "local-durable-reservations-v1", "committed-cumulative-ledger-v1", "create-only-usage-seed-v1"}}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	api, err := DialClientPolicy(ctx, capabilitySocket(t, caps), "expected")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer api.Close()
+	policy := &clientpolicy.PolicyConfig{ClientId: "owner", Version: 1, Enabled: true, MultiplierMicros: 1000000, BurstBytes: 65536, ExpiresAt: -86400000}
+	if err := api.Apply(ctx, []*clientpolicy.PolicyConfig{policy}); !errors.Is(err, ErrClientPolicyCapability) {
+		t.Fatalf("sent first-use expiry without advertised support: %v", err)
+	}
+	if err := api.Initialize(ctx, policy, &policycommand.Usage{}); !errors.Is(err, ErrClientPolicyCapability) {
+		t.Fatalf("initialized first-use expiry without advertised support: %v", err)
+	}
+}

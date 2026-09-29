@@ -13,8 +13,10 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
-const reservationRawBytes = 65536
-const maxStoredClients = 100000
+const (
+	reservationRawBytes = 65536
+	maxStoredClients    = 100000
+)
 
 var (
 	ErrStorage    = errors.New("client policy storage unavailable")
@@ -23,6 +25,7 @@ var (
 )
 
 type storedClient struct {
+	FirstUsedAt        int64  `json:"firstUsedAt,omitempty"`
 	InitializationHash string `json:"initializationHash,omitempty"`
 	Policy             Policy `json:"policy"`
 	Usage              Usage  `json:"usage"`
@@ -65,7 +68,7 @@ func CreateStore(path, instanceID string) error {
 	if !validInstanceID(instanceID) || path == "" {
 		return ErrInvalidPolicy
 	}
-	db, err := bolt.Open(path, 0600, storeOptions(true))
+	db, err := bolt.Open(path, 0o600, storeOptions(true))
 	if err != nil {
 		return fmt.Errorf("%w: initialize: %w", ErrStorage, err)
 	}
@@ -103,10 +106,10 @@ func OpenPersistentEngine(path, instanceID string) (*Engine, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: open existing state: %w", ErrStorage, err)
 	}
-	if !info.Mode().IsRegular() || runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0 {
+	if !info.Mode().IsRegular() || runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
 		return nil, fmt.Errorf("%w: state must be a private regular file", ErrStorage)
 	}
-	db, err := bolt.Open(path, 0600, storeOptions(false))
+	db, err := bolt.Open(path, 0o600, storeOptions(false))
 	if err != nil {
 		return nil, fmt.Errorf("%w: open: %w", ErrStorage, err)
 	}
@@ -135,6 +138,9 @@ func OpenPersistentEngine(path, instanceID string) (*Engine, error) {
 			}
 			if r.Policy.Validate() != nil || string(key) != r.Policy.ClientID || r.Usage.Remainder >= MultiplierScale || r.Epoch >= epoch || r.Sequence == 0 || r.Sequence > clients.Sequence() || r.UncertainBytes > math.MaxUint64-r.ReservedBytes || r.Usage.BilledBytes > math.MaxUint64-r.UncertainBytes-r.ReservedBytes {
 				return errors.New("invalid client state")
+			}
+			if _, err := r.Policy.effectiveExpiry(r.FirstUsedAt); err != nil {
+				return err
 			}
 			if _, err := r.Policy.quotaUsage(r.Usage, r.UncertainBytes); err != nil {
 				return err
@@ -169,13 +175,11 @@ func OpenPersistentEngine(path, instanceID string) (*Engine, error) {
 	for _, r := range records {
 		c := newClientState(e)
 		c.policy, c.usage, c.uncertain, c.revoked, c.sequence = r.Policy, r.Usage, r.UncertainBytes, r.Revoked, r.Sequence
-		c.initializationHash = r.InitializationHash
+		c.initializationHash, c.firstUsedAt = r.InitializationHash, r.FirstUsedAt
 		c.buckets[Upload].update(c.policy.UploadRate, c.policy.BurstBytes, now)
 		c.buckets[Download].update(c.policy.DownloadRate, c.policy.BurstBytes, now)
 		e.clients[c.policy.ClientID] = c
-		if c.policy.ExpiresAt != 0 && !c.revoked {
-			c.expiry = time.AfterFunc(time.Until(time.UnixMilli(c.policy.ExpiresAt)), c.expire)
-		}
+		c.armExpiryLocked()
 	}
 	return e, nil
 }
@@ -226,7 +230,7 @@ func (c *clientState) persistLocked(p Policy, revoked bool, reserved uint64) err
 	if c.engine.store == nil {
 		return nil
 	}
-	seq, err := c.engine.store.save(storedClient{Policy: p, Usage: c.usage, UncertainBytes: c.uncertain, ReservedBytes: reserved, Revoked: revoked, InitializationHash: c.initializationHash})
+	seq, err := c.engine.store.save(storedClient{FirstUsedAt: c.firstUsedAt, Policy: p, Usage: c.usage, UncertainBytes: c.uncertain, ReservedBytes: reserved, Revoked: revoked, InitializationHash: c.initializationHash})
 	if err != nil {
 		return fmt.Errorf("%w: commit: %w", ErrStorage, err)
 	}
@@ -288,7 +292,13 @@ func (c *clientState) reasonsLocked(now time.Time) Reason {
 	} else {
 		u.BilledBytes += c.uncertain
 	}
-	r |= c.policy.reasons(u, c.revoked, now)
+	policy := c.policy
+	expiry, err := policy.effectiveExpiry(c.firstUsedAt)
+	if err != nil {
+		r |= ReasonStorage
+	}
+	policy.ExpiresAt = expiry
+	r |= policy.reasons(u, c.revoked, now)
 	if c.engine.failed.Load() {
 		r |= ReasonStorage
 	}
