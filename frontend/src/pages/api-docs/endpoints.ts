@@ -1509,8 +1509,26 @@ export const sections: readonly Section[] = [
         method: 'POST',
         path: '/panel/api/clients/resetTraffic/:email',
         summary:
-          'Zero out a single client’s up/down counters. Re-enables the client across every attached inbound and pushes the change to Xray (or the remote node) so depleted users can connect again immediately.',
-        params: [{ name: 'email', in: 'path', type: 'string', desc: 'Client email.' }],
+          'Reset one client’s traffic period. Managed local clients retain lifetime usage, manual disable and expiry restrictions; legacy clients keep their existing counter-zeroing and re-enable behavior.',
+        description:
+          'For a managed client, send both clientId and requestId and reuse them after a timeout or success:false reply. The same request never captures a later boundary, even after another reset. clientId must still match the email owner. The core must be running and ready; prepared ledger state never falls back to legacy zeroing. A failure after saving the boundary remains pending for polling to retry. Requests without a body remain compatible, but receive a new server-generated request ID and cannot be safely replayed. Idempotent period resets currently require a local single-source policy with no remote attachments.',
+        params: [
+          { name: 'email', in: 'path', type: 'string', desc: 'Current client email.' },
+          {
+            name: 'clientId',
+            in: 'body (json)',
+            type: 'string',
+            optional: true,
+            desc: 'Stable client UUID; required when requestId is supplied. Rejects reuse of an old email by a different client.',
+          },
+          {
+            name: 'requestId',
+            in: 'body (json)',
+            type: 'string',
+            optional: true,
+            desc: 'Nonempty caller key, at most 128 bytes with no surrounding whitespace, NUL, CR or LF. Reuse for retries of this managed reset; use a new key for a new reset.',
+          },
+        ],
       },
       {
         method: 'POST',

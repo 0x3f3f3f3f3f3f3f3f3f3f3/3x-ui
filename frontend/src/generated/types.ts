@@ -584,6 +584,11 @@ export interface ClientTraffic {
   uuid: string;
 }
 
+export interface ClientTrafficResetRequest {
+  clientId?: string;
+  requestId?: string;
+}
+
 export interface ClientsSummary {
   active: number;
   deactive: string[];

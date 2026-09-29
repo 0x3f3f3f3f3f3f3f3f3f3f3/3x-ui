@@ -38,6 +38,12 @@ export const ClientPolicyAccountingSchema = z.object({
 
 export type ClientPolicyAccounting = z.infer<typeof ClientPolicyAccountingSchema>;
 
+export const ClientTrafficResetRequestSchema = z.object({
+  clientId: z.uuid(),
+  requestId: z.uuid(),
+});
+export type ClientTrafficResetRequest = z.infer<typeof ClientTrafficResetRequestSchema>;
+
 export const ClientTrafficSchema = z.object({
   email: z.string().optional(),
   up: z.number().optional(),

@@ -1,7 +1,11 @@
 package service
 
 import (
+	"context"
+	"errors"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
@@ -13,11 +17,30 @@ import (
 )
 
 func (s *ClientService) ResetTrafficByEmail(inboundSvc *InboundService, email string) (bool, error) {
+	return s.ResetTrafficByEmailWithRequest(context.Background(), inboundSvc, email, ClientTrafficResetRequest{})
+}
+
+func (s *ClientService) ResetTrafficByEmailWithRequest(ctx context.Context, inboundSvc *InboundService, email string, request ClientTrafficResetRequest) (bool, error) {
 	if email == "" {
 		return false, common.NewError("client email is required")
 	}
-	rec, err := s.GetRecordByEmail(nil, email)
+	if request.RequestID != "" && !validPolicySourceKey(request.RequestID) {
+		return false, ErrClientPolicyLedger
+	}
+	if request.RequestID != "" && request.ClientID == "" {
+		return false, errors.New("clientId is required with requestId")
+	}
+	if request.RequestID == "" {
+		request.RequestID = uuid.NewString()
+	}
+	rec, err := s.GetRecordByEmail(database.GetDB().WithContext(ctx), email)
 	if err != nil {
+		return false, err
+	}
+	if request.ClientID != "" && request.ClientID != rec.StableID {
+		return false, errors.New("client identity changed; reload before resetting traffic")
+	}
+	if handled, err := resetPreparedClientPolicy(ctx, rec.StableID, request.RequestID); handled || err != nil {
 		return false, err
 	}
 	inboundIds, err := s.GetInboundIdsForRecord(rec.Id)
@@ -27,14 +50,14 @@ func (s *ClientService) ResetTrafficByEmail(inboundSvc *InboundService, email st
 
 	needRestart := false
 	if len(inboundIds) == 0 {
-		if rErr := inboundSvc.ResetClientTrafficByEmail(email); rErr != nil {
+		if rErr := inboundSvc.resetLegacyClientTrafficByEmail(email, rec.StableID); rErr != nil {
 			return false, rErr
 		}
 	} else {
 		applies := make([]inboundApply, 0, len(inboundIds))
 		for _, ibId := range inboundIds {
 			applies = append(applies, inboundApply{id: ibId, run: func() (bool, error) {
-				return inboundSvc.ResetClientTraffic(ibId, email)
+				return inboundSvc.resetLegacyClientTraffic(ibId, email, rec.StableID)
 			}})
 		}
 		nr, applyErr := fanoutInboundApplies(applies)

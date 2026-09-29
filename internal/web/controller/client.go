@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -544,7 +545,12 @@ func (a *ClientController) delOrphans(c *gin.Context) {
 
 func (a *ClientController) resetTrafficByEmail(c *gin.Context) {
 	email := c.Param("email")
-	needRestart, err := a.clientService.ResetTrafficByEmail(&a.inboundService, email)
+	var request service.ClientTrafficResetRequest
+	if err := c.ShouldBindJSON(&request); err != nil && !errors.Is(err, io.EOF) {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	needRestart, err := a.clientService.ResetTrafficByEmailWithRequest(c.Request.Context(), &a.inboundService, email, request)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return

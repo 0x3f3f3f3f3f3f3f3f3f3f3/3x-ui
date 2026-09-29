@@ -149,7 +149,7 @@ func TestClientPolicyResetRuntimePollingRetriesTheCommittedBoundary(t *testing.T
 	}); err != nil {
 		t.Fatal(err)
 	}
-	resetErr := ResetLocalClientPolicy(ctx, client.StableID, "failed-insert")
+	_, resetErr := (&ClientService{}).ResetTrafficByEmailWithRequest(ctx, &InboundService{}, client.Email, ClientTrafficResetRequest{RequestID: "failed-insert", ClientID: client.StableID})
 	if err := db.Callback().Create().Remove("test:reset-insert-failure"); err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestClientPolicyResetRuntimePollingRetriesTheCommittedBoundary(t *testing.T
 		t.Fatal(err)
 	}
 	failureCtx, failureCancel := context.WithTimeout(ctx, 2*time.Second)
-	resetErr = ResetLocalClientPolicy(failureCtx, client.StableID, "request-a")
+	_, resetErr = (&ClientService{}).ResetTrafficByEmailWithRequest(failureCtx, &InboundService{}, client.Email, ClientTrafficResetRequest{RequestID: "request-a", ClientID: client.StableID})
 	failureCancel()
 	if err := db.Callback().Create().Remove("test:reset-control-loss"); err != nil {
 		t.Fatal(err)
@@ -240,15 +240,15 @@ func TestClientPolicyResetRuntimePollingRetriesTheCommittedBoundary(t *testing.T
 	assertCore(2, 32, 48)
 	assertAccounting("16", "48", "2", false)
 	echo(8)
-	if err := ResetLocalClientPolicy(ctx, client.StableID, "request-a"); err != nil {
+	if _, err := (&ClientService{}).ResetTrafficByEmailWithRequest(ctx, &InboundService{}, client.Email, ClientTrafficResetRequest{RequestID: "request-a", ClientID: client.StableID}); err != nil {
 		t.Fatal(err)
 	}
 	assertCore(2, 32, 80)
-	if err := ResetLocalClientPolicy(ctx, client.StableID, "request-b"); err != nil {
+	if _, err := (&ClientService{}).ResetTrafficByEmailWithRequest(ctx, &InboundService{}, client.Email, ClientTrafficResetRequest{RequestID: "request-b", ClientID: client.StableID}); err != nil {
 		t.Fatal(err)
 	}
 	echo(3)
-	if err := ResetLocalClientPolicy(ctx, client.StableID, "request-a"); err != nil {
+	if _, err := (&ClientService{}).ResetTrafficByEmailWithRequest(ctx, &InboundService{}, client.Email, ClientTrafficResetRequest{RequestID: "request-a", ClientID: client.StableID}); err != nil {
 		t.Fatal(err)
 	}
 	assertCore(3, 80, 92)
@@ -259,7 +259,7 @@ func TestClientPolicyResetRuntimePollingRetriesTheCommittedBoundary(t *testing.T
 	if err := db.Model(&model.ClientRecord{}).Where("id = ?", client.Id).Updates(map[string]any{"enable": false, "expiry_time": time.Now().Add(-time.Hour).UnixMilli()}).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := ResetLocalClientPolicy(ctx, client.StableID, "request-c"); err != nil {
+	if _, err := (&ClientService{}).ResetTrafficByEmailWithRequest(ctx, &InboundService{}, client.Email, ClientTrafficResetRequest{RequestID: "request-c", ClientID: client.StableID}); err != nil {
 		t.Fatal(err)
 	}
 	current, err := api.GetClient(ctx, client.StableID)
@@ -276,7 +276,7 @@ func TestClientPolicyResetRuntimePollingRetriesTheCommittedBoundary(t *testing.T
 	if err := process.Stop(); err != nil {
 		t.Fatal(err)
 	}
-	if err := ResetLocalClientPolicy(ctx, client.StableID, "while-stopped"); err == nil || !strings.Contains(err.Error(), "managed core is not ready") {
+	if _, err := (&ClientService{}).ResetTrafficByEmailWithRequest(ctx, &InboundService{}, client.Email, ClientTrafficResetRequest{RequestID: "while-stopped", ClientID: client.StableID}); err == nil || !strings.Contains(err.Error(), "managed core is not ready") {
 		t.Fatalf("stopped managed core accepted a reset: %v", err)
 	}
 	if err := db.Model(&model.ClientPolicyReset{}).Count(&resetCount).Error; err != nil || resetCount != 3 {
@@ -309,5 +309,27 @@ func TestClientPolicyResetRuntimePollingRetriesTheCommittedBoundary(t *testing.T
 	current, err = api.GetClient(ctx, client.StableID)
 	if err != nil || current.Policy.Enabled || current.Policy.ExpiresAt <= 0 || current.ActiveSessions != 0 {
 		t.Fatalf("restart cleared reset restrictions: %+v, %v", current, err)
+	}
+	if err := db.Where("client_id = ?", client.StableID).Delete(&model.ClientPolicyReceipt{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Where("client_id = ?", client.StableID).Delete(&model.ClientPolicyTotal{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&xray.ClientTraffic{}).Where("email = ?", client.Email).Updates(map[string]any{"up": 111, "down": 222, "enable": false}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (&ClientService{}).ResetTrafficByEmailWithRequest(ctx, &InboundService{}, client.Email, ClientTrafficResetRequest{RequestID: "missing-ledger", ClientID: client.StableID}); !errors.Is(err, ErrClientPolicyLedger) {
+		t.Fatalf("active managed identity fell back to legacy reset after losing its SQL ledger: %v", err)
+	}
+	var legacy xray.ClientTraffic
+	if err := db.First(&legacy, "email = ?", client.Email).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.First(&client, client.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if legacy.Up != 111 || legacy.Down != 222 || legacy.Enable || client.Enable {
+		t.Fatalf("missing managed ledger cleared legacy usage or manual disable: %+v, enabled=%t", legacy, client.Enable)
 	}
 }

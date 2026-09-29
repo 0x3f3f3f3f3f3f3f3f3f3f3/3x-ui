@@ -34,6 +34,10 @@ import {
 } from '@/schemas/client';
 import { DefaultsPayloadSchema } from '@/schemas/defaults';
 import { TRAFFIC_POLL_INTERVAL_S } from '@/lib/traffic/poll-interval';
+import {
+  acknowledgeClientTrafficReset,
+  pendingClientTrafficReset,
+} from '@/lib/clients/reset-request';
 
 // One row sent to POST /clients/:email/externalLinks.
 export type ExternalLinkInput = {
@@ -491,11 +495,16 @@ export function useClients(options: UseClientsOptions = {}) {
   });
 
   const resetTrafficMut = useMutation({
-    mutationFn: (email: string) =>
-      HttpUtil.post(`/panel/api/clients/resetTraffic/${encodeURIComponent(email)}`),
-    onSuccess: (msg) => {
-      if (msg?.success) invalidateAll();
+    mutationFn: async (client: ClientRecord) => {
+      const url = `/panel/api/clients/resetTraffic/${encodeURIComponent(client.email)}`;
+      const clientId = client.traffic?.accounting?.clientId;
+      if (!clientId) return HttpUtil.post(url);
+      const request = pendingClientTrafficReset(clientId);
+      const msg = await HttpUtil.post(url, request, JSON_HEADERS);
+      if (msg?.success) acknowledgeClientTrafficReset(request);
+      return msg;
     },
+    onSettled: () => invalidateAll(),
   });
 
   const resetAllTrafficsMut = useMutation({
@@ -654,7 +663,7 @@ export function useClients(options: UseClientsOptions = {}) {
   const resetTraffic = useCallback(
     (client: ClientRecord) => {
       if (!client?.email) return Promise.resolve(null as unknown as Msg<unknown>);
-      return resetTrafficMut.mutateAsync(client.email);
+      return resetTrafficMut.mutateAsync(client);
     },
     [resetTrafficMut],
   );

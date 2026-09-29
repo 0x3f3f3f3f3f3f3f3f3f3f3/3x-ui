@@ -2497,6 +2497,19 @@
         ],
         "type": "object"
       },
+      "ClientTrafficResetRequest": {
+        "properties": {
+          "clientId": {
+            "example": "e18c9a96-71bf-48d4-933f-8b9a46d4290c",
+            "type": "string"
+          },
+          "requestId": {
+            "example": "782f657b-b127-42a9-9511-d7d83d76dc7d",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "ClientsSummary": {
         "description": "ClientsSummary collects per-bucket counts plus the matching email lists so\nthe clients page can render the dashboard stat cards and their hover\npopovers without shipping the full client array. The counters are exact;\nthe lists stop at clientSummaryEmailCap entries and only back the popovers.",
         "properties": {
@@ -10309,19 +10322,40 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Zero out a single client’s up/down counters. Re-enables the client across every attached inbound and pushes the change to Xray (or the remote node) so depleted users can connect again immediately.",
+        "summary": "Reset one client’s traffic period. Managed local clients retain lifetime usage, manual disable and expiry restrictions; legacy clients keep their existing counter-zeroing and re-enable behavior.",
         "operationId": "post_panel_api_clients_resetTraffic_email",
+        "description": "For a managed client, send both clientId and requestId and reuse them after a timeout or success:false reply. The same request never captures a later boundary, even after another reset. clientId must still match the email owner. The core must be running and ready; prepared ledger state never falls back to legacy zeroing. A failure after saving the boundary remains pending for polling to retry. Requests without a body remain compatible, but receive a new server-generated request ID and cannot be safely replayed. Idempotent period resets currently require a local single-source policy with no remote attachments.",
         "parameters": [
           {
             "name": "email",
             "in": "path",
             "required": true,
-            "description": "Client email.",
+            "description": "Current client email.",
             "schema": {
               "type": "string"
             }
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "clientId": {
+                    "type": "string",
+                    "description": "Stable client UUID; required when requestId is supplied. Rejects reuse of an old email by a different client."
+                  },
+                  "requestId": {
+                    "type": "string",
+                    "description": "Nonempty caller key, at most 128 bytes with no surrounding whitespace, NUL, CR or LF. Reuse for retries of this managed reset; use a new key for a new reset."
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful response",

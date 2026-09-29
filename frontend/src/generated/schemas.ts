@@ -2471,6 +2471,19 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "ClientTrafficResetRequest": {
+    "properties": {
+      "clientId": {
+        "example": "e18c9a96-71bf-48d4-933f-8b9a46d4290c",
+        "type": "string"
+      },
+      "requestId": {
+        "example": "782f657b-b127-42a9-9511-d7d83d76dc7d",
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
   "ClientsSummary": {
     "description": "ClientsSummary collects per-bucket counts plus the matching email lists so\nthe clients page can render the dashboard stat cards and their hover\npopovers without shipping the full client array. The counters are exact;\nthe lists stop at clientSummaryEmailCap entries and only back the popovers.",
     "properties": {

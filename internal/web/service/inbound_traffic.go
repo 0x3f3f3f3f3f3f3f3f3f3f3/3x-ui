@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/logger"
@@ -625,8 +627,18 @@ func (s *InboundService) delClientStatsByEmails(tx *gorm.DB, emails []string) er
 }
 
 func (s *InboundService) ResetClientTrafficByEmail(clientEmail string) error {
+	if handled, err := tryResetManagedClientPolicy(context.Background(), clientEmail, uuid.NewString()); handled || err != nil {
+		return err
+	}
+	return s.resetLegacyClientTrafficByEmail(clientEmail, "")
+}
+
+func (s *InboundService) resetLegacyClientTrafficByEmail(clientEmail, expectedClientID string) error {
 	err := submitTrafficWrite(func() error {
 		return database.GetDB().Transaction(func(tx *gorm.DB) error {
+			if err := guardLegacyClientTrafficReset(tx, clientEmail, expectedClientID); err != nil {
+				return err
+			}
 			if err := adjustGroupBaselinesForRemovedTraffic(tx, []string{clientEmail}); err != nil {
 				return err
 			}
@@ -648,10 +660,17 @@ func (s *InboundService) ResetClientTrafficByEmail(clientEmail string) error {
 }
 
 func (s *InboundService) ResetClientTraffic(id int, clientEmail string) (needRestart bool, err error) {
+	if handled, err := tryResetManagedClientPolicy(context.Background(), clientEmail, uuid.NewString()); handled || err != nil {
+		return false, err
+	}
+	return s.resetLegacyClientTraffic(id, clientEmail, "")
+}
+
+func (s *InboundService) resetLegacyClientTraffic(id int, clientEmail, expectedClientID string) (needRestart bool, err error) {
 	var resetInbound *model.Inbound
 	err = submitTrafficWrite(func() error {
 		var inner error
-		needRestart, resetInbound, inner = s.resetClientTrafficLocked(id, clientEmail)
+		needRestart, resetInbound, inner = s.resetClientTrafficLocked(id, clientEmail, expectedClientID)
 		return inner
 	})
 	if err == nil {
@@ -674,7 +693,7 @@ func (s *InboundService) ResetClientTraffic(id int, clientEmail string) (needRes
 	return
 }
 
-func (s *InboundService) resetClientTrafficLocked(id int, clientEmail string) (bool, *model.Inbound, error) {
+func (s *InboundService) resetClientTrafficLocked(id int, clientEmail, expectedClientID string) (bool, *model.Inbound, error) {
 	needRestart := false
 	var reenablePlan *trafficLocalApplyPlan
 	var reenableNodeID *int
@@ -735,6 +754,9 @@ func (s *InboundService) resetClientTrafficLocked(id int, clientEmail string) (b
 		return false, nil, err
 	}
 	if err := db.Transaction(func(tx *gorm.DB) error {
+		if err := guardLegacyClientTrafficReset(tx, clientEmail, expectedClientID); err != nil {
+			return err
+		}
 		if err := adjustGroupBaselinesForRemovedTraffic(tx, []string{clientEmail}); err != nil {
 			return err
 		}

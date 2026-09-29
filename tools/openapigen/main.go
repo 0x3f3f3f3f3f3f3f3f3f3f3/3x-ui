@@ -97,6 +97,7 @@ func run(root, outDir string) error {
 				"HappLinkResult",
 				"ClientSlim",
 				"ClientRenewalPreviewRequest",
+				"ClientTrafficResetRequest",
 				"ClientRenewalPreview",
 				"ClientPageResponse",
 				"ClientsSummary",

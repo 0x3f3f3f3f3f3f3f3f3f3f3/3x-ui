@@ -98,7 +98,7 @@ func TestUpdate_PersistsRecordEnable_NoInbound(t *testing.T) {
 }
 
 func TestResetTrafficByEmail_LeavesRecordEnableTrue(t *testing.T) {
-	setupBulkDB(t)
+	setupPolicyLedgerDB(t)
 	svc := &ClientService{}
 	inboundSvc := &InboundService{}
 
@@ -127,7 +127,7 @@ func TestResetTrafficByEmail_LeavesRecordEnableTrue(t *testing.T) {
 }
 
 func TestResetTrafficByEmail_NoInbound_LeavesRecordEnableTrue(t *testing.T) {
-	setupBulkDB(t)
+	setupPolicyLedgerDB(t)
 	svc := &ClientService{}
 	inboundSvc := &InboundService{}
 

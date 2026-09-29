@@ -34,7 +34,7 @@ func TestResetTrafficOfDepletedClientSurvivesTickMidReset(t *testing.T) {
 
 func requireResetSurvivesTick(t *testing.T, reset func() error) {
 	t.Helper()
-	setupBulkDB(t)
+	setupPolicyLedgerDB(t)
 	clients := []model.Client{{Email: "d@stale", ID: "aaaaaaaa-0000-0000-0000-00000000000d", SubID: "sub-d", Enable: false, TotalGB: 1000}}
 	ib := mkInbound(t, 23140, model.VLESS, clientsSettings(t, clients))
 	if err := (&ClientService{}).SyncInbound(nil, ib.Id, clients); err != nil {

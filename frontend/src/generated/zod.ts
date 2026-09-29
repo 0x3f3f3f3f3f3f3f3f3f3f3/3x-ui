@@ -617,6 +617,12 @@ export const ClientTrafficSchema = z.object({
 });
 export type ClientTraffic = z.infer<typeof ClientTrafficSchema>;
 
+export const ClientTrafficResetRequestSchema = z.object({
+  clientId: z.string().optional(),
+  requestId: z.string().optional(),
+});
+export type ClientTrafficResetRequest = z.infer<typeof ClientTrafficResetRequestSchema>;
+
 export const ClientsSummarySchema = z.object({
   active: z.number().int(),
   deactive: z.array(z.string()),
