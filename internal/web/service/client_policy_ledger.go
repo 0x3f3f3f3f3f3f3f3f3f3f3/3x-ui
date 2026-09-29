@@ -66,6 +66,9 @@ func PrepareClientPolicyLedger(instanceID, clientID string) (*command.Usage, err
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&client, "stable_id = ?", clientID).Error; err != nil {
 			return err
 		}
+		if err := rejectDeletedClientPolicies(tx, []string{clientID}); err != nil {
+			return err
+		}
 		var receipt model.ClientPolicyReceipt
 		err := tx.First(&receipt, "instance_id = ? AND client_id = ?", instanceID, clientID).Error
 		if err == nil {

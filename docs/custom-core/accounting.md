@@ -190,8 +190,8 @@ After an authorization change has committed, compilation or bind validation
 failure stops the old managed process and reports the application error. Partial
 RPC changes and failed changes that could retain old access also stop it. A
 manually stopped process queues configuration changes without starting itself.
-Permanent client identity revocation is separate unfinished work; removing a
-binding is not claimed to be a durable deletion tombstone.
+Detaching a binding preserves the client identity. Permanent deletion follows
+the durable revocation path described below.
 
 Traffic lifecycle maintenance returns work from the serial SQL writer before
 calling Runtime. Legacy work then re-reads current inbound/client bindings and
@@ -201,3 +201,35 @@ reconcile per traffic batch. Single-client traffic reset follows the same writer
 boundary and does not add a user to a disabled inbound. Configuration export is
 read-only with respect to lifecycle maintenance; ordinary restart performs that
 maintenance before acquiring the global restart lock.
+
+
+## Permanent managed identity deletion
+
+Single deletion, bulk deletion, manual orphan cleanup and sync-orphan expiry
+commit a stable-ID tombstone with canonical record deletion. Tombstones, original
+seeds, receipts and lifetime totals survive independently of `keepTraffic`.
+Policy and seed preparation reject tombstoned identities. Ordinary detach keeps
+other bindings and does not create a tombstone.
+
+After SQL commits, Runtime revokes the current core policy version and the
+ordinary ledger path acknowledges it. A stopped process leaves durable pending
+work. Startup processes pending deletions before opening business listeners;
+normal polling retries initialized pending identities. Failed SQL reads, RPCs or
+SQL acknowledgement stop the active managed process and report `ErrManagedApply`.
+Replaying an acknowledged core revoke neither regrants access nor adds usage.
+
+Startup uses stable-ID keyset pages and batches of at most 1000. SQL providers and
+confirmation callbacks run outside the Runtime lock, while the service lifecycle
+lock guards the complete operation. A deletion intersecting the prepared policy
+or initialization set rejects that stale candidate. A core `NotFound` may mark
+`DeletionAbsent` only on the same source/client receipt with policy version zero
+and an existing tombstone. This operational marker does not set `Revoked` or alter
+usage; it avoids rescanning never-initialized history. A later nonzero receipt
+version makes that identity pending again. The permanent preparation fence stays.
+
+Orphan cleanup rechecks current attachment/grace state inside the serial writer.
+Its short-lived email marker is installed before releasing that writer and
+withdrawn on transaction failure, so a newly created identity can safely reuse
+the email. Cross-database copy and SQL dump/restore preserve permanent deletion
+and absence metadata. This local path does not establish global node revocation
+or coordinated panel/core backup rollback fencing.

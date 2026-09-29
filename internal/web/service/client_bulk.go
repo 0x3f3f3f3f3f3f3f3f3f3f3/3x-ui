@@ -1016,6 +1016,9 @@ func (s *ClientService) BulkDelete(inboundSvc *InboundService, emails []string, 
 					}
 				}
 			}
+			if err := recordClientPolicyTombstones(tx, successIds); err != nil {
+				return err
+			}
 			for _, batch := range chunkInts(successIds, sqlInChunk) {
 				if e := tx.Where("id IN ?", batch).Delete(&model.ClientRecord{}).Error; e != nil {
 					return e
@@ -1028,6 +1031,15 @@ func (s *ClientService) BulkDelete(inboundSvc *InboundService, emails []string, 
 		}
 	}
 
+	deletedStableIDs := make([]string, 0, len(successEmails))
+	for _, email := range successEmails {
+		deletedStableIDs = append(deletedStableIDs, recordsByEmail[email].StableID)
+	}
+	if len(deletedStableIDs) > 0 {
+		if err := reconcileDeletedClientPolicies(deletedStableIDs); err != nil {
+			return result, true, err
+		}
+	}
 	result.Deleted = len(successEmails)
 	for email, reason := range skippedReasons {
 		result.Skipped = append(result.Skipped, BulkDeleteReport{Email: email, Reason: reason})

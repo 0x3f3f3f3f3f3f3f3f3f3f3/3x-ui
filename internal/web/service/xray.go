@@ -1227,6 +1227,9 @@ func maintainManagedTraffic(process *xray.Process) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		err := pollLocalClientPolicyLedger(ctx, process)
 		if err == nil {
+			err = reconcileDeletedClientPolicies(nil)
+		}
+		if err == nil {
 			err = reconcileLocalClientPolicies(ctx, process)
 		}
 		if err == nil {

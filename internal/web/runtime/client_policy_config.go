@@ -87,6 +87,9 @@ func (l *Local) ApplyManagedConfig(ctx context.Context, process *xray.Process, n
 	if err != nil {
 		return false, err
 	}
+	if err := l.prepareManagedDeletions(ctx, policyAPI, bootstrap, newPolicy.Policies); err != nil {
+		return false, errors.Join(ErrManagedConfigPartial, err)
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if process.GetConfig() != current {

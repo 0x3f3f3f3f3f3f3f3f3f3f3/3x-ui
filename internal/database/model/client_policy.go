@@ -1,5 +1,11 @@
 package model
 
+// Permanent identity deletion is independent of mutable emails and retained traffic rows.
+type ClientPolicyTombstone struct {
+	ClientID  string `gorm:"primaryKey;size:36;<-:create"`
+	CreatedAt int64  `gorm:"autoCreateTime:milli;<-:create"`
+}
+
 type ClientPolicySource struct {
 	InstanceID string `gorm:"primaryKey;size:128"`
 	NodeKey    string `gorm:"uniqueIndex;not null;size:128"`
@@ -55,6 +61,7 @@ type ClientPolicyReset struct {
 
 // Receipts survive client deletion so final usage cannot reach a replacement identity.
 type ClientPolicyReceipt struct {
+	DeletionAbsent bool   `gorm:"not null;default:false"`
 	FirstUsedAt    int64  `gorm:"not null;default:0"`
 	InstanceID     string `gorm:"primaryKey;size:128"`
 	ClientID       string `gorm:"primaryKey;size:36"`

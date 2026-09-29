@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+
 	command "github.com/xtls/xray-core/app/clientpolicy/command"
 	"github.com/xtls/xray-core/infra/conf"
 
@@ -23,7 +25,11 @@ func PrepareLocalClientPolicyBootstrap(caps *command.Capabilities, config *conf.
 	if err != nil {
 		return nil, err
 	}
-	bootstrap := &runtime.ManagedPolicyBootstrap{AfterSequence: after}
+	bootstrap := &runtime.ManagedPolicyBootstrap{AfterSequence: after, DeletedClientPage: func(ctx context.Context, after string) ([]string, error) {
+		return pendingClientPolicyDeletions(ctx, caps.InstanceId, after, false)
+	}, ConfirmAbsentClients: func(ctx context.Context, ids []string) error {
+		return confirmAbsentClientPolicyDeletions(ctx, caps.InstanceId, ids)
+	}}
 	for _, policy := range compiled.Policies {
 		seed, err := PrepareClientPolicyLedger(caps.InstanceId, policy.ClientId)
 		if err != nil {

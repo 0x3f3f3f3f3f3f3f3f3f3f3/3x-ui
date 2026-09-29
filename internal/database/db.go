@@ -75,6 +75,7 @@ func allModels() []any {
 		&model.Node{},
 		&model.ApiToken{},
 		&model.ClientRecord{},
+		&model.ClientPolicyTombstone{},
 		&model.ClientPolicySource{},
 		&model.ClientPolicyTotal{},
 		&model.ClientPolicyReceipt{},

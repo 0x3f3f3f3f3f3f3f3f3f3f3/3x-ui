@@ -39,6 +39,9 @@ func prepareClientPolicies(clientIDs []string, compiled map[string]model.ClientR
 		if len(clients) != len(clientIDs) {
 			return gorm.ErrRecordNotFound
 		}
+		if err := rejectDeletedClientPolicies(tx, clientIDs); err != nil {
+			return err
+		}
 		resets, err := latestClientPolicyResets(tx, clientIDs)
 		if err != nil {
 			return err

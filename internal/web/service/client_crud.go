@@ -918,10 +918,16 @@ func (s *ClientService) Delete(inboundSvc *InboundService, id int, keepTraffic b
 				return err
 			}
 		}
+		if err := recordClientPolicyTombstones(tx, []int{id}); err != nil {
+			return err
+		}
 		return tx.Delete(&model.ClientRecord{}, id).Error
 	}); err != nil {
 		withdrawClientTombstones(existing.Email)
 		return needRestart, err
+	}
+	if err := reconcileDeletedClientPolicies([]string{existing.StableID}); err != nil {
+		return true, err
 	}
 	return needRestart, nil
 }

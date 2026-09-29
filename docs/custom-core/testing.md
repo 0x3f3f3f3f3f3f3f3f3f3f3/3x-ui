@@ -686,5 +686,43 @@ For reproduction, set `XRAY_E2E_BINARY` to the current custom build and run the
 and a dedicated `XUI_DB_DSN`. The full gate uses `make test-go`,
 `golangci-lint run`, `go build ./...`, and the original scale test with a 25-minute
 suite deadline. No frontend or production core source changed in this increment.
-Healthy legacy drain/settlement, automatic selection, permanent identity deletion,
-full UI status and restore/global-budget fencing remain separate unfinished work.
+Healthy legacy drain/settlement, automatic selection, full UI status and restore/global-budget fencing remain separate unfinished work.
+
+
+### Permanent managed identity deletion
+
+The real-child regressions exercise single/bulk deletion with both keep-traffic
+settings, established-flow closure, lifetime preservation, stopped/lost-control
+recovery and higher-version regrant rejection. Additional cases cover both orphan
+entrypoints, never-initialized identity replay, SQL intent rollback, pending-read
+and receipt-write failure, empty bulk scope, sibling-flow survival and fresh
+identity/usage after email reuse. A 100001-record history regression first failed
+at the old 100000 cap; bounded pages now reach its final identity and avoid
+resweeping confirmed absence. Runtime tests traverse 1000 unknown IDs before a
+live identity and reject stale initialization/candidate intersections before
+confirming absence, with SQL callbacks outside the Runtime lock.
+
+Compile-only omission checks independently reproduced stale bootstrap acceptance,
+repeated absence scans, hidden SQL failure, late email marking and loss of the
+migration table. Product sources were unchanged by those checks. The migration
+regression covers SQLite to PostgreSQL, export back to SQLite, SQL dump/restore,
+and a previous schema without the tombstone table or absence column. CI requires
+explicit PASS records for all 13 permanent-deletion service/Runtime tests in both
+database jobs. Final verification used Go 1.27.1 and the credential-revocation
+custom binary on the recorded ARM64 host. SQLite expanded race tests passed in
+98.427 s (service) and 1.814 s (Runtime). The PostgreSQL expanded service run took
+407.001 s: all new deletion cases passed, while two existing orphan tests exposed
+a shared-schema fixture collision. Their helper now uses the existing isolated
+schema setup; the affected orphan/identity subset passed twice in 25.975 s.
+PostgreSQL database/migration tests passed in 10.934 s. Final lint reported zero
+issues; the complete shuffled panel suite passed in 249.40 s wall time, and
+`go build ./...` passed in 8.16 s. Source review found no remaining blocker.
+Workflow YAML and all 18 shell blocks pass syntax checks.
+
+Reproduce the dedicated service/Runtime gate with the `Permanent managed identity
+deletion` step in `.github/workflows/custom-core.yml`; use a dedicated PostgreSQL
+DSN for that job. The cross-database test is
+`go test -race ./internal/database -run '^TestClientPolicyCrossDatabaseMigration$'`.
+The frontend and production core source are unchanged in this increment. Healthy
+legacy handoff, automatic selection, complete UI application status, global node
+revocation and coordinated backup rollback fencing remain unfinished.

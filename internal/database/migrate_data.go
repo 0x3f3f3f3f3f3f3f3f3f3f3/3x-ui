@@ -48,6 +48,7 @@ func migrationModels() []any {
 		&model.LegacyTrafficReceipt{},
 		&model.InboundClientIps{},
 		&model.ClientRecord{},
+		&model.ClientPolicyTombstone{},
 		&model.ClientPolicySource{},
 		&model.ClientPolicyTotal{},
 		&model.ClientPolicyReceipt{},
@@ -95,6 +96,7 @@ func MigrateData(srcPath, dstDSN string) error {
 		return err
 	}
 	defer srcSQL.Close()
+	hasPolicyTombstones := src.Migrator().HasTable(&model.ClientPolicyTombstone{})
 	policyTables := []any{&model.ClientPolicySource{}, &model.ClientPolicyTotal{}, &model.ClientPolicyReceipt{}}
 	policyTableCount := 0
 	for _, m := range policyTables {
@@ -154,6 +156,9 @@ func MigrateData(srcPath, dstDSN string) error {
 		}
 
 		for _, m := range migrationModels() {
+			if _, ok := m.(*model.ClientPolicyTombstone); ok && !hasPolicyTombstones {
+				continue
+			}
 			if _, ok := m.(*model.LegacyTrafficReceipt); ok && !hasLegacyTrafficReceipts {
 				continue
 			}

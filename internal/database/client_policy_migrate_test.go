@@ -34,6 +34,9 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if err := src.AutoMigrate(&model.ClientPolicyTombstone{}); err != nil {
+		t.Fatal(err)
+	}
 	clients := []model.ClientRecord{{Email: "one", Policy: &model.ClientPolicyOptions{UploadBytesPerSecond: 262144, DownloadBytesPerSecond: 1048576, Multiplier: "1.5"}, DesiredPolicyVersion: 7, PolicyFingerprint: "stored-policy-fingerprint"}, {Email: "two"}}
 	if err := src.Create(&clients).Error; err != nil {
 		t.Fatal(err)
@@ -44,7 +47,9 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	reset := model.ClientPolicyReset{ClientID: clients[0].StableID, RequestID: "migrated-reset", InstanceID: source.InstanceID, Epoch: 2, Sequence: 10, RawUpload: 4, RawDownload: 5, BilledBytes: 9, Remainder: 500000, UncertainBytes: 2, PolicyVersion: 3, CreatedAt: 123456}
 	batch := model.ClientTrafficResetBatch{RequestID: "migrated-batch", Scope: "calendar:daily:original", ScheduledAt: 123000, InboundIDsJSON: `[3,8]`, SelectionHash: "selected-members", TargetsJSON: `[{"clientId":"original-identity","email":"original-email","enableLegacy":true}]`, ManagedIDsJSON: `["original-identity"]`, Applied: true, Affected: 1, CreatedAt: 123456}
 	resetTime := model.ClientTrafficResetTime{ClientID: clients[0].StableID, EffectiveAt: 123456}
-	for _, row := range []any{&source, &total, &receipt, &reset, &batch, &resetTime} {
+	deleted := model.ClientPolicyTombstone{ClientID: "zz-deleted", CreatedAt: 123400}
+	deletionReceipt := model.ClientPolicyReceipt{InstanceID: source.InstanceID, ClientID: deleted.ClientID, DeletionAbsent: true, SeedUpload: 7, SeedDownload: 8, SeedBilled: 15}
+	for _, row := range []any{&source, &total, &receipt, &reset, &batch, &resetTime, &deleted, &deletionReceipt} {
 		if err := src.Create(row).Error; err != nil {
 			t.Fatal(err)
 		}
@@ -84,6 +89,53 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	}
 	if gotClient.Policy == nil || *gotClient.Policy != *clients[0].Policy || gotClient.DesiredPolicyVersion != 7 || gotClient.PolicyFingerprint != "stored-policy-fingerprint" {
 		t.Fatalf("policy migration lost settings/version: %+v", gotClient)
+	}
+	assertDeletion := func(db *gorm.DB) {
+		t.Helper()
+		var got model.ClientPolicyTombstone
+		if err := db.First(&got, "client_id = ?", deleted.ClientID).Error; err != nil || got != deleted {
+			t.Fatalf("migration lost permanent deletion: %+v %v", got, err)
+		}
+		var ack model.ClientPolicyReceipt
+		if err := db.First(&ack, "client_id = ?", deleted.ClientID).Error; err != nil || ack != deletionReceipt {
+			t.Fatalf("migration lost absence/seed or invented revocation: %+v %v", ack, err)
+		}
+	}
+	assertDeletion(dst)
+	exported, dump, restored := filepath.Join(t.TempDir(), "export.db"), filepath.Join(t.TempDir(), "export.dump"), filepath.Join(t.TempDir(), "restore.db")
+	if err := ExportPostgresToSQLite(os.Getenv("XUI_DB_DSN"), exported); err != nil {
+		t.Fatal(err)
+	}
+	if err := DumpSQLite(exported, dump); err != nil {
+		t.Fatal(err)
+	}
+	if err := RestoreSQLite(dump, restored); err != nil {
+		t.Fatal(err)
+	}
+	restoredDB, err := gorm.Open(sqlite.Open(restored), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { closeGorm(restoredDB) })
+	assertDeletion(restoredDB)
+	if err := src.Migrator().DropTable(&model.ClientPolicyTombstone{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := src.Migrator().DropColumn(&model.ClientPolicyReceipt{}, "deletion_absent"); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateData(path, os.Getenv("XUI_DB_DSN")); err != nil {
+		t.Fatalf("pre-deletion ledger migration: %v", err)
+	}
+	var deletedCount int64
+	if err := dst.Model(&model.ClientPolicyTombstone{}).Count(&deletedCount).Error; err != nil || deletedCount != 0 {
+		t.Fatalf("legacy migration fabricated deletion: %d %v", deletedCount, err)
+	}
+	var oldDeletionReceipt model.ClientPolicyReceipt
+	wantOldDeletionReceipt := deletionReceipt
+	wantOldDeletionReceipt.DeletionAbsent = false
+	if err := dst.First(&oldDeletionReceipt, "client_id = ?", deleted.ClientID).Error; err != nil || oldDeletionReceipt != wantOldDeletionReceipt {
+		t.Fatalf("legacy migration fabricated absence: %+v %v", oldDeletionReceipt, err)
 	}
 	if err := src.Migrator().DropColumn(&model.ClientPolicyReceipt{}, "first_used_at"); err != nil {
 		t.Fatal(err)

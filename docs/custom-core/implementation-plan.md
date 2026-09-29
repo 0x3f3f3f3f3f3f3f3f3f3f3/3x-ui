@@ -228,7 +228,17 @@ The focused fault, real-child, Reverse and writer regressions pass and source
 review found no remaining blocker in this increment. The isolated SQLite/PostgreSQL race, Runtime/API race, lint, full panel, build
 and original 10,000/100,000-client configuration gates passed; this checkpoint
 does not mark task 6 complete. Automatic selection
-from client policy, healthy legacy drain/settlement, permanent client deletion
-revocation, UI application status, complete restore fencing and global budgets
+from client policy, healthy legacy drain/settlement, UI application status,
+complete restore fencing and global budgets
 remain open. A running legacy process is rejected before policy preparation
 until its final accounting boundary can be proven.
+
+
+Permanent deletion candidate: four hard-delete entrypoints now commit durable
+stable-ID intent, revoke through Local Runtime and retain lifetime accounting.
+Startup pages pending work before listeners open; confirmed unknown identities
+have separate absence metadata and stale candidates cannot initialize them.
+SQL/control failure stops a running managed process and recovery is idempotent.
+Source review and final database, migration/backup, race, lint, full panel and
+build checks are complete; testing.md records the PostgreSQL fixture failure and
+its repeated successful rerun. Task 6 and the overall goal remain open.

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -292,44 +293,77 @@ func (s *ClientService) DeleteOrphans() (int, error) {
 		}
 		subIDs = append(subIDs, rows[i].SubID)
 	}
-	tombstoneClientEmails(emails)
+	var deletedStableIDs []string
 
-	if err := runSerializedTx(func(tx *gorm.DB) error {
-		if e := adjustGroupBaselinesForRemovedTraffic(tx, emails); e != nil {
-			return e
-		}
-		if e := clearClientHwidsBySubIDTx(tx, subIDs...); e != nil {
-			return e
-		}
-		for _, batch := range chunkInts(ids, sqlInChunk) {
-			if e := tx.Where("client_id IN ?", batch).Delete(&model.ClientInbound{}).Error; e != nil {
+	if err := submitTrafficWrite(func() (resultErr error) {
+		var marked []string
+		defer func() {
+			if resultErr != nil {
+				withdrawClientTombstones(marked...)
+			}
+		}()
+		return db.Transaction(func(tx *gorm.DB) error {
+			tx = tx.WithContext(context.WithValue(tx.Statement.Context, serializedTxContextKey{}, true))
+			current, err := currentClientPolicyOrphans(tx, ids, 0)
+			if err != nil {
+				return err
+			}
+			ids, emails, subIDs = nil, nil, nil
+			for _, row := range current {
+				ids = append(ids, row.Id)
+				emails = append(emails, row.Email)
+				subIDs = append(subIDs, row.SubID)
+				deletedStableIDs = append(deletedStableIDs, row.StableID)
+			}
+			if len(ids) == 0 {
+				return nil
+			}
+			tombstoneClientEmails(emails)
+			marked = emails
+			if err := recordClientPolicyTombstones(tx, ids); err != nil {
+				return err
+			}
+			if e := adjustGroupBaselinesForRemovedTraffic(tx, emails); e != nil {
 				return e
 			}
-			if e := tx.Where("client_id IN ?", batch).Delete(&model.ClientExternalLink{}).Error; e != nil {
+			if e := clearClientHwidsBySubIDTx(tx, subIDs...); e != nil {
 				return e
 			}
-		}
-		if len(emails) > 0 {
-			for _, batch := range chunkStrings(emails, sqlInChunk) {
-				if e := tx.Where("email IN ?", batch).Delete(&xray.ClientTraffic{}).Error; e != nil {
+			for _, batch := range chunkInts(ids, sqlInChunk) {
+				if e := tx.Where("client_id IN ?", batch).Delete(&model.ClientInbound{}).Error; e != nil {
 					return e
 				}
-				if e := tx.Where("client_email IN ?", batch).Delete(&model.InboundClientIps{}).Error; e != nil {
+				if e := tx.Where("client_id IN ?", batch).Delete(&model.ClientExternalLink{}).Error; e != nil {
 					return e
 				}
 			}
-			if e := clearGlobalTraffic(tx, emails...); e != nil {
-				return e
+			if len(emails) > 0 {
+				for _, batch := range chunkStrings(emails, sqlInChunk) {
+					if e := tx.Where("email IN ?", batch).Delete(&xray.ClientTraffic{}).Error; e != nil {
+						return e
+					}
+					if e := tx.Where("client_email IN ?", batch).Delete(&model.InboundClientIps{}).Error; e != nil {
+						return e
+					}
+				}
+				if e := clearGlobalTraffic(tx, emails...); e != nil {
+					return e
+				}
 			}
-		}
-		for _, batch := range chunkInts(ids, sqlInChunk) {
-			if e := tx.Where("id IN ?", batch).Delete(&model.ClientRecord{}).Error; e != nil {
-				return e
+			for _, batch := range chunkInts(ids, sqlInChunk) {
+				if e := tx.Where("id IN ?", batch).Delete(&model.ClientRecord{}).Error; e != nil {
+					return e
+				}
 			}
-		}
-		return nil
+			return nil
+		})
 	}); err != nil {
 		return 0, err
+	}
+	if len(deletedStableIDs) > 0 {
+		if err := reconcileDeletedClientPolicies(deletedStableIDs); err != nil {
+			return 0, err
+		}
 	}
 	return len(ids), nil
 }

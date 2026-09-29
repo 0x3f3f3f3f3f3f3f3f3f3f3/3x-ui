@@ -16,8 +16,10 @@ import (
 )
 
 type ManagedPolicyBootstrap struct {
-	AfterSequence   uint64
-	Initializations []*command.InitializeRequest
+	DeletedClientPage    func(context.Context, string) ([]string, error)
+	ConfirmAbsentClients func(context.Context, []string) error
+	AfterSequence        uint64
+	Initializations      []*command.InitializeRequest
 }
 
 type ManagedProcessRuntime interface {
@@ -119,9 +121,19 @@ func (l *Local) StartManagedProcess(ctx context.Context, process *xray.Process, 
 	if prepare == nil {
 		return errors.New("managed policy preparation is required")
 	}
+	var config conf.ClientPolicyConfig
+	if process == nil {
+		return errors.New("managed process is required")
+	}
+	if err := json.Unmarshal(process.GetConfig().ClientPolicy, &config); err != nil {
+		return err
+	}
 	return process.StartManaged(ctx, func(ctx context.Context, api *xray.ClientPolicyAPI) error {
 		bootstrap, err := prepare(ctx, api.Capabilities())
 		if err != nil {
+			return err
+		}
+		if err := l.prepareManagedDeletions(ctx, api, bootstrap, config.Policies); err != nil {
 			return err
 		}
 		l.mu.Lock()

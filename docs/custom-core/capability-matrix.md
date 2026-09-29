@@ -117,5 +117,13 @@ without preparation side effects and Reverse clearing. SQLite/PostgreSQL exercis
 single/bulk error propagation, writer reentry and stale traffic plans. The full
 independent gate and original configuration scale cases pass (testing.md).
 This scoped evidence does not complete automatic activation, healthy legacy
-handoff, permanent deletion tombstones, all protocol lifecycle combinations,
+handoff, all protocol lifecycle combinations,
 complete UI application status, backup rollback fencing or global node budgets.
+
+
+Permanent deletion increment: single/bulk and both orphan hard-delete entrypoints
+persist stable-ID intent and route local managed revocation through Runtime.
+Startup recovery, never-initialized identity fences and bounded history traversal
+are implemented. This does not upgrade global node revocation, all protocol
+combinations, automatic activation or backup rollback fencing. Verification is
+recorded in testing.md.

@@ -47,39 +47,66 @@ func clearSyncOrphanMarks(tx *gorm.DB) error {
 func (s *ClientService) ReapSyncOrphans() (int, error) {
 	db := database.GetDB()
 	cutoff := time.Now().Add(-syncOrphanReapGrace).UnixMilli()
-
-	var emails []string
+	var candidates []int
 	if err := db.Model(&model.ClientRecord{}).
 		Where("sync_orphaned_at > 0 AND sync_orphaned_at <= ?", cutoff).
 		Where("NOT EXISTS (SELECT 1 FROM client_inbounds WHERE client_inbounds.client_id = clients.id)").
-		Pluck("email", &emails).Error; err != nil {
+		Pluck("id", &candidates).Error; err != nil {
 		return 0, err
 	}
-	if len(emails) == 0 {
-		return 0, nil
-	}
-
 	reaped := 0
-	for _, batch := range chunkStrings(emails, sqlInChunk) {
+	for _, batch := range chunkInts(candidates, sqlInChunk) {
+		var deleted []model.ClientRecord
 		if err := runSerializedTx(func(tx *gorm.DB) error {
-			if err := adjustGroupBaselinesForRemovedTraffic(tx, batch); err != nil {
+			var err error
+			deleted, err = currentClientPolicyOrphans(tx, batch, cutoff)
+			if err != nil || len(deleted) == 0 {
 				return err
 			}
-			if err := tx.Where("email IN ?", batch).Delete(&model.ClientRecord{}).Error; err != nil {
+			var ids []int
+			var emails, subIDs []string
+			for _, row := range deleted {
+				ids = append(ids, row.Id)
+				emails = append(emails, row.Email)
+				subIDs = append(subIDs, row.SubID)
+			}
+			if err := recordClientPolicyTombstones(tx, ids); err != nil {
 				return err
 			}
-			if err := tx.Where("email IN ?", batch).Delete(&xray.ClientTraffic{}).Error; err != nil {
+			if err := adjustGroupBaselinesForRemovedTraffic(tx, emails); err != nil {
 				return err
 			}
-			if err := tx.Where("email IN ?", batch).Delete(&model.NodeClientTraffic{}).Error; err != nil {
+			if err := clearClientHwidsBySubIDTx(tx, subIDs...); err != nil {
 				return err
 			}
-			return tx.Where("client_email IN ?", batch).Delete(&model.InboundClientIps{}).Error
+			if err := tx.Where("client_id IN ?", ids).Delete(&model.ClientExternalLink{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("id IN ?", ids).Delete(&model.ClientRecord{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("email IN ?", emails).Delete(&xray.ClientTraffic{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("email IN ?", emails).Delete(&model.NodeClientTraffic{}).Error; err != nil {
+				return err
+			}
+			return tx.Where("client_email IN ?", emails).Delete(&model.InboundClientIps{}).Error
 		}); err != nil {
 			return reaped, err
 		}
-		reaped += len(batch)
-		logger.Infof("reaped %d client(s) confirmed removed on their node", len(batch))
+		if len(deleted) == 0 {
+			continue
+		}
+		ids := make([]string, 0, len(deleted))
+		for _, row := range deleted {
+			ids = append(ids, row.StableID)
+		}
+		if err := reconcileDeletedClientPolicies(ids); err != nil {
+			return reaped, err
+		}
+		reaped += len(deleted)
+		logger.Infof("reaped %d client(s) confirmed removed on their node", len(deleted))
 	}
 	return reaped, nil
 }
