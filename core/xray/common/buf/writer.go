@@ -18,6 +18,19 @@ type BufferToBytesWriter struct {
 	cache   [][]byte
 }
 
+func (w *BufferToBytesWriter) Write(p []byte) (int, error) {
+	lease, err := stats.BeginIO(w.counter)
+	if err != nil {
+		return 0, err
+	}
+	defer stats.EndIO(lease)
+	n, err := w.Writer.Write(p)
+	if w.counter != nil {
+		w.counter.Add(int64(n))
+	}
+	return n, err
+}
+
 // WriteMultiBuffer implements Writer. This method takes ownership of the given buffer.
 func (w *BufferToBytesWriter) WriteMultiBuffer(mb MultiBuffer) error {
 	defer ReleaseMulti(mb)

@@ -753,3 +753,34 @@ CI's race step now includes buffer, statistics, proxy and WireGuard packages.
 There is no public freeze/drain RPC or new capability. These tests establish
 metered IO accounting boundaries, not cancellation of every business socket,
 boot-scoped handoff, final SQL settlement or automatic managed activation.
+
+### Mux cancellation and byte interface accounting
+
+A real VMess TCP/XUDP regression exposed zero outbound upload accounting through
+BufferToBytesWriter's promoted raw Write method. Delayed writes through its direct,
+buffered-flush and unbuffered interfaces reproduced early sealing; explicit Write
+now holds a lease through the counter update. ReadVReader's exposed byte Read has
+the equivalent regression, without claiming an identified production bypass.
+
+Real VMess TCP/XUDP traffic now has nonzero wire counters, closes through the
+outbound handler and yields a repeatable final snapshot. Omitting the mux close
+implementation makes both cases hit the snapshot deadline. Separate regressions
+cover idle proxy cancellation, a blocked factory, rejection after closure, cleanup
+of a late worker, concurrent close acknowledgement, both mux pools and propagated
+proxy close failure. The combined buffer/mux/policy race run passed (1.801, 2.094
+and 13.514 s package times). Source review found no additional reachable byte
+interface bypass in current production call chains; this is not an assertion
+that every exported wrapper interface supplies counting.
+
+The complete shuffled core suite passed in 662.49 s, including protocol scenarios
+in 337.642 s. Expanded race checks exposed an existing unsynchronized outbound
+tag-cache pointer and test stop flags. Cache selection now holds the manager read
+lock; test flags are atomic. All other expanded race packages passed, and the
+affected full outbound race package passed again after this fix (11.080 s).
+The rebuilt custom core passed the complete shuffled panel suite (304.96 s).
+Lint reported zero issues (26.90 s), panel build passed (12.60 s), and changed Go
+formatting, workflow YAML and its 18 shell blocks validate. CI now includes
+outbound and mux packages in race checks.
+
+Normal outbound socket cancellation, boot-scoped private control and panel final
+settlement remain required work before exposing a drain capability.

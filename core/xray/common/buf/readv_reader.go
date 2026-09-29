@@ -59,6 +59,19 @@ type ReadVReader struct {
 	counter stats.Counter
 }
 
+func (r *ReadVReader) Read(p []byte) (int, error) {
+	lease, err := stats.BeginIO(r.counter)
+	if err != nil {
+		return 0, err
+	}
+	defer stats.EndIO(lease)
+	n, err := r.Reader.Read(p)
+	if r.counter != nil {
+		r.counter.Add(int64(n))
+	}
+	return n, err
+}
+
 // NewReadVReader creates a new ReadVReader.
 func NewReadVReader(reader io.Reader, rawConn syscall.RawConn, counter stats.Counter) *ReadVReader {
 	return &ReadVReader{

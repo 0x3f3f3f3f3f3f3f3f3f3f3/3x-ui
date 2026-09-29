@@ -250,3 +250,11 @@ Timeout/retry, partial errors, nested admission and immutable snapshots pass rac
 regressions; full core/panel suites, lint and builds pass. This does not expose a
 drain RPC or permit live legacy activation. IO-owner cancellation, private
 boot-scoped acknowledgement and atomic final settlement remain required.
+
+Task 6 mux cancellation candidate: TCP mux and XUDP pool closure now seals new
+workers and cancels proxy contexts, including late creation and concurrent-close
+races. Real VMess traffic exposed a byte Write accounting bypass; explicit byte
+Write/Read methods now participate in the counter boundary. Focused race tests,
+source review, full core/panel suites, lint and builds pass. Expanded race checks
+also exposed and verified a fix for an existing outbound tag-cache race. Ordinary outbound
+socket cancellation and the remaining handoff integration are still open.

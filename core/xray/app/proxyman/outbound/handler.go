@@ -329,9 +329,7 @@ func (h *Handler) Start() error {
 
 // Close implements common.Closable.
 func (h *Handler) Close() error {
-	common.Close(h.mux)
-	common.Close(h.proxy)
-	return nil
+	return errors.Combine(common.Close(h.mux), common.Close(h.xudp), common.Close(h.proxy))
 }
 
 // SenderSettings implements outbound.Handler.

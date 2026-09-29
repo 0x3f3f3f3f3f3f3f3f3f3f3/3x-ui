@@ -251,8 +251,21 @@ same final snapshot. New metered IO returns `net.ErrClosed`, including counters
 registered after sealing. Counter reset and removal cannot alter the boundary.
 No manager lock is held during IO or while waiting for existing leases.
 
+The byte interfaces of BufferToBytesWriter and ReadVReader also participate.
+The buffered VMess writer previously selected an embedded raw Write method,
+bypassing both the counter and its lease; explicit Write now accounts that path.
+ReadVReader exposes the same guarantee for callers using its byte interface,
+although no current production path with a nonnil counter was found there.
+
+Closing an outbound now closes both TCP mux and XUDP pools and propagates proxy
+close errors. Each pool seals worker admission, cancels its proxy contexts and
+closes workers; creation already in progress is rejected and closed upon return.
+Concurrent closes wait for cancellation to be issued. Pool closure does not by
+itself prove every proxy IO goroutine has exited; the counter barrier establishes
+the final accounting boundary after cancellation.
+
 This is an internal prerequisite, not an exposed drain capability. The caller
-must cancel all IO owners before waiting, including idle mux/observer/WireGuard
+must cancel all IO owners before waiting, including idle observer/WireGuard
 and raw sockets. Independent private control, boot-scoped acknowledgement, final
 panel settlement and healthy legacy cutover remain unimplemented. Ordinary
 managed activation still rejects a running legacy core before preparation.

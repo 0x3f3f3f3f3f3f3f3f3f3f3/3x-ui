@@ -3,7 +3,10 @@
 package buf
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"io"
 	"net"
 	"sync"
 	"syscall"
@@ -73,6 +76,50 @@ type pausedCounterRawConn struct {
 	syscall.RawConn
 	completed chan struct{}
 	release   chan struct{}
+}
+
+func TestCounterFreezeCoversReadvByteReader(t *testing.T) {
+	manager, _ := appstats.NewManager(context.Background(), &appstats.Config{})
+	counter, _ := manager.GetOrRegisterCounter("readv-byte")
+	raw := &pausedByteReader{Reader: bytes.NewReader([]byte("abc")), completed: make(chan struct{}), release: make(chan struct{})}
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(raw.release) }) }
+	t.Cleanup(unblock)
+	reader := NewReadVReader(raw, nil, counter)
+	done := make(chan error, 1)
+	go func() {
+		n, err := reader.Read(make([]byte, 3))
+		if err == nil && n != 3 {
+			err = io.ErrUnexpectedEOF
+		}
+		done <- err
+	}()
+	<-raw.completed
+	requirePendingCounterIO(t, manager)
+	unblock()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	final, err := manager.SealCounters(context.Background())
+	if err != nil || final["readv-byte"] != 3 {
+		t.Fatalf("byte reader escaped accounting: %v %v", final, err)
+	}
+	if n, err := reader.Read(make([]byte, 1)); n != 0 || !errors.Is(err, net.ErrClosed) {
+		t.Fatalf("sealed byte reader reached raw IO: %d %v", n, err)
+	}
+}
+
+type pausedByteReader struct {
+	io.Reader
+	completed chan struct{}
+	release   chan struct{}
+}
+
+func (r *pausedByteReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	close(r.completed)
+	<-r.release
+	return n, err
 }
 
 func (c *pausedCounterRawConn) Read(fn func(uintptr) bool) error {

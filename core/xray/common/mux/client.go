@@ -4,6 +4,7 @@ import (
 	"context"
 	goerrors "errors"
 	"io"
+	gonet "net"
 	"sync"
 	"time"
 
@@ -27,6 +28,13 @@ type ClientManager struct {
 	Picker  WorkerPicker
 }
 
+func (m *ClientManager) Close() error {
+	if m == nil {
+		return nil
+	}
+	return common.Close(m.Picker)
+}
+
 func (m *ClientManager) Dispatch(ctx context.Context, link *transport.Link) error {
 	for i := 0; i < 16; i++ {
 		worker, err := m.Picker.PickAvailable()
@@ -48,14 +56,22 @@ type WorkerPicker interface {
 type IncrementalWorkerPicker struct {
 	Factory ClientWorkerFactory
 
-	access      sync.Mutex
-	workers     []*ClientWorker
-	cleanupTask *task.Periodic
+	access       sync.Mutex
+	create       chan struct{}
+	closed       bool
+	closedSignal chan struct{}
+	closeOnce    sync.Once
+	closeErr     error
+	workers      []*ClientWorker
+	cleanupTask  *task.Periodic
 }
 
 func (p *IncrementalWorkerPicker) cleanupFunc() error {
 	p.access.Lock()
 	defer p.access.Unlock()
+	if p.closed {
+		return gonet.ErrClosed
+	}
 
 	if len(p.workers) == 0 {
 		return errors.New("no worker")
@@ -87,7 +103,27 @@ func (p *IncrementalWorkerPicker) findAvailable() int {
 
 func (p *IncrementalWorkerPicker) pickInternal() (*ClientWorker, bool, error) {
 	p.access.Lock()
-	defer p.access.Unlock()
+	if p.closed {
+		p.access.Unlock()
+		return nil, false, gonet.ErrClosed
+	}
+	if p.create == nil {
+		p.create = make(chan struct{}, 1)
+		p.closedSignal = make(chan struct{})
+	}
+	create, closedSignal := p.create, p.closedSignal
+	p.access.Unlock()
+	select {
+	case create <- struct{}{}:
+	case <-closedSignal:
+		return nil, false, gonet.ErrClosed
+	}
+	defer func() { <-create }()
+	p.access.Lock()
+	if p.closed {
+		p.access.Unlock()
+		return nil, false, gonet.ErrClosed
+	}
 
 	idx := p.findAvailable()
 	if idx >= 0 {
@@ -95,15 +131,25 @@ func (p *IncrementalWorkerPicker) pickInternal() (*ClientWorker, bool, error) {
 		if n > 1 && idx != n-1 {
 			p.workers[n-1], p.workers[idx] = p.workers[idx], p.workers[n-1]
 		}
-		return p.workers[idx], false, nil
+		worker := p.workers[idx]
+		p.access.Unlock()
+		return worker, false, nil
 	}
 
 	p.cleanup()
+	p.access.Unlock()
 
 	worker, err := p.Factory.Create()
 	if err != nil {
 		return nil, false, err
 	}
+	p.access.Lock()
+	if p.closed {
+		p.access.Unlock()
+		worker.Close()
+		return nil, false, gonet.ErrClosed
+	}
+	defer p.access.Unlock()
 	p.workers = append(p.workers, worker)
 
 	if p.cleanupTask == nil {
@@ -119,10 +165,34 @@ func (p *IncrementalWorkerPicker) pickInternal() (*ClientWorker, bool, error) {
 func (p *IncrementalWorkerPicker) PickAvailable() (*ClientWorker, error) {
 	worker, start, err := p.pickInternal()
 	if start {
-		common.Must(p.cleanupTask.Start())
+		if err := p.cleanupTask.Start(); err != nil {
+			return nil, err
+		}
 	}
 
 	return worker, err
+}
+
+func (p *IncrementalWorkerPicker) Close() error {
+	p.closeOnce.Do(func() {
+		p.access.Lock()
+		p.closed = true
+		if p.closedSignal != nil {
+			close(p.closedSignal)
+		}
+		workers, cleanupTask := p.workers, p.cleanupTask
+		p.workers = nil
+		p.access.Unlock()
+		var errs []error
+		if cleanupTask != nil {
+			errs = append(errs, cleanupTask.Close())
+		}
+		for _, worker := range workers {
+			errs = append(errs, worker.Close())
+		}
+		p.closeErr = errors.Combine(errs...)
+	})
+	return p.closeErr
 }
 
 type ClientWorkerFactory interface {
@@ -139,22 +209,21 @@ func (f *DialingWorkerFactory) Create() (*ClientWorker, error) {
 	opts := []pipe.Option{pipe.WithSizeLimit(64 * 1024)}
 	uplinkReader, upLinkWriter := pipe.New(opts...)
 	downlinkReader, downlinkWriter := pipe.New(opts...)
+	ctx := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
+		Target: net.TCPDestination(muxCoolAddress, muxCoolPort),
+	}})
+	ctx, cancel := context.WithCancel(ctx)
 
-	c, err := NewClientWorker(transport.Link{
+	c, err := newClientWorker(transport.Link{
 		Reader: downlinkReader,
 		Writer: upLinkWriter,
-	}, f.Strategy)
+	}, f.Strategy, cancel)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 
 	go func(p proxy.Outbound, d internet.Dialer, c common.Closable) {
-		outbounds := []*session.Outbound{{
-			Target: net.TCPDestination(muxCoolAddress, muxCoolPort),
-		}}
-		ctx := session.ContextWithOutbounds(context.Background(), outbounds)
-		ctx, cancel := context.WithCancel(ctx)
-
 		if errP := p.Process(ctx, &transport.Link{Reader: uplinkReader, Writer: downlinkWriter}, d); errP != nil {
 			errC := errors.Cause(errP)
 			if !(goerrors.Is(errC, io.EOF) || goerrors.Is(errC, io.ErrClosedPipe) || goerrors.Is(errC, context.Canceled)) {
@@ -163,7 +232,7 @@ func (f *DialingWorkerFactory) Create() (*ClientWorker, error) {
 		}
 		common.Must(c.Close())
 		cancel()
-	}(f.Proxy, f.Dialer, c.done)
+	}(f.Proxy, f.Dialer, c)
 
 	return c, nil
 }
@@ -179,6 +248,7 @@ type ClientWorker struct {
 	done           *done.Instance
 	timer          *time.Ticker
 	strategy       ClientStrategy
+	cancel         context.CancelFunc
 }
 
 var (
@@ -188,12 +258,17 @@ var (
 
 // NewClientWorker creates a new mux.Client.
 func NewClientWorker(stream transport.Link, s ClientStrategy) (*ClientWorker, error) {
+	return newClientWorker(stream, s, nil)
+}
+
+func newClientWorker(stream transport.Link, s ClientStrategy, cancel context.CancelFunc) (*ClientWorker, error) {
 	c := &ClientWorker{
 		sessionManager: NewSessionManager(),
 		link:           stream,
 		done:           done.New(),
 		timer:          time.NewTicker(time.Second * 16),
 		strategy:       s,
+		cancel:         cancel,
 	}
 
 	go c.fetchOutput()
@@ -220,11 +295,17 @@ func (m *ClientWorker) WaitClosed() <-chan struct{} {
 }
 
 func (m *ClientWorker) Close() error {
+	if m.cancel != nil {
+		m.cancel()
+	}
 	return m.done.Close()
 }
 
 func (m *ClientWorker) monitor() {
 	defer m.timer.Stop()
+	if m.cancel != nil {
+		defer m.cancel()
+	}
 
 	for {
 		checkSize := m.sessionManager.Size()

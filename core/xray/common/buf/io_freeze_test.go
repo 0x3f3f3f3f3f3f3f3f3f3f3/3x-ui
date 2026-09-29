@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"sync"
 	"testing"
 	"time"
@@ -52,6 +53,54 @@ func TestCounterFreezeWaitsForBufferedWrites(t *testing.T) {
 			}
 			if err != nil || final["buffered"] != want || int64(writer.Len()) != want {
 				t.Fatalf("frozen buffered write lost completed bytes: %+v output=%q err=%v", final, writer.String(), err)
+			}
+		})
+	}
+}
+
+func TestCounterFreezeCoversBufferedWriterByteEntrypoints(t *testing.T) {
+	for _, path := range []string{"direct", "flush", "unbuffered"} {
+		t.Run(path, func(t *testing.T) {
+			manager, _ := appstats.NewManager(context.Background(), &appstats.Config{})
+			counter, _ := manager.GetOrRegisterCounter("byte-writer")
+			raw := &pausedCounterWriter{completed: make(chan struct{}), release: make(chan struct{})}
+			var once sync.Once
+			unblock := func() { once.Do(func() { close(raw.release) }) }
+			t.Cleanup(unblock)
+			adapter := &BufferToBytesWriter{Writer: raw, counter: counter}
+			buffered := NewBufferedWriter(adapter)
+			if path == "unbuffered" {
+				if err := buffered.SetBuffered(false); err != nil {
+					t.Fatal(err)
+				}
+			}
+			operation := func() error {
+				if path == "direct" {
+					_, err := adapter.Write([]byte("abc"))
+					return err
+				}
+				if _, err := buffered.Write([]byte("abc")); err != nil {
+					return err
+				}
+				return buffered.Flush()
+			}
+			done := make(chan error, 1)
+			go func() { done <- operation() }()
+			<-raw.completed
+			requirePendingCounterIO(t, manager)
+			unblock()
+			if err := <-done; err != nil {
+				t.Fatal(err)
+			}
+			final, err := manager.SealCounters(context.Background())
+			if err != nil || final["byte-writer"] != 3 || raw.String() != "abc" {
+				t.Fatalf("byte write escaped accounting: %v output=%q err=%v", final, raw.String(), err)
+			}
+			if err := operation(); !errors.Is(err, net.ErrClosed) {
+				t.Fatalf("frozen byte writer reached raw IO: %v", err)
+			}
+			if raw.String() != "abc" {
+				t.Fatal("sealed writer transmitted additional bytes")
 			}
 		})
 	}
