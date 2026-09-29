@@ -318,3 +318,26 @@ explicit client ownership even if the HTTP transport loses its cache entry.
 This does not establish complete transport/handler drainage. Idle raw H1 pool
 ownership, browser-dialer/UDP-hop shutdown, manager lifecycle and independent
 boot-scoped final settlement remain open. No drain capability is advertised.
+
+
+## Manager and reverse-resource ownership prerequisite
+
+Inbound and outbound manager Close now seal admission and clear selection before
+closing owned handlers outside the lookup lock. Removed handlers remain owned
+until Close finishes; failures remain available to a later manager Close.
+Concurrent close callers share completion and the same result. Each handler is
+closed once, including a removal racing whole-manager closure. Start remains
+serialized with admission; this does not cancel an arbitrarily hung Start.
+
+Failed running additions are not published, and the core construction entrypoints
+close rejected handlers. VLESS cleanup therefore tracks reverse resources created
+by that handler, independently of tag lookup. Conditional manager removal cannot
+delete a replacement route. Reverse registration atomically suppresses default
+selection and no longer waits for an empty/closed outbound manager. Unsupported
+custom managers must provide the ownership operations before creating reverse
+routes. Static mux pickers seal worker admission, close existing/late workers and
+stop their maintenance timers. The counter IO barrier still supplies the final
+accounting join; these closes alone do not prove every IO goroutine has exited.
+
+Private boot-scoped drain acknowledgement and final panel settlement remain
+unimplemented; live legacy activation is still refused before preparation.

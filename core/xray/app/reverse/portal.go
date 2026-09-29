@@ -137,9 +137,12 @@ func (o *Outbound) ProxySettings() *serial.TypedMessage {
 }
 
 type StaticMuxPicker struct {
-	access  sync.Mutex
-	workers []*PortalWorker
-	cTask   *task.Periodic
+	closed    bool
+	closeOnce sync.Once
+	closeErr  error
+	access    sync.Mutex
+	workers   []*PortalWorker
+	cTask     *task.Periodic
 }
 
 func NewStaticMuxPicker() (*StaticMuxPicker, error) {
@@ -216,19 +219,41 @@ func (p *StaticMuxPicker) PickAvailable() (*mux.ClientWorker, error) {
 
 func (p *StaticMuxPicker) AddWorker(worker *PortalWorker) {
 	p.access.Lock()
-	defer p.access.Unlock()
-
+	if p.closed {
+		p.access.Unlock()
+		_ = worker.Close()
+		return
+	}
 	p.workers = append(p.workers, worker)
+	p.access.Unlock()
+}
+
+func (p *StaticMuxPicker) Close() error {
+	p.closeOnce.Do(func() {
+		p.access.Lock()
+		p.closed = true
+		workers := p.workers
+		p.workers = nil
+		p.access.Unlock()
+		errs := []error{p.cTask.Close()}
+		for _, worker := range workers {
+			errs = append(errs, worker.Close())
+		}
+		p.closeErr = errors.Combine(errs...)
+	})
+	return p.closeErr
 }
 
 type PortalWorker struct {
-	client   *mux.ClientWorker
-	control  *task.Periodic
-	writer   buf.Writer
-	reader   buf.Reader
-	draining bool
-	counter  uint32
-	timer    *signal.ActivityTimer
+	closeOnce sync.Once
+	closeErr  error
+	client    *mux.ClientWorker
+	control   *task.Periodic
+	writer    buf.Writer
+	reader    buf.Reader
+	draining  bool
+	counter   uint32
+	timer     *signal.ActivityTimer
 }
 
 func NewPortalWorker(client *mux.ClientWorker) (*PortalWorker, error) {
@@ -305,4 +330,12 @@ func (w *PortalWorker) IsFull() bool {
 
 func (w *PortalWorker) Closed() bool {
 	return w.client.Closed()
+}
+
+func (w *PortalWorker) Close() error {
+	w.closeOnce.Do(func() {
+		w.closeErr = errors.Combine(w.control.Close(), w.client.Close())
+		w.timer.SetTimeout(0)
+	})
+	return w.closeErr
 }

@@ -276,3 +276,14 @@ coverage. Source review found and resolved shared-client health, native retry,
 retired-generation ownership and late-result issues. Affected package race checks
 and complete core/panel gates, lint and builds pass. Manager lifecycle, idle raw
 pools, remaining transports and boot-scoped final settlement remain open.
+
+
+Task 6 manager ownership checkpoint: Close fences admission and selection, closes
+handlers outside lookup locks and retains removed handlers through completion.
+Failed additions are not published and rejected construction is cleaned up.
+Reviewed VLESS reverse interactions now use atomic nondefault registration,
+conditional identity removal and owned static-mux closure. Focused and expanded
+race checks pass after extending the core payload-comparison test timeout; source
+review is complete. Complete core/panel suites, expanded race checks, lint and
+both builds pass. Boot-scoped drain/settlement,
+remaining transport ownership and the overall goal remain open.

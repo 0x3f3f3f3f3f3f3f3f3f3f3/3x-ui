@@ -2,13 +2,13 @@ package inbound
 
 import (
 	"context"
+	gonet "net"
 	"sync"
 
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/inbound"
@@ -17,15 +17,31 @@ import (
 // Manager manages all inbound handlers.
 type Manager struct {
 	access           sync.RWMutex
-	untaggedHandlers []inbound.Handler
-	taggedHandlers   map[string]inbound.Handler
+	untaggedHandlers []*ownedHandler
+	taggedHandlers   map[string]*ownedHandler
 	running          bool
+	closed           bool
+	closeOnce        sync.Once
+	closeErr         error
+	retired          map[*ownedHandler]struct{}
+}
+
+type ownedHandler struct {
+	handler inbound.Handler
+	once    sync.Once
+	err     error
+}
+
+func (h *ownedHandler) close() error {
+	h.once.Do(func() { h.err = h.handler.Close() })
+	return h.err
 }
 
 // New returns a new Manager for inbound handlers.
 func New(ctx context.Context, config *proxyman.InboundConfig) (*Manager, error) {
 	m := &Manager{
-		taggedHandlers: make(map[string]inbound.Handler),
+		taggedHandlers: make(map[string]*ownedHandler),
+		retired:        make(map[*ownedHandler]struct{}),
 	}
 	return m, nil
 }
@@ -39,21 +55,26 @@ func (*Manager) Type() interface{} {
 func (m *Manager) AddHandler(ctx context.Context, handler inbound.Handler) error {
 	m.access.Lock()
 	defer m.access.Unlock()
-
+	if m.closed {
+		return gonet.ErrClosed
+	}
 	tag := handler.Tag()
-	if len(tag) > 0 {
+	if tag != "" {
 		if _, found := m.taggedHandlers[tag]; found {
 			return errors.New("existing tag found: " + tag)
 		}
-		m.taggedHandlers[tag] = handler
-	} else {
-		m.untaggedHandlers = append(m.untaggedHandlers, handler)
 	}
-
 	if m.running {
-		return handler.Start()
+		if err := handler.Start(); err != nil {
+			return err
+		}
 	}
-
+	owned := &ownedHandler{handler: handler}
+	if tag != "" {
+		m.taggedHandlers[tag] = owned
+	} else {
+		m.untaggedHandlers = append(m.untaggedHandlers, owned)
+	}
 	return nil
 }
 
@@ -62,11 +83,14 @@ func (m *Manager) GetHandler(ctx context.Context, tag string) (inbound.Handler, 
 	m.access.RLock()
 	defer m.access.RUnlock()
 
+	if m.closed {
+		return nil, gonet.ErrClosed
+	}
 	handler, found := m.taggedHandlers[tag]
 	if !found {
 		return nil, errors.New("handler not found: ", tag)
 	}
-	return handler, nil
+	return handler.handler, nil
 }
 
 // RemoveHandler implements inbound.Manager.
@@ -74,19 +98,26 @@ func (m *Manager) RemoveHandler(ctx context.Context, tag string) error {
 	if tag == "" {
 		return common.ErrNoClue
 	}
-
 	m.access.Lock()
-	defer m.access.Unlock()
-
-	if handler, found := m.taggedHandlers[tag]; found {
-		if err := handler.Close(); err != nil {
-			errors.LogWarningInner(ctx, err, "failed to close handler ", tag)
-		}
-		delete(m.taggedHandlers, tag)
-		return nil
+	if m.closed {
+		m.access.Unlock()
+		return gonet.ErrClosed
 	}
-
-	return common.ErrNoClue
+	owned := m.taggedHandlers[tag]
+	if owned == nil {
+		m.access.Unlock()
+		return common.ErrNoClue
+	}
+	delete(m.taggedHandlers, tag)
+	m.retired[owned] = struct{}{}
+	m.access.Unlock()
+	err := owned.close()
+	if err == nil {
+		m.access.Lock()
+		delete(m.retired, owned)
+		m.access.Unlock()
+	}
+	return err
 }
 
 // ListHandlers implements inbound.Manager.
@@ -94,11 +125,13 @@ func (m *Manager) ListHandlers(ctx context.Context) []inbound.Handler {
 	m.access.RLock()
 	defer m.access.RUnlock()
 
-	response := make([]inbound.Handler, len(m.untaggedHandlers))
-	copy(response, m.untaggedHandlers)
+	response := make([]inbound.Handler, 0, len(m.untaggedHandlers)+len(m.taggedHandlers))
+	for _, h := range m.untaggedHandlers {
+		response = append(response, h.handler)
+	}
 
 	for _, v := range m.taggedHandlers {
-		response = append(response, v)
+		response = append(response, v.handler)
 	}
 
 	return response
@@ -109,16 +142,19 @@ func (m *Manager) Start() error {
 	m.access.Lock()
 	defer m.access.Unlock()
 
+	if m.closed {
+		return gonet.ErrClosed
+	}
 	m.running = true
 
 	for _, handler := range m.taggedHandlers {
-		if err := handler.Start(); err != nil {
+		if err := handler.handler.Start(); err != nil {
 			return err
 		}
 	}
 
 	for _, handler := range m.untaggedHandlers {
-		if err := handler.Start(); err != nil {
+		if err := handler.handler.Start(); err != nil {
 			return err
 		}
 	}
@@ -127,28 +163,31 @@ func (m *Manager) Start() error {
 
 // Close implements common.Closable.
 func (m *Manager) Close() error {
-	m.access.Lock()
-	defer m.access.Unlock()
-
-	m.running = false
-
-	var errs []interface{}
-	for _, handler := range m.taggedHandlers {
-		if err := handler.Close(); err != nil {
-			errs = append(errs, err)
+	m.closeOnce.Do(func() {
+		m.access.Lock()
+		m.closed = true
+		m.running = false
+		handlers := append([]*ownedHandler(nil), m.untaggedHandlers...)
+		for _, h := range m.taggedHandlers {
+			handlers = append(handlers, h)
 		}
-	}
-	for _, handler := range m.untaggedHandlers {
-		if err := handler.Close(); err != nil {
-			errs = append(errs, err)
+		for h := range m.retired {
+			handlers = append(handlers, h)
 		}
-	}
-
-	if len(errs) > 0 {
-		return errors.New("failed to close all handlers").Base(errors.New(serial.Concat(errs...)))
-	}
-
-	return nil
+		m.taggedHandlers = nil
+		m.untaggedHandlers = nil
+		m.retired = nil
+		m.access.Unlock()
+		errs := make([]error, len(handlers))
+		var closed sync.WaitGroup
+		for i, h := range handlers {
+			closed.Add(1)
+			go func() { defer closed.Done(); errs[i] = h.close() }()
+		}
+		closed.Wait()
+		m.closeErr = errors.Combine(errs...)
+	})
+	return m.closeErr
 }
 
 // NewHandler creates a new inbound.Handler based on the given config.

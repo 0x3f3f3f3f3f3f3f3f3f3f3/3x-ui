@@ -6,9 +6,11 @@ import (
 	gotls "crypto/tls"
 	"encoding/base64"
 	"io"
+	gonet "net"
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -74,6 +76,12 @@ func init() {
 
 // Handler is an inbound connection handler that handles messages in VLess protocol.
 type Handler struct {
+	reverseAccess sync.Mutex
+	closed        bool
+	closeOnce     sync.Once
+	closeErr      error
+	ownedReverses map[*Reverse]struct{}
+
 	inboundHandlerManager  feature_inbound.Manager
 	policyManager          policy.Manager
 	stats                  stats.Manager
@@ -191,6 +199,12 @@ func isMuxAndNotXUDP(request *protocol.RequestHeader, first *buf.Buffer) bool {
 }
 
 func (h *Handler) GetReverse(a *vless.MemoryAccount) (*Reverse, error) {
+	h.reverseAccess.Lock()
+	defer h.reverseAccess.Unlock()
+	if h.closed {
+		return nil, gonet.ErrClosed
+	}
+
 	u := h.validator.Get(a.ID.UUID())
 	if u == nil {
 		return nil, errors.New("reverse: user " + a.ID.String() + " doesn't exist anymore")
@@ -201,14 +215,27 @@ func (h *Handler) GetReverse(a *vless.MemoryAccount) (*Reverse, error) {
 	}
 	r := h.outboundHandlerManager.GetHandler(a.Reverse.Tag)
 	if r == nil {
-		picker, _ := reverse.NewStaticMuxPicker()
-		r = &Reverse{tag: a.Reverse.Tag, picker: picker, client: &mux.ClientManager{Picker: picker}}
-		for len(h.outboundHandlerManager.ListHandlers(h.ctx)) == 0 {
-			time.Sleep(time.Second) // prevents this outbound from becoming the default outbound
+		manager, ok := h.outboundHandlerManager.(interface {
+			AddHandlerWithoutDefault(context.Context, outbound.Handler) error
+			RemoveHandlerIf(context.Context, string, outbound.Handler) error
+		})
+		if !ok {
+			return nil, errors.New("reverse: outbound manager lacks owned nondefault registration")
 		}
-		if err := h.outboundHandlerManager.AddHandler(h.ctx, r); err != nil {
+		picker, err := reverse.NewStaticMuxPicker()
+		if err != nil {
 			return nil, err
 		}
+		created := &Reverse{tag: a.Reverse.Tag, picker: picker, client: &mux.ClientManager{Picker: picker}}
+		if err := manager.AddHandlerWithoutDefault(h.ctx, created); err != nil {
+			_ = created.Close()
+			return nil, err
+		}
+		if h.ownedReverses == nil {
+			h.ownedReverses = make(map[*Reverse]struct{})
+		}
+		h.ownedReverses[created] = struct{}{}
+		r = created
 	}
 	if r, ok := r.(*Reverse); ok {
 		return r, nil
@@ -216,35 +243,98 @@ func (h *Handler) GetReverse(a *vless.MemoryAccount) (*Reverse, error) {
 	return nil, errors.New("reverse: outbound " + a.Reverse.Tag + " is not type Reverse")
 }
 
-func (h *Handler) RemoveReverse(u *protocol.MemoryUser) {
-	if u != nil {
-		a := u.Account.(*vless.MemoryAccount)
-		if a.Reverse != nil && a.Reverse.Tag != "" {
-			h.outboundHandlerManager.RemoveHandler(h.ctx, a.Reverse.Tag)
+func (h *Handler) takeReverse(u *protocol.MemoryUser) []*Reverse {
+	if u == nil {
+		return nil
+	}
+	a := u.Account.(*vless.MemoryAccount)
+	if a.Reverse == nil {
+		return nil
+	}
+	var owned []*Reverse
+	for r := range h.ownedReverses {
+		if r.tag == a.Reverse.Tag {
+			delete(h.ownedReverses, r)
+			owned = append(owned, r)
 		}
+	}
+	return owned
+}
+
+func (h *Handler) closeReverse(r *Reverse) error {
+	if r == nil {
+		return nil
+	}
+	var err error
+	if manager, ok := h.outboundHandlerManager.(interface {
+		RemoveHandlerIf(context.Context, string, outbound.Handler) error
+	}); ok {
+		err = manager.RemoveHandlerIf(h.ctx, r.tag, r)
+	}
+	return errors.Combine(err, r.Close())
+}
+
+func (h *Handler) RemoveReverse(u *protocol.MemoryUser) {
+	h.reverseAccess.Lock()
+	r := h.takeReverse(u)
+	h.reverseAccess.Unlock()
+	for _, reverse := range r {
+		_ = h.closeReverse(reverse)
 	}
 }
 
 // Close implements common.Closable.Close().
 func (h *Handler) Close() error {
-	if h.decryption != nil {
-		h.decryption.Close()
-	}
-	for _, u := range h.validator.GetAll() {
-		h.RemoveReverse(u)
-	}
-	return errors.Combine(common.Close(h.validator))
+	h.closeOnce.Do(func() {
+		h.reverseAccess.Lock()
+		h.closed = true
+		owned := make([]*Reverse, 0, len(h.ownedReverses))
+		for r := range h.ownedReverses {
+			owned = append(owned, r)
+		}
+		h.ownedReverses = nil
+		h.reverseAccess.Unlock()
+		var errs []error
+		if h.decryption != nil {
+			errs = append(errs, h.decryption.Close())
+		}
+		for _, r := range owned {
+			errs = append(errs, h.closeReverse(r))
+		}
+		errs = append(errs, common.Close(h.validator))
+		h.closeErr = errors.Combine(errs...)
+	})
+	return h.closeErr
 }
 
 // AddUser implements proxy.UserManager.AddUser().
 func (h *Handler) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
+	h.reverseAccess.Lock()
+	defer h.reverseAccess.Unlock()
+	if h.closed {
+		return gonet.ErrClosed
+	}
 	return h.validator.Add(u)
 }
 
 // RemoveUser implements proxy.UserManager.RemoveUser().
 func (h *Handler) RemoveUser(ctx context.Context, e string) error {
-	h.RemoveReverse(h.validator.GetByEmail(e))
-	return h.validator.Del(e)
+	h.reverseAccess.Lock()
+	u := h.validator.GetByEmail(e)
+	err := h.validator.Del(e)
+	var owned []*Reverse
+	if err == nil {
+		owned = h.takeReverse(u)
+	}
+	h.reverseAccess.Unlock()
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, r := range owned {
+		errs = append(errs, h.closeReverse(r))
+	}
+	return errors.Combine(errs...)
 }
 
 // GetUser implements proxy.UserManager.GetUser().
@@ -642,9 +732,11 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 }
 
 type Reverse struct {
-	tag    string
-	picker *reverse.StaticMuxPicker
-	client *mux.ClientManager
+	closeOnce sync.Once
+	closeErr  error
+	tag       string
+	picker    *reverse.StaticMuxPicker
+	client    *mux.ClientManager
 }
 
 func (r *Reverse) Tag() string {
@@ -656,6 +748,7 @@ func (r *Reverse) NewMux(ctx context.Context, link *transport.Link, observer fea
 	if err != nil {
 		return errors.New("failed to create mux client worker").Base(err).AtWarning()
 	}
+	defer muxClient.Close()
 	worker, err := reverse.NewPortalWorker(muxClient)
 	if err != nil {
 		return errors.New("failed to create portal worker").Base(err).AtWarning()
@@ -688,7 +781,8 @@ func (r *Reverse) Start() error {
 }
 
 func (r *Reverse) Close() error {
-	return nil
+	r.closeOnce.Do(func() { r.closeErr = common.Close(r.client) })
+	return r.closeErr
 }
 
 func (r *Reverse) SenderSettings() *serial.TypedMessage {

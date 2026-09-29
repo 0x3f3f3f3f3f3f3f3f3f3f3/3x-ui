@@ -842,3 +842,26 @@ core suite 621.89 s (scenarios 333.183 s), custom build 7.16 s, expanded core ra
 8.24 s. Nine Go files are formatted; workflow YAML and all 18 shell blocks
 validate. The tests do not establish idle raw H1 pool or complete manager and
 transport drainage.
+
+
+### Manager and reverse ownership candidate
+
+Regressions first reproduced removed outbound handlers never being closed,
+selection after manager Close, callbacks blocked by the manager lookup lock,
+missing retirement/error ownership and publication after failed Start. Tests also
+verify rejected inbound/outbound constructors close their created proxy resources
+without changing the original error identity. Review found VLESS reverse creation
+waiting forever on a closed manager and unadmitted cleanup deleting a live route.
+Both failed before ownership-aware cleanup and atomic nondefault registration.
+Replacement routes remain intact and static mux pools close existing/late workers.
+
+The expanded shuffled race command initially imposed a 90 s package timeout;
+core TestXrayDial was still comparing its 10 MiB payload with go-cmp when it timed
+out. With a 10 minute limit the complete core race package passed in 110.716 s.
+The other expanded packages passed: VLESS inbound 1.042 s, reverse 1.044 s,
+inbound manager 1.129 s, outbound manager 11.120 s, commander 1.041 s, metrics
+1.087 s and policy integration 13.559 s. Source review found no remaining blocker
+for this ownership increment. Final root gates passed: complete shuffled core
+suite 630.02 s, custom-core build 11.46 s, expanded race suite 76.02 s, complete
+shuffled panel suite 299.64 s, lint with zero issues 26.27 s and panel build
+8.31 s. Go formatting, workflow parsing and embedded shell validation pass.
