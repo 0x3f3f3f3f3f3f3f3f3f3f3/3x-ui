@@ -971,3 +971,26 @@ and 48.83 s command time). Complete root panel suite (300.03 s), lint with
 zero issues (26.96 s) and panel build (10.29 s) pass. Source review, Go
 formatting, workflow YAML and all 19 shell blocks pass. Both SQLite and
 PostgreSQL CI paths explicitly require the three new scale tests to pass.
+
+
+Automatic activation checkpoint (2026-09-29): tests first reproduced ordinary
+owned Tunnel startup without enforcement, legacy policy edits leaving the old
+child active, and stopped-core reconciliation falling through to legacy updates.
+The fixed path runs real Tunnel traffic without a template opt-in. Baseline
+100/200 plus four echo bytes settles to 104/204 raw and either 308 billed at the
+default multiplier or 316 at multiplier 2. Editing a live metered legacy client
+to multiplier 0.5 captures 105/205 and 310 billed before activation, then four
+managed echo bytes produce 109/209 raw and 314 billed without repricing history.
+
+Selection tests cover local explicit/default policy, owned Tunnel, omitted legacy
+authentication policy, remote-only, disabled-listener and unbound clients. A
+manually stopped core stays stopped with queued work. Unmetered legacy edits
+return the managed-apply and drain-capability errors, leave desired version zero
+and retain the original working child. Compiler regressions reject public or
+business-routed API-tag listeners before preparation. Focused PostgreSQL race
+passes (138.557 s), and complete SQLite service race passes (339.454 s), both
+with real Custom/upstream process fixtures. The two CI lifecycle jobs select and
+require all five automatic-activation tests.
+Final root checks pass: full panel Go suite (314.69 s), lint with zero issues
+(32.64 s), and panel build (19.19 s). Source review, Go formatting, workflow
+YAML and all 19 embedded shell blocks pass.

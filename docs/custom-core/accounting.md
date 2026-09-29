@@ -452,9 +452,9 @@ This is a guarded transition, not durable storage of every legacy counter. If
 both the original panel's pending snapshot and the old child are lost before
 final SQL commits, automatic recovery is intentionally refused; authoritative
 usage reconciliation is still required. An unsupported or unmetered legacy
-configuration also needs a separately verified migration. Automatic selection
-from ordinary client policy fields, generated Tunnel metering, complete UI state,
-all protocol ownership and general backup/restore fencing remain open.
+configuration also needs a separately verified migration. Automatic selection from ordinary fields is described below. General legacy
+Tunnel metering, complete UI state, all protocol ownership and general
+backup/restore fencing remain open.
 
 
 ### Bounded SQL work within one receipt
@@ -467,3 +467,29 @@ the complete request. Duplicate input emails retain the prior last-delta rule,
 and each client row is updated once. First-use deadlines are computed once for
 the whole settlement, then applied to every linked inbound. Legacy orphan traffic
 rows retain their previous behavior and are not assigned an invented identity.
+
+
+## Automatic local policy selection
+
+An enabled local listener selects the managed process when it belongs to a client
+with explicitly stored policy fields, or when it is a Tunnel with a client owner.
+Explicit default rates/multiplier count as a policy request; omitted fields on an
+authenticated legacy client do not. Remote-only, disabled-listener and unbound
+accounts do not trigger local activation. A disabled owner still selects managed
+enforcement so that disabling the account cannot remove its policy checks.
+
+Selection applies to the complete local Xray process. Every enabled business
+listener must pass the existing identity, protocol and budget checks. A template
+listener cannot evade these checks by borrowing the legacy API tag: only the
+verified loopback control listener with its dedicated routing rule is removed.
+Compilation refusal occurs before policy versions are reserved or legacy traffic
+is drained.
+
+Ordinary client and listener mutations use the same selector. A compatible live
+legacy process follows the verified final-settlement handoff above. An unmetered
+or unsupported child returns the saved-but-not-applied error and queues restart;
+its existing process is preserved before drain. A manually stopped or absent
+child queues activation without starting a business process. Existing managed
+postcommit failures retain their fail-closed behavior. Cold owned Tunnel startup
+uses the managed identity compiler, including when its policy fields are omitted.
+This does not make existing unmetered legacy Tunnel history attributable.

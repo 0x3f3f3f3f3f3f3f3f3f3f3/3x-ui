@@ -93,8 +93,8 @@ func (s *XrayService) compileManagedXrayConfig(state *conf.ClientPolicyConfig) (
 	for _, inbound := range cfg.InboundConfigs {
 		owners, known := bindings[inbound.Tag]
 		if legacyControlTag != "" && inbound.Tag == legacyControlTag && !known {
-			if inbound.Protocol != string(model.Tunnel) && inbound.Protocol != "dokodemo-door" {
-				return nil, fmt.Errorf("%w: legacy control tag belongs to a business protocol", xray.ErrClientPolicyCapability)
+			if !isLegacyControlInbound(cfg, inbound, legacyControlTag) {
+				return nil, fmt.Errorf("%w: legacy control tag has no verified control-only binding", xray.ErrClientPolicyCapability)
 			}
 			continue
 		}

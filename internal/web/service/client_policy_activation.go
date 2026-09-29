@@ -55,8 +55,19 @@ func (s *XrayService) managedPolicyRequested() (bool, error) {
 		return true, nil
 	}
 	var count int64
-	err = database.GetDB().Model(&model.ClientPolicySource{}).Where("node_key = ? AND (epoch > 0 OR handoff_boot_id <> '')", "local").Count(&count).Error
-	return count > 0, err
+	db := database.GetDB()
+	err = db.Model(&model.ClientPolicySource{}).Where("node_key = ? AND (epoch > 0 OR handoff_boot_id <> '')", "local").Count(&count).Error
+	if err != nil || count > 0 {
+		return count > 0, err
+	}
+	var clientID int
+	err = db.Table("clients c").Select("c.id").
+		Joins("JOIN client_inbounds ci ON ci.client_id = c.id").
+		Joins("JOIN inbounds i ON i.id = ci.inbound_id").
+		Where("i.node_id IS NULL AND i.enable = ?", true).
+		Where("i.protocol = ? OR c.policy_upload_bytes_per_second IS NOT NULL OR c.policy_download_bytes_per_second IS NOT NULL OR c.policy_multiplier IS NOT NULL", model.Tunnel).
+		Limit(1).Scan(&clientID).Error
+	return clientID != 0, err
 }
 
 func (s *XrayService) restartManagedXrayLocked(isForce bool) error {
@@ -234,20 +245,27 @@ func (s *XrayService) ReconcileManagedChange(ctx context.Context) (bool, error) 
 	lock.Lock()
 	defer lock.Unlock()
 	process := currentXrayProcess()
-	if process == nil || len(process.GetConfig().ClientPolicy) == 0 {
-		return false, nil
+	requested, err := s.managedPolicyRequested()
+	if err != nil || !requested {
+		return requested, err
 	}
+	wasManaged := process != nil && len(process.GetConfig().ClientPolicy) > 0
 	if err := ctx.Err(); err != nil {
 		s.SetToNeedRestart()
-		return true, errors.Join(err, process.Stop())
+		if wasManaged {
+			err = errors.Join(err, process.Stop())
+		}
+		return true, err
 	}
-	if isManuallyStopped.Load() {
+	if isManuallyStopped.Load() || process == nil {
 		s.SetToNeedRestart()
 		return true, nil
 	}
-	err := s.restartManagedXrayLocked(false)
-	if errors.Is(err, errManagedCandidateUnavailable) {
+	err = s.restartManagedXrayLocked(false)
+	if wasManaged && errors.Is(err, errManagedCandidateUnavailable) {
 		err = errors.Join(err, process.Stop())
+	}
+	if err != nil {
 		s.SetToNeedRestart()
 	}
 	return true, err

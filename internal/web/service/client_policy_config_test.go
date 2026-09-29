@@ -378,7 +378,7 @@ func TestClientPolicyConfigBindsAuthoritativeOwners(t *testing.T) {
 }
 
 func TestClientPolicyConfigRejectsUnresolvedBusinessIdentity(t *testing.T) {
-	for _, scenario := range []string{"unowned", "ambiguous", "unsupported", "remote-budget", "template-listener", "unconfigured-api-tag", "invalid-control-listener"} {
+	for _, scenario := range []string{"unowned", "ambiguous", "unsupported", "remote-budget", "template-listener", "unconfigured-api-tag", "invalid-control-listener", "misrouted-api-tag", "public-api-tag"} {
 		t.Run(scenario, func(t *testing.T) {
 			setupPolicyLedgerDB(t)
 			policyConfigTemplate(t)
@@ -420,6 +420,15 @@ func TestClientPolicyConfigRejectsUnresolvedBusinessIdentity(t *testing.T) {
 				}
 			case "unconfigured-api-tag":
 				if err := (&SettingService{}).saveSetting("xrayTemplateConfig", `{"inbounds":[{"tag":"api","protocol":"tunnel","listen":"127.0.0.1","port":24105,"settings":{"address":"127.0.0.1","port":9001}}],"outbounds":[{"protocol":"freedom"}]}`); err != nil {
+					t.Fatal(err)
+				}
+			case "misrouted-api-tag", "public-api-tag":
+				listen, outbound := "127.0.0.1", "direct"
+				if scenario == "public-api-tag" {
+					listen, outbound = "0.0.0.0", "api"
+				}
+				template := fmt.Sprintf(`{"api":{"tag":"api"},"inbounds":[{"tag":"api","protocol":"tunnel","listen":%q,"port":24105,"settings":{"address":"127.0.0.1","port":9001}}],"outbounds":[{"tag":"direct","protocol":"freedom"}],"routing":{"rules":[{"type":"field","inboundTag":["api"],"outboundTag":%q}]}}`, listen, outbound)
+				if err := (&SettingService{}).saveSetting("xrayTemplateConfig", template); err != nil {
 					t.Fatal(err)
 				}
 			case "invalid-control-listener":

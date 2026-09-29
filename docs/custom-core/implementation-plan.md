@@ -100,7 +100,7 @@ Files: `internal/database/{db.go,model/*}`, `internal/web/{service,controller,ru
 - [x] Core prerequisite: drain established TCP/UDP/Unix connections on inbound removal; test same-port Tunnel reassignment and unaffected sibling listeners.
 - [x] Scoped local allocation fence: serialize remote attachment against local policy preparation; coordinated global allocation remains open.
 - [x] Scoped legacy collector: atomic inbound/client/outbound settlement, lost-commit-ack deduplication, first-use rollback and SQLite/PostgreSQL receipt migration.
-- [x] Guarded live legacy handoff: boot-owned final snapshot, verified executable, stable ownership and SQL settlement before seeding; durable intent rejects interrupted handoff after loss of the original panel snapshot. Automatic policy selection and general legacy migration remain open.
+- [x] Guarded live legacy handoff: boot-owned final snapshot, verified executable, stable ownership and SQL settlement before seeding; durable intent rejects interrupted handoff after loss of the original panel snapshot. Automatic selection is covered by the checkpoint below; general legacy migration remains open.
 - [ ] Test end-to-end DB → API → UI → generated config → measured traffic → durable events → statistics.
 
 ## Task 7: SSH inbound and outbound
@@ -331,3 +331,15 @@ and 3001-listener limits have observed failing regressions and SQLite/PostgreSQL
 race coverage. Runtime and policy behavior are unchanged. Complete root panel,
 race, lint and build gates pass. Automatic selection, generated Tunnel metering
 and UI status are the next activation work.
+
+
+Automatic local selection checkpoint (2026-09-29): enabled local owned Tunnel
+and explicitly configured policy bindings now enter managed startup and ordinary
+mutation reconciliation without a template opt-in. Compatible live legacy edits
+settle final traffic before seeding; unmetered legacy configurations refuse with
+a saved-but-not-applied error. Stopped cores queue activation. Whole-process
+identity/capability checks and strict legacy control-listener recognition remain
+mandatory. Real traffic, refusal, stopped state and selector boundaries pass
+SQLite full-service race and PostgreSQL focused race. Complete UI application
+state, general legacy Tunnel migration, remaining protocols and multi-node
+budgets are still unfinished.
