@@ -256,3 +256,20 @@ settled usage stays unchanged and a new user transmits through the surviving
 listener. A separate encrypted-wire test advances only the expired session's
 last-receive timestamp and verifies an existing healthy session still works;
 that simulated-age test is not the wall-clock acceptance evidence.
+
+## Public IPv6 path
+
+The production native listener and destination bridge also have real IPv6
+loopback acceptance on both database backends. An official client connects to
+`::1` over each native underlay; TCP and UDP payload reaches actual `::1` targets
+only through rules requiring the public inbound tag, allowed canonical user,
+original `::1/128` source, domain, network and port. The internal authenticated
+bridge still listens on IPv4 loopback, while preserving the IPv6 source and
+actual IPv6 UDP reply peer. Public online observations report `::1`.
+
+Independent 1.5x/1x counters, existing-flow disable, healthy-user continuity and
+core restart are checked. Replacing the original source with the IPv4 bridge
+address makes both native transports fail their source rule. Production source
+needed no change for this acceptance increment; test helpers now honor their
+requested listener/client address. This does not claim external IPv6 reachability
+or kernel address-family translation.

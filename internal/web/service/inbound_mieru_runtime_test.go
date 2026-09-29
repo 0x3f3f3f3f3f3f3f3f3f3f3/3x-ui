@@ -523,7 +523,7 @@ func productionMieruClient(t *testing.T, underlay string, address netip.AddrPort
 	if underlay == "udp" {
 		transport = appctlpb.TransportProtocol_UDP
 	}
-	profile := &appctlpb.ClientProfile{ProfileName: proto.String("public-runtime"), User: &appctlpb.User{Name: proto.String(user.Email), Password: proto.String(user.Password)}, Servers: []*appctlpb.ServerEndpoint{{IpAddress: proto.String("127.0.0.1"), PortBindings: []*appctlpb.PortBinding{{Port: proto.Int32(int32(address.Port())), Protocol: transport.Enum()}}}}}
+	profile := &appctlpb.ClientProfile{ProfileName: proto.String("public-runtime"), User: &appctlpb.User{Name: proto.String(user.Email), Password: proto.String(user.Password)}, Servers: []*appctlpb.ServerEndpoint{{IpAddress: proto.String(address.Addr().String()), PortBindings: []*appctlpb.PortBinding{{Port: proto.Int32(int32(address.Port())), Protocol: transport.Enum()}}}}}
 	if len(multiplexing) > 0 {
 		profile.Multiplexing = &appctlpb.MultiplexingConfig{Level: multiplexing[0].Enum()}
 	}
@@ -539,8 +539,13 @@ func productionMieruClient(t *testing.T, underlay string, address netip.AddrPort
 
 func productionMieruEchoTarget(t *testing.T, network string) net.Addr {
 	t.Helper()
+	return productionMieruEchoTargetAt(t, network, "127.0.0.1:0")
+}
+
+func productionMieruEchoTargetAt(t *testing.T, network, address string) net.Addr {
+	t.Helper()
 	if network == "udp" {
-		conn, err := net.ListenPacket("udp4", "127.0.0.1:0")
+		conn, err := net.ListenPacket("udp", address)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -559,7 +564,7 @@ func productionMieruEchoTarget(t *testing.T, network string) net.Addr {
 		t.Cleanup(func() { _ = conn.Close(); <-done })
 		return conn.LocalAddr()
 	}
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		t.Fatal(err)
 	}

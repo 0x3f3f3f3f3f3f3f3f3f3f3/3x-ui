@@ -4077,3 +4077,52 @@ core recovery, management lifecycle and official client subscription paths.
 No frontend source changed, and this increment did not rerun the entire root
 Go suite: the earlier full-root evidence belongs to the admission batching
 milestone. The complete original task remains open.
+
+## Public mieru IPv6 acceptance (2026-09-29)
+
+`TestMieruIPv6RoutingPreservesSourceAndPolicy` and its PostgreSQL counterpart
+exercise both native underlays with official v3.38.0 clients, actual `::1`
+listeners and TCP/UDP `::1` targets. The fixture creates the inbound through
+existing public services, changes its listener through `UpdateInbound`, saves
+conjunctive routing rules through `SaveXraySetting` and applies them through
+`RestartXray`. Rules require the public tag, an allowed canonical email, original
+IPv6 source, domain, network and port; unmatched traffic goes to blackhole.
+The private bridge remains IPv4 loopback. Public online IP and the actual UDP
+reply peer must retain IPv6.
+
+The first user's exact totals are **53 up / 53 down / 159 billed** at 1.5x.
+The independent 1x user has **44 / 44 / 88**, then **88 / 88 / 176** after
+continuing while the first user is disabled, and **132 / 132 / 264** after core
+restart and fresh traffic. First-user TCP/UDP flows close within the existing
+1250ms bound; fresh authentication stays denied across core restart and its
+durable counters remain unchanged. Both users share `::1`.
+
+A narrow Go overlay changed only the runtime bridge callback's `dest.Source`
+to `127.0.0.1:23456`. Both native transports then timed out at the first real
+payload exchange: **1 top-level / 2 subtest failures**, 25.165s
+(`mieru-ipv6-source-red.jsonl`). Restoring the real source, without any production
+code change, passed **2 top-level / 4 subtests** under race in 39.223s, no skips
+or failures (`mieru-ipv6-source-green.jsonl`):
+
+```sh
+XUI_MANAGED_XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' \
+go test -p 1 -race ./internal/web/service \
+  -run '^TestMieruIPv6RoutingPreservesSourceAndPolicy' -count=1 -timeout=180s -json
+```
+
+Only acceptance tests and their helpers changed: official test clients now use
+the supplied address instead of hardcoded IPv4, and echo fixtures can bind an
+explicit address while existing callers retain `127.0.0.1:0`. This is local
+dual-stack proxy evidence, not Internet IPv6, NAT64, IPv6 configuration export,
+or the complete routing/rate/fault acceptance matrix. Separate user-specific
+outlet selection, priority, balancers and preview/rollback remain required.
+
+Affected IPv4 regression also passed under race/shuffle: **5 top-level / 10
+subtests**, no skips, 43.798s (`mieru-ipv6-ipv4-regression.jsonl`). The selection
+was `^TestMieru(InboundRunsThroughProductionXrayLifecycle|InboundHotCredentialsAndEnablePreserveOtherClient|InboundQuotaSurvivesCoreRestartAndManualDisable|PresenceAndStatusFollowAuthenticatedFlows)`.
+It includes SQLite/PostgreSQL lifecycle, credential/enable isolation, quota
+restart persistence and real public presence. `golangci-lint run
+./internal/web/service` reported **0 issues** (`mieru-ipv6-lint.log`).
+No runtime source changed, so production build/full-suite evidence remains the
+preceding UDP-idle milestone; neither was rerun for this test-only increment.

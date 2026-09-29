@@ -249,6 +249,13 @@ loss reclaimed both payload associations within the predeclared 67s idle bound,
 with stable usage and listener reuse. This scoped lifecycle evidence does not
 close TCP FIN detection behind full queues or the remaining public acceptance.
 
+Public IPv6 loopback acceptance now covers both databases and native transports,
+actual TCP/UDP targets, preserved source and UDP reply peer, exact independent
+billing, disable isolation and core restart. The production path required no
+change; a source-loss mutation demonstrates that the new route test fails if
+the bridge replaces the original IPv6 source. External IPv6/export coverage and
+the remaining public routing and fault matrix stay open.
+
 ## Task 7: Snell v4/v5/v6 vertical integration
 
 Files: new `internal/snell`, backend asset manifest/installer, namespace bridge,
