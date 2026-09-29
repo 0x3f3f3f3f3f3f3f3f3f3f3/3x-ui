@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -274,12 +275,14 @@ func TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts(t *testi
 			t.Fatal(err)
 		}
 		restarted := xray.NewTestProcess(process.GetConfig(), filepath.Join(dir, "hot-policy-restart.json"))
-		defer restarted.Stop()
+		t.Cleanup(func() { _ = restarted.Stop() })
 		if err := local.StartManagedProcess(ctx, restarted, func(_ context.Context, caps *command.Capabilities) (*panelruntime.ManagedPolicyBootstrap, error) {
 			return PrepareLocalClientPolicyBootstrap(caps, &restoredState)
 		}); err != nil {
 			t.Fatalf("restart lost acknowledged hot policies: %v", err)
 		}
+		runtime.GC()
+		runtime.GC()
 		recoveredAPI, err := xray.DialClientPolicy(ctx, socket, state.InstanceID)
 		if err != nil {
 			t.Fatal(err)
