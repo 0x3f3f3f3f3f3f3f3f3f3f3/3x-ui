@@ -33,11 +33,12 @@ def web_fixture(env, mode):
     panel = '/usr/local/x-ui/x-ui'
     env.update({'XUI_DB_FOLDER': '/etc/x-ui', 'XUI_DB_TYPE': 'sqlite', 'XUI_DB_DSN': '',
                 'XUI_BIN_FOLDER': '/usr/local/x-ui/bin', 'XUI_LOG_FOLDER': '/var/log/x-ui'})
-    Path('/etc/x-ui/x-ui.db').unlink()
-    setup = subprocess.run([panel, 'setting', '-username', 'fixture-admin', '-password', 'owned-fixture-only',
-                            '-port', '18080', '-listenIP', '127.0.0.1', '-webBasePath', '/fixture/'],
-                           env=env, text=True, capture_output=True, timeout=25)
-    assert setup.returncode == 0, setup.stderr[-1000:]
+    if mode != 'installed':
+        Path('/etc/x-ui/x-ui.db').unlink()
+        setup = subprocess.run([panel, 'setting', '-username', 'fixture-admin', '-password', 'owned-fixture-only',
+                                '-port', '18080', '-listenIP', '127.0.0.1', '-webBasePath', '/fixture/'],
+                               env=env, text=True, capture_output=True, timeout=25)
+        assert setup.returncode == 0, setup.stderr[-1000:]
     minted = subprocess.run([panel, 'setting', '-getApiToken', 'true', '-tokenName', 'owned-update-fixture'],
                             env=env, text=True, capture_output=True, timeout=15)
     match = re.search(r'^apiToken: (\S+)$', minted.stdout, re.MULTILINE)
@@ -74,8 +75,10 @@ def web_fixture(env, mode):
                 except OSError:
                     assert time.monotonic() < deadline, 'owned panel HTTP startup timed out'
                     time.sleep(0.05)
-            started = request('POST', 'updatePanel', 'dev=' + ('true' if mode == 'web-dev' else 'false'))
-            if mode in ['web-changed-script', 'web-docker', 'web-dirty']:
+            started = {} if mode == 'installed' else request('POST', 'updatePanel', 'dev=' + ('true' if mode == 'web-dev' else 'false'))
+            if mode == 'installed':
+                result = {'installedPanelHTTP': True}
+            elif mode in ['web-changed-script', 'web-docker', 'web-dirty']:
                 reason = {'web-docker': 'container image', 'web-changed-script': 'installed updater',
                           'web-dirty': 'unmodified panel'}[mode]
                 assert not started['success'] and reason in started['msg'], started
@@ -137,7 +140,14 @@ if len(sys.argv) > 1 and sys.argv[1] == '--child':
     if env.pop('FIXTURE_MENU', ''):
         command = env.pop('FIXTURE_MENU_COMMAND')
         os.execve('/bin/bash', ['bash', '/usr/bin/x-ui', command], env)
-    os.execve('/bin/bash', ['bash', '/update.sh'], env)
+    script = '/install.sh' if env.pop('FIXTURE_INSTALL', '') else '/update.sh'
+    if env.pop('FIXTURE_INSTALL_SUCCESS', ''):
+        installed = subprocess.run(['bash', script], env=env, text=True, capture_output=True, timeout=90)
+        Path('/fixture/install.log').write_text(installed.stdout + installed.stderr)
+        assert installed.returncode == 0, installed.stderr[-1000:]
+        web_fixture(env, 'installed')
+        raise SystemExit(0)
+    os.execve('/bin/bash', ['bash', script], env)
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--helper', required=True, type=Path)
@@ -146,9 +156,14 @@ parser.add_argument('--managed-core', required=True, type=Path)
 parser.add_argument('--stock-core', required=True, type=Path)
 parser.add_argument('--menu', action='store_true', help='exercise actual stable/dev menu update entry points')
 parser.add_argument('--web', action='store_true', help='exercise authenticated HTTP and detached update entry points')
+parser.add_argument('--install', action='store_true', help='exercise the actual installer before activation')
+parser.add_argument('--fresh-install', action='store_true', help='installer fixture with no existing installation')
+parser.add_argument('--install-success', action='store_true', help='fresh SQLite installation and actual installed-panel HTTP startup')
 parser.add_argument('--dirty-source-rejection', action='store_true', help='web rejection probe with an actually modified-source build')
 args = parser.parse_args()
-assert not (args.menu and args.web), 'choose menu or web probe'
+assert sum([args.menu, args.web, args.install]) <= 1, 'choose menu, web or installer probe'
+assert not args.fresh_install or args.install, 'fresh installation requires --install'
+assert not args.install_success or args.fresh_install, 'success probe requires --fresh-install'
 assert not args.dirty_source_rejection or args.web, 'dirty-source probe requires --web'
 repo = Path(__file__).resolve().parents[2]
 busybox = Path('/usr/bin/busybox')
@@ -195,6 +210,10 @@ cases = ['menu-stable', 'menu-dev', 'menu-changed-script'] if args.menu else ['b
              'stock-core', 'service-stop-failure']
 if args.web:
     cases = ['web-dirty'] if args.dirty_source_rejection else ['web-stable', 'web-dev', 'web-changed-script', 'web-docker']
+if args.fresh_install:
+    cases[-1] = 'dependency-failure'
+if args.install_success:
+    cases = ['first-install-success']
 for mode in cases:
     with tempfile.TemporaryDirectory(prefix='3x-ui-update-probe-', dir='/tmp') as tmp:
         root = Path(tmp)
@@ -207,11 +226,13 @@ for mode in cases:
         shutil.copy2(busybox, root / 'bin/busybox')
         for applet in ['uname','which','dirname','readlink','basename','rm','mkdir','mv',
                        'awk','sed','sha256sum','tar','gzip','date','cat','tr','grep','touch',
-                       'chmod','chown','cp','head','wc','mktemp','cut','ps']:
+                       'chmod','chown','cp','head','wc','mktemp','cut','ps','tail','install']:
             (root / 'bin' / applet).symlink_to('busybox')
         for path in ['proc','tmp','etc/x-ui','usr/bin','etc/init.d']:
             (root/path).mkdir(parents=True, exist_ok=True)
         write(root, '/etc/os-release', 'ID=debian\nVERSION_ID=12\n')
+        write(root, '/etc/passwd', 'root:x:0:0:root:/root:/bin/bash\n')
+        write(root, '/etc/group', 'root:x:0:\n')
         write(root, '/dev/null', '')
         (root/'dev/fd').symlink_to('/proc/self/fd')
         write(root, '/fixture/actions', '')
@@ -223,6 +244,7 @@ for mode in cases:
             write(root, '/bin/'+command,
                   '#!/bin/bash\nprintf "'+command+' %s\\n" "$*" >> /fixture/actions\n'
                   + ('[[ "$1" == stop ]] && exit 75\n' if command == 'systemctl' else '')
+                  + ('[[ $(cat /fixture/mode) == dependency-failure ]] && exit 73\n' if command == 'apt-get' else '')
                   + 'exit 0\n', True)
         write(root, '/usr/local/x-ui/x-ui', '#!/bin/bash\nprintf "fixture-old-panel\\n"\n', True)
         write(root, '/usr/local/x-ui/bin/'+core_name, 'fixture-old-core\n', True)
@@ -238,7 +260,7 @@ for mode in cases:
                 entry.size, entry.mode = len(payload), 0o755
                 tar.addfile(entry, io.BytesIO(payload))
         commit = info['commit']
-        if args.menu or args.web or mode in ['missing-panel','missing-unit','wrong-source','stock-core','service-stop-failure']:
+        if args.menu or args.web or args.install_success or mode in ['missing-panel','missing-unit','wrong-source','stock-core','service-stop-failure','dependency-failure']:
             source = root / 'fixture/source'
             (source/'bin').mkdir(parents=True)
             for name in ['update.sh','install.sh','x-ui.sh','x-ui.rc','x-ui.service.debian','x-ui.service.arch','x-ui.service.rhel']:
@@ -247,6 +269,8 @@ for mode in cases:
             shutil.copy2(args.helper, source/'update-stage')
             shutil.copy2(args.panel, source/'x-ui')
             shutil.copy2(args.stock_core if mode == 'stock-core' else args.managed_core, source/'bin'/core_name)
+            if args.install_success:
+                write(source, '/bin/tuic-server', '#!/bin/sh\nexit 97\n', True)
             if mode == 'missing-panel': (source/'x-ui').unlink()
             if mode == 'missing-unit': (source/'x-ui.service.debian').unlink()
             if mode == 'wrong-source': commit = '0'*40
@@ -268,6 +292,20 @@ for mode in cases:
                            'etc/systemd/system/x-ui.service','usr/bin/x-ui']
         if not args.web:
             preserved_paths.append('etc/x-ui/x-ui.db')
+        absent_paths = []
+        if args.fresh_install:
+            absent_paths = ['usr/local/x-ui', 'usr/bin/x-ui', 'etc/systemd/system/x-ui.service']
+            for path in absent_paths:
+                if (root/path).is_dir():
+                    shutil.rmtree(root/path)
+                else:
+                    (root/path).unlink()
+            preserved_paths = ['etc/x-ui/x-ui.db']
+        if args.install_success:
+            (root/'etc/x-ui/x-ui.db').unlink()
+            write(root, '/fixture/unrelated-file', 'preserved outside the installation')
+            preserved_paths = ['fixture/unrelated-file']
+            absent_paths = []
         sentinels = {p: sha(root/p) for p in preserved_paths}
         digest = '0'*64 if mode == 'bad-checksum' else sha(archive)
         env = {'PATH':'/bin','LANG':'C','TMPDIR':'/tmp','XUI_UPDATE_TAG':'fixture-release',
@@ -286,12 +324,20 @@ for mode in cases:
             env.update({'XUI_UPDATE_ARCHIVE':'/fixture/archive','XUI_UPDATE_SHA256':digest,
                         'XUI_UPDATE_COMMIT':commit,'XUI_UPDATE_HELPER':'/fixture/helper',
                         'XUI_UPDATE_HELPER_SHA256':helper_sha})
+        if args.install:
+            env['FIXTURE_INSTALL'] = 'true'
+        if args.install_success:
+            env.update({'FIXTURE_INSTALL_SUCCESS':'true', 'XUI_NONINTERACTIVE':'1', 'XUI_DB_TYPE':'sqlite',
+                        'XUI_DB_DSN':'', 'XUI_DB_FOLDER':'/etc/x-ui', 'XUI_USERNAME':'fixture-admin',
+                        'XUI_PASSWORD':'owned-fixture-only', 'XUI_PANEL_PORT':'18080',
+                        'XUI_WEB_BASE_PATH':'fixture', 'XUI_SSL_MODE':'none', 'XUI_SERVER_IP':'127.0.0.1'})
         write(root, '/fixture/env.json', json.dumps(env))
         shutil.copy2(repo/'update.sh', root/'update.sh')
+        shutil.copy2(repo/'install.sh', root/'install.sh')
         proc = subprocess.run(['unshare','--mount-proc','--net','--pid','--fork','--kill-child=SIGKILL',
             sys.executable,str(Path(__file__).resolve()),'--child',tmp,os.readlink('/proc/self/ns/net'),
             os.readlink('/proc/self/ns/mnt'),marker], input='y\n\n0\n' if args.menu else None,
-            text=True,capture_output=True,timeout=8 if args.menu else 65 if args.web else 40)
+            text=True,capture_output=True,timeout=8 if args.menu else 120 if args.install_success else 65 if args.web else 40)
         actions = (root/'fixture/actions').read_text().splitlines()
         preserved = all((root/p).is_file() and sha(root/p)==digest for p,digest in sentinels.items())
         stopped = 'systemctl stop x-ui' in actions
@@ -300,7 +346,21 @@ for mode in cases:
                 'output_tail':proc.stdout.splitlines()[-6:]}
         report.append(case)
         print(json.dumps(case), flush=True)
-        assert (proc.returncode == 0 if args.web else proc.returncode != 0) and preserved, case
+        assert (proc.returncode == 0 if args.web or args.install_success else proc.returncode != 0) and preserved, case
+        assert all(not (root/path).exists() for path in absent_paths), case
+        if args.install_success:
+            assert 'installedPanelHTTP' in proc.stdout and not stopped, case
+            assert (root/'etc/x-ui/install-result.env').stat().st_mode & 0o777 == 0o600
+            for name in inventory:
+                assert sha(root/'usr/local/x-ui'/name) == inventory[name]['sha256'], name
+            assert sha(root/'usr/bin/x-ui') == inventory['x-ui.sh']['sha256']
+            assert sha(root/'etc/systemd/system/x-ui.service') == inventory['x-ui.service.debian']['sha256']
+            assert 'systemctl enable x-ui' in actions and 'systemctl start x-ui' in actions, case
+            assert not any(x.startswith('systemctl restart') for x in actions), case
+            assert 'MigrationRequirements failed' not in (root/'fixture/install.log').read_text(), case
+            assert not list((root/'usr/local').glob('.x-ui-update-*')), case
+            assert not any('MHSanaei' in x or 'raw.githubusercontent.com' in x or x.startswith('pkill') for x in actions), case
+            continue
         expected_failure = {
             'bootstrap-missing-checksum': 'Failed to download',
             'bootstrap-wrong-checksum': 'helper checksum mismatch',
@@ -308,6 +368,7 @@ for mode in cases:
             'missing-panel': 'nonempty executable', 'missing-unit': 'nonempty nonexecutable unit',
             'wrong-source': 'compiled panel source/platform', 'stock-core': 'managed routing verification failed',
             'service-stop-failure': 'Cannot stop the installed service',
+            'dependency-failure': 'Cannot install',
             'menu-stable': 'helper checksum mismatch', 'menu-dev': 'helper checksum mismatch',
             'menu-changed-script': 'installed updater',
             'web-stable': 'failedDownloadReported', 'web-dev': 'failedDownloadReported',
@@ -317,11 +378,17 @@ for mode in cases:
         assert expected_failure in proc.stdout + proc.stderr, case
         if mode == 'service-stop-failure':
             assert stopped and 'runtime preflight passed' in proc.stdout, case
+        elif mode == 'dependency-failure':
+            assert not stopped and 'runtime preflight passed' in proc.stdout, case
+            assert actions == ['apt-get update'], case
         else:
             assert not stopped and not any(x.startswith(('apt-get','pkill')) for x in actions), case
         assert not list((root/'usr/local').glob('.x-ui-update-*')), case
         assert not list((root/'tmp').glob('3x-ui-update-*.sh')), case
-        if mode in ['menu-changed-script', 'web-changed-script', 'web-docker', 'web-dirty']:
+        if args.install:
+            assert not (root/'etc/x-ui/update-status.json').exists(), case
+            assert not any('raw.githubusercontent.com' in x or 'MHSanaei' in x for x in actions), case
+        elif mode in ['menu-changed-script', 'web-changed-script', 'web-docker', 'web-dirty']:
             assert not any(x.startswith('curl') for x in actions), case
             assert not (root/'etc/x-ui/update-status.json').exists(), case
         else:

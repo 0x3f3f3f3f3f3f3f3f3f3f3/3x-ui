@@ -5074,3 +5074,74 @@ entry points. First installation, menu refresh/legacy paths, independent core
 updates, successful upgrade activation, consistent SQLite/PostgreSQL backup,
 crash recovery and transactional program/database rollback remain open. The
 other outstanding protocol/policy acceptance items are unchanged.
+
+## Standalone installer validation and first SQLite installation (2026-09-29)
+
+The actual old installer failed the new isolated acceptance probe: before any
+managed-release verification it invoked the package manager and requested the
+upstream latest release. The new standalone installer uses the same bounded
+fixed-fork bootstrap, complete release validation and actual managed-core
+preflight as `update.sh`. The duplicated bootstrap functions keep both scripts
+standalone; the process probes exercise both paths. Upstream raw-script/unit
+fallbacks, optional missing checksums, deletion of the old installation tree and
+global process-name kills were removed from the install path.
+
+**Nine existing-install and nine fresh-install negative cases passed.** The cases
+cover missing/wrong helper checksums, wrong archive checksum, corrupt archive,
+missing panel/unit, wrong compiled source and a real stock core. A valid managed
+candidate reaches the explicit service-stop refusal in the existing case, or
+package-manager refusal in the fresh case. Old file hashes and the database
+sentinel survive; invalid fresh candidates do not create an installation, menu
+or unit. Owned staging trees are removed.
+
+The success probe performs an actual first SQLite installation using the native
+panel and managed core, checks every installed release file against the manifest,
+checks the installed menu/unit and mode-0600 credential file, then starts the
+installed panel and performs authenticated loopback HTTP. The database is created
+by the installer; the HTTP fixture does not recreate it or change its selected
+port/base path. It adds an unrelated setting and verifies startup preserves it.
+The final first-install case passed with no early service restart or migration
+error. Synthetic credentials are confined to the owned fixture.
+
+That success test exposed two distinct issues. Its initial chroot lacked a root
+account, so real `chown root:root` failed; adding fixture passwd/group entries
+resolved that environment omission. The subsequent real run exposed premature
+service restart during configuration and the existing `empty slice found`
+migration error. Panel service operations are now deferred during configuration,
+including renewal commands registered by this installer. The migration avoids
+saving an empty legacy-proxy slice. New tests first reproduced the error on both
+SQLite and isolated PostgreSQL, for fresh and SSH-only databases, then verified
+repeatable migration and unchanged SSH configuration. The migration race/shuffle
+run passed **7 top-level and 8 subtests, zero skips**.
+
+Reproduce with trusted native binaries and owned namespace/mount privileges:
+
+```sh
+python3 tools/managed-release/probe_update.py --install \
+  --helper /trusted/update-stage --panel /trusted/native-panel \
+  --managed-core /trusted/managed-xray --stock-core /trusted/stock-xray
+# Add --fresh-install for negative first-install cases, and also
+# --install-success to run the positive first SQLite installation case.
+XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' \
+  go test -p 1 -race -shuffle=on -count=1 -run '^TestMigration' ./internal/web/service
+```
+
+The pre-commit native panel uses an explicit full fixture source declaration
+with VCS recording disabled; it is not source attestation. Package installation,
+public network calls and service management are substitutes inside each guarded
+chroot. A marked executable stands in for the optional TUIC asset, so this test
+does not exercise TUIC. Actual systemd/OpenRC execution, ACME issuance/renewal,
+PostgreSQL installation, foreign platforms and custom service paths remain
+unverified. These tests do not establish transactional program/database rollback,
+safe downgrade, crash recovery or other outstanding protocol/policy acceptance.
+
+Logs under `/tmp/3x-ui-rate-trace/`: `installer-entrypoint-red.log`,
+`installer-first-success-initial.jsonl`, `installer-first-success-red.jsonl`,
+`installer-empty-migration-red.jsonl`, `installer-migration-green.jsonl`,
+`installer-first-success-green.jsonl`, `installer-existing-final.jsonl` and
+`installer-fresh-final.jsonl`.
+
+Shell/Python syntax and `git diff --check` passed. The first full Go lint run
+reported one formatting issue in the new test; after formatting correction,
+the final repository-wide run reported zero issues
+(`installer-final-lint-corrected.log`).

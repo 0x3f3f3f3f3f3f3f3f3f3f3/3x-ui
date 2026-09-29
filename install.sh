@@ -34,11 +34,12 @@ arch() {
         armv6* | armv6) echo 'armv6' ;;
         armv5* | armv5) echo 'armv5' ;;
         s390x) echo 's390x' ;;
-        *) echo -e "${green}Unsupported CPU architecture! ${plain}" && rm -f "$(realpath "$0")" && exit 1 ;;
+        *) echo -e "${red}Unsupported CPU architecture!${plain}" >&2; return 2 ;;
     esac
 }
 
-echo "Arch: $(arch)"
+install_arch=$(arch) || exit 2
+echo "Arch: ${install_arch}"
 
 # Non-interactive mode: triggered explicitly via XUI_NONINTERACTIVE=1, or
 # implicitly when stdin is not a TTY (e.g. `curl ... | bash`, cloud-init).
@@ -121,6 +122,16 @@ install_base() {
             apt-get update && apt-get install -y -q cron curl tar tzdata socat ca-certificates openssl
             ;;
     esac
+}
+
+# Certificate setup must not start the panel before installation is complete.
+installer_service() {
+    [[ "${XUI_INSTALL_CONFIGURING:-0}" != 1 ]] || return 0
+    if [[ "$release" == alpine ]]; then
+        rc-service x-ui "$1"
+    else
+        systemctl "$1" x-ui
+    fi
 }
 
 gen_random_string() {
@@ -433,7 +444,7 @@ setup_ssl_certificate() {
     ~/.acme.sh/acme.sh --installcert --force -d ${domain} \
         --key-file /root/cert/${domain}/privkey.pem \
         --fullchain-file /root/cert/${domain}/fullchain.pem \
-        --reloadcmd "systemctl restart x-ui" > /dev/null 2>&1
+        --reloadcmd 'if [ "${XUI_INSTALL_CONFIGURING:-0}" != 1 ]; then systemctl restart x-ui; fi' > /dev/null 2>&1
 
     if [ $? -ne 0 ]; then
         echo -e "${yellow}Failed to install certificate${plain}"
@@ -577,7 +588,7 @@ setup_ip_certificate() {
     ~/.acme.sh/acme.sh --installcert --force -d ${ipv4} \
         --key-file "${certDir}/privkey.pem" \
         --fullchain-file "${certDir}/fullchain.pem" \
-        --reloadcmd "${reloadCmd}" 2>&1 || true
+        --reloadcmd "if [ \"\${XUI_INSTALL_CONFIGURING:-0}\" != 1 ]; then ${reloadCmd}; fi" 2>&1 || true
 
     # Verify certificate files exist (don't rely on exit code - reloadcmd failure causes non-zero)
     if [[ ! -f "${certDir}/fullchain.pem" || ! -f "${certDir}/privkey.pem" ]]; then
@@ -713,7 +724,7 @@ ssl_cert_issue() {
 
     # Stop panel temporarily
     echo -e "${yellow}Stopping panel temporarily...${plain}"
-    systemctl stop x-ui 2> /dev/null || rc-service x-ui stop 2> /dev/null
+    installer_service stop > /dev/null 2>&1
 
     if [[ ${cert_exists} -eq 0 ]]; then
         # issue the certificate
@@ -723,7 +734,7 @@ ssl_cert_issue() {
         if [ $? -ne 0 ]; then
             echo -e "${red}Issuing certificate failed, please check logs.${plain}"
             rm -rf ~/.acme.sh/${domain} ~/.acme.sh/${domain}_ecc
-            systemctl start x-ui 2> /dev/null || rc-service x-ui start 2> /dev/null
+            installer_service start > /dev/null 2>&1
             return 1
         else
             echo -e "${green}Issuing certificate succeeded, installing certificates...${plain}"
@@ -766,7 +777,7 @@ ssl_cert_issue() {
     local installOutput=""
     installOutput=$(~/.acme.sh/acme.sh --installcert --force -d ${domain} \
         --key-file /root/cert/${domain}/privkey.pem \
-        --fullchain-file /root/cert/${domain}/fullchain.pem --reloadcmd "${reloadCmd}" 2>&1)
+        --fullchain-file /root/cert/${domain}/fullchain.pem --reloadcmd "if [ \"\${XUI_INSTALL_CONFIGURING:-0}\" != 1 ]; then ${reloadCmd}; fi" 2>&1)
     local installRc=$?
     echo "${installOutput}"
 
@@ -782,7 +793,7 @@ ssl_cert_issue() {
         if [[ ${cert_exists} -eq 0 ]]; then
             rm -rf ~/.acme.sh/${domain} ~/.acme.sh/${domain}_ecc
         fi
-        systemctl start x-ui 2> /dev/null || rc-service x-ui start 2> /dev/null
+        installer_service start > /dev/null 2>&1
         return 1
     fi
 
@@ -803,7 +814,7 @@ ssl_cert_issue() {
     fi
 
     # start panel
-    systemctl start x-ui 2> /dev/null || rc-service x-ui start 2> /dev/null
+    installer_service start > /dev/null 2>&1
 
     # Prompt user to set panel paths after successful certificate installation
     if [[ "$NONINTERACTIVE" == "1" ]]; then
@@ -823,7 +834,7 @@ ssl_cert_issue() {
             echo ""
             echo -e "${green}Access URL: https://${domain}:${existing_port}/${existing_webBasePath}${plain}"
             echo -e "${yellow}Panel will restart to apply SSL certificate...${plain}"
-            systemctl restart x-ui 2> /dev/null || rc-service x-ui restart 2> /dev/null
+            installer_service restart > /dev/null 2>&1
         else
             echo -e "${red}Error: Certificate or private key file not found for domain: $domain.${plain}"
         fi
@@ -920,12 +931,7 @@ prompt_and_setup_ssl() {
             prompt_or_default ipv6_addr "Do you have an IPv6 address to include? (leave empty to skip): " "" XUI_SSL_IPV6
             ipv6_addr="${ipv6_addr// /}" # Trim whitespace
 
-            # Stop panel if running (port 80 needed)
-            if [[ $release == "alpine" ]]; then
-                rc-service x-ui stop > /dev/null 2>&1
-            else
-                systemctl stop x-ui > /dev/null 2>&1
-            fi
+            installer_service stop > /dev/null 2>&1
 
             setup_ip_certificate "${server_ip}" "${ipv6_addr}"
             if [ $? -eq 0 ]; then
@@ -994,7 +1000,7 @@ prompt_and_setup_ssl() {
             echo -e "${green}✓ Custom certificate paths applied.${plain}"
             echo -e "${yellow}Note: You are responsible for renewing these files externally.${plain}"
 
-            systemctl restart x-ui > /dev/null 2>&1 || rc-service x-ui restart > /dev/null 2>&1
+            installer_service restart > /dev/null 2>&1
             ;;
         4)
             echo ""
@@ -1033,7 +1039,7 @@ prompt_and_setup_ssl() {
                 echo -e "${yellow}Panel will listen on all interfaces over plain HTTP. Make sure something else is terminating TLS in front of it.${plain}"
             fi
 
-            systemctl restart x-ui > /dev/null 2>&1 || rc-service x-ui restart > /dev/null 2>&1
+            installer_service restart > /dev/null 2>&1
             echo -e "${green}✓ SSL setup skipped.${plain}"
             ;;
         *)
@@ -1410,306 +1416,130 @@ setup_fail2ban() {
     return 0
 }
 
-# Lands a systemd unit file at ${xui_service}/x-ui.service via a temp file +
-# atomic mv, so a failed cp/curl or an interrupted mv never leaves a
-# truncated unit file at the live path -- systemd would then fail to parse
-# it on the next daemon-reload/start. Same pattern already used for
-# /usr/bin/x-ui elsewhere in this script. source_is_url picks cp (from a
-# file already extracted from the release tarball) vs curl (GitHub fallback).
-_install_xui_service_unit() {
-    local source="$1"
-    local source_is_url="$2"
-    local dest="${xui_service}/x-ui.service"
-    local temp_file="${dest}.tmp.$$"
+# Keep bootstrap validation identical to update.sh; both standalone scripts are
+# exercised through the isolated installer/updater probes.
+xui_update_work=""
+xui_update_stage=""
+curl_bin=$(command -v curl || true)
+_fail() {
+    echo -e "${red}${1}${plain}" >&2
+    exit 2
+}
+_cleanup_install() {
+    [[ -z "$xui_update_work" ]] || rm -rf -- "$xui_update_work"
+}
+trap _cleanup_install EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
 
-    rm -f "$temp_file"
-    if [[ "$source_is_url" == "true" ]]; then
-        curl -fLRo "$temp_file" "$source" > /dev/null 2>&1
+# Bootstrap is fetched only from this fork over HTTPS. Its mandatory checksum
+# protects download integrity; release provenance is checked by the helper.
+_download_update_bootstrap() {
+    local url="$1" dest="$2" limit="$3" bytes
+    [[ -n "$curl_bin" ]] || _fail "ERROR: Command 'curl' is required for online updates."
+    if ! (set -o pipefail; "${curl_bin}" --fail --silent --location \
+        --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 120 \
+        "$url" | head -c "$((limit + 1))" > "$dest"); then
+        _fail "ERROR: Failed to download the managed fork update helper."
+    fi
+    bytes=$(wc -c < "$dest")
+    [[ "$bytes" -gt 0 && "$bytes" -le "$limit" ]] || _fail "ERROR: Update helper download has invalid size."
+}
+
+_prepare_managed_update() {
+    local platform="linux-$(arch)" helper_asset helper_url expected actual helper
+    local parent
+    parent=$(cd -- "$(dirname -- "${xui_folder}")" && pwd -P) || _fail "ERROR: Installation parent is unavailable."
+    xui_update_work=$(mktemp -d "${parent}/.x-ui-update-XXXXXXXX") || _fail "ERROR: Cannot create a private update directory."
+    helper="${xui_update_work}/update-stage"
+    tag_version="${XUI_UPDATE_TAG:-}"
+    [[ -z "$tag_version" || "$tag_version" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$ ]] || _fail "ERROR: Invalid release tag."
+    local args=(--preflight --parent "${xui_update_work}" --release-platform "$platform")
+    if [[ -n "${XUI_UPDATE_ARCHIVE:-}" ]]; then
+        [[ -n "${XUI_UPDATE_HELPER:-}" && "${XUI_UPDATE_HELPER_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] || _fail "ERROR: Offline update requires a helper and its SHA256."
+        [[ -f "$XUI_UPDATE_HELPER" && ! -L "$XUI_UPDATE_HELPER" ]] || _fail "ERROR: Offline helper must be a regular file."
+        cp -- "$XUI_UPDATE_HELPER" "$helper" || _fail "ERROR: Cannot copy offline update helper."
+        expected="$XUI_UPDATE_HELPER_SHA256"
+        [[ "${XUI_UPDATE_SHA256:-}" =~ ^[0-9a-f]{64}$ && "${XUI_UPDATE_COMMIT:-}" =~ ^[0-9a-f]{40}$ && -n "$tag_version" ]] || _fail "ERROR: Offline update requires archive SHA256, full commit and tag."
+        args+=(--archive "$XUI_UPDATE_ARCHIVE" --sha256 "$XUI_UPDATE_SHA256" --release-commit "$XUI_UPDATE_COMMIT" --release-tag "$tag_version")
     else
-        cp -f "$source" "$temp_file" > /dev/null 2>&1
-    fi
-    if [[ $? -ne 0 ]]; then
-        rm -f "$temp_file"
-        return 1
-    fi
-    if [[ ! -s "$temp_file" ]]; then
-        rm -f "$temp_file"
-        return 1
-    fi
-    mv -f "$temp_file" "$dest"
-    if [[ $? -ne 0 ]]; then
-        rm -f "$temp_file"
-        return 1
-    fi
-    return 0
-}
-
-# resolve_latest_tag prints the latest stable release tag. It prefers the web
-# releases/latest redirect, which is not subject to the unauthenticated API's
-# 60 req/h-per-IP limit that trips shared CI/CGNAT addresses (the install then
-# fails with "Failed to fetch x-ui version"), and falls back to the API.
-resolve_latest_tag() {
-    local url tag
-    url=$(curl -sSLI -o /dev/null -w '%{url_effective}' --retry 5 --retry-delay 3 --connect-timeout 15 --max-time 60 "https://github.com/MHSanaei/3x-ui/releases/latest" 2>/dev/null)
-    tag=${url##*/tag/}
-    if [[ "$tag" != "$url" && -n "$tag" && "$tag" != "latest" ]]; then
-        echo "$tag"
-        return 0
-    fi
-    curl -Ls --retry 5 --retry-delay 3 --connect-timeout 15 --max-time 60 "https://api.github.com/repos/MHSanaei/3x-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/'
-}
-
-# Releases publish <asset>.sha256 next to each archive. A mismatch or a failed
-# sidecar download aborts the install; only a 404 (releases predating the
-# sidecar) is tolerated with a warning.
-verify_release_checksum() {
-    local url="$1" file="$2" sums="$2.sha256" code expected actual
-    rm -f "${sums}"
-    code=$(curl -sL --retry 3 --retry-delay 3 --connect-timeout 15 --max-time 60 -o "${sums}" -w '%{http_code}' "${url}.sha256")
-    if [[ "${code}" == "404" ]]; then
-        rm -f "${sums}"
-        echo -e "${yellow}No checksum published for this release, skipping verification${plain}"
-        return 0
-    fi
-    if [[ "${code}" != "200" ]]; then
-        rm -f "${sums}" "${file}"
-        echo -e "${red}Failed to download the checksum for $(basename "${file}") (HTTP ${code})${plain}"
-        exit 1
-    fi
-    expected=$(awk 'NR == 1 {print $1}' "${sums}")
-    actual=$(sha256sum "${file}" | awk '{print $1}')
-    rm -f "${sums}"
-    if [[ ! "${expected}" =~ ^[0-9a-f]{64}$ || "${expected}" != "${actual}" ]]; then
-        rm -f "${file}"
-        echo -e "${red}Checksum mismatch for $(basename "${file}"): expected ${expected:-<none>}, got ${actual}${plain}"
-        exit 1
-    fi
-    echo -e "${green}Checksum verified: ${actual}${plain}"
-}
-
-# Older tags predate some of these files (x-ui.rc arrived in v2.8.4). Serving
-# main's copy against an old binary is the mismatch this pinning exists to
-# prevent, so probe before anything is stopped or removed and refuse the tag.
-require_repo_files() {
-    local ref="$1" name status
-    shift
-    [[ "${ref}" == "main" ]] && return 0
-    for name in "$@"; do
-        status=$(curl -sIL --retry 3 --connect-timeout 15 -o /dev/null -w '%{http_code}' "https://raw.githubusercontent.com/MHSanaei/3x-ui/${ref}/${name}")
-        if [[ "${status}" != "200" ]]; then
-            echo -e "${red}${name} is not available for ${ref} (HTTP ${status})${plain}"
-            echo -e "${red}Install a release that ships it, or 'dev' for the rolling build. Your existing installation has not been touched.${plain}"
-            exit 1
+        [[ -z "${XUI_UPDATE_SHA256:-}${XUI_UPDATE_COMMIT:-}${XUI_UPDATE_HELPER:-}${XUI_UPDATE_HELPER_SHA256:-}" ]] || _fail "ERROR: Offline inputs require XUI_UPDATE_ARCHIVE."
+        helper_asset="update-stage-${platform}"
+        helper_url="https://github.com/0x3f3f3f3f3f3f3f3f3f3f3/3x-ui/releases/latest/download/${helper_asset}"
+        if [[ -n "$tag_version" ]]; then
+            helper_url="https://github.com/0x3f3f3f3f3f3f3f3f3f3f3/3x-ui/releases/download/${tag_version}/${helper_asset}"
         fi
-    done
+        _download_update_bootstrap "${helper_url}.sha256" "${helper}.sha256" 4096
+        expected=$(awk -v name="$helper_asset" 'NF != 2 || $2 != name || NR != 1 {bad=1} END {if (bad || NR != 1) exit 1; print $1}' "${helper}.sha256") || _fail "ERROR: Invalid update helper checksum file."
+        [[ "$expected" =~ ^[0-9a-f]{64}$ ]] || _fail "ERROR: Invalid update helper SHA256."
+        _download_update_bootstrap "$helper_url" "$helper" 33554432
+        args+=(--download)
+        [[ -z "$tag_version" ]] || args+=(--release-tag "$tag_version")
+    fi
+    actual=$(sha256sum "$helper") || _fail "ERROR: Cannot hash update helper."
+    actual="${actual%% *}"
+    [[ "$expected" == "$actual" ]] || _fail "ERROR: Update helper checksum mismatch."
+    chmod 700 "$helper" || _fail "ERROR: Cannot make update helper executable."
+    if ! xui_update_stage=$("$helper" "${args[@]}"); then
+        _fail "ERROR: Release validation or runtime preflight failed; the current installation is untouched."
+    fi
+    [[ "$xui_update_stage" == "${xui_update_work}/.x-ui-stage-"* && "$xui_update_stage" != *$'\n'* && -d "${xui_update_stage}/x-ui" ]] || _fail "ERROR: Invalid staged release path."
+    echo -e "${green}Managed fork release validation and runtime preflight passed.${plain}"
+}
+
+_install_xui_service_unit() {
+    local source="$1" dest="${xui_service}/x-ui.service" temp_file="${xui_service}/x-ui.service.tmp.$$"
+    if ! cp -- "$source" "$temp_file" || ! chmod 644 "$temp_file" || ! chown root:root "$temp_file" || ! mv -f -- "$temp_file" "$dest"; then
+        rm -f -- "$temp_file"
+        return 1
+    fi
 }
 
 install_x-ui() {
-    cd ${xui_folder%/x-ui}/
+    [[ $# -le 1 ]] || _fail "ERROR: Installer accepts at most one release tag."
+    if [[ $# == 1 ]]; then
+        XUI_UPDATE_TAG="$1"
+        [[ "$XUI_UPDATE_TAG" != dev ]] || XUI_UPDATE_TAG=dev-latest
+    fi
+    [[ "${XUI_IN_DOCKER:-}" != true && ! -e /.dockerenv && ! -e /run/.containerenv ]] || _fail "ERROR: Update the managed fork container image through your container runtime."
+    xui_folder="${xui_folder%/}"
+    [[ "$xui_folder" == /* && -n "${xui_folder##*/}" && "${xui_folder##*/}" != . && "${xui_folder##*/}" != .. && ! -L "$xui_folder" ]] || _fail "ERROR: Invalid installation directory."
+    local parent existing=false
+    parent=$(cd -- "$(dirname -- "$xui_folder")" && pwd -P) || _fail "ERROR: Installation parent is unavailable."
+    xui_folder="${parent}/${xui_folder##*/}"
+    if [[ -e "$xui_folder" ]]; then
+        [[ -d "$xui_folder" && -f "${xui_folder}/x-ui" && ! -L "${xui_folder}/x-ui" ]] || _fail "ERROR: Existing installation is incomplete; preserve it and recover from a backup."
+        existing=true
+    fi
 
-    # Download resources
-    if [ $# == 0 ]; then
-        tag_version=$(resolve_latest_tag)
-        if [[ ! -n "$tag_version" ]]; then
-            echo -e "${red}Failed to fetch x-ui version, it may be due to GitHub API restrictions, please try it later${plain}"
-            exit 1
-        fi
-        echo -e "Got x-ui latest version: ${tag_version}, beginning the installation..."
-        curl -fLR --retry 5 --retry-delay 3 --connect-timeout 15 --speed-limit 1 --speed-time 300 -o ${xui_folder}-linux-$(arch).tar.gz https://github.com/MHSanaei/3x-ui/releases/download/${tag_version}/x-ui-linux-$(arch).tar.gz
-        if [[ $? -ne 0 ]]; then
-            echo -e "${red}Downloading x-ui failed, please be sure that your server can access GitHub ${plain}"
-            exit 1
-        fi
-        if [[ ! -s ${xui_folder}-linux-$(arch).tar.gz ]]; then
-            rm ${xui_folder}-linux-$(arch).tar.gz -f
-            echo -e "${red}Downloaded x-ui release archive is empty${plain}"
-            exit 1
-        fi
-        verify_release_checksum "https://github.com/MHSanaei/3x-ui/releases/download/${tag_version}/x-ui-linux-$(arch).tar.gz" "${xui_folder}-linux-$(arch).tar.gz"
-    else
-        tag_version=$1
-        # The rolling dev channel ships under a fixed, non-semver tag that is
-        # force-moved to the latest main commit on every push. Accept `dev` as a
-        # convenient alias and skip the numeric floor check for it.
-        if [[ "$tag_version" == "dev" || "$tag_version" == "dev-latest" ]]; then
-            tag_version="dev-latest"
-            echo -e "${yellow}Installing the rolling dev build (tag: dev-latest). This is a per-commit pre-release, not a stable version.${plain}"
+    _prepare_managed_update
+    install_base || _fail "ERROR: Cannot install dependencies; the current installation is untouched."
+    if [[ "$existing" == true ]]; then
+        if [[ "$release" == alpine ]]; then
+            rc-service x-ui stop || _fail "ERROR: Cannot stop the installed service; program files are unchanged."
         else
-            tag_version_numeric=${tag_version#v}
-            min_version="2.3.5"
-
-            if [[ "$(printf '%s\n' "$min_version" "$tag_version_numeric" | sort -V | head -n1)" != "$min_version" ]]; then
-                echo -e "${red}Please use a newer version (at least v2.3.5). Exiting installation.${plain}"
-                exit 1
-            fi
-        fi
-
-        url="https://github.com/MHSanaei/3x-ui/releases/download/${tag_version}/x-ui-linux-$(arch).tar.gz"
-        echo -e "Beginning to install x-ui ${tag_version}"
-        curl -fLR --retry 5 --retry-delay 3 --connect-timeout 15 --speed-limit 1 --speed-time 300 -o ${xui_folder}-linux-$(arch).tar.gz ${url}
-        if [[ $? -ne 0 ]]; then
-            echo -e "${red}Download x-ui ${tag_version} failed, please check if the version exists ${plain}"
-            exit 1
-        fi
-        if [[ ! -s ${xui_folder}-linux-$(arch).tar.gz ]]; then
-            rm ${xui_folder}-linux-$(arch).tar.gz -f
-            echo -e "${red}Downloaded x-ui release archive is empty${plain}"
-            exit 1
-        fi
-        verify_release_checksum "${url}" "${xui_folder}-linux-$(arch).tar.gz"
-    fi
-    # x-ui.sh, x-ui.rc and the unit files must come from the same release as
-    # the binary; only the rolling dev build tracks main.
-    local script_ref="${tag_version}"
-    if [[ "${tag_version}" == "dev-latest" ]]; then
-        script_ref="main"
-    fi
-    # The unit files are only fetched when the release tarball lacks them, so
-    # they are checked at that point instead of here.
-    local required_files=("x-ui.sh")
-    [[ $release == "alpine" ]] && required_files+=("x-ui.rc")
-    require_repo_files "${script_ref}" "${required_files[@]}"
-    local xui_script_temp="/usr/bin/x-ui-temp.$$"
-    rm -f "${xui_script_temp}"
-    curl -fLRo "${xui_script_temp}" "https://raw.githubusercontent.com/MHSanaei/3x-ui/${script_ref}/x-ui.sh"
-    if [[ $? -ne 0 ]]; then
-        rm -f "${xui_script_temp}"
-        echo -e "${red}Failed to download x-ui.sh${plain}"
-        exit 1
-    fi
-    if [[ ! -s "${xui_script_temp}" ]]; then
-        rm -f "${xui_script_temp}"
-        echo -e "${red}Downloaded x-ui.sh is empty${plain}"
-        exit 1
-    fi
-
-    # Stop x-ui service and remove old resources
-    local custom_bin_backup=""
-    if [[ -e ${xui_folder}/ ]]; then
-        if [[ $release == "alpine" ]]; then
-            rc-service x-ui stop
-        else
-            systemctl stop x-ui
-        fi
-        # Kill any leftover mtg (MTProto) sidecars. x-ui runs them outside its own
-        # lifecycle, so on Linux a stale one can survive the stop and keep holding
-        # an inbound port with an outdated secret, silently breaking new clients.
-        # The freshly installed panel respawns a clean mtg per inbound on start.
-        pkill -f 'mtg-linux-[^ ]* run ' > /dev/null 2>&1 || true
-        pkill -f 'tuic-server.*-c .*bin/tuic/tuic_[0-9]+\.json' > /dev/null 2>&1 || true
-
-        # bin/ is about to be wiped wholesale by the tar extraction below. The
-        # release only ships known assets (xray/mtg binaries, the bundled
-        # geoip*/geosite*.dat sets) -- anything else in bin/ was placed there
-        # by the admin (e.g. a hand-added custom geoip/geosite file referenced
-        # from a routing rule via "ext:<file>:<code>") and would otherwise be
-        # silently deleted on every update, breaking Xray at next start with
-        # "failed to open <file>: no such file or directory" for any routing
-        # rule that references it. Moved aside rather than copied: a rename
-        # on the same filesystem is atomic (no truncated file if disk space
-        # runs out mid-copy, unlike `cp`) and keeps the snapshot under
-        # /usr/local rather than a separate, possibly small/tmpfs $TMPDIR.
-        if [[ -d "${xui_folder}/bin" ]]; then
-            custom_bin_backup="${xui_folder%/x-ui}/x-ui-bin-backup.$$"
-            rm -rf "${custom_bin_backup}"
-            if ! mv "${xui_folder}/bin" "${custom_bin_backup}"; then
-                custom_bin_backup=""
-                echo -e "${yellow}Could not back up bin/ -- custom files there will not be preserved across this update${plain}"
-            fi
-        fi
-        # Sole cleanup path for the backup from here on -- covers both the
-        # two `exit 1`s below (extraction/binary-missing failures) and an
-        # interrupted update (Ctrl-C, signal) before the restore runs.
-        # Cleared once the restore below finishes normally.
-        trap '[[ -n "${custom_bin_backup}" ]] && rm -rf "${custom_bin_backup}"' EXIT INT TERM
-        rm ${xui_folder}/ -rf
-    fi
-
-    # Extract resources and set permissions
-    tar zxvf x-ui-linux-$(arch).tar.gz
-    if [[ $? -ne 0 ]]; then
-        rm x-ui-linux-$(arch).tar.gz -f
-        rm -f "${xui_script_temp}"
-        echo -e "${red}Failed to extract the x-ui release archive -- the previous installation has already been removed, so the panel will not start until this is fixed; try running the installer again${plain}"
-        exit 1
-    fi
-    rm x-ui-linux-$(arch).tar.gz -f
-
-    cd x-ui
-    if [[ $? -ne 0 || ! -s x-ui ]]; then
-        rm -f "${xui_script_temp}"
-        echo -e "${red}Extracted x-ui archive is missing the x-ui binary -- the previous installation has already been removed, so the panel will not start until this is fixed; try running the installer again${plain}"
-        exit 1
-    fi
-    chmod +x x-ui
-    chmod +x x-ui.sh
-
-    # Check the system's architecture and rename the file accordingly.
-    # The panel binary maps GOARCH=arm to "arm32" (internal/xray/process.go),
-    # so the Xray binary must be named xray-linux-arm32; mtg keeps plain "arm".
-    if [[ $(arch) == "armv5" || $(arch) == "armv6" || $(arch) == "armv7" ]]; then
-        mv bin/xray-linux-$(arch) bin/xray-linux-arm32
-        chmod +x bin/xray-linux-arm32
-        if [[ -f bin/mtg-linux-$(arch) ]]; then
-            mv bin/mtg-linux-$(arch) bin/mtg-linux-arm
-            chmod +x bin/mtg-linux-arm
+            systemctl stop x-ui || _fail "ERROR: Cannot stop the installed service; program files are unchanged."
         fi
     fi
-    chmod +x x-ui bin/xray-linux-$(arch)
-    if [[ -f bin/mtg-linux-arm ]]; then
-        chmod +x bin/mtg-linux-arm
-    elif [[ -f bin/mtg-linux-$(arch) ]]; then
-        chmod +x bin/mtg-linux-$(arch)
-    fi
-    if [[ -f bin/tuic-server ]]; then
-        chmod +x bin/tuic-server
-    else
+
+    # Preserve runtime files while installing the preflighted inventory.
+    # Transactional activation and database rollback remain separate work.
+    mkdir -p -- "$xui_folder" || _fail "ERROR: Cannot create installation directory."
+    cp -a -- "${xui_update_stage}/x-ui/." "${xui_folder}/" || _fail "ERROR: Cannot copy the verified release."
+    cd -- "$xui_folder" || _fail "ERROR: Cannot enter installation directory."
+    if [[ ! -f bin/tuic-server ]]; then
         install_tuic_server
     fi
-
-    # Restore anything from the old bin/ that the fresh release doesn't ship
-    # (custom geoip/geosite files, or anything else an admin hand-placed
-    # there) -- never overwrites a same-named file the new release provides,
-    # so bundled assets (geoip.dat, geoip_RU.dat, ...) still get the fresh
-    # per-release copy. Runs after the arch-rename above so xray-linux-arm32/
-    # mtg-linux-arm already exist under their final names there and aren't
-    # mistaken for custom files needing a restore. Skips paths the panel
-    # itself regenerates at runtime (config.json, mtproto/*.toml -- see
-    # internal/xray/process.go, internal/mtproto/manager.go): those aren't
-    # admin-placed, and restoring a stale one only resurrects dead state (an
-    # orphaned mtg config for a since-deleted inbound) or the wrong
-    # directory permissions.
-    if [[ -n "${custom_bin_backup}" ]]; then
-        local restored_custom_bin=()
-        while IFS= read -r -d '' f; do
-            local rel="${f#"${custom_bin_backup}"/}"
-            case "${rel}" in
-                config.json | mtproto | mtproto/* | tuic | tuic/*) continue ;;
-            esac
-            if [[ ! -e "bin/${rel}" ]]; then
-                mkdir -p "bin/$(dirname "${rel}")"
-                cp -a "${f}" "bin/${rel}"
-                restored_custom_bin+=("${rel}")
-            fi
-        done < <(find "${custom_bin_backup}" \( -type f -o -type l \) -print0)
-        rm -rf "${custom_bin_backup}"
-        custom_bin_backup=""
-        if [[ ${#restored_custom_bin[@]} -gt 0 ]]; then
-            echo -e "${green}Restored custom file(s) in bin/ not shipped by this release: ${restored_custom_bin[*]}${plain}"
-        fi
+    local xui_script_temp
+    xui_script_temp=$(mktemp /usr/bin/.x-ui-menu-XXXXXXXX) || _fail "ERROR: Cannot stage the bundled control menu."
+    if ! cp -- "${xui_folder}/x-ui.sh" "$xui_script_temp" || ! chmod 755 "$xui_script_temp" || ! mv -f -- "$xui_script_temp" /usr/bin/x-ui; then
+        rm -f -- "$xui_script_temp"
+        _fail "ERROR: Cannot install the bundled control menu."
     fi
-    trap - EXIT INT TERM
-
-    # Update x-ui cli and se set permission
-    mv -f "${xui_script_temp}" /usr/bin/x-ui
-    if [[ $? -ne 0 ]]; then
-        rm -f "${xui_script_temp}"
-        echo -e "${red}Failed to install x-ui.sh${plain}"
-        exit 1
-    fi
-    chmod +x /usr/bin/x-ui
-    mkdir -p /var/log/x-ui
-    config_after_install
+    mkdir -p /var/log/x-ui || _fail "ERROR: Cannot create the log directory."
+    export XUI_INSTALL_CONFIGURING=1
+    config_after_install || _fail "ERROR: Panel configuration or database migration failed."
+    unset XUI_INSTALL_CONFIGURING
 
     # Etckeeper compatibility
     if [ -d "/etc/.git" ]; then
@@ -1725,109 +1555,34 @@ install_x-ui() {
         fi
     fi
 
-    if [[ $release == "alpine" ]]; then
-        xui_rc_temp="/etc/init.d/x-ui.tmp.$$"
-        rm -f "${xui_rc_temp}"
-        curl -fLRo "${xui_rc_temp}" "https://raw.githubusercontent.com/MHSanaei/3x-ui/${script_ref}/x-ui.rc"
-        if [[ $? -ne 0 ]]; then
-            rm -f "${xui_rc_temp}"
-            echo -e "${red}Failed to download x-ui.rc${plain}"
-            exit 1
+    if [[ "$release" == alpine ]]; then
+        local xui_rc_temp
+        xui_rc_temp=$(mktemp /etc/init.d/.x-ui-unit-XXXXXXXX) || _fail "ERROR: Cannot stage the bundled OpenRC unit."
+        if ! cp -- "${xui_folder}/x-ui.rc" "$xui_rc_temp" || ! chmod 755 "$xui_rc_temp" || ! chown root:root "$xui_rc_temp" || ! mv -f -- "$xui_rc_temp" /etc/init.d/x-ui; then
+            rm -f -- "$xui_rc_temp"
+            _fail "ERROR: Cannot install the bundled OpenRC unit."
         fi
-        if [[ ! -s "${xui_rc_temp}" ]]; then
-            rm -f "${xui_rc_temp}"
-            echo -e "${red}Downloaded x-ui.rc is empty${plain}"
-            exit 1
-        fi
-        mv -f "${xui_rc_temp}" /etc/init.d/x-ui
-        if [[ $? -ne 0 ]]; then
-            rm -f "${xui_rc_temp}"
-            echo -e "${red}Failed to install x-ui.rc${plain}"
-            exit 1
-        fi
-        chmod +x /etc/init.d/x-ui
-        rc-update add x-ui
-        rc-service x-ui start
+        rc-update add x-ui || _fail "ERROR: Cannot enable the panel service."
+        rc-service x-ui start || _fail "ERROR: Installed service failed to start."
     else
-        # Install systemd service file
-        service_installed=false
-
-        if [ -f "x-ui.service" ]; then
-            echo -e "${green}Found x-ui.service in extracted files, installing...${plain}"
-            if _install_xui_service_unit "x-ui.service" "false"; then
-                service_installed=true
-            fi
-        fi
-
-        if [ "$service_installed" = false ]; then
-            case "${release}" in
-                ubuntu | debian | armbian)
-                    if [ -f "x-ui.service.debian" ]; then
-                        echo -e "${green}Found x-ui.service.debian in extracted files, installing...${plain}"
-                        if _install_xui_service_unit "x-ui.service.debian" "false"; then
-                            service_installed=true
-                        fi
-                    fi
-                    ;;
-                arch | manjaro | parch)
-                    if [ -f "x-ui.service.arch" ]; then
-                        echo -e "${green}Found x-ui.service.arch in extracted files, installing...${plain}"
-                        if _install_xui_service_unit "x-ui.service.arch" "false"; then
-                            service_installed=true
-                        fi
-                    fi
-                    ;;
-                *)
-                    if [ -f "x-ui.service.rhel" ]; then
-                        echo -e "${green}Found x-ui.service.rhel in extracted files, installing...${plain}"
-                        if _install_xui_service_unit "x-ui.service.rhel" "false"; then
-                            service_installed=true
-                        fi
-                    fi
-                    ;;
-            esac
-        fi
-
-        # If service file not found in tar.gz, download from GitHub
-        if [ "$service_installed" = false ]; then
-            echo -e "${yellow}Service files not found in tar.gz, downloading from GitHub...${plain}"
-            case "${release}" in
-                ubuntu | debian | armbian)
-                    service_unit_url="https://raw.githubusercontent.com/MHSanaei/3x-ui/${script_ref}/x-ui.service.debian"
-                    ;;
-                arch | manjaro | parch)
-                    service_unit_url="https://raw.githubusercontent.com/MHSanaei/3x-ui/${script_ref}/x-ui.service.arch"
-                    ;;
-                *)
-                    service_unit_url="https://raw.githubusercontent.com/MHSanaei/3x-ui/${script_ref}/x-ui.service.rhel"
-                    ;;
-            esac
-
-            if ! _install_xui_service_unit "$service_unit_url" "true"; then
-                echo -e "${red}Failed to install x-ui.service from GitHub (${script_ref}) -- the release tarball did not ship one either${plain}"
-                exit 1
-            fi
-            service_installed=true
-        fi
-
-        if [ "$service_installed" = true ]; then
-            echo -e "${green}Setting up systemd unit...${plain}"
-            chown root:root ${xui_service}/x-ui.service > /dev/null 2>&1
-            chmod 644 ${xui_service}/x-ui.service > /dev/null 2>&1
-            systemctl daemon-reload
-            systemctl enable x-ui
-            systemctl start x-ui
-        else
-            echo -e "${red}Failed to install x-ui.service file${plain}"
-            exit 1
-        fi
+        local unit
+        case "$release" in
+            ubuntu | debian | armbian) unit=x-ui.service.debian ;;
+            arch | manjaro | parch) unit=x-ui.service.arch ;;
+            *) unit=x-ui.service.rhel ;;
+        esac
+        mkdir -p -- "$xui_service" || _fail "ERROR: Cannot create the service directory."
+        _install_xui_service_unit "${xui_folder}/${unit}" || _fail "ERROR: Cannot install the bundled systemd unit."
+        systemctl daemon-reload || _fail "ERROR: Cannot reload the service manager."
+        systemctl enable x-ui || _fail "ERROR: Cannot enable the panel service."
+        systemctl start x-ui || _fail "ERROR: Installed service failed to start."
     fi
 
     # IP Limit relies on fail2ban; install + configure it now so the feature
     # works out of the box (no-op when XUI_ENABLE_FAIL2BAN=false). Never fatal.
     setup_fail2ban
 
-    echo -e "${green}x-ui ${tag_version}${plain} installation finished, it is running now..."
+    echo -e "${green}Managed fork x-ui installation finished, it is running now.${plain}"
     echo -e ""
     echo -e "┌───────────────────────────────────────────────────────┐
 │  ${blue}x-ui control menu usages (subcommands):${plain}              │
@@ -1850,5 +1605,4 @@ install_x-ui() {
 }
 
 echo -e "${green}Running...${plain}"
-install_base
-install_x-ui $1
+install_x-ui "$@"

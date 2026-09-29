@@ -196,8 +196,10 @@ func (s *InboundService) MigrationRequirements() (err error) {
 			return
 		}
 	}
-	if err = tx.Save(inbounds).Error; err != nil {
-		return
+	if len(inbounds) > 0 {
+		if err = tx.Save(inbounds).Error; err != nil {
+			return
+		}
 	}
 
 	// Remove orphaned traffics

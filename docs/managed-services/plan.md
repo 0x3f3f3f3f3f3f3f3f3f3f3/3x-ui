@@ -321,6 +321,15 @@ remain separate open work.
 
 ## Task 9: Cross-cutting delivery and full acceptance
 
+Delivery progress (2026-09-29): managed bundle assembly, full-source manifests,
+bounded fork downloads, candidate managed-core preflight and verified installed
+menu/web update entry points have separate evidence. The standalone installer
+now uses that preflight before package/service changes and has an isolated first
+SQLite installation plus installed-panel HTTP check. Menu installation/refresh/
+legacy routes, independent core updates, transactional activation/DB rollback,
+real service-manager/container/platform execution and final acceptance remain
+open; the broader delivery checkboxes below are intentionally not complete.
+
 - [ ] Audit every matrix row again for every protocol, including groups/LDAP,
   HWID, subscription host overrides, notifications and first-use expiry.
 - [ ] Fork-safe install/update; reproducible images/packages; non-Linux build gates.

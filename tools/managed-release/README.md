@@ -86,10 +86,10 @@ preflight after staging. The fixture panel used a declared `f` repeated 40 times
 commit, so this observation is not a claim that the artifact came from an actual
 commit with that identity. See [validation](../../docs/managed-services/validation.md).
 
-Installer/menu/web-updater activation and program/database rollback remain
-unfinished. The bundled scripts still require that integration before they are
-a safe upgrade path. A passing assembly probe does not establish installation,
-upgrade, container runtime or full protocol/policy acceptance.
+The standalone installer and regular menu/web updates now use verified release
+staging. Transactional activation and program/database rollback remain
+unfinished. A passing assembly probe does not establish installation, upgrade,
+container runtime or full protocol/policy acceptance.
 
 The actual updater's validation order has a separate isolated negative-acceptance
 probe, `probe_update.py`. It requires a built static `update-stage`, an unmodified
@@ -108,3 +108,11 @@ containers. A deliberately dirty native build can be checked with
 `--web --dirty-source-rejection`. These modes keep validation failures away from
 host services and check that the existing panel/data survive; they do not yet
 exercise successful activation or schema rollback.
+
+`probe_update.py --install` runs nine installer rejection cases against an
+existing installation; add `--fresh-install` for nine cases without an installed
+panel. `--install --fresh-install --install-success` instead performs first
+SQLite installation, checks installed file hashes and private credential-file
+permissions, then starts the real installed panel and checks authenticated HTTP.
+Package and service managers are substitutes inside the owned chroot; no real
+systemd/OpenRC deployment, ACME issuance or upgrade rollback is claimed.

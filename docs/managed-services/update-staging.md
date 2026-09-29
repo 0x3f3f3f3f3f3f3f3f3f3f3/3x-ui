@@ -4,10 +4,10 @@ The `update-stage` command validates a Linux release archive into a new private
 directory. Its optional download mode selects this fork's release and tag commit;
 `--preflight` executes the verified candidate's managed-core check. The helper
 does not stop services, replace an installation or migrate a database. `update.sh`
-now runs these checks before dependencies, service stop or program replacement.
-The regular menu and web updates use the verified installed updater. First
-installation, menu refresh/legacy installation and transactional program/DB
-rollback remain unfinished; preflight alone does not make activation atomic.
+and `install.sh` run these checks before dependencies, service stop or program
+replacement. The regular menu and web updates use the verified installed updater.
+Menu installation/refresh/legacy routes and transactional program/DB rollback
+remain unfinished; preflight alone does not make activation atomic.
 
 Build and run:
 
@@ -185,8 +185,9 @@ fail at its unchanged 2-second deadline; restoring it passes.
 
 This command does not start the candidate web service, migrate or restore a
 database, validate every user configuration, replace an installed directory or
-prove a packaged image works. First installation, menu refresh/legacy paths
-and safe activation with program/database rollback remain unfinished work.
+prove a packaged image works. The installer integration below has separate
+native-process evidence; menu installation/refresh/legacy paths and safe
+activation with program/database rollback remain unfinished work.
 
 ## Fork download and updater preparation
 
@@ -269,7 +270,7 @@ availability compares full source commits; short display hashes and release-body
 markers do not determine equality. Metadata lookup does not download or execute
 the candidate and is not evidence of its runtime compatibility.
 
-The legacy installer, menu refresh/legacy-version routes, separate core updater,
+The menu installation/refresh/legacy-version routes, separate core updater,
 and safe activation/rollback are still open. Do not use those unchanged paths
 as evidence that all distribution and recovery routes are fork-safe.
 
@@ -277,5 +278,46 @@ as evidence that all distribution and recovery routes are fork-safe.
 更新脚本。脚本会复制到安装目录之外；运行时配置等额外文件不会因此被拒绝或
 修改。下载、完整文件校验和真实受管核心预检均在依赖安装与停服之前完成。
 网页更新在容器内会明确拒绝，并提示通过镜像更新；来源未知或带源码修改标记的
-构建也不能启动自动更新。首次安装、菜单自身刷新/旧版本安装、独立核心更新和
+构建也不能启动自动更新。菜单安装入口、自身刷新/旧版本安装、独立核心更新和
 失败后的程序及数据库事务回滚仍未完成，不能将上述检查视为完整升级回滚保证。
+
+## Standalone installer integration
+
+Run `bash /trusted/selected-checkout/install.sh [RELEASE_TAG]` as root on a native
+Linux host. An omitted tag selects this fork's latest stable release; `dev` maps
+to the explicit `dev-latest` prerelease. The selected release must contain the
+managed helper, mandatory checksums and complete compatible bundle. There is no
+upstream or missing-checksum fallback. Online bootstrap needs curl, trusted CA
+certificates and the ordinary shell/file utilities before package installation;
+missing prerequisites cause an error. The existing installation parent must
+exist. The same explicit `XUI_UPDATE_*` offline inputs described above are also
+accepted by the installer.
+
+The standalone installer performs full staging and the real managed-core
+preflight before package installation or service stop. Rejection cleans its own
+temporary tree. A failed dependency installation or service stop aborts before
+program replacement. Installation copies the preflighted inventory, preserving
+runtime extras; it does not remove the old installation tree or kill processes
+by a global name pattern. The control menu and distro-specific unit come from
+that inventory. Containers are rejected with an image-update instruction.
+
+Initial configuration keeps panel service operations deferred until the bundled
+unit has been installed. Certificate renewal commands written by this installer
+respect that temporary configuration guard; subsequent renewal uses the normal
+service command. Actual ACME issuance/renewal has not been tested here. Normal
+panel database initialization still creates/migrates the database. The legacy
+inbound migration now accepts an empty set of traditional proxy inbounds,
+including a fresh database or a database containing only SSH inbounds.
+
+The Linux arm64 probe covers first SQLite installation, exact installed file
+hashes, mode-0600 credential output and authenticated HTTP from the installed
+panel. Package/service commands are isolated substitutes, so actual systemd,
+OpenRC, external PostgreSQL installation, custom service paths and ACME remain
+unverified. Consistent upgrade snapshots, health rollback and crash recovery are
+still required. Do not interpret a successful first-install fixture as a safe
+downgrade path; there is no automatic database downgrade/restore transaction yet.
+
+中文说明：独立 `install.sh` 已使用 fork 的完整发布包校验和真实核心预检，
+失败时不会先安装依赖、停止服务或删除旧目录。首次 SQLite 安装及安装后面板
+HTTP 已在隔离环境验证；真实服务管理器、证书签发、PostgreSQL 安装和事务回滚
+仍未验证或未完成。菜单中的安装入口仍需要单独接入，不能与独立安装脚本混淆。

@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -13,6 +14,40 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
+
+func TestMigrationRequirementsWithoutLegacyProxyInbounds(t *testing.T) {
+	for _, postgres := range []bool{false, true} {
+		for _, sshOnly := range []bool{false, true} {
+			t.Run(fmt.Sprintf("postgres=%t/ssh=%t", postgres, sshOnly), func(t *testing.T) {
+				if postgres {
+					managedUsagePostgresSchema(t)
+				}
+				setupConflictDB(t)
+				db := database.GetDB()
+				inbound := &model.Inbound{
+					UserId: 1, Tag: "ssh-owner", Port: 30201, Protocol: model.SSH,
+					Settings: `{"clients":[]}`, StreamSettings: `{}`,
+				}
+				if sshOnly {
+					if err := db.Create(inbound).Error; err != nil {
+						t.Fatal(err)
+					}
+				}
+				for range 2 {
+					if err := (&InboundService{}).MigrationRequirements(); err != nil {
+						t.Fatalf("migration without legacy proxy inbounds: %v", err)
+					}
+				}
+				if sshOnly {
+					var got model.Inbound
+					if err := db.First(&got, inbound.Id).Error; err != nil || got.Settings != inbound.Settings || got.Protocol != model.SSH {
+						t.Fatalf("unrelated SSH configuration changed: %+v %v", got, err)
+					}
+				}
+			})
+		}
+	}
+}
 
 // TestMigrationRequirements_BackfillsClientTrafficsWithMultiDomainInbound guards the
 // PostgreSQL fix where the externalProxy detection query (executed via .Scan) errored on
