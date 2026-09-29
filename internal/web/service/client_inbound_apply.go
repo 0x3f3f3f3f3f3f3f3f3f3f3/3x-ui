@@ -613,6 +613,9 @@ func (s *ClientService) prepareInboundClientAdd(inboundSvc *InboundService, data
 		if e := commitInboundClientSettings(tx, oldInbound, prevSettings); e != nil {
 			return e
 		}
+		if err := inboundSvc.checkSavedAmneziaWGForwardedPorts(tx, oldInbound); err != nil {
+			return err
+		}
 		if err := s.ApplyInboundClientDelta(tx, oldInbound.Id, addedClients, nil); err != nil {
 			return err
 		}
@@ -834,7 +837,7 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 			clients[0].ForwardedPorts = old.ForwardedPorts
 		}
 	}
-	if oldInbound.Protocol == model.AmneziaWG {
+	if oldInbound.Protocol == model.AmneziaWG && clients[0].Enable {
 		portCtx, err := inboundSvc.loadPortConflictContext(database.GetDB())
 		if err != nil {
 			return false, err
@@ -975,12 +978,14 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 			if err := lockListenerReservationsTx(tx); err != nil {
 				return err
 			}
-			txPortCtx, pErr := inboundSvc.loadPortConflictContext(tx)
-			if pErr != nil {
-				return pErr
-			}
-			if hit := inboundSvc.checkForwardedPortsConflict(txPortCtx, clients[0].ForwardedPorts); hit != "" {
-				return common.NewError("amneziawg: forwardedPorts collides with", hit)
+			if clients[0].Enable {
+				txPortCtx, pErr := inboundSvc.loadPortConflictContext(tx)
+				if pErr != nil {
+					return pErr
+				}
+				if hit := inboundSvc.checkForwardedPortsConflict(txPortCtx, clients[0].ForwardedPorts); hit != "" {
+					return common.NewError("amneziawg: forwardedPorts collides with", hit)
+				}
 			}
 		}
 		if len(clients[0].Email) > 0 {
@@ -1038,6 +1043,11 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 
 		if e := commitInboundClientSettings(tx, oldInbound, prevSettings); e != nil {
 			return e
+		}
+		if clients[0].Enable {
+			if err := inboundSvc.checkSavedAmneziaWGForwardedPorts(tx, oldInbound); err != nil {
+				return err
+			}
 		}
 		// Rename the client record in the same transaction as the settings JSON
 		// so no concurrent SyncInbound can see one renamed without the other.

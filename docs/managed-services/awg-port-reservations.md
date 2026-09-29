@@ -94,15 +94,58 @@ and [activity statistics](https://www.postgresql.org/docs/16/monitoring-stats.ht
 No timing-only lock assertion, host firewall modification or production
 deployment is used.
 
+## Peer ownership and complete candidate edits
+
+The ownership follow-up validates the entire saved AWG peer list against other
+local AWG rows. Two clients cannot own the same wildcard TCP+UDP forward, even
+on the same inbound. A canonical client attached to a second inbound cannot
+create a second listener for the same host port; ordinary shared attachment
+without forwarded ports remains allowed.
+
+The service and runtime share `ForwardedPortClaims`: a claim requires a
+nonempty email and a resolvable tunnel target on an enabled peer. IPv6-only
+targets require the instance's IPv6 flag. As with the pre-existing reverse
+listener check, disabled inbound rows retain otherwise valid peer claims.
+That reservation behavior is distinct from actually starting their listeners.
+
+Complete edits replace the old inbound in the reservation context with the
+proposed row. Moving its public listener onto its own forward is rejected;
+moving the listener away and forwarding the released port in the same edit is
+allowed. Client additions, edits and bulk enable validate the stored settings
+after rebasing over concurrent client changes, before the transaction commits.
+
+Disabling a client can remove its claim despite legacy peer or fixed-listener
+conflicts. Bulk disable and inbound disable, including full inbound edits,
+remain possible amid legacy peer conflicts. Full inbound normalization still
+checks fixed listener specifications; this is not a guarantee that every
+invalid legacy configuration can be edited. Re-enabling rechecks ownership and
+keeps all affected projections disabled on failure. Removing the old owner
+allows a subsequent enable.
+
+The PostgreSQL peer concurrency test stages another peer's port change in a
+separate transaction. It observes the actual advisory wait, commits the owner,
+then verifies rejection and unchanged settings/identity rows. Both same-row
+rebasing and cross-inbound changes are covered. Temporarily removing only the
+post-rebase addition check made both cases accept the collision; restoring it
+passed both cases under the race detector.
+
+Reproduce the ownership and lifecycle tests with the isolated PostgreSQL DSN:
+
+```sh
+go test -p 1 -race -count=1 -timeout=3m -run '^TestAWGForward' ./internal/web/service
+```
+
+Validation of the complete follow-up is recorded in [validation.md](validation.md).
+
 ## Remaining boundaries
 
 Public AWG create/edit currently reject node assignment. A remote-node test
 experiment therefore did not describe a supported AWG operation and was
 removed; node integration remains an open requirement.
 
-Peer-versus-peer duplicate forward ownership, candidate self-collisions during
-complete edits, runtime listener failure reporting, and AWG forwarded-payload
-policy enforcement require follow-up. These save-path checks do not prove
+Runtime listener failure reporting, revocation of established forwarded flows,
+forward-field edit/attachment consistency and AWG forwarded-payload policy
+enforcement require follow-up. These save-path checks do not prove
 wire interoperability, bandwidth shaping, accounting or quota cutoff. General
 first-class forwarding, kernel forwarding/offload and firewall coexistence
 also remain unimplemented or unverified as recorded in the plan.

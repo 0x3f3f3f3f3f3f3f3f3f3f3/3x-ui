@@ -1284,7 +1284,7 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 			}
 			// The clients' forward specs were validated while this row had no id,
 			// so the ports it now derives were never in the guard's context.
-			if aErr := s.checkAmneziaWGForwardedPorts(tx, inbound.Settings); aErr != nil {
+			if aErr := s.checkAmneziaWGForwardedPorts(tx, inbound); aErr != nil {
 				return aErr
 			}
 		}
@@ -1648,7 +1648,7 @@ func (s *InboundService) SetInboundEnable(id int, enable bool) (bool, error) {
 			return err
 		}
 		if enable && inbound.Protocol == model.AmneziaWG && inbound.NodeID == nil {
-			if err := s.checkAmneziaWGForwardedPorts(tx, inbound.Settings); err != nil {
+			if err := s.checkAmneziaWGForwardedPorts(tx, inbound); err != nil {
 				return err
 			}
 		}
@@ -1808,8 +1808,8 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		if conflict != nil {
 			return common.NewError(conflict.String())
 		}
-		if inbound.Protocol == model.AmneziaWG {
-			if err := s.checkAmneziaWGForwardedPorts(tx, inbound.Settings); err != nil {
+		if inbound.Protocol == model.AmneziaWG && inbound.Enable {
+			if err := s.checkAmneziaWGForwardedPorts(tx, inbound); err != nil {
 				return err
 			}
 		}

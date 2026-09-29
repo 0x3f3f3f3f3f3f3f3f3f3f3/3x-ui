@@ -191,7 +191,7 @@ func TestManagedBridgeReservationsIncludeAmneziaWGResources(t *testing.T) {
 				if err := database.GetDB().Create(managed).Error; err != nil {
 					t.Fatal(err)
 				}
-				if err := svc.checkAmneziaWGForwardedPorts(database.GetDB(), awg.Settings); err == nil || !strings.Contains(err.Error(), "managed-owner") {
+				if err := svc.checkAmneziaWGForwardedPorts(database.GetDB(), awg); err == nil || !strings.Contains(err.Error(), "managed-owner") {
 					t.Fatalf("AWG forward must reject disabled managed reservation: %v", err)
 				}
 			}

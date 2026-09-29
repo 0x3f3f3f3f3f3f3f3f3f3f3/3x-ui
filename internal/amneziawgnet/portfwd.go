@@ -50,12 +50,8 @@ const (
 	udpForward
 )
 
-// portForwardKey identifies one listener: a specific peer's specific port on
-// a specific protocol. Two different peers (even on the same inbound)
-// forwarding the same port number get two independent listeners under two
-// independent keys -- a same-port collision surfaces as an ordinary bind
-// failure on whichever one opens second, not something actively prevented
-// here (see the migration plan's Phase 3.6 notes).
+// portForwardKey identifies one peer's listener. The service validates ownership;
+// legacy conflicting rows can still fail their individual runtime binds.
 type portForwardKey struct {
 	email string
 	port  int
@@ -155,23 +151,35 @@ func forwardingPeers(inst amneziawg.Instance) []amneziawg.Peer {
 // tcpForward and one udpForward per forwarded port of the forwarding peers.
 func desiredPortForwardKeys(inst amneziawg.Instance) map[portForwardKey]struct{} {
 	out := map[portForwardKey]struct{}{}
-	for _, p := range forwardingPeers(inst) {
-		for _, port := range amneziawg.ExpandForwardedPorts(p.ForwardedPorts) {
-			out[portForwardKey{email: p.Email, port: port, proto: tcpForward}] = struct{}{}
-			out[portForwardKey{email: p.Email, port: port, proto: udpForward}] = struct{}{}
-		}
+	for _, claim := range ForwardedPortClaims(inst) {
+		out[portForwardKey{email: claim.Email, port: claim.Port, proto: tcpForward}] = struct{}{}
+		out[portForwardKey{email: claim.Email, port: claim.Port, proto: udpForward}] = struct{}{}
 	}
 	return out
+}
+
+type ForwardedPortClaim struct {
+	Email string
+	Port  int
+}
+
+// ForwardedPortClaims uses the runtime's target gate for wildcard TCP+UDP claims.
+func ForwardedPortClaims(inst amneziawg.Instance) []ForwardedPortClaim {
+	var claims []ForwardedPortClaim
+	for _, peer := range forwardingPeers(inst) {
+		for _, port := range amneziawg.ExpandForwardedPorts(peer.ForwardedPorts) {
+			claims = append(claims, ForwardedPortClaim{Email: peer.Email, Port: port})
+		}
+	}
+	return claims
 }
 
 // ForwardedPortOwner names the peer Reconcile opens a listener on port for --
 // the same peers and expansion as desiredPortForwardKeys, never a silent one.
 func ForwardedPortOwner(inst amneziawg.Instance, port int) (string, bool) {
-	for _, p := range forwardingPeers(inst) {
-		for _, candidate := range amneziawg.ExpandForwardedPorts(p.ForwardedPorts) {
-			if candidate == port {
-				return p.Email, true
-			}
+	for _, claim := range ForwardedPortClaims(inst) {
+		if claim.Port == port {
+			return claim.Email, true
 		}
 	}
 	return "", false

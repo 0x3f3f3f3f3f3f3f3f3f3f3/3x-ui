@@ -307,8 +307,9 @@ Files: new `internal/portforward`, existing inlet selection/client flow,
 port_conflict.go, Runtime, routing bridge; TUIC/MTProto/WG/AWG adapters.
 
 Verified prerequisite: [AWG forwarded-port reservations](awg-port-reservations.md)
-covers template/fixed listeners and concurrent public mutations. Peer ownership,
-forwarded-payload policy and first-class forwarding remain separate open work.
+covers template/fixed listeners, peer ownership, complete candidate edits and
+concurrent public mutations. Forwarded payload policy and first-class forwarding
+remain separate open work.
 
 - [ ] Evaluate nft/iptables family, permissions and offload in isolated namespace.
 - [ ] Exclusive node+network+address+port client binding, TCP/UDP/combined.

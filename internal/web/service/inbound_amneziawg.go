@@ -276,6 +276,7 @@ func (s *InboundService) normalizeAmneziaWGSettings(inbound *model.Inbound, oldS
 	if err != nil {
 		return err
 	}
+	portCtx.replaceInbound(inbound)
 	for i := range parsed.Clients {
 		c := &parsed.Clients[i]
 		if err := s.amneziaWGForwardedPortsConflict(portCtx, c); err != nil {
@@ -360,21 +361,22 @@ func (s *InboundService) amneziaWGForwardedPortsConflict(ctx portConflictContext
 
 // checkAmneziaWGForwardedPorts re-runs the guard over one row's stored clients:
 // on create it ran before Save, when the row's own ports were not in the context.
-func (s *InboundService) checkAmneziaWGForwardedPorts(db *gorm.DB, settings string) error {
+func (s *InboundService) checkAmneziaWGForwardedPorts(db *gorm.DB, inbound *model.Inbound) error {
 	var parsed amneziawg.InboundSettings
-	if err := json.Unmarshal([]byte(settings), &parsed); err != nil {
+	if err := json.Unmarshal([]byte(inbound.Settings), &parsed); err != nil {
 		return nil
 	}
 	ctx, err := s.loadPortConflictContext(db)
 	if err != nil {
 		return err
 	}
+	ctx.replaceInbound(inbound)
 	for i := range parsed.Clients {
 		if err := s.amneziaWGForwardedPortsConflict(ctx, &parsed.Clients[i]); err != nil {
 			return err
 		}
 	}
-	return nil
+	return checkAWGForwardOwnershipTx(db, inbound)
 }
 
 // checkForwardedPortsConflict names the panel, inbound or AmneziaWG relay port a

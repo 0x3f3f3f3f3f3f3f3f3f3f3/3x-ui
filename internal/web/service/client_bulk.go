@@ -1774,6 +1774,11 @@ func (s *ClientService) bulkSetEnableInboundClients(inboundSvc *InboundService, 
 		if e := commitInboundClientSettings(tx, oldInbound, prevSettings); e != nil {
 			return e
 		}
+		if enable {
+			if err := inboundSvc.checkSavedAmneziaWGForwardedPorts(tx, oldInbound); err != nil {
+				return err
+			}
+		}
 		finalClients, gcErr := inboundSvc.GetClients(oldInbound)
 		if gcErr != nil {
 			return gcErr

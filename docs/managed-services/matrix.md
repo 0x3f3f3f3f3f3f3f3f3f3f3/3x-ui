@@ -59,7 +59,7 @@ Unauthenticated HTTP/SOCKS/TUN/forwarding requires owned resource bindings.
 
 AWG reservation safety has scoped service/database evidence in
 [awg-port-reservations.md](awg-port-reservations.md): fixed/template listener
-conflicts and transactional public mutations. This does not promote AWG's
+conflicts, peer ownership and transactional public mutations. This does not promote AWG's
 per-client shaping, billing or first-class forwarding coverage to V.
 
 ## New first-class services

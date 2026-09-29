@@ -4526,3 +4526,75 @@ embedded frontend assets changed during this run. The separately committed
 network prerequisite probe and documentation changed no tested Go package.
 Frontend verification was not repeated because its source/assets were unchanged.
 This verifies the scoped reservation fix, not all Task 8 requirements.
+
+## AWG peer forward ownership and candidate state
+
+This follow-up is scoped to save-time resource ownership and lifecycle state;
+[awg-port-reservations.md](awg-port-reservations.md) describes the behavior.
+AWG forwarded payload still bypasses the unified policy meter. These checks do
+not complete Task 8 or establish per-client forwarding throughput or quota.
+
+Observed RED evidence before the relevant changes:
+
+- Ten conflicting creation/addition/edit cases accepted duplicate peer
+  claims, while ten disjoint-port controls passed. Two complete-edit cases
+  accepted moving the public listener onto an owned forward.
+- Moving a public listener away and using its released port failed on both
+  databases because the preflight still examined the old inbound row.
+- Temporarily removing only the addition's post-rebase validation accepted
+  both same-inbound and cross-inbound PostgreSQL conflicts after an observed
+  advisory wait and the other transaction's commit. The original early lock
+  remained in place. The source was restored before subsequent runs.
+- Whole-row validation initially blocked disabling one of three conflicting
+  legacy peers, and disabling an inbound through its full edit endpoint.
+  Both failures were observed on SQLite and PostgreSQL. The corresponding
+  disable paths now avoid acquiring new forward claims.
+- Existing fixed-reservation validation also prevented client disable in both
+  databases. The regression test removes the claim successfully and verifies
+  that re-enable remains rejected by the same named reservation.
+
+Focused restored concurrency race result: **1 top-level test / 2 subtests
+passed**, no skips, 4.714s. The expanded focused ownership matrix passed
+**10 top-level tests / 56 subtests**, no skips, 18.333s. Subsequent lifecycle
+coverage, including full-edit disable and re-enable, passed **2 top-level tests
+/ 20 subtests**, no skips, 6.713s. The latter run follows the final production
+change. Earlier enable controls passed 1 top-level / 6 subtests in 2.340s;
+these are overlapping checks, not additive acceptance totals.
+
+Final affected race checks passed with actual local PostgreSQL and Xray:
+
+```sh
+go test -p 1 -race -count=1 -timeout=5m -json ./internal/amneziawg ./internal/amneziawgnet
+go test -p 1 -race -count=1 -timeout=8m -json \
+  -run 'Test.*(Port|AWG|Amnezia|Template|Portable|Import|Bulk.*Enable|Bulk.*Reenable|SetInboundEnable)' \
+  ./internal/web/service
+golangci-lint run --timeout=5m ./...
+go build -p 1 -o /tmp/3x-ui-awg-peer-ownership-panel .
+```
+
+Native packages: **148 top-level / 76 subtests passed**, zero skips; 1.269s
+and 23.006s. Service regression: **191 top-level / 276 subtests passed**, zero
+skips, 233.069s, including all 11 new ownership tests / 66 subtests. Lint
+reported **0 issues** and the normal panel build succeeded. Logs are
+`awg-peer-native-race.jsonl`, `awg-peer-related-race.jsonl`, `awg-peer-lint.log`
+and `awg-peer-build.log` under `/tmp/3x-ui-rate-trace/`.
+
+The final full-root regression exited zero: **53 test packages, 2692 top-level
+tests and 4806 subtests passed**, no failures. **28 top-level and 14 subtests
+skipped**; all 42 names exactly match `awg-reservations-full-go.jsonl`. Seven
+packages have no tests. The service package completed in 658.088s.
+
+```sh
+XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+XUI_MANAGED_XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+XUI_MIHOMO_E2E_BINARY=/tmp/3x-ui-mihomo-v1.19.30 \
+XUI_E2E_PANEL=/tmp/3x-ui-awg-peer-ownership-panel \
+XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' \
+XUI_E2E_PG_DSN='postgresql://nobody@127.0.0.1:55432/postgres?sslmode=disable' \
+go test -p 1 -shuffle=on -count=1 -timeout=25m -json ./...
+```
+
+Log: `/tmp/3x-ui-rate-trace/awg-peer-full-go.jsonl`. No Go source or embedded
+frontend assets changed during the run. Frontend checks were not repeated for
+this backend-only change. The full task remains incomplete; this evidence
+covers the resource-ownership follow-up, not AWG payload policy enforcement.
