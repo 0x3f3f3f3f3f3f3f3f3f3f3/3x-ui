@@ -297,7 +297,7 @@ func (s *Session) Admit(direction Direction, n uint64) error {
 			c.mu.Unlock()
 			return err
 		}
-		if exceedsQuota(next, c.uncertain, c.policy.QuotaBytes) {
+		if c.policy.exceedsQuota(next, c.uncertain) {
 			c.mu.Unlock()
 			return ErrRestricted
 		}

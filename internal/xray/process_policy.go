@@ -92,6 +92,7 @@ func (p *Process) StartManaged(ctx context.Context, prepare func(context.Context
 			Enabled: policy.Enabled, MultiplierMicros: policy.Multiplier, QuotaBytes: policy.QuotaBytes,
 			UploadBytesPerSecond: policy.UploadRate, DownloadBytesPerSecond: policy.DownloadRate,
 			BurstBytes: policy.BurstBytes, ExpiresAt: policy.ExpiresAt,
+			QuotaBaselineBytes: policy.QuotaBaselineBytes, QuotaBaselineRemainder: policy.QuotaBaselineRemainder,
 		})
 	}
 	for len(policies) > 0 {

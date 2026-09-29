@@ -37,7 +37,7 @@ func init() {
 				e.Close()
 				return nil, ErrInvalidPolicy
 			}
-			policies = append(policies, Policy{ClientID: p.ClientId, Version: p.Version, Enabled: p.Enabled, Multiplier: p.MultiplierMicros, QuotaBytes: p.QuotaBytes, UploadRate: p.UploadBytesPerSecond, DownloadRate: p.DownloadBytesPerSecond, BurstBytes: p.BurstBytes, ExpiresAt: p.ExpiresAt})
+			policies = append(policies, Policy{ClientID: p.ClientId, Version: p.Version, Enabled: p.Enabled, Multiplier: p.MultiplierMicros, QuotaBytes: p.QuotaBytes, UploadRate: p.UploadBytesPerSecond, DownloadRate: p.DownloadBytesPerSecond, BurstBytes: p.BurstBytes, ExpiresAt: p.ExpiresAt, QuotaBaselineBytes: p.QuotaBaselineBytes, QuotaBaselineRemainder: p.QuotaBaselineRemainder})
 		}
 		if err := e.applyBatch(policies, false); err != nil {
 			e.Close()

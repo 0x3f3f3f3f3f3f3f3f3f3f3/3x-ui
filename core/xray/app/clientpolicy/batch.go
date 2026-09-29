@@ -56,6 +56,10 @@ func (e *Engine) applyBatch(policies []Policy, commit bool) error {
 			unlock()
 			return ErrPolicyVersion
 		}
+		if _, err := p.quotaUsage(c.usage, c.uncertain); err != nil {
+			unlock()
+			return err
+		}
 		if p != c.policy {
 			records = append(records, storedClient{Policy: p, Usage: c.usage, UncertainBytes: c.uncertain, InitializationHash: c.initializationHash})
 		}

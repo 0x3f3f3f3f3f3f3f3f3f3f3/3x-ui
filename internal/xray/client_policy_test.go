@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/xtls/xray-core/app/clientpolicy"
 	policycommand "github.com/xtls/xray-core/app/clientpolicy/command"
 	"google.golang.org/grpc"
 )
@@ -16,6 +17,24 @@ import (
 type capabilityServer struct {
 	policycommand.UnimplementedClientPolicyServiceServer
 	response *policycommand.Capabilities
+}
+
+func TestClientPolicyAdapterRejectsQuotaWindowWithoutCapability(t *testing.T) {
+	caps := &policycommand.Capabilities{ApiVersion: 1, InstanceId: "expected", Epoch: 4, Capabilities: []string{"trusted-tunnel-client-id-v1", "shared-directional-rate-v1", "fixed-point-billing-v1", "live-session-control-v1", "local-durable-reservations-v1", "committed-cumulative-ledger-v1", "create-only-usage-seed-v1"}}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	api, err := DialClientPolicy(ctx, capabilitySocket(t, caps), "expected")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer api.Close()
+	policy := &clientpolicy.PolicyConfig{ClientId: "owner", Version: 2, Enabled: true, MultiplierMicros: 1000000, BurstBytes: 65536, QuotaBytes: 10, QuotaBaselineRemainder: 500000}
+	if err := api.Apply(ctx, []*clientpolicy.PolicyConfig{policy}); !errors.Is(err, ErrClientPolicyCapability) {
+		t.Fatalf("sent quota reset without advertised support: %v", err)
+	}
+	if err := api.Initialize(ctx, policy, &policycommand.Usage{Remainder: 500000}); !errors.Is(err, ErrClientPolicyCapability) {
+		t.Fatalf("seeded quota baseline without advertised support: %v", err)
+	}
 }
 
 func (s *capabilityServer) GetCapabilities(context.Context, *policycommand.Empty) (*policycommand.Capabilities, error) {

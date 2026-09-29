@@ -60,7 +60,7 @@ func (s *service) GetCapabilities(ctx context.Context, _ *Empty) (*Capabilities,
 		return nil, err
 	}
 	c := s.engine.Capabilities()
-	features := []string{"trusted-tunnel-client-id-v1", "trusted-vless-client-id-v1", "trusted-vmess-client-id-v1", "trusted-trojan-client-id-v1", "trusted-shadowsocks-aead-client-id-v1", "shared-directional-rate-v1", "fixed-point-billing-v1", "live-session-control-v1"}
+	features := []string{"trusted-tunnel-client-id-v1", "trusted-vless-client-id-v1", "trusted-vmess-client-id-v1", "trusted-trojan-client-id-v1", "trusted-shadowsocks-aead-client-id-v1", "shared-directional-rate-v1", "fixed-point-billing-v1", "quota-window-baseline-v1", "live-session-control-v1"}
 	if c.Persistent {
 		features = append(features, "local-durable-reservations-v1", "committed-cumulative-ledger-v1", "create-only-usage-seed-v1")
 	}
@@ -68,11 +68,11 @@ func (s *service) GetCapabilities(ctx context.Context, _ *Empty) (*Capabilities,
 }
 
 func policyConfig(p clientpolicy.Policy) *clientpolicy.PolicyConfig {
-	return &clientpolicy.PolicyConfig{ClientId: p.ClientID, Version: p.Version, Enabled: p.Enabled, MultiplierMicros: p.Multiplier, QuotaBytes: p.QuotaBytes, UploadBytesPerSecond: p.UploadRate, DownloadBytesPerSecond: p.DownloadRate, BurstBytes: p.BurstBytes, ExpiresAt: p.ExpiresAt}
+	return &clientpolicy.PolicyConfig{ClientId: p.ClientID, Version: p.Version, Enabled: p.Enabled, MultiplierMicros: p.Multiplier, QuotaBytes: p.QuotaBytes, UploadBytesPerSecond: p.UploadRate, DownloadBytesPerSecond: p.DownloadRate, BurstBytes: p.BurstBytes, ExpiresAt: p.ExpiresAt, QuotaBaselineBytes: p.QuotaBaselineBytes, QuotaBaselineRemainder: p.QuotaBaselineRemainder}
 }
 
 func runtimePolicy(p *clientpolicy.PolicyConfig) clientpolicy.Policy {
-	return clientpolicy.Policy{ClientID: p.ClientId, Version: p.Version, Enabled: p.Enabled, Multiplier: p.MultiplierMicros, QuotaBytes: p.QuotaBytes, UploadRate: p.UploadBytesPerSecond, DownloadRate: p.DownloadBytesPerSecond, BurstBytes: p.BurstBytes, ExpiresAt: p.ExpiresAt}
+	return clientpolicy.Policy{ClientID: p.ClientId, Version: p.Version, Enabled: p.Enabled, Multiplier: p.MultiplierMicros, QuotaBytes: p.QuotaBytes, UploadRate: p.UploadBytesPerSecond, DownloadRate: p.DownloadBytesPerSecond, BurstBytes: p.BurstBytes, ExpiresAt: p.ExpiresAt, QuotaBaselineBytes: p.QuotaBaselineBytes, QuotaBaselineRemainder: p.QuotaBaselineRemainder}
 }
 
 func (s *service) InitializeClient(ctx context.Context, r *InitializeRequest) (*Empty, error) {

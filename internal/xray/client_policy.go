@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 
 	"github.com/xtls/xray-core/app/clientpolicy"
 	policycommand "github.com/xtls/xray-core/app/clientpolicy/command"
@@ -84,11 +85,17 @@ func (c *ClientPolicyAPI) GetClient(ctx context.Context, id string) (*policycomm
 }
 
 func (c *ClientPolicyAPI) Initialize(ctx context.Context, policy *clientpolicy.PolicyConfig, seed *policycommand.Usage) error {
+	if err := c.requireQuotaWindowCapability([]*clientpolicy.PolicyConfig{policy}); err != nil {
+		return err
+	}
 	_, err := c.client.InitializeClient(ctx, &policycommand.InitializeRequest{Policy: policy, Usage: seed})
 	return err
 }
 
 func (c *ClientPolicyAPI) Apply(ctx context.Context, policies []*clientpolicy.PolicyConfig) error {
+	if err := c.requireQuotaWindowCapability(policies); err != nil {
+		return err
+	}
 	_, err := c.client.ApplyPolicies(ctx, &policycommand.ApplyRequest{Policies: policies})
 	return err
 }
@@ -117,4 +124,13 @@ func (c *ClientPolicyAPI) Checkpoint(ctx context.Context) error {
 
 func (c *ClientPolicyAPI) ReadLedger(ctx context.Context, after uint64, limit uint32) (*policycommand.LedgerPage, error) {
 	return c.client.ReadLedger(ctx, &policycommand.LedgerRequest{AfterSequence: after, Limit: limit})
+}
+
+func (c *ClientPolicyAPI) requireQuotaWindowCapability(policies []*clientpolicy.PolicyConfig) error {
+	for _, p := range policies {
+		if (p.GetQuotaBaselineBytes() != 0 || p.GetQuotaBaselineRemainder() != 0) && !slices.Contains(c.capabilities.GetCapabilities(), "quota-window-baseline-v1") {
+			return fmt.Errorf("%w: missing quota-window-baseline-v1", ErrClientPolicyCapability)
+		}
+	}
+	return nil
 }

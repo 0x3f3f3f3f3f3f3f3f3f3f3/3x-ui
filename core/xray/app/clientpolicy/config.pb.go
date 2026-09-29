@@ -32,6 +32,8 @@ type PolicyConfig struct {
 	DownloadBytesPerSecond uint64                 `protobuf:"varint,7,opt,name=download_bytes_per_second,json=downloadBytesPerSecond,proto3" json:"download_bytes_per_second,omitempty"`
 	BurstBytes             uint64                 `protobuf:"varint,8,opt,name=burst_bytes,json=burstBytes,proto3" json:"burst_bytes,omitempty"`
 	ExpiresAt              int64                  `protobuf:"varint,9,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	QuotaBaselineBytes     uint64                 `protobuf:"varint,10,opt,name=quota_baseline_bytes,json=quotaBaselineBytes,proto3" json:"quota_baseline_bytes,omitempty"`
+	QuotaBaselineRemainder uint64                 `protobuf:"varint,11,opt,name=quota_baseline_remainder,json=quotaBaselineRemainder,proto3" json:"quota_baseline_remainder,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -129,6 +131,20 @@ func (x *PolicyConfig) GetExpiresAt() int64 {
 	return 0
 }
 
+func (x *PolicyConfig) GetQuotaBaselineBytes() uint64 {
+	if x != nil {
+		return x.QuotaBaselineBytes
+	}
+	return 0
+}
+
+func (x *PolicyConfig) GetQuotaBaselineRemainder() uint64 {
+	if x != nil {
+		return x.QuotaBaselineRemainder
+	}
+	return 0
+}
+
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Policies      []*PolicyConfig        `protobuf:"bytes,1,rep,name=policies,proto3" json:"policies,omitempty"`
@@ -193,7 +209,7 @@ var File_app_clientpolicy_config_proto protoreflect.FileDescriptor
 
 const file_app_clientpolicy_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1dapp/clientpolicy/config.proto\x12\x15xray.app.clientpolicy\"\xdf\x02\n" +
+	"\x1dapp/clientpolicy/config.proto\x12\x15xray.app.clientpolicy\"\xcb\x03\n" +
 	"\fPolicyConfig\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x04R\aversion\x12\x18\n" +
@@ -206,7 +222,10 @@ const file_app_clientpolicy_config_proto_rawDesc = "" +
 	"\vburst_bytes\x18\b \x01(\x04R\n" +
 	"burstBytes\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\t \x01(\x03R\texpiresAt\"\x89\x01\n" +
+	"expires_at\x18\t \x01(\x03R\texpiresAt\x120\n" +
+	"\x14quota_baseline_bytes\x18\n" +
+	" \x01(\x04R\x12quotaBaselineBytes\x128\n" +
+	"\x18quota_baseline_remainder\x18\v \x01(\x04R\x16quotaBaselineRemainder\"\x89\x01\n" +
 	"\x06Config\x12?\n" +
 	"\bpolicies\x18\x01 \x03(\v2#.xray.app.clientpolicy.PolicyConfigR\bpolicies\x12\x1d\n" +
 	"\n" +

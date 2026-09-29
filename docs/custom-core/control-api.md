@@ -42,3 +42,12 @@ The core now closes all feature resources when startup fails. Durable policy con
 Local Runtime connects negotiated startup to database preparation: a durable pending source precedes private state-file creation, existing files are preserved, and an activated source cannot silently recreate a missing store. The callback binds the negotiated epoch and prepares immutable historical seeds. Runtime rejects a core behind the panel cursor or historical seed before opening business listeners. Database preparation occurs outside the Runtime RPC mutex to preserve the traffic-writer lock order. This path has real child-process tests with both supported databases; automatic production configuration/cutover is still pending.
 
 Remaining gates include production settlement scheduling, coordinated legacy cutover, restore fencing, mass-client performance and protected local transport on Windows. Existing target metadata limitations remain: the pre-rewrite Tunnel target is not yet independently preserved.
+
+`PolicyConfig` adds field 10 `quota_baseline_bytes` and field 11 `quota_baseline_remainder`, exposed in JSON as `quotaBaselineBytes` and `quotaBaselineRemainder`. They identify the effective lifetime billed boundary of the quota window. The core advertises `quota-window-baseline-v1`; the panel adapter checks this capability before sending a nonzero baseline through Apply or Initialize. Zero-baseline requests keep the previous capability requirements. Future baselines or invalid fractions reject the entire update before persistence. GetClient returns the active baseline, while ledger receipts remain lifetime cumulative values.
+
+Regenerate the policy message with:
+
+```sh
+cd core/xray
+protoc --go_out=. --go_opt=paths=source_relative app/clientpolicy/config.proto
+```

@@ -19,6 +19,9 @@ func (e *Engine) Initialize(p Policy, seed Usage) error {
 	if seed.Remainder >= MultiplierScale {
 		return ErrInvalidUsage
 	}
+	if _, err := p.quotaUsage(seed, 0); err != nil {
+		return err
+	}
 	encoded, err := json.Marshal(struct {
 		Policy Policy
 		Usage  Usage

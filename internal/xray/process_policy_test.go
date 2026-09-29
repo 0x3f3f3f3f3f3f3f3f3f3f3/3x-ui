@@ -23,7 +23,7 @@ func TestManagedProcessNegotiatesAndSeedsBeforeOpeningListeners(t *testing.T) {
 	if binary == "" {
 		t.Skip("set XRAY_E2E_BINARY to the built custom core")
 	}
-	for _, mode := range []string{"success", "slow-preparation", "preparation-failure", "listener-conflict"} {
+	for _, mode := range []string{"success", "quota-window", "slow-preparation", "preparation-failure", "listener-conflict"} {
 		t.Run(mode, func(t *testing.T) {
 			dir, err := os.MkdirTemp("", "panel-managed-start-")
 			if err != nil {
@@ -54,6 +54,9 @@ func TestManagedProcessNegotiatesAndSeedsBeforeOpeningListeners(t *testing.T) {
 			port := freePort(t)
 			address := fmt.Sprintf("127.0.0.1:%d", port)
 			raw := fmt.Sprintf(`{"log":{"loglevel":"error"},"api":{"tag":"control","listen":%q,"services":["ClientPolicyServiceV1","HandlerService"]},"clientPolicy":{"stateFile":%q,"instanceId":"managed-process","policies":[{"clientId":"owner","version":1,"enabled":true,"multiplierMicros":1000000,"quotaBytes":1000,"burstBytes":65536}]},"inbounds":[{"tag":"owned","listen":"127.0.0.1","port":%d,"protocol":"tunnel","settings":{"network":"tcp","address":"127.0.0.1","port":%d,"clientId":"owner"}}],"outbounds":[{"protocol":"freedom","settings":{"finalRules":[{"action":"allow","ip":["127.0.0.1"]}]}}]}`, socket, state, port, target.Addr().(*net.TCPAddr).Port)
+			if mode == "quota-window" {
+				raw = strings.Replace(raw, `"quotaBytes":1000`, `"quotaBytes":600,"quotaBaselineBytes":100,"quotaBaselineRemainder":500000`, 1)
+			}
 			var config Config
 			if err := json.Unmarshal([]byte(raw), &config); err != nil {
 				t.Fatal(err)
@@ -93,9 +96,15 @@ func TestManagedProcessNegotiatesAndSeedsBeforeOpeningListeners(t *testing.T) {
 						return ctx.Err()
 					}
 				}
-				return api.Initialize(ctx, &clientpolicy.PolicyConfig{ClientId: "owner", Version: 1, Enabled: true, MultiplierMicros: 1000000, QuotaBytes: 1000, BurstBytes: 65536}, &policycommand.Usage{RawDownload: 100, BilledBytes: 100})
+				seedPolicy := &clientpolicy.PolicyConfig{ClientId: "owner", Version: 1, Enabled: true, MultiplierMicros: 1000000, QuotaBytes: 1000, BurstBytes: 65536}
+				seedUsage := &policycommand.Usage{RawDownload: 100, BilledBytes: 100}
+				if mode == "quota-window" {
+					seedPolicy.QuotaBytes, seedPolicy.QuotaBaselineBytes, seedPolicy.QuotaBaselineRemainder = 600, 100, 500000
+					seedUsage.Remainder = 500000
+				}
+				return api.Initialize(ctx, seedPolicy, seedUsage)
 			})
-			if mode != "success" && mode != "slow-preparation" {
+			if mode != "success" && mode != "quota-window" && mode != "slow-preparation" {
 				if mode == "preparation-failure" && !errors.Is(err, errSetup) {
 					t.Fatalf("lost preparation failure: %v", err)
 				}
@@ -139,6 +148,9 @@ func TestManagedProcessNegotiatesAndSeedsBeforeOpeningListeners(t *testing.T) {
 			client, err := api.GetClient(ctx, "owner")
 			if err != nil {
 				t.Fatal(err)
+			}
+			if mode == "quota-window" && (client.Usage.Remainder != 500000 || client.Policy.QuotaBaselineBytes != 100 || client.Policy.QuotaBaselineRemainder != 500000) {
+				t.Fatalf("process bootstrap lost quota baseline: %+v", client)
 			}
 			if client.Usage.RawUpload != 256 || client.Usage.RawDownload != 356 || client.Usage.BilledBytes != 612 {
 				t.Fatalf("activation lost the historical seed: %+v", client.Usage)

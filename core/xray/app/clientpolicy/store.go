@@ -136,6 +136,9 @@ func OpenPersistentEngine(path, instanceID string) (*Engine, error) {
 			if r.Policy.Validate() != nil || string(key) != r.Policy.ClientID || r.Usage.Remainder >= MultiplierScale || r.Epoch >= epoch || r.Sequence == 0 || r.Sequence > clients.Sequence() || r.UncertainBytes > math.MaxUint64-r.ReservedBytes || r.Usage.BilledBytes > math.MaxUint64-r.UncertainBytes-r.ReservedBytes {
 				return errors.New("invalid client state")
 			}
+			if _, err := r.Policy.quotaUsage(r.Usage, r.UncertainBytes); err != nil {
+				return err
+			}
 			records = append(records, r)
 			return nil
 		}); err != nil {
@@ -240,12 +243,15 @@ func (c *clientState) reserveLocked(n uint64) error {
 		return ErrPacketTooLarge
 	}
 	raw := uint64(reservationRawBytes)
-	if q := c.policy.QuotaBytes; q != 0 {
+	affordable := func(raw uint64) bool {
+		u, err := charge(c.usage, Upload, raw, c.policy.Multiplier)
+		return err == nil && !c.policy.exceedsQuota(u, c.uncertain) && !(u.BilledBytes == math.MaxUint64-c.uncertain && u.Remainder != 0)
+	}
+	if !affordable(raw) {
 		lo, hi := n, raw
 		for lo < hi {
 			mid := lo + (hi-lo+1)/2
-			u, err := charge(c.usage, Upload, mid, c.policy.Multiplier)
-			if err != nil || exceedsQuota(u, c.uncertain, q) {
+			if !affordable(mid) {
 				hi = mid - 1
 			} else {
 				lo = mid
@@ -272,10 +278,6 @@ func (c *clientState) reserveLocked(n uint64) error {
 	}
 	c.reservationLeft = raw
 	return nil
-}
-
-func exceedsQuota(u Usage, uncertain, q uint64) bool {
-	return q != 0 && (uncertain > q || u.BilledBytes > q-uncertain || u.BilledBytes == q-uncertain && u.Remainder != 0)
 }
 
 func (c *clientState) reasonsLocked(now time.Time) Reason {

@@ -92,3 +92,25 @@ func charge(before Usage, direction Direction, n, multiplier uint64) (Usage, err
 	result.Remainder = remainder
 	return result, nil
 }
+
+func (p Policy) quotaUsage(u Usage, uncertain uint64) (Usage, error) {
+	if u.Remainder >= MultiplierScale || uncertain > math.MaxUint64-u.BilledBytes {
+		return Usage{}, ErrInvalidUsage
+	}
+	u.BilledBytes += uncertain
+	if u.BilledBytes < p.QuotaBaselineBytes || u.BilledBytes == p.QuotaBaselineBytes && u.Remainder < p.QuotaBaselineRemainder {
+		return Usage{}, ErrInvalidPolicy
+	}
+	u.BilledBytes -= p.QuotaBaselineBytes
+	if u.Remainder < p.QuotaBaselineRemainder {
+		u.BilledBytes--
+		u.Remainder += MultiplierScale
+	}
+	u.Remainder -= p.QuotaBaselineRemainder
+	return u, nil
+}
+
+func (p Policy) exceedsQuota(u Usage, uncertain uint64) bool {
+	window, err := p.quotaUsage(u, uncertain)
+	return err != nil || p.QuotaBytes != 0 && (window.BilledBytes > p.QuotaBytes || window.BilledBytes == p.QuotaBytes && window.Remainder != 0)
+}
