@@ -4760,3 +4760,71 @@ and `release-manifest-file-hash-mutation-red.jsonl` under `/tmp/3x-ui-rate-trace
 The restored source was checked again under race/shuffle after the overlays;
 see `release-manifest-restored-race.jsonl` and `release-manifest-full-lint.log`.
 No frontend or existing application delivery code changed in this increment.
+
+## Candidate release runtime preflight
+
+The standalone panel commands in [update-staging.md](update-staging.md) now
+check compiled metadata, the complete staged manifest and an authenticated
+managed-core handshake before any business database initialization. This is a
+preflight component; existing installer/menu/web updater integration and safe
+activation/rollback remain unfinished.
+
+The previous normal panel failed the new metadata CLI tests (unknown command,
+non-JSON output and incorrect success exit for invalid arguments). It also
+failed both real-core preflight cases because the command did not exist. New
+metadata API/modified-source tests initially failed to compile. The first full
+lint found a context-free listener; using `ListenConfig.Listen(ctx, ...)` fixed
+that finding, and the final full repository lint reported **0 issues**.
+
+A normal Linux arm64 candidate was built with an explicit `f` repeated 40 times
+source stamp and `-buildvcs=false`. This is a declared **test fixture identity**,
+not source provenance attestation. It accepted the actual managed Xray
+26.9.9 / 3x-ui-managed-1 and rejected the stock core built from the same pinned
+upstream source. Eight invalid bundle/CLI cases failed before launching a
+marker core: commit, tag, platform, ABI, modified file, foreign panel executable,
+extra argument and missing commit. Database sentinels and unrelated directories
+remained unchanged; probe temporary files were removed.
+
+A second actual build kept VCS metadata and the same explicit stamp. Its
+`modified` flag was true; a fully inventoried fixture was rejected with exit 2
+before the marker core ran, leaving its temporary directory empty. Thus the
+explicit source stamp does not hide a recorded dirty checkout.
+
+Cancellation testing waits until an owned core helper receives authentication
+bytes on the actual probe listener, withholds the reply and sends SIGTERM to
+the candidate. The candidate must fail within 2 seconds, reap the observed
+child, release its exact listening address and remove its temporary files. A
+Go overlay that discarded only signal-context propagation failed at this
+unchanged deadline (3.851s overall); restoring the implementation passed. The
+helper exercises process/handshake cleanup, not stock-core interoperability.
+
+Final affected race/shuffle checks passed **9 top-level tests / 22 subtests**,
+no skips, across the root package and `internal/config` (6.317s and 1.019s):
+
+```sh
+XUI_E2E_PANEL=/tmp/3x-ui-release-preflight-panel-final \
+XUI_E2E_RELEASE_COMMIT=ffffffffffffffffffffffffffffffffffffffff \
+XUI_MANAGED_XRAY_E2E_BINARY=/tmp/3x-ui-xray-managed-final-1 \
+XUI_STOCK_XRAY_E2E_BINARY=/tmp/3x-ui-xray-pinned \
+go test -p 1 -race -shuffle=on -count=1 -timeout=2m \
+  -run '^Test(ReleaseInfoCLI|VerifyReleaseCLI|ReleaseInfoSource|ReleaseInfoRejects|ReleaseInfoDoesNot|ReleaseInfoReports)' \
+  -json . ./internal/config
+```
+
+Logs under `/tmp/3x-ui-rate-trace/`: `release-info-cli-red.jsonl`,
+`release-runtime-first-green.jsonl`, `release-runtime-reject-green.jsonl`,
+`release-runtime-cancel-mutant.jsonl`, `release-runtime-final-race.jsonl` and
+`release-runtime-lint-final.log`. The final full-root command
+`go test -p 1 -shuffle=on -count=1 -timeout=25m -json ./...`, with the normal
+candidate, both managed-core variables, the separate stock-core variable,
+Mihomo and both isolated PostgreSQL DSNs enabled, passed **56 test packages /
+2734 top-level tests / 4966 subtests**, with no failures. The service package
+took 664.626s. **28 top-level and 14 subtests were skipped**; their exact 42
+names matched the preceding AWG forwarding regression, with none added or
+removed. Seven additional packages had no tests. See
+`release-runtime-full-go.jsonl`. Go source and embedded assets were unchanged
+throughout the run. No frontend behavior changed in this increment.
+
+No Docker image, release publication or host installation was executed. The
+Dockerfile's scoped change builds the whole root package so the new CLI file is
+linked; managed-core image/release assembly remains a separate delivery step.

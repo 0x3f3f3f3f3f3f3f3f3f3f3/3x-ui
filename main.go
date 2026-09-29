@@ -579,6 +579,13 @@ func loadServiceEnvFile() {
 // main is the entry point of the 3x-ui application.
 // It parses command-line arguments to run the web server, migrate database, or update settings.
 func main() {
+	if handled, err := runReleaseCommand(os.Args[1:], os.Stdout); handled {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		return
+	}
 	loadServiceEnvFile()
 
 	if len(os.Args) < 2 {
@@ -763,6 +770,8 @@ func main() {
 func commandHelp() string {
 	return `
 Commands:
+    release-info   print compiled release identity without opening the database
+    verify-release verify a staged bundle and its managed routing core
     run            run web panel
     migrate        migrate from other/old x-ui
     migrate-db     SQLite <-> .dump (--dump/--restore) or copy into PostgreSQL (--dsn)

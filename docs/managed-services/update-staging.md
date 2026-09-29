@@ -133,7 +133,54 @@ The full-inventory check is for an assembled or freshly staged bundle. Runtime
 files added to an installed directory are not release members. The installer
 and web updater still need integration that respects this distinction, binds
 scripts/helpers to the selected release, preserves runtime state and restores
-the old program/database on failed activation. The ABI values are declarations:
-a native panel metadata check and authenticated managed-core probe are still
-required to establish actual compatibility before activation. No stock-core
-compatibility or complete fork-safe update claim follows from this manifest.
+the old program/database on failed activation. The ABI values are declarations;
+the runtime check below verifies the candidate panel and managed core before
+activation. No complete fork-safe update claim follows from the manifest alone.
+
+## Candidate runtime preflight
+
+The panel exposes two standalone commands before loading service configuration
+or opening a business database:
+
+```sh
+./x-ui release-info
+./x-ui verify-release --directory /path/to/stage/x-ui \
+  --commit FULL_SELECTED_COMMIT --tag SELECTED_TAG --platform linux-arm64
+```
+
+`release-info` emits JSON containing the fixed repository, full source commit,
+modified-source flag, native platform, panel version and policy/routing ABIs.
+Builds may set `internal/config.buildSourceCommit` through the module-qualified
+Go linker flag; otherwise the commit comes from Go's VCS build information.
+An unknown source remains empty. An explicit stamp does not hide a recorded
+`vcs.modified=true`. ARM platforms use the compiled GOARM value. These fields
+are build declarations, not independent source provenance attestation.
+
+`verify-release` requires Linux, an unmodified matching compiled identity, the
+selected manifest and its complete file inventory. It must execute the panel
+inside that staged bundle. It then starts the bundle's Xray on an ephemeral
+IPv4 loopback port with a random managed-bridge credential, a blackhole outbound
+and private temporary configuration/log paths. The existing bridge performs a
+real nonce/HMAC handshake; no external destination is requested. A stock Xray
+cannot pass this check merely by declaring the ABI in its manifest.
+
+The probe uses the existing managed process lifecycle, stops its owned core and
+removes its temporary directory on success, failure or handled cancellation.
+The readiness/handshake context is limited to 10 seconds; the existing version
+query and process-stop bounds also apply. The command handles SIGINT/SIGTERM.
+The cancellation test's 2-second bound measures an already pending handshake,
+not every possible startup or shutdown stage. It checks the observed child PID
+has disappeared, its exact listening address can be rebound and probe files
+are gone. An external SIGKILL cannot run filesystem cleanup.
+
+Actual Linux arm64 checks cover a managed-core success, stock-core rejection,
+invalid source/tag/platform/ABI, changed files and execution from outside the
+bundle. Rejected metadata/inventory cases must not launch even a marker core.
+Database sentinels and unrelated runtime directories remain unchanged. Removing
+signal-context propagation through a build overlay makes the cancellation test
+fail at its unchanged 2-second deadline; restoring it passes.
+
+This command does not start the candidate web service, migrate or restore a
+database, validate every user configuration, replace an installed directory or
+prove a packaged image works. Installer/menu/web-updater integration and safe
+activation with program/database rollback remain separate unfinished work.
