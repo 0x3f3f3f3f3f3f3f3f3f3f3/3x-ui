@@ -917,3 +917,40 @@ passes (1.590 s package time), lint reports zero issues, and panel build passes
 (8.26 s). Explicit Go formatting and all 18 workflow shell blocks pass.
 The version-output addition passes targeted core tests and builds;
 core data-path implementation is unchanged in this increment.
+
+
+Live handoff candidate (2026-09-29): real Tunnel traffic verifies ordinary-poll
+settlement, a lost commit acknowledgement and a fresh final delta before seed
+capture. The hand-checked baseline 100/200 plus 5+6+4 echo bytes produces a
+115/215 seed billed at 330; four subsequent managed echo bytes at multiplier 2
+produce 119/219 raw and 346 billed. SQL failure retains the frozen snapshot and
+retry ID. Tests reject unmetered configurations, listener conflicts, changed
+installed images, changed credentials, replacement stable IDs and a business
+listener that merely uses the API tag. Mid-settlement executable replacement
+still launches the pinned image. Delimiter-containing emails retain exact usage.
+
+Crash regressions initially showed a fresh panel starting from stale usage after
+failed final SQL, both with and without the configuration opt-in. Durable intent
+and atomic completion now fence that path, including direct bootstrap/seed calls.
+A final receipt update failure rolls back completion and usage together. A final
+commit followed by policy-preparation failure survives loss of the panel process;
+the next process captures 105/205 and 310 billed. A completion marker without its
+referenced receipt is refused.
+
+The first complete root gate passed internal/xray race and PostgreSQL handoff,
+but failed TestTrafficHandoffImagePreservesDefaultResourceDirectory in the full
+panel suite. An earlier API test left an explicit asset-directory environment
+variable. Clearing and restoring all four asset/certificate variable names in
+the default-directory fixture fixed the original shuffle seed (1790720481238172087,
+17.723 s for internal/xray) and a deliberately contaminated environment race run
+(1.866 s). Production explicit environment preservation remains unchanged. The
+initial journal SQLite handoff race suite passes (15.379 s). PostgreSQL race
+passes for service handoff (39.134 s) and cross-database migration (10.436 s),
+including pending/completed markers through export/dump/restore and older schemas.
+Final root internal/xray race (22.53 s command time), SQLite handoff race
+(18.73 s) and complete panel suite (302.85 s) pass. Lint initially found the new
+test imports lacked the repository's local-module group; that formatting-only
+fix passes lint with zero issues (31.11 s) and panel build (8.31 s). All 19
+changed Go files meet both repository import grouping and gofumpt; workflow YAML
+and all 19 embedded shell blocks validate. Source review found no blocker for
+this guarded handoff increment. Large SQL batch bounds remain separate work.

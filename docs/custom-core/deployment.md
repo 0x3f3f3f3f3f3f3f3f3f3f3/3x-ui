@@ -20,3 +20,22 @@ build/custom-xray policy-init -file /private/path/policy.db -instance panel-assi
 ```
 
 Set `clientPolicy.stateFile` to that path and `clientPolicy.instanceId` to the same ID, alongside `policies`. Existing, missing, corrupt, mismatched or locked state must not be deleted/reinitialized to bypass an error. Lost state requires authoritative ledger reconciliation; that workflow is not implemented yet. Keep the state on durable local storage; installer/Docker volume setup and backup fencing remain open.
+
+
+## Interrupted live handoff
+
+A live legacy-to-managed transition records its old child boot in the panel SQL
+source before draining. Back up this source together with `legacy_traffic_receipts`,
+client traffic, identities and the private policy state; do not omit the source's
+handoff fields when moving between SQLite and PostgreSQL.
+
+After a transient SQL failure, keep the original panel process alive and retry
+activation: it retains the frozen final snapshot and receipt ID. Once final SQL
+has committed, a panel restart can finish managed activation using that committed
+usage. If the original panel and snapshot are lost before final SQL commits, the
+new panel refuses to start business listeners. Preserve the database, core state
+and available logs for authoritative reconciliation. Do not clear the handoff
+marker or create a fresh policy store to get past the error: doing so can restore
+already-spent quota. Automated reconciliation of an irretrievably lost legacy
+snapshot is not implemented. A rollback still requires the coordinated
+pre-upgrade backup and matching binaries described above.

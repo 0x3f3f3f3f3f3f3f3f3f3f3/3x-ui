@@ -41,7 +41,9 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	if err := src.Create(&clients).Error; err != nil {
 		t.Fatal(err)
 	}
-	source := model.ClientPolicySource{InstanceID: "migrated-source", NodeKey: "local", Epoch: 3, Sequence: 17}
+	source := model.ClientPolicySource{InstanceID: "migrated-source", NodeKey: "local", Epoch: 3, Sequence: 17, HandoffBootID: "original-boot", HandoffProcessID: "original-process", HandoffBatchID: "original-final"}
+	pendingSource := model.ClientPolicySource{InstanceID: "pending-source", NodeKey: "pending-node", HandoffBootID: "interrupted-boot"}
+	finalReceipt := model.LegacyTrafficReceipt{ProcessID: "original-process", Sequence: 3, BatchID: "original-final"}
 	total := model.ClientPolicyTotal{ClientID: clients[0].StableID, RawUpload: 11, RawDownload: 22, BilledBytes: 66, UncertainBytes: 5}
 	receipt := model.ClientPolicyReceipt{FirstUsedAt: 123450, InstanceID: source.InstanceID, ClientID: total.ClientID, Epoch: 2, Sequence: 17, PolicyVersion: 4, RawUpload: 11, RawDownload: 22, BilledBytes: 66, UncertainBytes: 5, Remainder: 1234}
 	reset := model.ClientPolicyReset{ClientID: clients[0].StableID, RequestID: "migrated-reset", InstanceID: source.InstanceID, Epoch: 2, Sequence: 10, RawUpload: 4, RawDownload: 5, BilledBytes: 9, Remainder: 500000, UncertainBytes: 2, PolicyVersion: 3, CreatedAt: 123456}
@@ -49,7 +51,7 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	resetTime := model.ClientTrafficResetTime{ClientID: clients[0].StableID, EffectiveAt: 123456}
 	deleted := model.ClientPolicyTombstone{ClientID: "zz-deleted", CreatedAt: 123400}
 	deletionReceipt := model.ClientPolicyReceipt{InstanceID: source.InstanceID, ClientID: deleted.ClientID, DeletionAbsent: true, SeedUpload: 7, SeedDownload: 8, SeedBilled: 15}
-	for _, row := range []any{&source, &total, &receipt, &reset, &batch, &resetTime, &deleted, &deletionReceipt} {
+	for _, row := range []any{&source, &pendingSource, &finalReceipt, &total, &receipt, &reset, &batch, &resetTime, &deleted, &deletionReceipt} {
 		if err := src.Create(row).Error; err != nil {
 			t.Fatal(err)
 		}
@@ -102,6 +104,20 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 		}
 	}
 	assertDeletion(dst)
+	assertHandoff := func(db *gorm.DB) {
+		t.Helper()
+		for _, want := range []model.ClientPolicySource{source, pendingSource} {
+			var got model.ClientPolicySource
+			if err := db.First(&got, "instance_id = ?", want.InstanceID).Error; err != nil || got != want {
+				t.Fatalf("migration lost handoff intent or completion: %+v %v", got, err)
+			}
+		}
+		var got model.LegacyTrafficReceipt
+		if err := db.First(&got, "process_id = ?", finalReceipt.ProcessID).Error; err != nil || got != finalReceipt {
+			t.Fatalf("migration lost final handoff receipt: %+v %v", got, err)
+		}
+	}
+	assertHandoff(dst)
 	exported, dump, restored := filepath.Join(t.TempDir(), "export.db"), filepath.Join(t.TempDir(), "export.dump"), filepath.Join(t.TempDir(), "restore.db")
 	if err := ExportPostgresToSQLite(os.Getenv("XUI_DB_DSN"), exported); err != nil {
 		t.Fatal(err)
@@ -118,6 +134,19 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	}
 	t.Cleanup(func() { closeGorm(restoredDB) })
 	assertDeletion(restoredDB)
+	assertHandoff(restoredDB)
+	for _, column := range []string{"handoff_boot_id", "handoff_process_id", "handoff_batch_id"} {
+		if err := src.Migrator().DropColumn(&model.ClientPolicySource{}, column); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := MigrateData(path, os.Getenv("XUI_DB_DSN")); err != nil {
+		t.Fatalf("pre-handoff ledger migration: %v", err)
+	}
+	var preHandoff model.ClientPolicySource
+	if err := dst.First(&preHandoff, "instance_id = ?", source.InstanceID).Error; err != nil || preHandoff.HandoffBootID != "" || preHandoff.HandoffProcessID != "" || preHandoff.HandoffBatchID != "" || preHandoff.Epoch != 3 || preHandoff.Sequence != 17 {
+		t.Fatalf("old ledger invented handoff or lost source: %+v %v", preHandoff, err)
+	}
 	if err := src.Migrator().DropTable(&model.ClientPolicyTombstone{}); err != nil {
 		t.Fatal(err)
 	}

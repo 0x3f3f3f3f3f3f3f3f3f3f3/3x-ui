@@ -16,6 +16,11 @@ import (
 )
 
 func TestClientPolicyLiveLegacyRefusalLeavesPreparationUntouched(t *testing.T) {
+	binary := os.Getenv("XRAY_UPSTREAM_E2E_BINARY")
+	if binary == "" {
+		t.Skip("set XRAY_UPSTREAM_E2E_BINARY to the unmodified core")
+	}
+	t.Setenv("XRAY_E2E_BINARY", binary)
 	svc, tunnel, owner, _ := setupManagedActivationService(t)
 	cfg, err := svc.GetXrayConfig()
 	if err != nil {

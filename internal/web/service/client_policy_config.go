@@ -20,8 +20,24 @@ import (
 
 var ErrManagedConfigStale = errors.New("managed configuration changed during compilation")
 
+type compiledManagedConfig struct {
+	config   *xray.Config
+	state    conf.ClientPolicyConfig
+	ids      []string
+	records  map[string]model.ClientRecord
+	bindings map[string][]model.ClientRecord
+}
+
 // A candidate binds database identities before negotiated activation; it does not migrate legacy usage.
 func (s *XrayService) GetManagedXrayConfig(state *conf.ClientPolicyConfig) (*xray.Config, error) {
+	compiled, err := s.compileManagedXrayConfig(state)
+	if err != nil {
+		return nil, err
+	}
+	return compiled.prepare()
+}
+
+func (s *XrayService) compileManagedXrayConfig(state *conf.ClientPolicyConfig) (*compiledManagedConfig, error) {
 	if state == nil || !filepath.IsAbs(state.StateFile) {
 		return nil, clientpolicy.ErrInvalidPolicy
 	}
@@ -122,19 +138,26 @@ func (s *XrayService) GetManagedXrayConfig(state *conf.ClientPolicyConfig) (*xra
 	if _, err := coreConfig.Build(); err != nil {
 		return nil, fmt.Errorf("managed candidate validation: %w", err)
 	}
+	return &compiledManagedConfig{config: cfg, state: policyState, ids: ids, records: records, bindings: bindings}, nil
+}
+
+func (c *compiledManagedConfig) prepare() (*xray.Config, error) {
+	policyState := c.state
 	policyState.Policies = nil
-	for _, batch := range chunkStrings(ids, 1000) {
-		policies, err := prepareClientPolicies(batch, records)
+	for _, batch := range chunkStrings(c.ids, 1000) {
+		policies, err := prepareClientPolicies(batch, c.records)
 		if err != nil {
 			return nil, err
 		}
 		policyState.Policies = append(policyState.Policies, policies...)
 	}
-	cfg.ClientPolicy, err = json.Marshal(policyState)
+	raw, err := json.Marshal(policyState)
 	if err != nil {
 		return nil, err
 	}
-	return cfg, nil
+	cfg := *c.config
+	cfg.ClientPolicy = raw
+	return &cfg, nil
 }
 
 func readManagedConfigSnapshot(db *gorm.DB, read func(*gorm.DB) error) error {

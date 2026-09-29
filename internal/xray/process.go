@@ -125,16 +125,19 @@ func NewTestProcess(xrayConfig *Config, configPath string) *Process {
 }
 
 type process struct {
-	trafficBootID       string
-	trafficEndpoint     string
-	trafficDraining     bool
-	trafficFinal        map[string]int64
-	trafficFinalSettled bool
-	trafficMu           sync.Mutex
-	trafficCursor       map[string]int64
-	trafficID           string
-	trafficSequence     int64
-	trafficPending      *pendingTrafficBatch
+	trafficOwners        map[string]string
+	trafficExecutableDir string
+	trafficExecutable    []byte
+	trafficBootID        string
+	trafficEndpoint      string
+	trafficDraining      bool
+	trafficFinal         map[string]int64
+	trafficFinalSettled  bool
+	trafficMu            sync.Mutex
+	trafficCursor        map[string]int64
+	trafficID            string
+	trafficSequence      int64
+	trafficPending       *pendingTrafficBatch
 
 	// mu guards the process lifecycle fields (cmd, done, exitErr) plus version,
 	// apiPort, and config, which are written by Start/startCommand/refreshVersion/
@@ -200,6 +203,8 @@ type process struct {
 	// lazily by the first caller.
 	onlineAPISupport atomic.Int32
 
+	binaryEnv  []string
+	binaryPath string
 	config     *Config
 	configPath string // if set, use this path instead of GetConfigPath() and remove on Stop
 	logWriter  *LogWriter
@@ -605,7 +610,7 @@ func (p *process) refreshVersion() bool {
 	supportsTrafficControl := false
 	ctx, cancel := context.WithTimeout(context.Background(), xrayVersionTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, GetBinaryPath(), "-version")
+	cmd := p.command(ctx, "-version")
 	if data, err := cmd.Output(); err == nil {
 		for _, line := range bytes.Split(data, []byte("\n")) {
 			if bytes.Equal(bytes.TrimSpace(line), []byte("Custom configuration: traffic-control-v1")) {
@@ -679,7 +684,7 @@ func (p *process) startConfig(startConfig *Config) (err error) {
 		return common.NewErrorf("Failed to write configuration file: %v", err)
 	}
 
-	cmd := exec.CommandContext(context.Background(), GetBinaryPath(), "-c", configPath)
+	cmd := p.command(context.Background(), "-c", configPath)
 	cmd.Stdout = p.logWriter
 	cmd.Stderr = p.logWriter
 
@@ -765,6 +770,9 @@ func (p *process) startCommandOwned(cmd *exec.Cmd, controlDir string) error {
 	p.mu.Unlock()
 	p.intentionalStop.Store(false)
 
+	if cmd.Env == nil {
+		cmd.Env = cmd.Environ()
+	}
 	if err := cmd.Start(); err != nil {
 		close(done)
 		p.mu.Lock()
@@ -780,6 +788,9 @@ func (p *process) startCommandOwned(cmd *exec.Cmd, controlDir string) error {
 	p.trafficBootID, p.trafficEndpoint = "", ""
 	p.trafficDraining, p.trafficFinalSettled = false, false
 	p.trafficFinal = nil
+	p.trafficExecutable = nil
+	p.trafficExecutableDir = ""
+	p.trafficOwners = nil
 	attachChildLifetime(cmd)
 
 	go p.waitForCommand(cmd, done, controlDir)
@@ -931,4 +942,17 @@ func pruneOldCrashReports(dir string, keep int) {
 	for _, old := range reports[:len(reports)-keep] {
 		_ = os.Remove(filepath.Join(dir, old))
 	}
+}
+
+func (p *process) executablePath() string {
+	if p.binaryPath != "" {
+		return p.binaryPath
+	}
+	return GetBinaryPath()
+}
+
+func (p *process) command(ctx context.Context, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, p.executablePath(), args...)
+	cmd.Env = p.binaryEnv
+	return cmd
 }

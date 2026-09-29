@@ -7,10 +7,13 @@ type ClientPolicyTombstone struct {
 }
 
 type ClientPolicySource struct {
-	InstanceID string `gorm:"primaryKey;size:128"`
-	NodeKey    string `gorm:"uniqueIndex;not null;size:128"`
-	Epoch      int64  `gorm:"not null"`
-	Sequence   int64  `gorm:"not null"`
+	InstanceID       string `gorm:"primaryKey;size:128"`
+	NodeKey          string `gorm:"uniqueIndex;not null;size:128"`
+	Epoch            int64  `gorm:"not null"`
+	Sequence         int64  `gorm:"not null"`
+	HandoffBootID    string `gorm:"not null;default:'';size:36"`
+	HandoffProcessID string `gorm:"not null;default:'';size:36"`
+	HandoffBatchID   string `gorm:"not null;default:'';size:36"`
 }
 
 type ClientPolicyTotal struct {

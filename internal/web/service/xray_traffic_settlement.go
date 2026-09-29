@@ -29,35 +29,7 @@ func (s *XrayService) CollectAndSettleTraffic() (*XrayTrafficSettlement, error) 
 	if err := maintainManagedTraffic(p); err != nil {
 		return nil, err
 	}
-	traffics, clients, err := p.SettleTraffic(func(batch *xray.TrafficBatch) error {
-		return runSerializedTx(func(tx *gorm.DB) error {
-			receipt := model.LegacyTrafficReceipt{ProcessID: batch.ProcessID}
-			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&receipt).Error; err != nil {
-				return err
-			}
-			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&receipt, "process_id = ?", batch.ProcessID).Error; err != nil {
-				return err
-			}
-			if receipt.Sequence == batch.Sequence && receipt.BatchID == batch.ID {
-				return nil
-			}
-			if receipt.Sequence != batch.Sequence-1 {
-				return errors.New("traffic settlement receipt is inconsistent")
-			}
-			traffics, clients := batch.Traffics, batch.ClientTraffics
-			if err := s.inboundService.addInboundTraffic(tx, traffics); err != nil {
-				return err
-			}
-			if err := s.inboundService.addClientTraffic(tx, clients); err != nil {
-				return err
-			}
-			if err := (&outbound.OutboundService{}).AddTrafficTx(tx, traffics); err != nil {
-				return err
-			}
-			receipt.Sequence, receipt.BatchID = batch.Sequence, batch.ID
-			return tx.Save(&receipt).Error
-		})
-	})
+	traffics, clients, err := p.SettleTraffic(s.settleLegacyTrafficBatch)
 	if err != nil {
 		return nil, err
 	}
@@ -67,4 +39,43 @@ func (s *XrayService) CollectAndSettleTraffic() (*XrayTrafficSettlement, error) 
 		return nil, err
 	}
 	return &XrayTrafficSettlement{Traffics: traffics, ClientTraffics: clients, NeedRestart: needRestart, ClientsDisabled: disabled}, nil
+}
+
+func (s *XrayService) settleLegacyTrafficBatch(batch *xray.TrafficBatch) error {
+	return s.settleLegacyTrafficBatchChecked(batch, nil)
+}
+
+func (s *XrayService) settleLegacyTrafficBatchChecked(batch *xray.TrafficBatch, check func(*gorm.DB, *xray.TrafficBatch) error) error {
+	return runSerializedTx(func(tx *gorm.DB) error {
+		receipt := model.LegacyTrafficReceipt{ProcessID: batch.ProcessID}
+		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&receipt).Error; err != nil {
+			return err
+		}
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&receipt, "process_id = ?", batch.ProcessID).Error; err != nil {
+			return err
+		}
+		if receipt.Sequence == batch.Sequence && receipt.BatchID == batch.ID {
+			return nil
+		}
+		if receipt.Sequence != batch.Sequence-1 {
+			return errors.New("traffic settlement receipt is inconsistent")
+		}
+		if check != nil {
+			if err := check(tx, batch); err != nil {
+				return err
+			}
+		}
+		traffics, clients := batch.Traffics, batch.ClientTraffics
+		if err := s.inboundService.addInboundTraffic(tx, traffics); err != nil {
+			return err
+		}
+		if err := s.inboundService.addClientTraffic(tx, clients); err != nil {
+			return err
+		}
+		if err := (&outbound.OutboundService{}).AddTrafficTx(tx, traffics); err != nil {
+			return err
+		}
+		receipt.Sequence, receipt.BatchID = batch.Sequence, batch.ID
+		return tx.Save(&receipt).Error
+	})
 }

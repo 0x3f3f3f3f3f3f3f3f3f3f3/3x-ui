@@ -39,6 +39,11 @@ func BindClientPolicySource(nodeKey, instanceID string, epoch uint64) error {
 		if source.InstanceID != instanceID || source.Epoch > int64(epoch) {
 			return ErrClientPolicyLedger
 		}
+		if source.HandoffBootID != "" {
+			if err := checkLegacyHandoffReceipt(tx, &source); err != nil {
+				return err
+			}
+		}
 		return tx.Model(&source).Update("epoch", int64(epoch)).Error
 	})
 }
@@ -61,6 +66,11 @@ func PrepareClientPolicyLedger(instanceID, clientID string) (*command.Usage, err
 		var source model.ClientPolicySource
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&source, "instance_id = ?", instanceID).Error; err != nil {
 			return err
+		}
+		if source.HandoffBootID != "" {
+			if err := checkLegacyHandoffReceipt(tx, &source); err != nil {
+				return err
+			}
 		}
 		var client model.ClientRecord
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&client, "stable_id = ?", clientID).Error; err != nil {

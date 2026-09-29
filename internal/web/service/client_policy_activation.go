@@ -11,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/app/clientpolicy"
 	command "github.com/xtls/xray-core/app/clientpolicy/command"
 	"github.com/xtls/xray-core/infra/conf"
+	"gorm.io/gorm"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/config"
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
@@ -37,7 +38,7 @@ func (s *InboundService) reconcileManagedChange(inbound *model.Inbound) (bool, e
 }
 
 func (s *XrayService) managedPolicyRequested() (bool, error) {
-	if process := currentXrayProcess(); process != nil && len(process.GetConfig().ClientPolicy) > 0 {
+	if process := currentXrayProcess(); process != nil && (len(process.GetConfig().ClientPolicy) > 0 || process.FinalTrafficPending()) {
 		return true, nil
 	}
 	raw, err := s.settingService.GetXrayConfigTemplate()
@@ -54,18 +55,80 @@ func (s *XrayService) managedPolicyRequested() (bool, error) {
 		return true, nil
 	}
 	var count int64
-	err = database.GetDB().Model(&model.ClientPolicySource{}).Where("node_key = ? AND epoch > 0", "local").Count(&count).Error
+	err = database.GetDB().Model(&model.ClientPolicySource{}).Where("node_key = ? AND (epoch > 0 OR handoff_boot_id <> '')", "local").Count(&count).Error
 	return count > 0, err
 }
 
 func (s *XrayService) restartManagedXrayLocked(isForce bool) error {
 	process := currentXrayProcess()
-	if process != nil && process.IsRunning() && len(process.GetConfig().ClientPolicy) == 0 {
-		return errors.New("live legacy traffic must be drained and settled before managed activation")
+	if err := checkLocalLegacyHandoff(process); err != nil {
+		return err
+	}
+	var executable *xray.TrafficHandoffExecutable
+	legacy := process != nil && len(process.GetConfig().ClientPolicy) == 0 && (process.IsRunning() || process.FinalTrafficPending())
+	if legacy {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err := process.CheckTrafficHandoff(ctx)
+		cancel()
+		if err != nil {
+			return fmt.Errorf("live legacy traffic cannot be safely drained and settled: %w", err)
+		}
+		executable, err = process.PinTrafficHandoffExecutable()
+		if err != nil {
+			return err
+		}
+		defer executable.Close()
 	}
 	state, err := EnsureLocalClientPolicyState(filepath.Join(config.GetDBFolderPath(), "client-policy"))
 	if err != nil {
 		return errors.Join(errManagedCandidateUnavailable, err)
+	}
+	if legacy {
+		compiled, err := s.compileManagedXrayConfig(state)
+		if err != nil {
+			return errors.Join(errManagedCandidateUnavailable, err)
+		}
+		if err := compiled.checkLegacyAccounting(process.GetConfig()); err != nil {
+			return err
+		}
+		if conflicts := bindConflicts(compiled.config, process.GetConfig()); len(conflicts) > 0 {
+			return errors.Join(errManagedCandidateUnavailable, fmt.Errorf("config refused: %s", conflicts[0]))
+		}
+		if _, err := localManagedPolicyRuntime(); err != nil {
+			return err
+		}
+		owners := make(map[string]string, len(compiled.records))
+		for _, record := range compiled.records {
+			owners[record.Email] = record.StableID
+		}
+		if err := process.PinFinalTrafficOwners(owners); err != nil {
+			return err
+		}
+		boot := process.TrafficDrainBootID()
+		if err := beginLegacyHandoff(state.InstanceID, boot); err != nil {
+			return err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		err = process.SettleFinalTraffic(ctx, func(batch *xray.TrafficBatch) error {
+			return s.settleLegacyTrafficBatchChecked(batch, func(tx *gorm.DB, batch *xray.TrafficBatch) error {
+				if err := compiled.checkLegacyTrafficOwners(tx, batch); err != nil {
+					return err
+				}
+				return completeLegacyHandoff(tx, state.InstanceID, boot, batch)
+			})
+		})
+		cancel()
+		if err != nil {
+			return fmt.Errorf("final legacy traffic settlement: %w", err)
+		}
+		if err := requireLegacyHandoffComplete(state.InstanceID, boot); err != nil {
+			return err
+		}
+		if process.IsRunning() {
+			if err := process.Stop(); err != nil {
+				return err
+			}
+		}
 	}
 	candidate, err := s.managedConfigCandidate(state)
 	if err != nil {
@@ -123,7 +186,11 @@ func (s *XrayService) restartManagedXrayLocked(isForce bool) error {
 	if err := json.Unmarshal(candidate.ClientPolicy, &policy); err != nil {
 		return err
 	}
-	process = xray.NewProcess(candidate)
+	if executable != nil {
+		process = executable.NewProcess(candidate)
+	} else {
+		process = xray.NewProcess(candidate)
+	}
 	xrayState.replace(process)
 	s.xrayAPI.StatsLastValues = nil
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)

@@ -16,6 +16,7 @@ type TrafficBatch struct {
 	ProcessID      string
 	Sequence       int64
 	ID             string
+	Final          bool
 	Traffics       []*Traffic
 	ClientTraffics []*ClientTraffic
 }
@@ -30,7 +31,7 @@ type pendingTrafficBatch struct {
 func (p *Process) SettleTraffic(settle func(*TrafficBatch) error) ([]*Traffic, []*ClientTraffic, error) {
 	p.trafficMu.Lock()
 	defer p.trafficMu.Unlock()
-	if p.trafficDraining {
+	if p.trafficDraining || p.trafficOwners != nil {
 		return nil, nil, ErrFinalTrafficPending
 	}
 	if !p.IsControlReady() {
@@ -128,6 +129,6 @@ func (p *Process) trafficBatchFromCounters(values map[string]int64, final bool) 
 	clientTraffics := mapToSlice(clients)
 	return &pendingTrafficBatch{batch: TrafficBatch{
 		ProcessID: p.trafficID, Sequence: p.trafficSequence + 1, ID: uuid.NewString(),
-		Traffics: traffics, ClientTraffics: clientTraffics,
+		Traffics: traffics, ClientTraffics: clientTraffics, Final: final,
 	}, cursor: cursor}, nil
 }

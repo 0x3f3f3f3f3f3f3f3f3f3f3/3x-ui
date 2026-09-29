@@ -414,3 +414,44 @@ it before signaling exit; failures before launch clean it immediately. Explicit
 control paths remain caller-owned. The generated endpoint never changes the
 panel's desired configuration, exports or hot-diff comparison. Automatic control
 does not itself enable managed policy activation or service SQL handoff.
+
+
+## Verified live legacy handoff
+
+Explicit managed activation can now take over a running, owned Linux Custom
+child whose private control advertises the final-counter capability. Before
+requesting the irreversible drain, the panel compiles and validates the managed
+candidate without reserving policy versions. It checks listener conflicts,
+actual legacy credentials, user statistics settings and email ownership. An
+unmetered Tunnel configuration, an unrecognized business listener or an upstream
+core is refused while the existing business process remains available.
+
+The launched executable is identified from the owned child. The installed image
+must still match it; a private copy is hash checked and executed before drain,
+then used for the replacement launch. Its inherited resource environment and
+original executable-relative geodata/certificate defaults are preserved. The
+private image lives until replacement startup completes. Ordinary polling is
+fenced once ownership is pinned. Pending SQL batches retain their original
+receipt IDs; a boot-pinned immutable final snapshot supplies only the remaining
+delta. The shared transaction commits inbound, client and outbound usage with
+the final receipt before any managed usage seed is captured. It rechecks stable
+identity and credentials inside that transaction; reusing an email cannot
+transfer a cached final delta to a new client.
+
+The local policy source records the old boot before pending replay or drain.
+Its final process/batch reference commits atomically with final usage and the
+legacy receipt. A fresh panel refuses activation if this intent lacks its final
+receipt and the original owned process/snapshot is unavailable. Removing the
+configuration opt-in does not bypass that fence. Direct bootstrap binding and
+seed preparation enforce the same receipt prerequisite. If final SQL completed
+but policy preparation failed, a fresh panel can resume from the committed final
+usage. Database migration/export preserves both interrupted intents and completed
+receipt references.
+
+This is a guarded transition, not durable storage of every legacy counter. If
+both the original panel's pending snapshot and the old child are lost before
+final SQL commits, automatic recovery is intentionally refused; authoritative
+usage reconciliation is still required. An unsupported or unmetered legacy
+configuration also needs a separately verified migration. Automatic selection
+from ordinary client policy fields, generated Tunnel metering, complete UI state,
+all protocol ownership and general backup/restore fencing remain open.

@@ -99,8 +99,8 @@ Files: `internal/database/{db.go,model/*}`, `internal/web/{service,controller,ru
 - [ ] Test wildcard/dual-stack/control-port collision, reassignment, reset/renew restrictions and active connection termination.
 - [x] Core prerequisite: drain established TCP/UDP/Unix connections on inbound removal; test same-port Tunnel reassignment and unaffected sibling listeners.
 - [x] Scoped local allocation fence: serialize remote attachment against local policy preparation; coordinated global allocation remains open.
-- [x] Scoped legacy collector: atomic inbound/client/outbound settlement, lost-commit-ack deduplication, first-use rollback and SQLite/PostgreSQL receipt migration. Final drain and ordinary managed activation remain open.
-- [ ] Legacy handoff: counter IO barrier prerequisite verified; implement IO-owner cancellation, private boot-scoped final snapshot and panel settlement before seed capture. No drain capability is exposed yet.
+- [x] Scoped legacy collector: atomic inbound/client/outbound settlement, lost-commit-ack deduplication, first-use rollback and SQLite/PostgreSQL receipt migration.
+- [x] Guarded live legacy handoff: boot-owned final snapshot, verified executable, stable ownership and SQL settlement before seeding; durable intent rejects interrupted handoff after loss of the original panel snapshot. Automatic policy selection and general legacy migration remain open.
 - [ ] Test end-to-end DB → API → UI → generated config → measured traffic → durable events → statistics.
 
 ## Task 7: SSH inbound and outbound
@@ -312,3 +312,14 @@ hint. Numeric version parsing and older Custom/upstream startup remain intact.
 PID/boot verification is unchanged; runtime-only config and child-owned cleanup
 pass real process tests. Source review, full panel/race suites, lint and build pass.
 The shared SQL writer and live legacy activation integration remain open.
+
+
+Task 6 live handoff candidate: pure candidate validation, verified executable
+copy, legacy metering/credential checks and stable owner fencing now precede the
+owned final drain. The shared SQL writer settles pending and final receipts
+before policy versions and usage seeds. Durable source intent blocks stale
+startup after a panel crash; completion is atomic with final usage and supports
+restart after subsequent preparation failure. Unsupported/unmetered legacy
+configurations remain refused. Automatic policy selection, ordinary generated
+Tunnel metering, large SQL batch bounds, UI status and the remainder of the goal
+are still open. Final validation is recorded in testing.md.
