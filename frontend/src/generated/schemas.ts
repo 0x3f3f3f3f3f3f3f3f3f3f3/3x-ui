@@ -1902,6 +1902,51 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "ClientPolicyAccounting": {
+    "properties": {
+      "appliedVersion": {
+        "example": "2",
+        "type": "string"
+      },
+      "clientId": {
+        "example": "e18c9a96-71bf-48d4-933f-8b9a46d4290c",
+        "type": "string"
+      },
+      "desiredVersion": {
+        "example": "2",
+        "type": "string"
+      },
+      "lifetime": {
+        "$ref": "#/components/schemas/ClientPolicyUsage"
+      },
+      "period": {
+        "$ref": "#/components/schemas/ClientPolicyUsage"
+      },
+      "quotaBytes": {
+        "example": "10737418240",
+        "type": "string"
+      },
+      "remaining": {
+        "example": "1.5",
+        "nullable": true,
+        "type": "string"
+      },
+      "resetPending": {
+        "example": false,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "appliedVersion",
+      "clientId",
+      "desiredVersion",
+      "lifetime",
+      "period",
+      "quotaBytes",
+      "resetPending"
+    ],
+    "type": "object"
+  },
   "ClientPolicyOptions": {
     "properties": {
       "downloadBytesPerSecond": {
@@ -1920,6 +1965,34 @@ export const SCHEMAS: Record<string, unknown> = {
       "downloadBytesPerSecond",
       "multiplier",
       "uploadBytesPerSecond"
+    ],
+    "type": "object"
+  },
+  "ClientPolicyUsage": {
+    "description": "Decimal strings retain exact bytes and millionth-byte fractions in JSON clients.",
+    "properties": {
+      "billed": {
+        "example": "4718592.5",
+        "type": "string"
+      },
+      "download": {
+        "example": "2097152",
+        "type": "string"
+      },
+      "uncertain": {
+        "example": "0",
+        "type": "string"
+      },
+      "upload": {
+        "example": "1048576",
+        "type": "string"
+      }
+    },
+    "required": [
+      "billed",
+      "download",
+      "uncertain",
+      "upload"
     ],
     "type": "object"
   },
@@ -2290,6 +2363,14 @@ export const SCHEMAS: Record<string, unknown> = {
   "ClientTraffic": {
     "description": "ClientTraffic represents traffic statistics and limits for a specific client.\nIt tracks upload/download usage, expiry times, and online status for inbound clients.",
     "properties": {
+      "accounting": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ClientPolicyAccounting"
+          }
+        ],
+        "nullable": true
+      },
       "down": {
         "example": 2097152,
         "format": "int64",

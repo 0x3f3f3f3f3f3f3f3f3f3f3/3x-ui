@@ -22,7 +22,27 @@ type ClientTraffic struct {
 	// ResetMax caps how many times auto-renew may fire; 0 means no cap.
 	ResetMax int `json:"resetMax" form:"resetMax" gorm:"default:0" example:"0"`
 	// ResetCount is how many have fired, so a prepaid plan stops on its own.
-	ResetCount   int   `json:"resetCount" form:"resetCount" gorm:"default:0" example:"0"`
-	LastOnline   int64 `json:"lastOnline" form:"lastOnline" gorm:"default:0" example:"1735680000000"`
-	LastSubFetch int64 `json:"lastSubFetch" form:"lastSubFetch" gorm:"default:0" example:"1735680000000"`
+	ResetCount   int                     `json:"resetCount" form:"resetCount" gorm:"default:0" example:"0"`
+	LastOnline   int64                   `json:"lastOnline" form:"lastOnline" gorm:"default:0" example:"1735680000000"`
+	LastSubFetch int64                   `json:"lastSubFetch" form:"lastSubFetch" gorm:"default:0" example:"1735680000000"`
+	Accounting   *ClientPolicyAccounting `json:"accounting,omitempty" gorm:"-"`
+}
+
+// Decimal strings retain exact bytes and millionth-byte fractions in JSON clients.
+type ClientPolicyUsage struct {
+	Upload    string `json:"upload" example:"1048576"`
+	Download  string `json:"download" example:"2097152"`
+	Billed    string `json:"billed" example:"4718592.5"`
+	Uncertain string `json:"uncertain" example:"0"`
+}
+
+type ClientPolicyAccounting struct {
+	ClientID       string            `json:"clientId" example:"e18c9a96-71bf-48d4-933f-8b9a46d4290c"`
+	Lifetime       ClientPolicyUsage `json:"lifetime"`
+	Period         ClientPolicyUsage `json:"period"`
+	QuotaBytes     string            `json:"quotaBytes" example:"10737418240"`
+	Remaining      *string           `json:"remaining" example:"1.5"`
+	AppliedVersion string            `json:"appliedVersion" example:"2"`
+	DesiredVersion string            `json:"desiredVersion" example:"2"`
+	ResetPending   bool              `json:"resetPending" example:"false"`
 }

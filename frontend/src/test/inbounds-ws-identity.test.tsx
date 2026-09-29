@@ -7,6 +7,7 @@ import { keys } from '@/api/queryKeys';
 import { useInbounds } from '@/pages/inbounds/useInbounds';
 
 import { makeTestQueryClient } from './test-utils';
+import { acknowledgedAccounting, pendingAccounting } from './fixtures/client-policy-accounting';
 
 function seedInbounds() {
   const rows = [1, 2].map((id) => ({
@@ -46,6 +47,28 @@ async function renderInbounds() {
 // Every client_stats push carries all inbounds' totals, so rebuilding a row whether or
 // not its numbers moved re-ran the client rollup and the whole table on each push.
 describe('inbound websocket merges keep unchanged state', () => {
+  it('updates an accounting-only change and clears accounting absent from a later snapshot', async () => {
+    const { result } = await renderInbounds();
+    act(() =>
+      result.current.applyClientStatsEvent({
+        clients: [{ email: 'c1@x', accounting: pendingAccounting }],
+      }),
+    );
+    expect(result.current.dbInbounds[0].clientStats?.[0]?.accounting).toEqual(pendingAccounting);
+    act(() =>
+      result.current.applyClientStatsEvent({
+        clients: [{ email: 'c1@x', accounting: acknowledgedAccounting }],
+      }),
+    );
+    expect(result.current.dbInbounds[0].clientStats?.[0]?.accounting).toEqual(
+      acknowledgedAccounting,
+    );
+    act(() =>
+      result.current.applyClientStatsEvent({ clients: [{ email: 'c1@x', up: 0, down: 0 }] }),
+    );
+    expect(result.current.dbInbounds[0].clientStats?.[0]?.accounting).toBeUndefined();
+  });
+
   it('keeps rows and the client rollup when a client_stats push changes nothing', async () => {
     const { rows, result } = await renderInbounds();
     const before = result.current.dbInbounds;

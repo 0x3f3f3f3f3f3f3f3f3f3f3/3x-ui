@@ -74,6 +74,8 @@ func run(root, outDir string) error {
 			Path: resolveRel(root, "internal/xray"),
 			StructAllow: setOf(
 				"ClientTraffic",
+				"ClientPolicyAccounting",
+				"ClientPolicyUsage",
 				"Traffic",
 			),
 		},

@@ -717,6 +717,17 @@
       "advancedTitle": "高级设置"
     },
     "clients": {
+      "accounting": {
+        "periodBilled": "本周期已确认计费用量",
+        "periodUncertain": "本周期不确定用量",
+        "lifetimeUpload": "累计上传",
+        "lifetimeDownload": "累计下载",
+        "lifetimeBilled": "累计计费用量",
+        "lifetimeUncertain": "累计不确定用量",
+        "policyVersion": "已应用 / 目标策略版本",
+        "resetPending": "重置等待内核确认",
+        "policyPending": "策略等待内核确认"
+      },
       "tabBasics": "基本",
       "tabCredentials": "凭据",
       "tabLinks": "链接",

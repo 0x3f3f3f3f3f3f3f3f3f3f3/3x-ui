@@ -717,6 +717,17 @@
       "sniffingDestOverride": "Destination override"
     },
     "clients": {
+      "accounting": {
+        "periodBilled": "Confirmed billed usage",
+        "periodUncertain": "Uncertain usage in this period",
+        "lifetimeUpload": "Lifetime upload",
+        "lifetimeDownload": "Lifetime download",
+        "lifetimeBilled": "Lifetime billed usage",
+        "lifetimeUncertain": "Lifetime uncertain usage",
+        "policyVersion": "Applied / desired policy",
+        "resetPending": "Reset awaiting core confirmation",
+        "policyPending": "Policy awaiting core confirmation"
+      },
       "tabBasics": "Basics",
       "tabCredentials": "Credentials",
       "tabLinks": "Links",

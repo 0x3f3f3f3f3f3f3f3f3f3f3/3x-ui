@@ -46,8 +46,8 @@ jobs:
         run: |
           set -o pipefail
           XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race ./internal/web/service \
-            -run 'TestClientPolicy(StateProvisioning|RuntimeBootstrap|Options|Omission|Desired|Polling|Config|Reset)' -count=1 -v | tee /tmp/policy-bootstrap.log
-          for test in TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts TestClientPolicyPollingRetriesCommittedTraffic TestClientPolicyConfigFeedsRealTunnelLedger TestClientPolicyConfigPreparesEveryPolicyBatch TestClientPolicyResetRetriesKeepTheLatestWindowAndLifetime TestClientPolicyResetRuntimePollingRetriesTheCommittedBoundary; do
+            -run 'TestClientPolicy(StateProvisioning|RuntimeBootstrap|Options|Omission|Desired|Polling|Config|Reset|Accounting)' -count=1 -v | tee /tmp/policy-bootstrap.log
+          for test in TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts TestClientPolicyPollingRetriesCommittedTraffic TestClientPolicyConfigFeedsRealTunnelLedger TestClientPolicyConfigPreparesEveryPolicyBatch TestClientPolicyResetRetriesKeepTheLatestWindowAndLifetime TestClientPolicyResetRuntimePollingRetriesTheCommittedBoundary TestClientPolicyAccountingIncludesEverySnapshotBatch TestClientPolicyAccountingWaitsForResetAcknowledgement; do
             grep -q -- "^--- PASS: $test " /tmp/policy-bootstrap.log
           done
   policy-postgres:
@@ -79,7 +79,7 @@ jobs:
       - name: Real PostgreSQL migrations, commit failure and Tunnel ledger
         run: |
           set -o pipefail
-          XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race ./internal/database ./internal/web/service -run 'TestClientStableIdentityMigrationPostgres|TestClientPolicyCrossDatabaseMigration|TestClientPolicy(Ledger|StateProvisioning|RuntimeBootstrap|Options|Omission|Desired|Polling|Config|Reset)|TestTunnelOwner' -count=1 -v | tee /tmp/policy-postgres.log
-          for test in TestClientStableIdentityMigrationPostgres TestClientPolicyCrossDatabaseMigration TestClientPolicyLedgerPostgresCommitFailure TestClientPolicyLedgerRealTunnelAndRestart TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts TestClientPolicyPollingRetriesCommittedTraffic TestTunnelOwnerConcurrentAttachmentsChooseOneOwner TestClientPolicyConfigFeedsRealTunnelLedger TestClientPolicyConfigPreparesEveryPolicyBatch TestClientPolicyResetRetriesKeepTheLatestWindowAndLifetime TestClientPolicyResetPostgresCommitFailureKeepsPriorPolicy TestClientPolicyResetRuntimePollingRetriesTheCommittedBoundary; do
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race ./internal/database ./internal/web/service -run 'TestClientStableIdentityMigrationPostgres|TestClientPolicyCrossDatabaseMigration|TestClientPolicy(Ledger|StateProvisioning|RuntimeBootstrap|Options|Omission|Desired|Polling|Config|Reset|Accounting)|TestTunnelOwner' -count=1 -v | tee /tmp/policy-postgres.log
+          for test in TestClientStableIdentityMigrationPostgres TestClientPolicyCrossDatabaseMigration TestClientPolicyLedgerPostgresCommitFailure TestClientPolicyLedgerRealTunnelAndRestart TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts TestClientPolicyPollingRetriesCommittedTraffic TestTunnelOwnerConcurrentAttachmentsChooseOneOwner TestClientPolicyConfigFeedsRealTunnelLedger TestClientPolicyConfigPreparesEveryPolicyBatch TestClientPolicyResetRetriesKeepTheLatestWindowAndLifetime TestClientPolicyResetPostgresCommitFailureKeepsPriorPolicy TestClientPolicyResetRuntimePollingRetriesTheCommittedBoundary TestClientPolicyAccountingIncludesEverySnapshotBatch TestClientPolicyAccountingWaitsForResetAcknowledgement; do
             grep -q -- "^--- PASS: $test " /tmp/policy-postgres.log
           done

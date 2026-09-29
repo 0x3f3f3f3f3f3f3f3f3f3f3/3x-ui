@@ -7,6 +7,8 @@ import { HttpUtil, IntlUtil, SizeFormatter, ColorUtils, Wireguard } from '@/util
 import { activateOnKey } from '@/utils/a11y';
 import { Protocols } from '@/schemas/primitives';
 import { InfinityIcon } from '@/components/ui';
+import ClientTrafficCell from '@/components/clients/ClientTrafficCell';
+import { computeTrafficDisplay } from '@/lib/clients/traffic-display';
 import { useDatepicker } from '@/hooks/useDatepicker';
 import {
   genAllLinks,
@@ -263,21 +265,44 @@ export default function InboundInfoModal({
     return dbInbound?.enable ?? true;
   }, [clientSettings, dbInbound]);
 
+  const clientDisplay = useMemo(
+    () =>
+      computeTrafficDisplay(
+        {
+          up: clientStats?.up ?? 0,
+          down: clientStats?.down ?? 0,
+          total: clientStats?.total ?? clientSettings?.totalGB ?? 0,
+          accounting: clientStats?.accounting,
+          enabled: isEnable,
+          trafficDiff,
+        },
+        false,
+      ),
+    [clientStats, clientSettings, isEnable, trafficDiff],
+  );
+
   const isDepleted = useMemo(() => {
     if (!clientStats || !clientSettings) return false;
-    const total = clientStats.total ?? 0;
-    const used = (clientStats.up ?? 0) + (clientStats.down ?? 0);
-    if (total > 0 && used >= total) return true;
+    if (clientDisplay.isDepleted) return true;
     const expiry = clientSettings.expiryTime ?? 0;
     if (expiry > 0 && now >= expiry) return true;
     return false;
-  }, [clientStats, clientSettings, now]);
+  }, [clientStats, clientSettings, clientDisplay, now]);
 
   const remainingStats = useMemo(() => {
     if (!clientStats || !clientSettings) return '-';
-    const remained = clientStats.total - clientStats.up - clientStats.down;
+    const remained = clientDisplay.remaining;
     return remained > 0 ? SizeFormatter.sizeFormat(remained) : '-';
-  }, [clientStats, clientSettings]);
+  }, [clientStats, clientSettings, clientDisplay]);
+
+  const clientUsageColor = clientStats?.accounting
+    ? ColorUtils.usageColor(clientDisplay.used, trafficDiff, clientDisplay.total)
+    : clientStats
+      ? statsColor(clientStats, trafficDiff)
+      : 'default';
+  const clientQuota = clientStats?.accounting
+    ? clientDisplay.total
+    : (clientSettings?.totalGB ?? 0);
 
   const isWireguard = !!dbInbound?.isWireguard;
   const wgSecretKey = inbound?.settings?.secretKey as string | undefined;
@@ -381,13 +406,26 @@ export default function InboundInfoModal({
             <tr>
               <td>{t('usage')}</td>
               <td>
-                <Tag color="green">
-                  {SizeFormatter.sizeFormat(clientStats.up + clientStats.down)}
-                </Tag>
-                <Tag>
-                  ↑ {SizeFormatter.sizeFormat(clientStats.up)} /{' '}
-                  {SizeFormatter.sizeFormat(clientStats.down)} ↓
-                </Tag>
+                {clientStats.accounting ? (
+                  <ClientTrafficCell
+                    up={clientStats.up}
+                    down={clientStats.down}
+                    total={clientStats.total}
+                    accounting={clientStats.accounting}
+                    enabled={isEnable}
+                    trafficDiff={trafficDiff}
+                  />
+                ) : (
+                  <>
+                    <Tag color="green">
+                      {SizeFormatter.sizeFormat(clientStats.up + clientStats.down)}
+                    </Tag>
+                    <Tag>
+                      ↑ {SizeFormatter.sizeFormat(clientStats.up)} /{' '}
+                      {SizeFormatter.sizeFormat(clientStats.down)} ↓
+                    </Tag>
+                  </>
+                )}
               </td>
             </tr>
           )}
@@ -486,19 +524,17 @@ export default function InboundInfoModal({
         <tbody>
           <tr>
             <td>
-              {clientStats && (clientSettings?.totalGB ?? 0) > 0 ? (
-                <Tag color={statsColor(clientStats, trafficDiff)}>{remainingStats}</Tag>
-              ) : !clientSettings?.totalGB || clientSettings.totalGB <= 0 ? (
+              {clientStats && clientQuota > 0 ? (
+                <Tag color={clientUsageColor}>{remainingStats}</Tag>
+              ) : clientQuota <= 0 ? (
                 <Tag color="purple">
                   <InfinityIcon />
                 </Tag>
               ) : null}
             </td>
             <td>
-              {(clientSettings?.totalGB ?? 0) > 0 ? (
-                <Tag color={clientStats ? statsColor(clientStats, trafficDiff) : 'default'}>
-                  {SizeFormatter.sizeFormat(clientSettings!.totalGB!)}
-                </Tag>
+              {clientQuota > 0 ? (
+                <Tag color={clientUsageColor}>{SizeFormatter.sizeFormat(clientQuota)}</Tag>
               ) : (
                 <Tag color="purple">
                   <InfinityIcon />

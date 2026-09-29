@@ -479,12 +479,32 @@ export const ClientPageResponseSchema = z.object({
 });
 export type ClientPageResponse = z.infer<typeof ClientPageResponseSchema>;
 
+export const ClientPolicyAccountingSchema = z.object({
+  appliedVersion: z.string(),
+  clientId: z.string(),
+  desiredVersion: z.string(),
+  lifetime: z.lazy(() => ClientPolicyUsageSchema),
+  period: z.lazy(() => ClientPolicyUsageSchema),
+  quotaBytes: z.string(),
+  remaining: z.string().nullable().optional(),
+  resetPending: z.boolean(),
+});
+export type ClientPolicyAccounting = z.infer<typeof ClientPolicyAccountingSchema>;
+
 export const ClientPolicyOptionsSchema = z.object({
   downloadBytesPerSecond: z.number().int(),
   multiplier: z.string(),
   uploadBytesPerSecond: z.number().int(),
 });
 export type ClientPolicyOptions = z.infer<typeof ClientPolicyOptionsSchema>;
+
+export const ClientPolicyUsageSchema = z.object({
+  billed: z.string(),
+  download: z.string(),
+  uncertain: z.string(),
+  upload: z.string(),
+});
+export type ClientPolicyUsage = z.infer<typeof ClientPolicyUsageSchema>;
 
 export const ClientRecordSchema = z.object({
   adTag: z.string(),
@@ -576,6 +596,7 @@ export const ClientSlimSchema = z.object({
 export type ClientSlim = z.infer<typeof ClientSlimSchema>;
 
 export const ClientTrafficSchema = z.object({
+  accounting: z.lazy(() => ClientPolicyAccountingSchema).nullable().optional(),
   down: z.number().int(),
   email: z.string(),
   enable: z.boolean(),

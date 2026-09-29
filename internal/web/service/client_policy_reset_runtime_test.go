@@ -45,6 +45,9 @@ func TestClientPolicyResetRuntimePollingRetriesTheCommittedBoundary(t *testing.T
 	if err := db.Create(&client).Error; err != nil {
 		t.Fatal(err)
 	}
+	if err := db.Create(&xray.ClientTraffic{Email: client.Email, Enable: true, Total: 1000}).Error; err != nil {
+		t.Fatal(err)
+	}
 	state, err := EnsureLocalClientPolicyState(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -183,6 +186,17 @@ func TestClientPolicyResetRuntimePollingRetriesTheCommittedBoundary(t *testing.T
 	if reset.PolicyVersion != 2 || reset.BilledBytes != 32 || reset.RawUpload != 8 || reset.RawDownload != 8 {
 		t.Fatalf("reset did not checkpoint before persisting its boundary: %+v", reset)
 	}
+	assertAccounting := func(period, lifetime, applied string, pending bool) {
+		t.Helper()
+		traffic, err := (&InboundService{}).GetClientTrafficByEmail(client.Email)
+		if err != nil || traffic == nil || traffic.Accounting == nil {
+			t.Fatalf("read real core accounting: %+v %v", traffic, err)
+		}
+		if got := traffic.Accounting; got.ClientID != client.StableID || got.Period.Billed != period || got.Lifetime.Billed != lifetime || got.AppliedVersion != applied || got.ResetPending != pending {
+			t.Fatalf("real core receipt projected the wrong window: %+v", got)
+		}
+	}
+	assertAccounting("32", "32", "1", true)
 	echo(4)
 	remote := mkInbound(t, 24198, model.Tunnel, `{}`)
 	if err := db.Model(remote).Update("node_id", 7).Error; err != nil {
@@ -224,6 +238,7 @@ func TestClientPolicyResetRuntimePollingRetriesTheCommittedBoundary(t *testing.T
 		}
 	}
 	assertCore(2, 32, 48)
+	assertAccounting("16", "48", "2", false)
 	echo(8)
 	if err := ResetLocalClientPolicy(ctx, client.StableID, "request-a"); err != nil {
 		t.Fatal(err)
@@ -237,6 +252,7 @@ func TestClientPolicyResetRuntimePollingRetriesTheCommittedBoundary(t *testing.T
 		t.Fatal(err)
 	}
 	assertCore(3, 80, 92)
+	assertAccounting("12", "92", "3", false)
 	if got := policyLedgerTotal(t, client.StableID); got.RawUpload != 23 || got.RawDownload != 23 || got.BilledBytes != 92 {
 		t.Fatalf("reset cleared or duplicated lifetime history: %+v", got)
 	}
@@ -289,6 +305,7 @@ func TestClientPolicyResetRuntimePollingRetriesTheCommittedBoundary(t *testing.T
 		t.Fatal(err)
 	}
 	assertCore(4, 92, 92)
+	assertAccounting("0", "92", "4", false)
 	current, err = api.GetClient(ctx, client.StableID)
 	if err != nil || current.Policy.Enabled || current.Policy.ExpiresAt <= 0 || current.ActiveSessions != 0 {
 		t.Fatalf("restart cleared reset restrictions: %+v, %v", current, err)

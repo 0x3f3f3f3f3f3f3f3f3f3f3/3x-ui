@@ -1,5 +1,6 @@
 import type { SubSettings } from '../useInbounds';
 import type { HostRecord } from '@/schemas/api/host';
+import type { ClientPolicyAccounting } from '@/schemas/client';
 
 export interface ClientStats {
   email: string;
@@ -8,6 +9,7 @@ export interface ClientStats {
   total: number;
   expiryTime: number;
   enable?: boolean;
+  accounting?: ClientPolicyAccounting | null;
 }
 
 export interface ClientSetting {

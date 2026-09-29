@@ -455,10 +455,28 @@ export interface ClientPageResponse {
   total: number;
 }
 
+export interface ClientPolicyAccounting {
+  appliedVersion: string;
+  clientId: string;
+  desiredVersion: string;
+  lifetime: ClientPolicyUsage;
+  period: ClientPolicyUsage;
+  quotaBytes: string;
+  remaining?: string | null;
+  resetPending: boolean;
+}
+
 export interface ClientPolicyOptions {
   downloadBytesPerSecond: number;
   multiplier: string;
   uploadBytesPerSecond: number;
+}
+
+export interface ClientPolicyUsage {
+  billed: string;
+  download: string;
+  uncertain: string;
+  upload: string;
 }
 
 export interface ClientRecord {
@@ -546,6 +564,7 @@ export interface ClientSlim {
 }
 
 export interface ClientTraffic {
+  accounting?: ClientPolicyAccounting | null;
   down: number;
   email: string;
   enable: boolean;

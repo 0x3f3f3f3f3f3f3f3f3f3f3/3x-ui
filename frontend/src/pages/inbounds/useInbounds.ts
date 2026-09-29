@@ -10,7 +10,13 @@ import { isSSMultiUser } from '@/lib/xray/protocol-capabilities';
 import { setDatepicker } from '@/hooks/useDatepicker';
 import { keys } from '@/api/queryKeys';
 import { SlimInboundListSchema, LastOnlineMapSchema, InboundDetailSchema } from '@/schemas/inbound';
-import { OnlinesSchema, OnlineByNodeSchema, ActiveInboundsByNodeSchema } from '@/schemas/client';
+import {
+  OnlinesSchema,
+  OnlineByNodeSchema,
+  ActiveInboundsByNodeSchema,
+  ClientTrafficSchema,
+  type ClientTraffic,
+} from '@/schemas/client';
 import { DefaultsPayloadSchema, type DefaultsPayload } from '@/schemas/defaults';
 
 import type { InboundSpeedEntry } from './list/types';
@@ -502,14 +508,7 @@ export function useInbounds() {
     if (!payload || typeof payload !== 'object') return;
     const p = payload as {
       inbounds?: { id: number; up?: number; down?: number; total?: number; enable?: boolean }[];
-      clients?: {
-        email: string;
-        up?: number;
-        down?: number;
-        total?: number;
-        expiryTime?: number;
-        enable?: boolean;
-      }[];
+      clients?: unknown[];
     };
 
     const byId = new Map<
@@ -521,20 +520,11 @@ export function useInbounds() {
         if (row && row.id != null) byId.set(row.id, row);
       }
     }
-    const byEmail = new Map<
-      string,
-      {
-        email: string;
-        up?: number;
-        down?: number;
-        total?: number;
-        expiryTime?: number;
-        enable?: boolean;
-      }
-    >();
+    const byEmail = new Map<string, ClientTraffic>();
     if (Array.isArray(p.clients)) {
       for (const row of p.clients) {
-        if (row && row.email) byEmail.set(row.email, row);
+        const parsed = ClientTrafficSchema.safeParse(row);
+        if (parsed.success && parsed.data.email) byEmail.set(parsed.data.email, parsed.data);
       }
     }
     if (byId.size === 0 && byEmail.size === 0) return;
@@ -558,13 +548,16 @@ export function useInbounds() {
                 total: typeof su.total === 'number' ? su.total : stat.total,
                 expiryTime: typeof su.expiryTime === 'number' ? su.expiryTime : stat.expiryTime,
                 enable: typeof su.enable === 'boolean' ? su.enable : stat.enable,
+                accounting: su.accounting,
               } as ClientStats;
               if (
                 merged.up === stat.up &&
                 merged.down === stat.down &&
                 merged.total === stat.total &&
                 merged.expiryTime === stat.expiryTime &&
-                merged.enable === stat.enable
+                merged.enable === stat.enable &&
+                JSON.stringify(merged.accounting ?? null) ===
+                  JSON.stringify(stat.accounting ?? null)
               ) {
                 return stat;
               }

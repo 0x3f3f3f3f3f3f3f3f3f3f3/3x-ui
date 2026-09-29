@@ -36,6 +36,10 @@ const meta = {
         'Headroom in bytes below the quota at which the bar shifts from green to orange.',
     },
     compact: { description: 'Smaller bar and tighter layout for dense table rows.' },
+    accounting: {
+      description:
+        'Confirmed lifetime and period accounting, with exact byte amounts and pending policy status.',
+    },
   },
 } satisfies Meta<typeof ClientTrafficCell>;
 
@@ -76,5 +80,30 @@ export const DisabledCompact: Story = {
     total: 40 * GiB,
     enabled: false,
     compact: true,
+  },
+};
+
+export const PendingAccounting: Story = {
+  args: {
+    accounting: {
+      clientId: 'e18c9a96-71bf-48d4-933f-8b9a46d4290c',
+      lifetime: {
+        upload: '1073741824',
+        download: '4294967296',
+        billed: '10737418240.5',
+        uncertain: '65536',
+      },
+      period: {
+        upload: '268435456',
+        download: '1073741824',
+        billed: '2684354560.5',
+        uncertain: '0',
+      },
+      quotaBytes: '10737418240',
+      remaining: '8053063679.5',
+      appliedVersion: '2',
+      desiredVersion: '3',
+      resetPending: true,
+    },
   },
 };

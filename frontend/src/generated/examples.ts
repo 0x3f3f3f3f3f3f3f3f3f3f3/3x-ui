@@ -497,10 +497,36 @@ export const EXAMPLES: Record<string, unknown> = {
     },
     "total": 2000
   },
+  "ClientPolicyAccounting": {
+    "appliedVersion": "2",
+    "clientId": "e18c9a96-71bf-48d4-933f-8b9a46d4290c",
+    "desiredVersion": "2",
+    "lifetime": {
+      "billed": "4718592.5",
+      "download": "2097152",
+      "uncertain": "0",
+      "upload": "1048576"
+    },
+    "period": {
+      "billed": "4718592.5",
+      "download": "2097152",
+      "uncertain": "0",
+      "upload": "1048576"
+    },
+    "quotaBytes": "10737418240",
+    "remaining": "1.5",
+    "resetPending": false
+  },
   "ClientPolicyOptions": {
     "downloadBytesPerSecond": 0,
     "multiplier": "",
     "uploadBytesPerSecond": 0
+  },
+  "ClientPolicyUsage": {
+    "billed": "4718592.5",
+    "download": "2097152",
+    "uncertain": "0",
+    "upload": "1048576"
   },
   "ClientRecord": {
     "adTag": "",
@@ -585,6 +611,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "updatedAt": 1735100000000
   },
   "ClientTraffic": {
+    "accounting": null,
     "down": 2097152,
     "email": "user1",
     "enable": true,
@@ -783,6 +810,7 @@ export const EXAMPLES: Record<string, unknown> = {
   "Inbound": {
     "clientStats": [
       {
+        "accounting": null,
         "down": 2097152,
         "email": "user1",
         "enable": true,

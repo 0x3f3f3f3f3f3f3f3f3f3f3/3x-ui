@@ -1123,6 +1123,9 @@ func (s *InboundService) GetActiveClientTraffics(emails []string) ([]*xray.Clien
 		traffics = append(traffics, page...)
 	}
 	overlayGlobalTraffic(db, traffics)
+	if err := overlayClientPolicyAccounting(db, traffics); err != nil {
+		return nil, err
+	}
 	return traffics, nil
 }
 
@@ -1141,6 +1144,9 @@ func (s *InboundService) GetAllClientTraffics() ([]*xray.ClientTraffic, error) {
 		return nil, err
 	}
 	overlayGlobalTraffic(db, traffics)
+	if err := overlayClientPolicyAccounting(db, traffics); err != nil {
+		return nil, err
+	}
 	return traffics, nil
 }
 
@@ -1182,6 +1188,9 @@ func (s *InboundService) GetClientTrafficByEmail(email string) (traffic *xray.Cl
 	}
 	overlayGlobalTraffic(db, traffics)
 	t := traffics[0]
+	if err := overlayClientPolicyAccounting(db, traffics); err != nil {
+		return nil, err
+	}
 
 	if rec, rErr := s.clientService.GetRecordByEmail(db, email); rErr == nil && rec != nil {
 		c := rec.ToClient()

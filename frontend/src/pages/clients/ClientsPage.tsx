@@ -1169,6 +1169,7 @@ export default function ClientsPage() {
           <ClientTrafficCell
             up={record.traffic?.up}
             down={record.traffic?.down}
+            accounting={record.traffic?.accounting}
             total={record.totalGB}
             enabled={record.enable}
             trafficDiff={trafficDiff}
@@ -1847,6 +1848,7 @@ export default function ClientsPage() {
                                     compact
                                     up={row.traffic?.up}
                                     down={row.traffic?.down}
+                                    accounting={row.traffic?.accounting}
                                     total={row.totalGB}
                                     enabled={row.enable}
                                     trafficDiff={trafficDiff}

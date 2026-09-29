@@ -41,6 +41,11 @@
   color: var(--ant-color-text-secondary);
 }
 
+.client-traffic-cell-pending {
+  margin-inline-end: 4px;
+  color: var(--ant-color-warning);
+}
+
 .client-traffic-cell-bar {
   flex: 1 1 60px;
   min-width: 48px;

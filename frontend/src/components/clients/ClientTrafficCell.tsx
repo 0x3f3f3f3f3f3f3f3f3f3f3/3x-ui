@@ -1,11 +1,13 @@
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Popover, Progress } from 'antd';
+import { ClockCircleOutlined } from '@ant-design/icons';
 
 import InfinityIcon from '@/components/ui/InfinityIcon';
 import { useTheme } from '@/hooks/useTheme';
 import { computeTrafficDisplay } from '@/lib/clients/traffic-display';
 import { SizeFormatter } from '@/utils';
+import type { ClientPolicyAccounting } from '@/schemas/client';
 import './ClientTrafficCell.css';
 
 export interface ClientTrafficCellProps {
@@ -15,12 +17,10 @@ export interface ClientTrafficCellProps {
   enabled?: boolean;
   trafficDiff?: number;
   compact?: boolean;
+  accounting?: ClientPolicyAccounting | null;
 }
 
-// Every prop is a primitive and the component is pure, so the memo bails out
-// whenever a client's counters did not move — which is most of them on most
-// pushes. Each skipped instance is one antd Popover (rc-trigger), one Progress,
-// a useTranslation subscription and a theme context read, times up to 200 rows.
+// Stable props skip the popover and progress work on quiet traffic updates.
 const ClientTrafficCell = memo(function ClientTrafficCell({
   up = 0,
   down = 0,
@@ -28,28 +28,63 @@ const ClientTrafficCell = memo(function ClientTrafficCell({
   enabled = true,
   trafficDiff = 0,
   compact = false,
+  accounting,
 }: ClientTrafficCellProps) {
   const { t } = useTranslation();
   const { isDark } = useTheme();
 
   const display = useMemo(
-    () => computeTrafficDisplay({ up, down, total, enabled, trafficDiff }, isDark),
-    [up, down, total, enabled, trafficDiff, isDark],
+    () => computeTrafficDisplay({ up, down, total, enabled, trafficDiff, accounting }, isDark),
+    [up, down, total, enabled, trafficDiff, accounting, isDark],
   );
+
+  const pendingLabel = accounting?.resetPending
+    ? t('pages.clients.accounting.resetPending')
+    : accounting && accounting.appliedVersion !== accounting.desiredVersion
+      ? t('pages.clients.accounting.policyPending')
+      : null;
+  const accountingRows = accounting
+    ? [
+        [t('pages.clients.accounting.periodBilled'), accounting.period.billed],
+        [t('pages.clients.accounting.periodUncertain'), accounting.period.uncertain],
+        [t('pages.clients.accounting.lifetimeUpload'), accounting.lifetime.upload],
+        [t('pages.clients.accounting.lifetimeDownload'), accounting.lifetime.download],
+        [t('pages.clients.accounting.lifetimeBilled'), accounting.lifetime.billed],
+        [t('pages.clients.accounting.lifetimeUncertain'), accounting.lifetime.uncertain],
+      ]
+    : [];
 
   const popover = (
     <table className="client-traffic-popover">
       <tbody>
         <tr>
           <td>↑</td>
-          <td>{SizeFormatter.sizeFormat(up)}</td>
+          <td>{SizeFormatter.sizeFormat(display.up)}</td>
           <td>↓</td>
-          <td>{SizeFormatter.sizeFormat(down)}</td>
+          <td>{SizeFormatter.sizeFormat(display.down)}</td>
         </tr>
         {!display.isUnlimited && (
           <tr>
             <td colSpan={2}>{t('remained')}</td>
-            <td colSpan={2}>{SizeFormatter.sizeFormat(display.remaining)}</td>
+            <td colSpan={2} title={accounting?.remaining ? `${accounting.remaining} B` : undefined}>
+              {SizeFormatter.sizeFormat(display.remaining)}
+            </td>
+          </tr>
+        )}
+        {accountingRows.map(([label, value]) => (
+          <tr key={label}>
+            <td colSpan={2}>{label}</td>
+            <td colSpan={2} title={`${value} B`}>
+              {SizeFormatter.sizeFormat(Number(value))}
+            </td>
+          </tr>
+        ))}
+        {accounting && (
+          <tr>
+            <td colSpan={2}>{t('pages.clients.accounting.policyVersion')}</td>
+            <td colSpan={2}>
+              {accounting.appliedVersion} / {accounting.desiredVersion}
+            </td>
           </tr>
         )}
       </tbody>
@@ -67,10 +102,20 @@ const ClientTrafficCell = memo(function ClientTrafficCell({
   return (
     <Popover content={popover} trigger={['hover', 'click']} placement="top">
       <div className={rootClass}>
-        <span className="client-traffic-cell-used">{SizeFormatter.sizeFormat(display.used)}</span>
+        <span className="client-traffic-cell-used">
+          {pendingLabel && (
+            <ClockCircleOutlined
+              className="client-traffic-cell-pending"
+              role="status"
+              aria-label={pendingLabel}
+              title={pendingLabel}
+            />
+          )}
+          {SizeFormatter.sizeFormat(display.used)}
+        </span>
         <Progress
           className="client-traffic-cell-bar"
-          aria-label={`${SizeFormatter.sizeFormat(display.used)} / ${display.isUnlimited ? t('subscription.unlimited') : SizeFormatter.sizeFormat(total)}`}
+          aria-label={`${SizeFormatter.sizeFormat(display.used)} / ${display.isUnlimited ? t('subscription.unlimited') : SizeFormatter.sizeFormat(display.total)}`}
           percent={display.percent}
           showInfo={false}
           strokeColor={display.strokeColor}
@@ -87,7 +132,7 @@ const ClientTrafficCell = memo(function ClientTrafficCell({
               <InfinityIcon />
             </span>
           ) : (
-            SizeFormatter.sizeFormat(total)
+            SizeFormatter.sizeFormat(display.total)
           )}
         </span>
       </div>

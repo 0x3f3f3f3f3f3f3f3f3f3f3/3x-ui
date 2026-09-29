@@ -192,7 +192,7 @@ func (s *InboundService) GetNodeClientTraffics(nodeID int) ([]*xray.ClientTraffi
 // full /panel/api/inbounds/list payload, which doubles as the traffic
 // snapshot masters poll: overlaying that would leak pushed globals back into
 // the masters' delta accounting.
-func (s *InboundService) overlayInboundsClientStats(db *gorm.DB, inbounds []*model.Inbound) {
+func (s *InboundService) overlayInboundsClientStats(db *gorm.DB, inbounds []*model.Inbound) error {
 	rows := make([]*xray.ClientTraffic, 0)
 	for _, ib := range inbounds {
 		for j := range ib.ClientStats {
@@ -200,6 +200,7 @@ func (s *InboundService) overlayInboundsClientStats(db *gorm.DB, inbounds []*mod
 		}
 	}
 	overlayGlobalTraffic(db, rows)
+	return overlayClientPolicyAccounting(db, rows)
 }
 
 // clearGlobalTraffic drops every master's pushed rows for the given emails.

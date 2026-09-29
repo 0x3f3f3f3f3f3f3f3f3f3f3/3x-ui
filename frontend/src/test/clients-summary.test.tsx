@@ -6,7 +6,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sameSpeedMap, useClients } from '@/hooks/useClients';
 import { makeTestQueryClient } from '@/test/test-utils';
 import { HttpUtil, Msg } from '@/utils';
-import type { ClientsSummary } from '@/schemas/client';
+import type { ClientPageResponse, ClientsSummary } from '@/schemas/client';
+import { acknowledgedAccounting, pendingAccounting } from './fixtures/client-policy-accounting';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -49,9 +50,9 @@ describe('client summary always reflects the server, never a client_stats recomp
     summary: serverSummary,
   };
 
-  function mockPanel() {
+  function mockPanel(response: ClientPageResponse = pagedResponse) {
     vi.spyOn(HttpUtil, 'get').mockImplementation(async (url: string) => {
-      if (url.includes('/clients/list/paged')) return new Msg(true, '', pagedResponse);
+      if (url.includes('/clients/list/paged')) return new Msg(true, '', response);
       if (url.includes('/inbounds/options')) return new Msg(true, '', []);
       return new Msg(true, '', null);
     });
@@ -69,17 +70,48 @@ describe('client summary always reflects the server, never a client_stats recomp
     );
   }
 
-  async function loadedHook() {
-    mockPanel();
+  async function loadedHook(response: ClientPageResponse = pagedResponse) {
+    mockPanel(response);
     const { result } = renderHook(() => useClients(), { wrapper: wrapperFor() });
     await waitFor(() => expect(result.current.settingsReady).toBe(true));
     act(() => {
       result.current.setQuery({ page: 1, pageSize: 25, sort: 'createdAt', order: 'ascend' });
     });
     await waitFor(() => expect(result.current.fetched).toBe(true));
-    expect(result.current.summary).toEqual(serverSummary);
+    expect(result.current.summary).toEqual(response.summary);
     return result;
   }
+
+  it('updates accounting-only snapshots and clears an old identity when its next snapshot has no ledger', async () => {
+    const result = await loadedHook({
+      ...pagedResponse,
+      total: 1,
+      filtered: 1,
+      summary: { ...serverSummary, total: 1, active: 1 },
+      items: [
+        {
+          email: 'a@x',
+          enable: true,
+          totalGB: 100,
+          traffic: { up: 50, down: 50, accounting: pendingAccounting },
+        },
+      ],
+    });
+    act(() =>
+      result.current.applyClientStatsEvent({
+        clients: [{ email: 'a@x', up: 50, down: 50, accounting: acknowledgedAccounting }],
+      }),
+    );
+    await waitFor(() =>
+      expect(result.current.clients[0].traffic?.accounting).toEqual(acknowledgedAccounting),
+    );
+    act(() =>
+      result.current.applyClientStatsEvent({
+        clients: [{ email: 'a@x', up: 0, down: 0, total: 100 }],
+      }),
+    );
+    await waitFor(() => expect(result.current.clients[0].traffic?.accounting).toBeUndefined());
+  });
 
   it('stays pinned to the server summary across a client_stats push carrying an orphan row with no matching gap', async () => {
     const result = await loadedHook();

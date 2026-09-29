@@ -749,9 +749,26 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 	// UpdateInboundClient renames the record atomically with each inbound's
 	// settings JSON; this direct write only covers records with no inbound left.
 	if updated.Email != existing.Email {
-		if err := database.GetDB().Model(&model.ClientRecord{}).
-			Where("id = ? AND email = ?", id, existing.Email).
-			Update("email", updated.Email).Error; err != nil {
+		if err := runSerializedTx(func(tx *gorm.DB) error {
+			renamed := tx.Model(&model.ClientRecord{}).
+				Where("id = ? AND email = ?", id, existing.Email).
+				Update("email", updated.Email)
+			if renamed.Error != nil || renamed.RowsAffected == 0 {
+				return renamed.Error
+			}
+			if err := inboundSvc.UpdateClientStat(tx, existing.Email, &updated); err != nil {
+				return err
+			}
+			if err := inboundSvc.UpdateClientIPs(tx, existing.Email, updated.Email); err != nil {
+				return err
+			}
+			for _, table := range []any{&model.ClientGlobalTraffic{}, &model.NodeClientTraffic{}} {
+				if err := tx.Model(table).Where("email = ?", existing.Email).Update("email", updated.Email).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
 			return needRestart, err
 		}
 	}

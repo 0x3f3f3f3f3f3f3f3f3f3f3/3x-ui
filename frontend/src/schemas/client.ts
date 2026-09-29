@@ -9,7 +9,37 @@ const nullableNumberArray = z
   .nullable()
   .transform((v) => v ?? []);
 
+const policyWholeBytes = z
+  .string()
+  .max(19)
+  .regex(/^(0|[1-9]\d*)$/);
+const policyBilledBytes = z
+  .string()
+  .max(26)
+  .regex(/^(0|[1-9]\d*)(\.\d{1,6})?$/);
+
+export const ClientPolicyUsageSchema = z.object({
+  upload: policyWholeBytes,
+  download: policyWholeBytes,
+  billed: policyBilledBytes,
+  uncertain: policyWholeBytes,
+});
+
+export const ClientPolicyAccountingSchema = z.object({
+  clientId: z.uuid(),
+  lifetime: ClientPolicyUsageSchema,
+  period: ClientPolicyUsageSchema,
+  quotaBytes: policyWholeBytes,
+  remaining: policyBilledBytes.nullable(),
+  appliedVersion: policyWholeBytes,
+  desiredVersion: policyWholeBytes,
+  resetPending: z.boolean(),
+});
+
+export type ClientPolicyAccounting = z.infer<typeof ClientPolicyAccountingSchema>;
+
 export const ClientTrafficSchema = z.object({
+  email: z.string().optional(),
   up: z.number().optional(),
   down: z.number().optional(),
   total: z.number().optional(),
@@ -19,6 +49,7 @@ export const ClientTrafficSchema = z.object({
   lastSubFetch: z.number().optional(),
   resetMax: z.number().optional(),
   resetCount: z.number().optional(),
+  accounting: ClientPolicyAccountingSchema.nullable().optional(),
 });
 
 export const ClientRecordSchema = z

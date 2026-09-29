@@ -1,6 +1,7 @@
 import dayjs, { type Dayjs } from 'dayjs';
 import { ObjectUtil, NumberFormatter, SizeFormatter } from '@/utils';
 import { Protocols } from '@/schemas/primitives';
+import type { ClientPolicyAccounting } from '@/schemas/client';
 
 export type RawJsonField = string | Record<string, unknown> | unknown[];
 
@@ -13,6 +14,7 @@ export interface ClientStats {
   enable?: boolean;
   inboundId?: number;
   reset?: number;
+  accounting?: ClientPolicyAccounting | null;
 }
 
 export interface FallbackParentRef {

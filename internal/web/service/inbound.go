@@ -245,7 +245,9 @@ func (s *InboundService) GetInboundsSlim(userId int) ([]*model.Inbound, error) {
 	s.backfillClientStats(db, inbounds)
 	// Slim feeds the panel UI only (masters poll the full list), so the badge
 	// math may see the cross-panel totals a master pushed.
-	s.overlayInboundsClientStats(db, inbounds)
+	if err := s.overlayInboundsClientStats(db, inbounds); err != nil {
+		return nil, err
+	}
 	for _, ib := range inbounds {
 		ib.Settings = slimSettingsClients(ib.Settings)
 	}
@@ -1551,7 +1553,9 @@ func (s *InboundService) GetInboundDetail(id int) (*model.Inbound, error) {
 		return nil, err
 	}
 	s.enrichClientStats(db, []*model.Inbound{inbound})
-	s.overlayInboundsClientStats(db, []*model.Inbound{inbound})
+	if err := s.overlayInboundsClientStats(db, []*model.Inbound{inbound}); err != nil {
+		return nil, err
+	}
 	return inbound, nil
 }
 

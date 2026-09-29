@@ -7,6 +7,7 @@ import { keys } from '@/api/queryKeys';
 import { markLocalInvalidate } from '@/api/invalidationTracker';
 import {
   ClientHydrateSchema,
+  ClientTrafficSchema,
   ClientPageResponseSchema,
   InboundOptionsSchema,
   OnlinesSchema,
@@ -761,7 +762,8 @@ export function useClients(options: UseClientsOptions = {}) {
       if (!active) return;
       const byEmail = new Map<string, ClientTraffic>();
       for (const row of p.clients) {
-        if (row && row.email) byEmail.set(row.email, row);
+        const parsed = ClientTrafficSchema.safeParse(row);
+        if (parsed.success && parsed.data.email) byEmail.set(parsed.data.email, parsed.data);
       }
       queryClient.setQueryData<ClientPageResponse>(keys.clients.list(active), (prev) => {
         if (!prev) return prev;
@@ -778,6 +780,7 @@ export function useClients(options: UseClientsOptions = {}) {
           if (typeof upd.expiryTime === 'number') merged.expiryTime = upd.expiryTime;
           if (typeof upd.enable === 'boolean') merged.enable = upd.enable;
           if (typeof upd.lastOnline === 'number') merged.lastOnline = upd.lastOnline;
+          merged.accounting = upd.accounting;
           next[i] = { ...row, traffic: merged };
           touched = true;
         }
