@@ -34,9 +34,23 @@ func localManagedPolicyRuntime() (runtime.ManagedProcessRuntime, error) {
 
 // Restart serialization pins the process; no Runtime mutex is held during SQL work.
 func ResetLocalClientPolicy(ctx context.Context, clientID, requestID string) error {
-	if clientID == "" || !validPolicySourceKey(requestID) {
+	return ResetLocalClientPolicies(ctx, []string{clientID}, requestID)
+}
+
+func ResetLocalClientPolicies(ctx context.Context, clientIDs []string, requestID string) error {
+	if !validPolicySourceKey(requestID) {
 		return ErrClientPolicyLedger
 	}
+	ids, err := clientPolicyResetIDs(clientIDs)
+	if err != nil {
+		return err
+	}
+	return applyLocalClientPolicyReset(ctx, ids, func(instanceID string) ([]clientpolicy.Policy, error) {
+		return PrepareClientPolicyResets(instanceID, ids, requestID)
+	})
+}
+
+func applyLocalClientPolicyReset(ctx context.Context, ids []string, prepare func(string) ([]clientpolicy.Policy, error)) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -53,15 +67,14 @@ func ResetLocalClientPolicy(ctx context.Context, clientID, requestID string) err
 	if err := json.Unmarshal(process.GetConfig().ClientPolicy, &config); err != nil {
 		return err
 	}
-	found := false
+	configured := make(map[string]bool, len(config.Policies))
 	for _, policy := range config.Policies {
-		if policy.ClientID == clientID {
-			found = true
-			break
-		}
+		configured[policy.ClientID] = true
 	}
-	if !found {
-		return clientpolicy.ErrUnknownClient
+	for _, id := range ids {
+		if !configured[id] {
+			return clientpolicy.ErrUnknownClient
+		}
 	}
 	managed, err := localManagedPolicyRuntime()
 	if err != nil {
@@ -70,12 +83,14 @@ func ResetLocalClientPolicy(ctx context.Context, clientID, requestID string) err
 	if err := pollLocalClientPolicyLedger(ctx, process); err != nil {
 		return fmt.Errorf("checkpoint before reset: %w", err)
 	}
-	policy, err := PrepareClientPolicyReset(config.InstanceID, clientID, requestID)
+	policies, err := prepare(config.InstanceID)
 	if err != nil {
 		return err
 	}
-	if err := managed.ApplyManagedPolicies(ctx, process, []clientpolicy.Policy{policy}); err != nil {
-		return fmt.Errorf("reset saved but core application failed: %w", err)
+	for start := 0; start < len(policies); start += 1000 {
+		if err := managed.ApplyManagedPolicies(ctx, process, policies[start:min(start+1000, len(policies))]); err != nil {
+			return fmt.Errorf("reset saved but core application failed: %w", err)
+		}
 	}
 	return nil
 }

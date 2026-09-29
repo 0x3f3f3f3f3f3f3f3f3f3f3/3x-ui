@@ -21,6 +21,10 @@ type ClientTrafficResetRequest struct {
 	ClientID  string `json:"clientId,omitempty" example:"e18c9a96-71bf-48d4-933f-8b9a46d4290c"`
 }
 
+type ClientTrafficBatchResetRequest struct {
+	RequestID string `json:"requestId,omitempty" example:"03a0bc3c-8b5f-4573-9ad2-fb6247cfcfc2"`
+}
+
 func tryResetManagedClientPolicy(ctx context.Context, email, requestID string) (bool, error) {
 	var client model.ClientRecord
 	tx := database.GetDB().WithContext(ctx)

@@ -62,7 +62,7 @@ func seedEnabledClientsForReset(t *testing.T, svc *ClientService, port int, n in
 // lookup to a batched read: the number of SELECTs on clients must not grow
 // with the number of emails reset.
 func TestBulkResetTraffic_DoesNotQueryPerEmail(t *testing.T) {
-	setupBulkDB(t)
+	setupPolicyLedgerDB(t)
 	svc := &ClientService{}
 	inboundSvc := &InboundService{}
 

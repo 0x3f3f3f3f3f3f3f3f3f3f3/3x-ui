@@ -2471,6 +2471,15 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "ClientTrafficBatchResetRequest": {
+    "properties": {
+      "requestId": {
+        "example": "03a0bc3c-8b5f-4573-9ad2-fb6247cfcfc2",
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
   "ClientTrafficResetRequest": {
     "properties": {
       "clientId": {

@@ -1,8 +1,8 @@
 package service
 
 import (
-	"errors"
 	"math"
+	"slices"
 
 	"github.com/xtls/xray-core/app/clientpolicy"
 	"gorm.io/gorm"
@@ -36,75 +36,140 @@ func validateClientPolicyReset(reset *model.ClientPolicyReset) error {
 
 // The boundary is a committed receipt; outstanding reservations are never credited as spent usage.
 func PrepareClientPolicyReset(instanceID, clientID, requestID string) (clientpolicy.Policy, error) {
-	var policy clientpolicy.Policy
-	if !validPolicySourceKey(instanceID) || !validPolicySourceKey(requestID) || clientID == "" {
-		return policy, ErrClientPolicyLedger
-	}
-	err := runSerializedTx(func(tx *gorm.DB) error {
-		var source model.ClientPolicySource
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&source, "instance_id = ?", instanceID).Error; err != nil {
-			return err
-		}
-		if source.NodeKey != "local" || source.Epoch <= 0 || source.Sequence <= 0 {
-			return ErrClientPolicyLedger
-		}
-		var client model.ClientRecord
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&client, "stable_id = ?", clientID).Error; err != nil {
-			return err
-		}
-		resets, err := latestClientPolicyResets(tx, []string{clientID})
-		if err != nil {
-			return err
-		}
-		latest := resets[clientID]
-		if latest != nil && latest.InstanceID != instanceID {
-			return ErrClientPolicyLedger
-		}
-		if err := validateLocalClientPolicyResetScope(tx, []string{clientID}); err != nil {
-			return err
-		}
-		var receipts []model.ClientPolicyReceipt
-		if err := tx.Where("client_id = ?", clientID).Find(&receipts).Error; err != nil {
-			return err
-		}
-		if len(receipts) != 1 {
-			return ErrClientPolicyLedger
-		}
-		receipt := receipts[0]
-		if receipt.InstanceID != instanceID || receipt.Epoch > source.Epoch || receipt.Sequence > source.Sequence || receipt.PolicyVersion <= 0 || receipt.PolicyVersion > client.DesiredPolicyVersion || receipt.ReservedBytes < 0 || receipt.Revoked {
-			return ErrClientPolicyLedger
-		}
-		var total model.ClientPolicyTotal
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&total, "client_id = ?", clientID).Error; err != nil {
-			return err
-		}
-		if total.RawUpload != receipt.RawUpload || total.RawDownload != receipt.RawDownload || total.BilledBytes != receipt.BilledBytes || total.UncertainBytes != receipt.UncertainBytes {
-			return ErrClientPolicyLedger
-		}
-		var existing model.ClientPolicyReset
-		err = tx.First(&existing, "client_id = ? AND request_id = ?", clientID, requestID).Error
-		if err == nil {
-			if existing.InstanceID != instanceID {
-				return ErrClientPolicyLedger
-			}
-			policy, err = prepareClientPolicyRecord(tx, client, latest)
-			return err
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		reset := model.ClientPolicyReset{ClientID: clientID, RequestID: requestID, InstanceID: instanceID, Epoch: receipt.Epoch, Sequence: receipt.Sequence, RawUpload: receipt.RawUpload, RawDownload: receipt.RawDownload, BilledBytes: receipt.BilledBytes, Remainder: receipt.Remainder, UncertainBytes: receipt.UncertainBytes}
-		policy, err = prepareClientPolicyRecord(tx, client, &reset)
-		if err != nil {
-			return err
-		}
-		reset.PolicyVersion = int64(policy.Version)
-		return tx.Create(&reset).Error
-	})
+	policies, err := PrepareClientPolicyResets(instanceID, []string{clientID}, requestID)
 	if err != nil {
 		return clientpolicy.Policy{}, err
 	}
-	return policy, nil
+	return policies[0], nil
+}
+
+func PrepareClientPolicyResets(instanceID string, clientIDs []string, requestID string) ([]clientpolicy.Policy, error) {
+	if !validPolicySourceKey(instanceID) || !validPolicySourceKey(requestID) {
+		return nil, ErrClientPolicyLedger
+	}
+	ids, err := clientPolicyResetIDs(clientIDs)
+	if err != nil {
+		return nil, err
+	}
+	var policies []clientpolicy.Policy
+	err = runSerializedTx(func(tx *gorm.DB) error {
+		var err error
+		policies, err = prepareClientPolicyResetsTx(tx, instanceID, ids, requestID)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return policies, nil
+}
+
+func prepareClientPolicyResetsTx(tx *gorm.DB, instanceID string, ids []string, requestID string) ([]clientpolicy.Policy, error) {
+	var source model.ClientPolicySource
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&source, "instance_id = ?", instanceID).Error; err != nil {
+		return nil, err
+	}
+	if source.NodeKey != "local" || source.Epoch <= 0 || source.Sequence <= 0 {
+		return nil, ErrClientPolicyLedger
+	}
+	var policies []clientpolicy.Policy
+	for _, batch := range chunkStrings(ids, 1000) {
+		prepared, err := prepareClientPolicyResetBatch(tx, source, batch, requestID)
+		if err != nil {
+			return nil, err
+		}
+		policies = append(policies, prepared...)
+	}
+	return policies, nil
+}
+
+func clientPolicyResetIDs(clientIDs []string) ([]string, error) {
+	if len(clientIDs) == 0 || len(clientIDs) > 100000 {
+		return nil, ErrClientPolicyLedger
+	}
+	ids := slices.Clone(clientIDs)
+	slices.Sort(ids)
+	for i, id := range ids {
+		if id == "" || i > 0 && ids[i-1] == id {
+			return nil, ErrClientPolicyLedger
+		}
+	}
+	return ids, nil
+}
+
+func prepareClientPolicyResetBatch(tx *gorm.DB, source model.ClientPolicySource, ids []string, requestID string) ([]clientpolicy.Policy, error) {
+	var clients []model.ClientRecord
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("stable_id IN ?", ids).Order("stable_id").Find(&clients).Error; err != nil {
+		return nil, err
+	}
+	if len(clients) != len(ids) {
+		return nil, gorm.ErrRecordNotFound
+	}
+	latest, err := latestClientPolicyResets(tx, ids)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateLocalClientPolicyResetScope(tx, ids); err != nil {
+		return nil, err
+	}
+	var receipts []model.ClientPolicyReceipt
+	if err := tx.Where("client_id IN ?", ids).Find(&receipts).Error; err != nil {
+		return nil, err
+	}
+	byID := make(map[string]model.ClientPolicyReceipt, len(receipts))
+	for _, receipt := range receipts {
+		if _, exists := byID[receipt.ClientID]; exists {
+			return nil, ErrClientPolicyLedger
+		}
+		byID[receipt.ClientID] = receipt
+	}
+	var totals []model.ClientPolicyTotal
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("client_id IN ?", ids).Order("client_id").Find(&totals).Error; err != nil {
+		return nil, err
+	}
+	if len(totals) != len(ids) {
+		return nil, ErrClientPolicyLedger
+	}
+	var existing []model.ClientPolicyReset
+	if err := tx.Where("client_id IN ? AND request_id = ?", ids, requestID).Find(&existing).Error; err != nil {
+		return nil, err
+	}
+	retries := make(map[string]bool, len(existing))
+	for _, reset := range existing {
+		if reset.InstanceID != source.InstanceID {
+			return nil, ErrClientPolicyLedger
+		}
+		retries[reset.ClientID] = true
+	}
+	policies := make([]clientpolicy.Policy, 0, len(clients))
+	for i, client := range clients {
+		receipt, ok := byID[client.StableID]
+		if !ok || receipt.InstanceID != source.InstanceID || receipt.Epoch > source.Epoch || receipt.Sequence > source.Sequence || receipt.PolicyVersion <= 0 || receipt.PolicyVersion > client.DesiredPolicyVersion || receipt.ReservedBytes < 0 || receipt.Revoked {
+			return nil, ErrClientPolicyLedger
+		}
+		total := totals[i]
+		if total.ClientID != client.StableID || total.RawUpload != receipt.RawUpload || total.RawDownload != receipt.RawDownload || total.BilledBytes != receipt.BilledBytes || total.UncertainBytes != receipt.UncertainBytes {
+			return nil, ErrClientPolicyLedger
+		}
+		reset := latest[client.StableID]
+		if reset != nil && reset.InstanceID != source.InstanceID {
+			return nil, ErrClientPolicyLedger
+		}
+		if !retries[client.StableID] {
+			reset = &model.ClientPolicyReset{ClientID: client.StableID, RequestID: requestID, InstanceID: source.InstanceID, Epoch: receipt.Epoch, Sequence: receipt.Sequence, RawUpload: receipt.RawUpload, RawDownload: receipt.RawDownload, BilledBytes: receipt.BilledBytes, Remainder: receipt.Remainder, UncertainBytes: receipt.UncertainBytes}
+		}
+		policy, err := prepareClientPolicyRecord(tx, client, reset)
+		if err != nil {
+			return nil, err
+		}
+		if !retries[client.StableID] {
+			reset.PolicyVersion = int64(policy.Version)
+			if err := tx.Create(reset).Error; err != nil {
+				return nil, err
+			}
+		}
+		policies = append(policies, policy)
+	}
+	return policies, nil
 }
 
 func validateLocalClientPolicyResetScope(tx *gorm.DB, clientIDs []string) error {

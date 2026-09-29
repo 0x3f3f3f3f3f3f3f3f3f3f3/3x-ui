@@ -37,6 +37,8 @@ import { TRAFFIC_POLL_INTERVAL_S } from '@/lib/traffic/poll-interval';
 import {
   acknowledgeClientTrafficReset,
   pendingClientTrafficReset,
+  acknowledgeAllClientTrafficReset,
+  pendingAllClientTrafficReset,
 } from '@/lib/clients/reset-request';
 
 // One row sent to POST /clients/:email/externalLinks.
@@ -508,10 +510,13 @@ export function useClients(options: UseClientsOptions = {}) {
   });
 
   const resetAllTrafficsMut = useMutation({
-    mutationFn: () => HttpUtil.post('/panel/api/clients/resetAllTraffics'),
-    onSuccess: (msg) => {
-      if (msg?.success) invalidateAll();
+    mutationFn: async () => {
+      const request = pendingAllClientTrafficReset();
+      const msg = await HttpUtil.post('/panel/api/clients/resetAllTraffics', request, JSON_HEADERS);
+      if (msg?.success) acknowledgeAllClientTrafficReset(request);
+      return msg;
     },
+    onSettled: () => invalidateAll(),
   });
 
   const delDepletedMut = useMutation({

@@ -98,6 +98,7 @@ func run(root, outDir string) error {
 				"ClientSlim",
 				"ClientRenewalPreviewRequest",
 				"ClientTrafficResetRequest",
+				"ClientTrafficBatchResetRequest",
 				"ClientRenewalPreview",
 				"ClientPageResponse",
 				"ClientsSummary",

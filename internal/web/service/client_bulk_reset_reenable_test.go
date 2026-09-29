@@ -7,7 +7,7 @@ import "testing"
 // enabled with its counters zeroed, in all three enable locations. This is the
 // path whose s.Update failure was previously swallowed silently.
 func TestBulkResetTraffic_ReenablesDisabledClient(t *testing.T) {
-	setupBulkDB(t)
+	setupPolicyLedgerDB(t)
 	svc := &ClientService{}
 	inboundSvc := &InboundService{}
 

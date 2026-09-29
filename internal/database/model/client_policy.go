@@ -15,6 +15,18 @@ type ClientPolicyTotal struct {
 	UncertainBytes int64  `gorm:"not null"`
 }
 
+// Membership is captured before execution so retries cannot reset newly created clients.
+type ClientTrafficResetBatch struct {
+	RequestID      string `gorm:"primaryKey;size:128;<-:create"`
+	Scope          string `gorm:"not null;size:128;<-:create"`
+	SelectionHash  string `gorm:"not null;size:64;<-:create"`
+	TargetsJSON    string `gorm:"not null;type:text;<-:create"`
+	ManagedIDsJSON string `gorm:"not null;type:text"`
+	Applied        bool   `gorm:"not null"`
+	Affected       int    `gorm:"not null"`
+	CreatedAt      int64  `gorm:"autoCreateTime:milli;<-:create"`
+}
+
 // A reset captures a committed lifetime boundary; request retries never capture it again.
 type ClientPolicyReset struct {
 	Id             int64  `gorm:"primaryKey;autoIncrement;index:idx_policy_reset_order,priority:2"`

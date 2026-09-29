@@ -318,15 +318,20 @@ func (a *ClientController) setExternalLinks(c *gin.Context) {
 }
 
 func (a *ClientController) resetAllTraffics(c *gin.Context) {
-	needRestart, err := a.clientService.ResetAllTraffics()
+	var request service.ClientTrafficBatchResetRequest
+	if err := c.ShouldBindJSON(&request); err != nil && !errors.Is(err, io.EOF) {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	needRestart, err := a.clientService.ResetAllTrafficsWithRequest(c.Request.Context(), request.RequestID)
+	if needRestart {
+		a.xrayService.SetToNeedRestart()
+	}
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
 	jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.resetAllClientTrafficSuccess"), nil)
-	if needRestart {
-		a.xrayService.SetToNeedRestart()
-	}
 	notifyClientsChanged()
 }
 
@@ -719,7 +724,8 @@ func (a *ClientController) detach(c *gin.Context) {
 }
 
 type bulkResetRequest struct {
-	Emails []string `json:"emails"`
+	Emails    []string `json:"emails"`
+	RequestID string   `json:"requestId,omitempty"`
 }
 
 func (a *ClientController) bulkResetTraffic(c *gin.Context) {
@@ -728,12 +734,11 @@ func (a *ClientController) bulkResetTraffic(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	affected, err := a.clientService.BulkResetTraffic(&a.inboundService, req.Emails)
+	affected, err := a.clientService.BulkResetTrafficWithRequest(c.Request.Context(), &a.inboundService, req.Emails, req.RequestID)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
 	jsonObj(c, gin.H{"affected": affected}, nil)
-	a.xrayService.SetToNeedRestart()
 	notifyClientsChanged()
 }

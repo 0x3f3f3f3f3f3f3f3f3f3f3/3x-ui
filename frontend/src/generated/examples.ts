@@ -630,6 +630,9 @@ export const EXAMPLES: Record<string, unknown> = {
     "up": 1048576,
     "uuid": "e18c9a96-71bf-48d4-933f-8b9a46d4290c"
   },
+  "ClientTrafficBatchResetRequest": {
+    "requestId": "03a0bc3c-8b5f-4573-9ad2-fb6247cfcfc2"
+  },
   "ClientTrafficResetRequest": {
     "clientId": "e18c9a96-71bf-48d4-933f-8b9a46d4290c",
     "requestId": "782f657b-b127-42a9-9511-d7d83d76dc7d"

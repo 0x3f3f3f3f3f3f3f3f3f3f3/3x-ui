@@ -617,6 +617,11 @@ export const ClientTrafficSchema = z.object({
 });
 export type ClientTraffic = z.infer<typeof ClientTrafficSchema>;
 
+export const ClientTrafficBatchResetRequestSchema = z.object({
+  requestId: z.string().optional(),
+});
+export type ClientTrafficBatchResetRequest = z.infer<typeof ClientTrafficBatchResetRequestSchema>;
+
 export const ClientTrafficResetRequestSchema = z.object({
   clientId: z.string().optional(),
   requestId: z.string().optional(),

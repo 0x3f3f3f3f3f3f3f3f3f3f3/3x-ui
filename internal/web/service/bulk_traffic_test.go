@@ -35,7 +35,7 @@ func trafficOf(t *testing.T, email string) xray.ClientTraffic {
 }
 
 func TestBulkResetTrafficZeroesUsageAndReenables(t *testing.T) {
-	setupBulkDB(t)
+	setupPolicyLedgerDB(t)
 	svc := &ClientService{}
 	inboundSvc := &InboundService{}
 

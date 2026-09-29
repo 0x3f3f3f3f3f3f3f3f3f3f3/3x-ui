@@ -2497,6 +2497,15 @@
         ],
         "type": "object"
       },
+      "ClientTrafficBatchResetRequest": {
+        "properties": {
+          "requestId": {
+            "example": "03a0bc3c-8b5f-4573-9ad2-fb6247cfcfc2",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "ClientTrafficResetRequest": {
         "properties": {
           "clientId": {
@@ -9179,8 +9188,25 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Reset the up/down counters for every client globally. Quotas and expiry are not affected. Triggers an Xray restart if any counter actually moved.",
+        "summary": "Reset every client’s traffic period. Managed clients retain lifetime usage, manual disable and expiry; legacy counters retain their existing reset behavior.",
         "operationId": "post_panel_api_clients_resetAllTraffics",
+        "description": "Send requestId and reuse it after an uncertain reply. The server persists the original stable client identities before execution: retries do not include newly created clients, follow an existing identity through rename, and never reset new usage again. Managed clients require a ready local core and a single ledger source with no remote attachments. All SQL boundaries commit together before bounded Runtime application; a core failure remains pending for polling. Legacy changes can already be committed when Runtime application reports failure. At most 100000 clients can be selected. An empty body generates a new key and cannot be safely replayed.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "requestId": {
+                    "type": "string",
+                    "description": "Caller retry key, at most 128 bytes; no surrounding whitespace, NUL, CR or LF. Use a new key for a new reset."
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful response",
@@ -9981,20 +10007,38 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Zero up/down counters for many clients in one call. Loops the single-reset path so each client is re-enabled across its attached inbounds and pushed to Xray/remote nodes. Returns the count of successfully reset clients.",
+        "summary": "Reset selected clients in one durable batch. Managed clients keep lifetime usage and independent restrictions; legacy clients keep counter zeroing and re-enable behavior.",
         "operationId": "post_panel_api_clients_bulkResetTraffic",
+        "description": "Supply requestId to retry the original stable identity selection after a timeout or failure. Reordering or repeating emails is allowed; changing the normalized email set with the same key is rejected. A renamed client stays selected and a replacement at its former email is excluded. Deleted identities are skipped. The full SQL reset commits atomically before managed Runtime application, which normal polling can finish after a failure. A retry returns the original affected count and does not clear later legacy traffic or manual disables. Managed execution currently requires a local single-source policy with no remote attachments; a batch containing a stopped/prepared managed client does not fall back to legacy zeroing. The selection limit is 100000 clients.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "type": "object",
+                "properties": {
+                  "emails": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Client emails selected for this reset."
+                  },
+                  "requestId": {
+                    "type": "string",
+                    "description": "Caller retry key, at most 128 bytes without surrounding whitespace, NUL, CR or LF. Omit for a new non-replayable request."
+                  }
+                },
+                "required": [
+                  "emails"
+                ]
               },
               "example": {
                 "emails": [
                   "alice",
                   "bob"
-                ]
+                ],
+                "requestId": "03a0bc3c-8b5f-4573-9ad2-fb6247cfcfc2"
               }
             }
           }

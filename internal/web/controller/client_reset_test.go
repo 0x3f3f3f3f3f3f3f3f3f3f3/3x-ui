@@ -17,6 +17,46 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
 
+func TestClientTrafficResetHTTPBatchRetriesDoNotClearNewUsage(t *testing.T) {
+	for _, path := range []string{"resetAllTraffics", "bulkResetTraffic"} {
+		t.Run(path, func(t *testing.T) {
+			dbtest.InitDB(t, filepath.Join(t.TempDir(), "reset-batch.db"))
+			db := database.GetDB()
+			owner := model.ClientRecord{Email: "batch-http"}
+			if err := db.Create(&owner).Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Create(&xray.ClientTraffic{Email: owner.Email, Up: 10, Down: 20}).Error; err != nil {
+				t.Fatal(err)
+			}
+			router := gin.New()
+			NewClientController(router.Group("/panel/api/clients"))
+			for attempt := range 2 {
+				request := httptest.NewRequest(http.MethodPost, "/panel/api/clients/"+path, strings.NewReader(`{"emails":["batch-http"],"requestId":"same-http-batch"}`))
+				request.Header.Set("Content-Type", "application/json")
+				response := httptest.NewRecorder()
+				router.ServeHTTP(response, request)
+				var result struct {
+					Success bool `json:"success"`
+				}
+				if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || !result.Success {
+					t.Fatalf("batch HTTP reset: %s, %v", response.Body, err)
+				}
+				var traffic xray.ClientTraffic
+				if err := db.First(&traffic, "email = ?", owner.Email).Error; err != nil {
+					t.Fatal(err)
+				}
+				if traffic.Up != int64(attempt*33) || traffic.Down != 0 {
+					t.Fatalf("HTTP retry captured a new reset boundary: %+v", traffic)
+				}
+				if err := db.Model(&traffic).Update("up", 33).Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
 func TestClientTrafficResetHTTPRejectsInvalidIdentityAndRequestBeforeWriting(t *testing.T) {
 	for _, test := range []struct{ name, body, wantError string }{
 		{"reused-email", `{"requestId":"retry-a","clientId":"former-owner"}`, "client identity changed"},

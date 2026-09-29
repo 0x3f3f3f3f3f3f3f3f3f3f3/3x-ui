@@ -65,10 +65,10 @@ _openapi:
         an app remain valid until the external provider revokes them.
       url: '#replace-a-clients-external-links-and-external-subscriptions-sends-the-full-set-the-server-replaces-all-rows-disabled-rows-stay-saved-for-editing-but-are-not-emitted-in-generated-subscriptions-the-owning-clients-disabled-or-expired-state-also-stops-these-rows-from-being-emitted-on-future-subscription-fetches-credentials-already-imported-by-an-app-remain-valid-until-the-external-provider-revokes-them'
     - depth: 2
-      title: Reset the up/down counters for every client globally. Quotas and expiry
-        are not affected. Triggers an Xray restart if any counter actually
-        moved.
-      url: '#reset-the-updown-counters-for-every-client-globally-quotas-and-expiry-are-not-affected-triggers-an-xray-restart-if-any-counter-actually-moved'
+      title: Reset every client’s traffic period. Managed clients retain lifetime
+        usage, manual disable and expiry; legacy counters retain their existing
+        reset behavior.
+      url: '#reset-every-clients-traffic-period-managed-clients-retain-lifetime-usage-manual-disable-and-expiry-legacy-counters-retain-their-existing-reset-behavior'
     - depth: 2
       title: Delete every client whose traffic quota is exhausted (used >= total, when
         reset is disabled) or whose expiry has passed. Returns the deleted count
@@ -178,11 +178,10 @@ _openapi:
         running."
       url: '#mirror-of-bulkattach-detach-many-existing-clients-from-many-inbounds-in-one-call-for-each-email-intersects-the-clients-current-inbounds-with-the-requested-set-and-detaches-from-those-only-email-inbound-pairs-where-the-client-is-not-currently-attached-are-silently-no-ops-emails-not-attached-to-any-of-the-requested-inbounds-are-reported-under-skipped-client-records-are-kept-even-if-they-become-orphaned--use-bulkdel-for-full-removal-returns-per-email-detachedskippederrors-lists-and-triggers-a-single-xray-restart-if-any-target-inbound-was-running'
     - depth: 2
-      title: Zero up/down counters for many clients in one call. Loops the
-        single-reset path so each client is re-enabled across its attached
-        inbounds and pushed to Xray/remote nodes. Returns the count of
-        successfully reset clients.
-      url: '#zero-updown-counters-for-many-clients-in-one-call-loops-the-single-reset-path-so-each-client-is-re-enabled-across-its-attached-inbounds-and-pushed-to-xrayremote-nodes-returns-the-count-of-successfully-reset-clients'
+      title: Reset selected clients in one durable batch. Managed clients keep
+        lifetime usage and independent restrictions; legacy clients keep counter
+        zeroing and re-enable behavior.
+      url: '#reset-selected-clients-in-one-durable-batch-managed-clients-keep-lifetime-usage-and-independent-restrictions-legacy-clients-keep-counter-zeroing-and-re-enable-behavior'
     - depth: 2
       title: List all client groups with their member counts. Merges persisted groups
         (rows in client_groups, including empty placeholders) with the distinct
@@ -348,10 +347,10 @@ _openapi:
           emitted on future subscription fetches; credentials already imported
           by an app remain valid until the external provider revokes them.
         id: replace-a-clients-external-links-and-external-subscriptions-sends-the-full-set-the-server-replaces-all-rows-disabled-rows-stay-saved-for-editing-but-are-not-emitted-in-generated-subscriptions-the-owning-clients-disabled-or-expired-state-also-stops-these-rows-from-being-emitted-on-future-subscription-fetches-credentials-already-imported-by-an-app-remain-valid-until-the-external-provider-revokes-them
-      - content: Reset the up/down counters for every client globally. Quotas and expiry
-          are not affected. Triggers an Xray restart if any counter actually
-          moved.
-        id: reset-the-updown-counters-for-every-client-globally-quotas-and-expiry-are-not-affected-triggers-an-xray-restart-if-any-counter-actually-moved
+      - content: Reset every client’s traffic period. Managed clients retain lifetime
+          usage, manual disable and expiry; legacy counters retain their
+          existing reset behavior.
+        id: reset-every-clients-traffic-period-managed-clients-retain-lifetime-usage-manual-disable-and-expiry-legacy-counters-retain-their-existing-reset-behavior
       - content: Delete every client whose traffic quota is exhausted (used >= total,
           when reset is disabled) or whose expiry has passed. Returns the
           deleted count and triggers an Xray restart when any client was on a
@@ -451,11 +450,10 @@ _openapi:
           detached/skipped/errors lists and triggers a single Xray restart if
           any target inbound was running."
         id: mirror-of-bulkattach-detach-many-existing-clients-from-many-inbounds-in-one-call-for-each-email-intersects-the-clients-current-inbounds-with-the-requested-set-and-detaches-from-those-only-email-inbound-pairs-where-the-client-is-not-currently-attached-are-silently-no-ops-emails-not-attached-to-any-of-the-requested-inbounds-are-reported-under-skipped-client-records-are-kept-even-if-they-become-orphaned--use-bulkdel-for-full-removal-returns-per-email-detachedskippederrors-lists-and-triggers-a-single-xray-restart-if-any-target-inbound-was-running
-      - content: Zero up/down counters for many clients in one call. Loops the
-          single-reset path so each client is re-enabled across its attached
-          inbounds and pushed to Xray/remote nodes. Returns the count of
-          successfully reset clients.
-        id: zero-updown-counters-for-many-clients-in-one-call-loops-the-single-reset-path-so-each-client-is-re-enabled-across-its-attached-inbounds-and-pushed-to-xrayremote-nodes-returns-the-count-of-successfully-reset-clients
+      - content: Reset selected clients in one durable batch. Managed clients keep
+          lifetime usage and independent restrictions; legacy clients keep
+          counter zeroing and re-enable behavior.
+        id: reset-selected-clients-in-one-durable-batch-managed-clients-keep-lifetime-usage-and-independent-restrictions-legacy-clients-keep-counter-zeroing-and-re-enable-behavior
       - content: List all client groups with their member counts. Merges persisted
           groups (rows in client_groups, including empty placeholders) with the
           distinct group_name values currently set on clients. Sorted
@@ -658,6 +656,30 @@ _openapi:
           still have detached the remaining inbounds. Detach writes nothing
           beyond the inbounds, so every error carries the prefix.'
         heading: detach-a-client-from-one-or-more-inbounds-without-deleting-the-client
+      - content: 'Send requestId and reuse it after an uncertain reply. The server
+          persists the original stable client identities before execution:
+          retries do not include newly created clients, follow an existing
+          identity through rename, and never reset new usage again. Managed
+          clients require a ready local core and a single ledger source with no
+          remote attachments. All SQL boundaries commit together before bounded
+          Runtime application; a core failure remains pending for polling.
+          Legacy changes can already be committed when Runtime application
+          reports failure. At most 100000 clients can be selected. An empty body
+          generates a new key and cannot be safely replayed.'
+        heading: reset-every-clients-traffic-period-managed-clients-retain-lifetime-usage-manual-disable-and-expiry-legacy-counters-retain-their-existing-reset-behavior
+      - content: Supply requestId to retry the original stable identity selection after
+          a timeout or failure. Reordering or repeating emails is allowed;
+          changing the normalized email set with the same key is rejected. A
+          renamed client stays selected and a replacement at its former email is
+          excluded. Deleted identities are skipped. The full SQL reset commits
+          atomically before managed Runtime application, which normal polling
+          can finish after a failure. A retry returns the original affected
+          count and does not clear later legacy traffic or manual disables.
+          Managed execution currently requires a local single-source policy with
+          no remote attachments; a batch containing a stopped/prepared managed
+          client does not fall back to legacy zeroing. The selection limit is
+          100000 clients.
+        heading: reset-selected-clients-in-one-durable-batch-managed-clients-keep-lifetime-usage-and-independent-restrictions-legacy-clients-keep-counter-zeroing-and-re-enable-behavior
       - content: For a managed client, send both clientId and requestId and reuse them
           after a timeout or success:false reply. The same request never
           captures a later boundary, even after another reset. clientId must

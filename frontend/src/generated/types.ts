@@ -584,6 +584,10 @@ export interface ClientTraffic {
   uuid: string;
 }
 
+export interface ClientTrafficBatchResetRequest {
+  requestId?: string;
+}
+
 export interface ClientTrafficResetRequest {
   clientId?: string;
   requestId?: string;

@@ -44,6 +44,9 @@ export const ClientTrafficResetRequestSchema = z.object({
 });
 export type ClientTrafficResetRequest = z.infer<typeof ClientTrafficResetRequestSchema>;
 
+export const ClientTrafficBatchResetRequestSchema = z.object({ requestId: z.uuid() });
+export type ClientTrafficBatchResetRequest = z.infer<typeof ClientTrafficBatchResetRequestSchema>;
+
 export const ClientTrafficSchema = z.object({
   email: z.string().optional(),
   up: z.number().optional(),

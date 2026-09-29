@@ -162,7 +162,7 @@ func TestClientPolicyResetEntrypointsRecheckAfterQueuedBootstrap(t *testing.T) {
 
 func TestClientPolicyResetEntrypointsProtectStoppedAndPreparedClients(t *testing.T) {
 	for _, preparedOnly := range []bool{false, true} {
-		for _, entrypoint := range []string{"client", "inbound-email", "inbound-client"} {
+		for _, entrypoint := range []string{"client", "inbound-email", "inbound-client", "bulk", "all", "inbound-all"} {
 			t.Run(fmt.Sprintf("%s/prepared-only=%t", entrypoint, preparedOnly), func(t *testing.T) {
 				var id string
 				if preparedOnly {
@@ -201,6 +201,12 @@ func TestClientPolicyResetEntrypointsProtectStoppedAndPreparedClients(t *testing
 					resetErr = (&InboundService{}).ResetClientTrafficByEmail(owner.Email)
 				case "inbound-client":
 					_, resetErr = (&InboundService{}).ResetClientTraffic(inbound.Id, owner.Email)
+				case "bulk":
+					_, resetErr = (&ClientService{}).BulkResetTraffic(&InboundService{}, []string{owner.Email})
+				case "all":
+					_, resetErr = (&ClientService{}).ResetAllTraffics()
+				case "inbound-all":
+					resetErr = (&ClientService{}).ResetAllClientTraffics(&InboundService{}, inbound.Id)
 				}
 				if resetErr == nil || !strings.Contains(resetErr.Error(), "managed core is not ready for reset") {
 					t.Fatalf("bound client fell back to a legacy reset: %v", resetErr)

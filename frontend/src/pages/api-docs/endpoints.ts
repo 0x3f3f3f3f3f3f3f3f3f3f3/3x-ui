@@ -1308,7 +1308,18 @@ export const sections: readonly Section[] = [
         method: 'POST',
         path: '/panel/api/clients/resetAllTraffics',
         summary:
-          'Reset the up/down counters for every client globally. Quotas and expiry are not affected. Triggers an Xray restart if any counter actually moved.',
+          'Reset every client’s traffic period. Managed clients retain lifetime usage, manual disable and expiry; legacy counters retain their existing reset behavior.',
+        description:
+          'Send requestId and reuse it after an uncertain reply. The server persists the original stable client identities before execution: retries do not include newly created clients, follow an existing identity through rename, and never reset new usage again. Managed clients require a ready local core and a single ledger source with no remote attachments. All SQL boundaries commit together before bounded Runtime application; a core failure remains pending for polling. Legacy changes can already be committed when Runtime application reports failure. At most 100000 clients can be selected. An empty body generates a new key and cannot be safely replayed.',
+        params: [
+          {
+            name: 'requestId',
+            in: 'body (json)',
+            type: 'string',
+            optional: true,
+            desc: 'Caller retry key, at most 128 bytes; no surrounding whitespace, NUL, CR or LF. Use a new key for a new reset.',
+          },
+        ],
         response: '{\n  "success": true\n}',
       },
       {
@@ -1453,8 +1464,25 @@ export const sections: readonly Section[] = [
         method: 'POST',
         path: '/panel/api/clients/bulkResetTraffic',
         summary:
-          'Zero up/down counters for many clients in one call. Loops the single-reset path so each client is re-enabled across its attached inbounds and pushed to Xray/remote nodes. Returns the count of successfully reset clients.',
-        body: '{\n  "emails": ["alice", "bob"]\n}',
+          'Reset selected clients in one durable batch. Managed clients keep lifetime usage and independent restrictions; legacy clients keep counter zeroing and re-enable behavior.',
+        description:
+          'Supply requestId to retry the original stable identity selection after a timeout or failure. Reordering or repeating emails is allowed; changing the normalized email set with the same key is rejected. A renamed client stays selected and a replacement at its former email is excluded. Deleted identities are skipped. The full SQL reset commits atomically before managed Runtime application, which normal polling can finish after a failure. A retry returns the original affected count and does not clear later legacy traffic or manual disables. Managed execution currently requires a local single-source policy with no remote attachments; a batch containing a stopped/prepared managed client does not fall back to legacy zeroing. The selection limit is 100000 clients.',
+        params: [
+          {
+            name: 'emails',
+            in: 'body (json)',
+            type: 'string[]',
+            desc: 'Client emails selected for this reset.',
+          },
+          {
+            name: 'requestId',
+            in: 'body (json)',
+            type: 'string',
+            optional: true,
+            desc: 'Caller retry key, at most 128 bytes without surrounding whitespace, NUL, CR or LF. Omit for a new non-replayable request.',
+          },
+        ],
+        body: '{\n  "emails": ["alice", "bob"],\n  "requestId": "03a0bc3c-8b5f-4573-9ad2-fb6247cfcfc2"\n}',
         response: '{\n  "success": true,\n  "obj": {\n    "affected": 2\n  }\n}',
       },
       {
