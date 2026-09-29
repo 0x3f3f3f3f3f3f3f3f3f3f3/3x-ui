@@ -3715,3 +3715,104 @@ difference/overshoot, and closure bounds of 7.175717–32.881171ms. The affected
 Logs: `/tmp/3x-ui-rate-trace/mieru-public-acceptance-final.jsonl` and
 `mieru-quota-lint.log`. This increment changes test utilities, acceptance tests
 and evidence documents only; prior frontend/build evidence is unchanged.
+
+### Canonical attachment without a subscription ID
+
+The new public UDP payload workload exposed an existing service defect before
+any measurement: `Attach` rejected an already selected canonical client with
+an empty subscription ID as a duplicate email. The same public service call
+failed for mieru and VLESS on SQLite and PostgreSQL. The new focused regression
+also checks repeated attachment, unchanged credentials/policy ID/subscription
+ID, and continued duplicate-email rejection by the ordinary add endpoint.
+
+Explicit attachment now carries the selected database owner through the private
+add pipeline. It preserves an empty subscription ID and rechecks the selected
+record's policy ID, email and subscription ID under its transaction lock before
+writing membership or settings. Ordinary create, add and portable import retain
+the existing duplicate validation. No model/schema or public API field changes.
+
+Focused empty-ID RED evidence is in
+`/tmp/3x-ui-rate-trace/attach-identity-red-isolated.jsonl`: all four dialect/
+protocol cases rejected valid attachment. The first PostgreSQL harness reused
+one schema across protocol subcases; it was corrected to use a schema per leaf
+before recording this evidence. The first identity-replacement fixture attempted
+a GORM write to the create-only policy-ID field, which did not modify the row;
+its failed assertion is not evidence of an actual replacement race. The corrected
+fixture performs the replacement explicitly and checks affected rows and stored
+identity. Removing only the transaction identity comparison through a `/tmp`
+overlay then caused both SQLite/PostgreSQL replacement tests to accept the stale
+operation (meaningful RED, 1.075s). Restored production source passed all four
+top-level / four subtests with race checking, no skips, in 8.174s:
+
+```sh
+XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' \
+go test -race -p 1 ./internal/web/service \
+  -run '^TestAttach(CanonicalClientWithoutSubscriptionID|RejectsReplacedCanonicalIdentity)' \
+  -count=1 -json
+```
+
+Logs: `attach-replacement-mutation-red.jsonl` and
+`attach-identity-green-final.jsonl` under `/tmp/3x-ui-rate-trace/`.
+
+The pending UDP payload rate workload then completed cross-inbound attachment,
+but its first normal-build SQLite/TCP-underlay unlimited upload baseline was
+122791 B/s, below the predeclared 524288 B/s minimum; the run failed in 14.221s
+before rate acceptance. No baseline threshold or rate tolerance was changed.
+That unfinished workload is retained separately while the canonical attachment
+fix receives its own regression/commit. Its baseline capacity must be diagnosed;
+this result is not proof of correct sustained UDP shaping.
+
+The same defect was then reproduced at `BulkAttach`: four empty-ID dialect/
+protocol cases failed, and two tests with a confirmed policy-identity replacement
+incorrectly committed the whole batch. The fix now shares the trusted-owner
+pipeline between single and bulk attachment. Each selected record is validated,
+then locked in ID order with bounded SQL chunks and rechecked before committing
+one payload per inbound. Bulk tests cover two clients, partially populated targets,
+repeated target IDs, retries and atomic rejection of a stale identity.
+
+The initial bulk RED run failed all four top-level/four subtests in 2.314s
+(`bulk-attach-identity-red.jsonl`). The first combined single/bulk focused race
+run passed eight top-level/eight subtests, without skips
+(`all-attach-identity-green.jsonl`). Subsequent broader regression results are
+recorded below. These logs are under `/tmp/3x-ui-rate-trace/`.
+
+Expanded related-path race checking passed **80 top-level / 90 subtests** in
+102.688s, with three explicit skips: the two real-core portable SSH restoration
+tests (core environment not set for this focused run) and the opt-in PostgreSQL
+bulk scale test. Command: `go test -race -p 1 ./internal/web/service -run
+'^Test(Bulk|Attach|Portable|Import)' -count=1 -json` with `XUI_TEST_PG_DSN`.
+The service-package `golangci-lint run ./internal/web/service/...` reported zero
+issues, and `go build -o /tmp/3x-ui-attach-identity-panel .` passed. Logs:
+`attach-related-race.jsonl`, `attach-backend-lint.log`, `attach-panel-build.log`.
+
+A subsequent instrumented UDP baseline again failed all four client/direction
+measurements (97266–122863 B/s, required 524288 B/s). Both policy rates were
+zero, all eight flows remained alive, payloads were intact, and every receiver
+advanced. During the 400ms window, 86 durable-admission calls consumed a combined
+738ms including database waiting; destination writes consumed about 3.48ms.
+This points to admission throughput, but does not yet separate queueing from
+transaction work or commit cost. The diagnostic then stalled in its manual
+cleanup: the official session close waited behind a blocked TCP output lock.
+A captured goroutine dump identifies the fixture's session-before-client stop
+order. The pending fixture now stops the official client/underlay first; that
+change still requires execution. No production rate fix or UDP acceptance is
+claimed from this diagnostic (`udp-admission-baseline-diagnostic.jsonl`).
+
+Final full-root regression for the single/bulk implementation passed **53 test
+packages, 2656 top-level / 4542 subtests**, with **28 top-level / 14 subtest skips**
+and seven packages containing no tests. No failures; the service package took
+440.36s. Command: `go test -p 1 -shuffle=on -count=1 ./... -json`,
+with `XRAY_E2E_BINARY` and `XUI_MANAGED_XRAY_E2E_BINARY` pointing to the pinned
+managed core, `XUI_MIHOMO_E2E_BINARY=/tmp/3x-ui-mihomo-v1.19.30`, and the same
+`XUI_TEST_PG_DSN`. Log: `/tmp/3x-ui-rate-trace/attach-bulk-full-go.jsonl`.
+The pending UDP payload rate fixture is still outside this committed suite.
+
+The skips are retained explicitly (none count as passes):
+
+- `internal/database`: `TestMigrate_Postgres`, `TestHostAutoMigrateCreatesColumns_Postgres`, `TestClientWeeklyRenewMigration_Postgres`.
+- `internal/sshoutbound`: `TestConnectorOpenSSHIPv6Target`, `TestBridgeOpenSSHForwardingAndPinFailure`, `TestConnectorOpenSSHForwardingAndStrictHostPin`.
+- `internal/sub`: `TestGetSubsScale/N=10000`, `TestGetSubsScale/N=100000`.
+- `internal/web/controller`: `TestUpdatePanel_UnsupportedPlatformReturnsNoRunId`.
+- `internal/web/job`: `TestCheckClientIpScale/N=10000_single`, `TestCheckClientIpScale/N=10000_spread50`, `TestCheckClientIpScale/N=100000_single`, `TestCheckClientIpScale/N=100000_spread50`.
+- `internal/web/service`: `TestDelAllClientsPostgresScale`, `TestSyncInboundPostgresScale`, `TestSetClientLimitHwidIsSerializedWithSyncInbound`, `TestSSHUpstreamPolicyRatesAndRestart`, `TestSSHOutboundRunsThroughProductionXray`, `TestAddTrafficPollScale`, `TestAddInbound_PostgresCommitFailureMakesNoRuntimeCall`, `TestAddDelClientPostgresScale`, `TestGetXrayConfigScale`, `TestWsPayloadScale`, `TestSSHUpstreamPolicyQuotaAndLifecycle`, `TestBulkOpsPostgresScale`, `TestSSHUpstream_Postgres/runtime`, `TestSSHUpstream_Postgres/rates`, `TestSSHUpstream_Postgres/quota`, `TestGetClientTrafficByEmailABScale`, `TestUpdateInbound_PostgresCommitFailureMakesNoRuntimeCall`, `TestGoldenRoutingFixturesBuildInXray/rule/balancer-routed`, `TestGoldenRoutingFixturesBuildInXray/rule/full`, `TestGoldenDNSFixturesBuildInXray/dns/full`, `TestGoldenDNSFixturesBuildInXray/dns-server/full`, `TestGoldenDNSFixturesBuildInXray/dns-server/legacy-expectips`, `TestAllAPIsPostgresScale`, `TestGroupAndListPostgresScale`.
+- `internal/web/service/outbound`: `TestSSHProbeResolvesNativeProxyChain`, `TestSSHProbeUsesRequestedPinAndIsolatesInvalidContext`, `TestSSHProbeUsesRealCoreAndOpenSSH`, `TestSSHProbeFailureCleansOwnedResources`, `TestAddTrafficReturnsDeferredCommitFailure`.

@@ -106,7 +106,7 @@ func (s *ClientService) importPortableClient(inboundSvc *InboundService, item Cl
 		if err != nil {
 			return false, false, err
 		}
-		add, err := s.prepareInboundClientAdd(inboundSvc, &model.Inbound{Id: inbound.Id, Settings: string(settings)})
+		add, err := s.prepareInboundClientAdd(inboundSvc, &model.Inbound{Id: inbound.Id, Settings: string(settings)}, nil)
 		if err != nil {
 			return false, false, err
 		}

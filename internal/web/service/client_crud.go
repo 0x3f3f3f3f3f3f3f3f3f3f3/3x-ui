@@ -253,7 +253,7 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 		}
 		adds = append(adds, &model.Inbound{Id: ibId, Settings: string(settingsPayload)})
 	}
-	needRestart, fanoutErr := s.fanoutInboundClientAdds(inboundSvc, adds)
+	needRestart, fanoutErr := s.fanoutInboundClientAdds(inboundSvc, adds, nil)
 	if fanoutErr != nil {
 		// Never on a failed create: this retrims the devices of an email that
 		// already existed, and a create the panel reported as failed must not.
@@ -314,11 +314,11 @@ func fanoutInboundApplies(applies []inboundApply) (bool, error) {
 }
 
 // fanoutInboundClientAdds applies one payload per inbound.
-func (s *ClientService) fanoutInboundClientAdds(inboundSvc *InboundService, adds []*model.Inbound) (bool, error) {
+func (s *ClientService) fanoutInboundClientAdds(inboundSvc *InboundService, adds []*model.Inbound, owners map[string]*model.ClientRecord) (bool, error) {
 	applies := make([]inboundApply, 0, len(adds))
 	for _, add := range adds {
 		applies = append(applies, inboundApply{id: add.Id, run: func() (bool, error) {
-			return s.AddInboundClient(inboundSvc, add)
+			return s.addInboundClientsForOwners(inboundSvc, add, owners)
 		}})
 	}
 	return fanoutInboundApplies(applies)
@@ -1063,7 +1063,7 @@ func (s *ClientService) Attach(inboundSvc *InboundService, id int, inboundIds []
 		}
 		adds = append(adds, &model.Inbound{Id: ibId, Settings: string(settingsPayload)})
 	}
-	return s.fanoutInboundClientAdds(inboundSvc, adds)
+	return s.fanoutInboundClientAdds(inboundSvc, adds, map[string]*model.ClientRecord{existing.Email: existing})
 }
 
 func (s *ClientService) CreateOne(inboundSvc *InboundService, inboundId int, client model.Client) (bool, error) {

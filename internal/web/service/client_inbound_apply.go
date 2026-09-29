@@ -332,8 +332,12 @@ type preparedInboundClientAdd struct {
 }
 
 func (s *ClientService) AddInboundClient(inboundSvc *InboundService, data *model.Inbound) (bool, error) {
+	return s.addInboundClientsForOwners(inboundSvc, data, nil)
+}
+
+func (s *ClientService) addInboundClientsForOwners(inboundSvc *InboundService, data *model.Inbound, owners map[string]*model.ClientRecord) (bool, error) {
 	defer lockInbound(data.Id).Unlock()
-	add, err := s.prepareInboundClientAdd(inboundSvc, data)
+	add, err := s.prepareInboundClientAdd(inboundSvc, data, owners)
 	if err != nil || add == nil {
 		return false, err
 	}
@@ -344,12 +348,15 @@ func (s *ClientService) AddInboundClient(inboundSvc *InboundService, data *model
 }
 
 // The caller holds the inbound lock through preparation, commit and runtime apply.
-func (s *ClientService) prepareInboundClientAdd(inboundSvc *InboundService, data *model.Inbound) (*preparedInboundClientAdd, error) {
+func (s *ClientService) prepareInboundClientAdd(inboundSvc *InboundService, data *model.Inbound, owners map[string]*model.ClientRecord) (*preparedInboundClientAdd, error) {
 	clients, err := inboundSvc.GetClients(data)
 	if err != nil {
 		return nil, err
 	}
 	if err := validateClientsRenewal(clients); err != nil {
+		return nil, err
+	}
+	if err := validateAttachmentOwners(clients, owners); err != nil {
 		return nil, err
 	}
 
@@ -370,18 +377,20 @@ func (s *ClientService) prepareInboundClientAdd(inboundSvc *InboundService, data
 			}
 			cm["updated_at"] = nowTs
 			existingSub, _ := cm["subId"].(string)
-			if strings.TrimSpace(existingSub) == "" {
+			if owners == nil && strings.TrimSpace(existingSub) == "" {
 				cm["subId"] = random.NumLower(16)
 			}
 			interfaceClients[i] = cm
 		}
 	}
-	existEmail, err := s.checkEmailsExistForClients(inboundSvc, clients)
-	if err != nil {
-		return nil, err
-	}
-	if existEmail != "" {
-		return nil, common.NewError("Duplicate email:", existEmail)
+	if owners == nil {
+		existEmail, err := s.checkEmailsExistForClients(inboundSvc, clients)
+		if err != nil {
+			return nil, err
+		}
+		if existEmail != "" {
+			return nil, common.NewError("Duplicate email:", existEmail)
+		}
 	}
 
 	oldInbound, err := inboundSvc.GetInbound(data.Id)
@@ -557,6 +566,9 @@ func (s *ClientService) prepareInboundClientAdd(inboundSvc *InboundService, data
 	// Persist client stats + inbound atomically, serialized against the traffic
 	// poll to avoid the cross-transaction lock-order deadlock (runSerializedTx).
 	persist := func(tx *gorm.DB) error {
+		if err := lockAttachmentOwnersTx(tx, clients, owners); err != nil {
+			return err
+		}
 		// lockInbound is per-inbound, so the pre-tx cross-inbound checks race
 		// concurrent writers on other inbounds — re-run them in here (#6225).
 		if oldInbound.Protocol == model.WireGuard || oldInbound.Protocol == model.AmneziaWG {

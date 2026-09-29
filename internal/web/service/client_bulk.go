@@ -42,6 +42,7 @@ func (s *ClientService) BulkAttach(inboundSvc *InboundService, emails []string, 
 	}
 
 	records := make([]*model.ClientRecord, 0, len(emails))
+	owners := make(map[string]*model.ClientRecord, len(emails))
 	seenEmail := make(map[string]struct{}, len(emails))
 	for _, email := range emails {
 		if email == "" {
@@ -58,6 +59,7 @@ func (s *ClientService) BulkAttach(inboundSvc *InboundService, emails []string, 
 			continue
 		}
 		records = append(records, rec)
+		owners[rec.Email] = rec
 	}
 
 	// Same rule as Attach (#4834): clients.flow is unreliable when a non-flow
@@ -137,7 +139,7 @@ func (s *ClientService) BulkAttach(inboundSvc *InboundService, emails []string, 
 	}
 
 	attachResults, attachPanics := fanoutInboundResults(attachIds, addFanoutLimit(attachAnyTunnel), func(i int) inboundApplyOutcome {
-		nr, err := s.AddInboundClient(inboundSvc, &model.Inbound{Id: attachIds[i], Settings: attachPayloads[i]})
+		nr, err := s.addInboundClientsForOwners(inboundSvc, &model.Inbound{Id: attachIds[i], Settings: attachPayloads[i]}, owners)
 		return inboundApplyOutcome{needRestart: nr, err: err}
 	})
 	for i, out := range attachResults {

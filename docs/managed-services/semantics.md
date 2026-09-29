@@ -30,6 +30,11 @@ implemented or verified.
   Every counter source has a persisted incarnation and monotonic sequence.
   Counter reset requires a new accepted incarnation; a smaller count in the
   same incarnation is not inferred to be a restart.
+- Single and bulk attachment select existing canonical records, including clients
+  without subscription IDs. It preserves that subscription value and verifies
+  the selected policy identities, emails and subscription values under ordered row locks
+  before adding membership. Ordinary client creation retains duplicate-email
+  protection; attachment does not create a new accounting identity.
 - Report replay cannot change raw counters or charges. Out-of-order reports
   cannot rewind a cursor. All source contributions are settled once by their
   billing owner; transport bridges, outbound stats and master mirrors are not
