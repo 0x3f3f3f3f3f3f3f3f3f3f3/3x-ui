@@ -129,3 +129,7 @@ priority/user/domain/IP/network/egress tests, then existing model/Runtime/API/UI
 client export, backup, node and deployment flows. This plan does not declare
 mieru complete after a loopback echo or a library test. Publish logical verified
 milestones only to the already approved feature branch and verify remote SHA.
+
+The [packet bridge prerequisite](xray-datagram-bridge.md) now has a reproducible
+pinned-core patch and actual boundary tests. This does not yet connect the
+native mieru callback to the core or provide a public managed service.

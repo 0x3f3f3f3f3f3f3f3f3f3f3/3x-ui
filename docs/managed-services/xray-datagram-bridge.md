@@ -1,0 +1,63 @@
+# Authenticated UDP routing bridge plan
+
+Continue main Task 6 inline under its existing authorization. The complete
+requirements remain binding; this increment establishes a routing prerequisite,
+not public mieru support or complete native-protocol policy enforcement.
+
+## Decision and boundary evidence
+
+The pinned core is `v1.260327.1-0.20260908222543-52a412d9e2f5` (26.9.9).
+Keep the dependency and upstream baseline. Maintain a narrow, reproducible
+source patch when stock packet handling cannot satisfy the promised boundary.
+Never edit the module cache or silently replace a running core.
+
+Evaluate a private, per-client authenticated Trojan stream per UDP destination.
+It carries the original domain/IP and authenticated user into the existing
+dispatcher; one stream per destination prevents the native UDP dispatcher from
+reusing the first destination's route for a later destination. Retain the
+existing SOCKS TCP bridge and its authentication readiness check.
+
+The [official wire format](https://trojan-gfw.github.io/trojan/protocol) carries
+a two-byte UDP length. The pinned implementation instead rejects payloads over
+8192 bytes, drops empty payloads, and allocates only 8192 bytes for a response
+including its header. Real core tests reproduce empty upload loss, 8192-byte
+response failure and 8193/65507-byte upload loss; 1 and 8170 bytes pass.
+The first fixture omitted an explicit permission for its loopback target and
+failed even the small control. Core debug logs proved the default final rule
+blocked it; the corrected fixture allows only its loopback target network.
+
+Trojan is deprecated in this pinned core. This private bridge therefore depends
+on the maintained pinned build and explicit capability checks, not continued
+upstream support. Credentials are random per binding and remain loopback-only;
+this is not a new public Trojan service or a replacement for TLS on public
+connections. No fallback target may be configured for rejected credentials.
+
+The official mieru UDP wrapper rejects domain names in response headers.
+Preserve original domains for routing but return only actual available peer IP
+metadata. Do not resolve again and guess which address a routed outbound used.
+Outbounds that do not expose that metadata require an explicit protected state
+until an appropriate adapter is implemented and verified.
+
+## Steps and verification contract
+
+1. Add real core tests before changes for empty, header-boundary and maximum
+   65507-byte UDP payloads in each direction. Establish the small control.
+2. Add a pinned source preparation/build command with checksum validation,
+   patch provenance and distinct build identity. Fix complete packet allocation,
+   packet-aware empty handling and bounded queue admission. Add upstream-level
+   tests for buffer/queue behavior before the corresponding patch.
+3. Verify source patches against the pinned core's affected package suites and
+   the actual core data path. Add malformed/oversize framing tests. Preserve
+   byte counters at zero for empty packets and avoid unbounded empty queues.
+4. Implement the private packet bridge with policy-ID credentials, original
+   source and target, deadlines, exclusive connection ownership and no direct
+   fallback. Test user/domain/IP/network/port/tag/priority/block/egress routing,
+   wrong credentials, core exit and cancellation with real requests.
+5. Connect official mieru clients to that bridge and verify per-client policy,
+   exact single billing and existing-flow cutoff over both native underlays.
+6. Continue the model/Runtime/UI/API/export/deployment/node/backup work from
+   main Task 6. Public activation must validate the required core capability
+   before changing desired/actual runtime state.
+
+Do not claim stock cores, all outbounds, IPv6, public integration or multi-node
+execution are verified from a single direct IPv4 loopback result.

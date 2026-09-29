@@ -1,0 +1,201 @@
+diff --git a/common/buf/buffer.go b/common/buf/buffer.go
+--- a/common/buf/buffer.go
++++ b/common/buf/buffer.go
+@@ -35,6 +35,7 @@
+ 	end       int32
+ 	ownership ownership
+ 	UDP       *net.Destination
++	Datagram  bool
+ }
+ 
+ // New creates a Buffer with 0 length and 8K capacity, managed.
+@@ -119,6 +120,7 @@
+ 		bytespool.Free(p)
+ 	}
+ 	b.UDP = nil
++	b.Datagram = false
+ }
+ 
+ // Clear clears the content of the buffer, results an empty buffer with
+diff --git a/common/buf/reader.go b/common/buf/reader.go
+--- a/common/buf/reader.go
++++ b/common/buf/reader.go
+@@ -8,20 +8,13 @@
+ )
+ 
+ func readOneUDP(r io.Reader) (*Buffer, error) {
+-	b := New()
+-	for i := 0; i < 64; i++ {
+-		_, err := b.ReadFrom(r)
+-		if !b.IsEmpty() {
+-			return b, nil
+-		}
+-		if err != nil {
+-			b.Release()
+-			return nil, err
+-		}
++	b := NewWithSize(65535)
++	if n, err := b.ReadFrom(r); err != nil && n == 0 {
++		b.Release()
++		return nil, err
+ 	}
+-
+-	b.Release()
+-	return nil, errors.New("Reader returns too many empty payloads.")
++	b.Datagram = true
++	return b, nil
+ }
+ 
+ // ReadBuffer reads a Buffer from the given reader.
+diff --git a/common/buf/multi_buffer.go b/common/buf/multi_buffer.go
+--- a/common/buf/multi_buffer.go
++++ b/common/buf/multi_buffer.go
+@@ -251,7 +251,7 @@
+ // IsEmpty returns true if the MultiBuffer has no content.
+ func (mb MultiBuffer) IsEmpty() bool {
+ 	for _, b := range mb {
+-		if !b.IsEmpty() {
++		if b != nil && (b.Datagram || b.UDP != nil || !b.IsEmpty()) {
+ 			return false
+ 		}
+ 	}
+diff --git a/transport/pipe/impl.go b/transport/pipe/impl.go
+--- a/transport/pipe/impl.go
++++ b/transport/pipe/impl.go
+@@ -25,8 +25,8 @@
+ 	discardOverflow bool
+ }
+ 
+-func (o *pipeOption) isFull(curSize int32) bool {
+-	return o.limit >= 0 && curSize > o.limit
++func (o *pipeOption) isFull(curSize int64) bool {
++	return o.limit >= 0 && curSize > int64(o.limit)
+ }
+ 
+ type pipe struct {
+@@ -53,10 +53,20 @@
+ 	return data.Len()
+ }
+ 
++func (p *pipe) queueSize() int64 {
++	size := int64(p.data.Len())
++	for _, b := range p.data {
++		if b != nil && (b.Datagram || b.UDP != nil) {
++			size += int64(max(cap(b.Bytes()), buf.Size)) - int64(b.Len())
++		}
++	}
++	return size
++}
++
+ func (p *pipe) getState(forRead bool) error {
+ 	switch p.state {
+ 	case open:
+-		if !forRead && p.option.isFull(p.data.Len()) {
++		if !forRead && p.option.isFull(p.queueSize()) {
+ 			return errBufferFull
+ 		}
+ 		return nil
+@@ -143,6 +153,7 @@
+ 
+ func (p *pipe) WriteMultiBuffer(mb buf.MultiBuffer) error {
+ 	if mb.IsEmpty() {
++		buf.ReleaseMulti(mb)
+ 		return nil
+ 	}
+ 
+diff --git a/proxy/trojan/protocol.go b/proxy/trojan/protocol.go
+--- a/proxy/trojan/protocol.go
++++ b/proxy/trojan/protocol.go
+@@ -21,7 +21,7 @@
+ )
+ 
+ const (
+-	maxLength = 8192
++	maxLength = 65535
+ 
+ 	commandTCP byte = 1
+ 	commandUDP byte = 3
+@@ -123,13 +123,15 @@
+ }
+ 
+ func (w *PacketWriter) writePacket(payload []byte, dest net.Destination) (int, error) {
+-	buffer := buf.StackNew()
++	length := len(payload)
++	if length > maxLength {
++		return 0, errors.New("oversize payload")
++	}
++	buffer := buf.NewWithSize(int32(length + 263))
+ 	defer buffer.Release()
+-
+-	length := len(payload)
+ 	lengthBuf := [2]byte{}
+ 	binary.BigEndian.PutUint16(lengthBuf[:], uint16(length))
+-	if err := addrParser.WriteAddressPort(&buffer, dest.Address, dest.Port); err != nil {
++	if err := addrParser.WriteAddressPort(buffer, dest.Address, dest.Port); err != nil {
+ 		return 0, err
+ 	}
+ 	if _, err := buffer.Write(lengthBuf[:]); err != nil {
+@@ -238,25 +240,16 @@
+ 		return nil, errors.New("failed to read crlf").Base(err)
+ 	}
+ 
++	if crlf != [2]byte{'\r', '\n'} {
++		return nil, errors.New("invalid packet delimiter")
++	}
++
+ 	dest := net.UDPDestination(addr, port)
+-	var mb buf.MultiBuffer
+-	for remain > 0 {
+-		length := buf.Size
+-		if remain < length {
+-			length = remain
+-		}
+-
+-		b := buf.New()
+-		b.UDP = &dest
+-		mb = append(mb, b)
+-		n, err := b.ReadFullFrom(r, int32(length))
+-		if err != nil {
+-			buf.ReleaseMulti(mb)
+-			return nil, errors.New("failed to read payload").Base(err)
+-		}
+-
+-		remain -= int(n)
+-	}
+-
+-	return mb, nil
+-}
++	b := buf.NewWithSize(int32(remain))
++	b.UDP = &dest
++	if _, err := b.ReadFullFrom(r, int32(remain)); err != nil {
++		b.Release()
++		return nil, errors.New("failed to read payload").Base(err)
++	}
++	return buf.MultiBuffer{b}, nil
++}
+diff --git a/proxy/freedom/freedom.go b/proxy/freedom/freedom.go
+--- a/proxy/freedom/freedom.go
++++ b/proxy/freedom/freedom.go
+@@ -497,8 +497,9 @@
+ }
+ 
+ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
+-	b := buf.New()
+-	b.Resize(0, buf.Size)
++	b := buf.NewWithSize(65535)
++	b.Datagram = true
++	b.Resize(0, 65535)
+ 	for {
+ 		n, d, err := r.PacketConnWrapper.ReadFrom(b.Bytes())
+ 		if err != nil {
+diff --git a/proxy/trojan/server.go b/proxy/trojan/server.go
+--- a/proxy/trojan/server.go
++++ b/proxy/trojan/server.go
+@@ -245,6 +245,7 @@
+ }
+ 
+ func (s *Server) handleUDPPayload(ctx context.Context, sessionPolicy policy.Session, clientReader *PacketReader, clientWriter *PacketWriter, dispatcher routing.Dispatcher) error {
++	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
+ 	ctx, cancel := context.WithCancel(ctx)
+ 	defer cancel()
+ 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)

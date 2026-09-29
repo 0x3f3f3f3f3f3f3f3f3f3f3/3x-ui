@@ -165,3 +165,17 @@ adapter and shared controller on SQLite, before public Runtime integration.
 | Authenticated Xray UDP routing / policy-aware bridge | N | Current SOCKS bridge is TCP-only; packet-capable identity-preserving bridge still required |
 | Public model/Runtime/API/UI/export/node/deployment integration | N | No public mieru service option or manager is claimed by this increment |
 | Native pre-accept resource stress, credential rotation, PostgreSQL adapter acceptance | N | Native queue peak-memory bounds, live credential generation handling and the adapter's second-dialect vertical remain open |
+
+## UDP core prerequisite evidence
+
+These results concern the independently built pinned core patch. They do not
+change the N status of the managed mieru routing/management rows above.
+
+| Core prerequisite | Status | Evidence / limit |
+|---|---|---|
+| Whole payload over authenticated Trojan UDP and direct IPv4 egress | V | Real fixed-core binary and UDP socket, 0/1/8170/8192/8193/65507-byte request/reply, no additional split or duplicate packet |
+| Empty packet presence independent of billing bytes | V | Actual connected UDP read and real pipe preserve one empty packet and zero byte count; empty packets consume finite queue capacity |
+| Finite per-user UDP pipe configuration | V | Real authenticated UDP input and stalled TCP protocol outbound, unlimited control plus finite user policy despite unlimited global default; Linux-owned socket buffers fixed |
+| Reproducible source and build identity | V | Pinned module/checksum verification, checked patch application, separate output, retained MPL-2.0 provenance; existing output paths are refused |
+| Private policy-ID bridge, source-IP replies and unified route tests | N | No public managed service consumes this core capability yet; original domains remain visible to routing, but stock freedom may return a domain alias in packet metadata |
+| Distribution, installer selection and Runtime capability enforcement | N | The independent build command does not replace or install a panel core |

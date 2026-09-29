@@ -306,3 +306,14 @@ cursors are not recreated by this file. Keep a complete database backup for
 upgrade/rollback; older binaries do not understand the new byte-string and
 policy format. No safe downgrade migration is established. Large-import/export
 performance and distributed policy restoration remain unverified.
+
+## Independent core packet build
+
+`tools/managed-xray` prepares and builds the pinned core with reviewed packet
+handling changes. Its [instructions](../../tools/managed-xray/README.md) include
+the source checksum, MPL-2.0 provenance, isolated output and real-core tests.
+The command refuses an existing binary path and does not install, restart or
+replace the panel's running core. Preserve the patches and source reference
+with any derived binary distribution. Public managed UDP activation, installed
+core capability enforcement, node compatibility and installer selection remain
+required before this build is used by a managed mieru service.

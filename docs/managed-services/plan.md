@@ -210,6 +210,11 @@ partial startup and backpressure cleanup. These are internal adapter results.
 The required dial callback preserves routing context; its test direct connector
 is not evidence of the future Xray UDP bridge or public Runtime integration.
 
+The [core datagram prerequisite](xray-datagram-bridge.md) now supplies a pinned,
+independently built source patch with real empty/maximum UDP payload and finite
+queue tests. The private policy-ID bridge, actual reply-source metadata and
+Runtime activation still need implementation before the routing item is done.
+
 ## Task 7: Snell v4/v5/v6 vertical integration
 
 Files: new `internal/snell`, backend asset manifest/installer, namespace bridge,

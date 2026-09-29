@@ -2315,3 +2315,128 @@ declared bounds, not new universal timing guarantees.
 After those final source changes, affected Go lint again reported `0 issues`,
 `go build ./...` succeeded, and `make gen-check` again preserved 186 paths and
 198 operations. Documentation's local links and `git diff --check` passed.
+
+
+## Pinned core UDP packet prerequisite (2026-09-28)
+
+Native mieru commit `2f00235f51e91f97de5620be76ebd7c5fe37b03c` was pushed to the
+approved fork feature branch; independent `git ls-remote` returned that exact
+SHA. The following increment remains an internal routing prerequisite. It does
+not activate public mieru routing or alter the installed panel core.
+
+`tools/managed-xray` prepares the existing pinned 26.9.9 source with its module
+checksum, runs `go mod verify`, applies a reviewed MPL-2.0 patch and builds a
+separate binary marked `3x-ui-packets-1`. Existing source/output paths are
+refused; functional checks preserved a source sentinel and the existing binary
+SHA. The final test binary SHA256 is
+`9d292ae3d32f64a44206ede9c39e2b9dfa2a65e953b1a5ccafa25b8f47a4fa64`.
+Patch SHA256:
+`5f09614959462e280048694668e5f3ebf8ea152fbf110c0de8522b4cc597f967`.
+This is Linux arm64/Go 1.27.1 evidence, not all-platform packaging acceptance.
+
+Actual TCP-authenticated Trojan UDP requests to an independent UDP socket
+established 1/8170-byte controls. Stock core then lost empty uploads, failed an
+8192-byte response with `buffer is full`, and rejected 8193/65507-byte uploads.
+The initial fixture had failed even the one-byte control: debug logs showed the
+core's default final rule blocking the loopback target. An explicit fixture-only
+loopback allow rule corrected that setup; it is not a change to deployed ACLs.
+Logs: `/tmp/3x-ui-core-datagram-red-corrected.log` and
+`/tmp/3x-ui-core-datagram-green.log`. All six packet sizes subsequently completed
+exact request/reply checks, with a further target read checking for extra split
+or duplicate packets. The response source remains the core's original domain
+alias; actual-IP response adaptation is still required for the mieru wrapper.
+
+The patch allocates complete packets and complete address/length framing,
+retains empty packet presence separately from payload byte counts, and charges
+at least one normal buffer's capacity to each queued UDP packet. Native finite
+pipe semantics retain one final whole-write admission beyond the limit. An
+explicitly unlimited upstream buffer configuration is still unlimited; managed
+activation must select a finite policy. The Trojan UDP handler now passes its
+authenticated user's buffer policy through to the dispatcher.
+
+Real stalled TCP protocol-outbound tests show why that policy propagation is
+necessary. With an unlimited global default, stock core accepted all 33,644,544
+framed bytes in both the unlimited control and configured-zero-buffer case.
+The final fixture fixes only its owned Linux socket buffers, avoiding kernel
+autotuning as the acceptance boundary. Patched-core repeats preserved the
+unlimited control but stopped the bounded sender at 448,533 framed bytes in the
+recorded final run, with the same two-second deadline and predeclared 8 MiB
+ceiling. That observation includes socket flight and protocol framing; it is
+not a new billing boundary, rate measurement or universal memory bound.
+Logs: `/tmp/3x-ui-core-buffer-policy-controlled-red.log` and
+`/tmp/3x-ui-core-bridge-package-final.log` (three full package race repetitions,
+all passing, 10.856s). An earlier fixture run passed at 8,276,276 framed bytes;
+its proximity to the fixed ceiling motivated explicit socket-buffer control,
+not an enlarged tolerance.
+
+Core-package RED evidence also covers empty connected UDP reads, empty packets
+bypassing a zero-capacity pipe, maximum-width address framing and malformed
+CRLF. Actual compile-time overlays individually removed overflow rejection,
+full packet allocation and queue-capacity charging. Each corresponding test
+failed: a 65536-byte length overflow wrote 65547 framed bytes, an 8193-byte
+packet was truncated, or the second empty datagram bypassed the full queue.
+The overlays modify only isolated test builds, not repository/module sources.
+Self-review additionally caught loss of a valid final `io.Reader` payload with
+EOF; its RED test passed after retaining nonempty final reads and refusing to
+invent a subsequent empty packet. The first changed `IsEmpty` implementation
+also failed the upstream nil-buffer regression; the final code retains nil
+handling. These failures were corrected, not counted as passing runs.
+
+The core's own full `go test -p 1 -count=1 -shuffle=on -json ./...` ran from
+23:38:54Z to 23:49:23Z. It passed 80 test packages, including the 334.027s real
+protocol scenario package, and failed three packages because the module archive
+omits `resources/geoip.dat`/`geosite.dat`. The affected top-level failures were
+`TestChinaSites`, `TestParseDomainRules`, `TestParseIPRules`, `TestIPMatcher4CN`
+and `TestGeodataConfig`. Fetching the upstream CI's actual asset source at
+commit `f810cb1a484824b94604872b82b1eb74ec7a43c3` and checking both published
+SHA256 values made all three complete packages pass. The combined complete
+package results are 83 passing packages, 560 passing top-level tests and one
+skipped top-level test (`TestSockOptMark`), plus 85 packages without test files.
+The initial invocation was not green. Logs:
+`/tmp/3x-ui-core-full-go.jsonl`, `/tmp/3x-ui-core-geodata-rerun.jsonl`.
+
+The final EOF-preservation edit followed that broad run. A fresh complete
+`go test -race -count=1 -json ./common/buf ./transport/pipe ./proxy/trojan
+./proxy/freedom` then passed all 46 top-level tests across the three packages
+with tests; freedom has no package tests, and is exercised by the actual wire
+tests. No test cases were skipped and no race was detected. Log:
+`/tmp/3x-ui-core-patch-packages-final-2.jsonl`. The final isolated binary build
+exited zero after source verification. The earlier in-progress shell script
+was edited during execution and exited 127 despite emitting a binary; that
+attempt is not counted as a successful build. The scripts were then finalized
+and rerun with new output paths.
+
+No public API, model, migration, frontend control or locale changed in this
+increment. The packet-capable policy-ID bridge, response IP metadata, complete
+route/egress tests, Runtime capability enforcement and installation/node paths
+remain open in the main Task 6 and the packet bridge plan.
+
+
+The final panel regression used the newly built binary for both
+`XRAY_E2E_BINARY` and `XUI_MANAGED_XRAY_E2E_BINARY`, with the owned PostgreSQL and
+OpenSSH fixtures enabled:
+
+```sh
+XRAY_E2E_BINARY=/tmp/3x-ui-xray-packets-verified-2 \
+XUI_MANAGED_XRAY_E2E_BINARY=/tmp/3x-ui-xray-packets-verified-2 \
+SSH_E2E_SERVER=/usr/sbin/sshd \
+XUI_TEST_PG_DSN='host=127.0.0.1 port=55432 user=nobody dbname=postgres sslmode=disable' \
+LD_LIBRARY_PATH=/tmp/3x-ui-pg-tools/root/usr/lib/aarch64-linux-gnu \
+go test -p 1 -count=1 -shuffle=on -json ./...
+```
+
+It exited zero from 23:51:56Z to 23:59:50Z on 2026-09-28: **52 test packages,
+2497 top-level tests passed; 18 top-level tests skipped**, with seven packages
+without test files. There were 4979 passing and 29 skipped test/subtest events,
+and no failures. The skips remain explicit conditional paths, not acceptance.
+This includes existing panel/SSH/core workflows and the final UDP tests against
+the final core patch. Log: `/tmp/3x-ui-packet-core-panel-full-go.jsonl`.
+Affected panel lint reported zero issues. No full frontend run is claimed for
+this source-tooling/core/test-only increment.
+
+Final `go build ./...`, affected lint, shell syntax and local documentation-link
+checks passed. The first staged whitespace check flagged the required leading
+context spaces in the unified patch file. A directory-scoped Git attribute
+exempts only patch-context trailing spaces and space-before-tab; applied Go
+source still passes `gofmt`, and patch application is checked before building.
+All other source whitespace checks remain enabled.
