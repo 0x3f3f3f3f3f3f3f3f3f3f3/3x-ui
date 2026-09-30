@@ -2106,3 +2106,94 @@ No core or frontend production source changed. Prior native-core/frontend
 suite evidence remains applicable; no fresh full native-core/frontend test
 suite or remote CI execution is claimed. Clean checkpoint builds are separate
 artifact verification and do not imply deployment or whole-goal completion.
+
+
+### Password-owner shared fields and bulk enable
+
+Public enable read/set/toggle, IP limit, expiry, integer-GiB quota and bulk enable
+are covered for explicit local Mixed/HTTP owners: password-only, ordinary sibling
+and sole-owner empty Tunnel graphs. The initial public fixture failure was a
+duplicate traffic row; the corrected fixture then reproduced 36 failing cases
+out of 54. Narrow current-field writes preserve unrelated canonical values,
+current per-resource credentials, account arrays, links, counters and lifetime
+ledger. A matching saved enable reconciles pending managed intent. Legacy
+ordinary/remote fanout retains its result contract.
+
+Boundary tests cover preflight scope, missing/malformed accounts, ambiguous
+Tunnel, current unrelated edits, late SQL rollback, recycled names and changed
+membership. Six actual PostgreSQL operations wait for a held resource row and
+preserve the competing password/policy/credential rotation. A 129-owner shared
+graph uses two managed acknowledgement boundaries and at most ten complete graph
+reads; the original implementation performed 388 complete reads and failed.
+That RED and all earlier fixture/implementation failures remain in task evidence.
+
+The initial read-only review found three Important issues: classification drift
+could enter legacy writers with a stale identity; a later bulk error could discard
+committed owned results; relative expiry could not settle an actual first-use
+receipt because password settings lack a clients array. Classification gain/loss
+and fully valid old-label replacement reproduced the first issue for all six
+write entrypoints. Captured identity/membership/classification now fences both
+branches, including each legacy writer transaction. Bulk retains prior Changed,
+restart and skipped reports after a later error.
+
+First-use settlement skips password account arrays, updates ordinary expiry
+mirrors and accepts omitted empty Tunnel clients only with the sole selected
+owner. Both protocols and all three valid graphs settle a persistent engine's
+actual admitted payload receipt twice without replay. A late second Tunnel owner
+is rejected with expiry and receipt/total rollback. The first corrected test
+incorrectly expected the historical traffic row to gain managed usage; that
+fixture failure is retained. The historical row stays 123/456, while the managed
+lifetime total advances to 126/456/583. First-use, renewal and legacy atomicity
+race tests pass in 7.074 s. No accounting assertion was relaxed.
+
+Real core exercises public bulk/set disable and re-enable, quota lowering/lifting
+and expiry. A aliases, active/idle TCP and Mixed UDP associations plus TCP/UDP
+Tunnel close under restrictions; B survives at the same source IP/core boot.
+Enable cannot override quota or expiry. Refusal is measured by actual target
+payload, since a CONNECT handshake can finish before payload admission is denied.
+Independent target bytes and final lifetime totals are:
+
+| Protocol / owner | Target bytes for protocol | Raw upload | Raw download | Lifetime billed |
+| --- | ---: | ---: | ---: | ---: |
+| HTTP / A | 90 | 160 | 1073742084 | 1073742364 |
+| HTTP / B | 90 | 30 | 30 | 90 |
+| Mixed / A | 108 | 166 | 1073742090 | 1073742388 |
+| Mixed / B | 108 | 42 | 42 | 126 |
+
+Each protocol's target total is shared between its two rows. A starts from
+100/1073742024/1073742124 with multiplier 2; B uses 1.5. Restart and repeated
+polling retain these exact totals. Set/bulk lost ApplyPolicies replies after real
+execution save disable intent, stop the uncertain child and recover on a new
+boot. Retry/re-enable settles exactly 24 target bytes to A 124/224/396.
+
+Corrected-source race/shuffle contracts pass on SQLite (86.70 s wall) and
+PostgreSQL (467.51 s wall; service 463.913 s). All 18 required non-PostgreSQL
+names pass on both, and all 20 names pass on PostgreSQL. The additional final
+writer-fence regression passes separately in 7.666 s service time. Prior Update, bulk,
+ordinary/multinode, first-use and renewal contracts are included. YAML and all
+31 Bash blocks parse; no remote CI execution is claimed. Production hashes and
+named results are recorded under password-owner-fields task evidence. Contracts
+compiled before deletion of an unused wrapper; the execution paths are unchanged.
+Final full Go/race checks compile the cleaned source. Earlier pre-review results
+and the subsequent lint failures remain separately archived.
+
+Final generation (0.98 s), lint (38.99 s, 0 issues) and vet (3.94 s) pass.
+Earlier corrected lint/vet results remain archived; these final checks include
+the additional PostgreSQL writer-fence test.
+The same reviewer clears all three Important findings: independent SQLite
+correction/public/batch/first-use tests pass in 16.954 s, and PostgreSQL late
+name-reuse probes at legacy single, legacy bulk and final bulk metadata writes
+all pass in 2.455 s. No remaining Critical/Important issue or new material
+regression was found. The three PostgreSQL probes are now required repository
+CI regression tests. Full make test-go passes in 307.17 s wall, including
+service 136.801 s and the explicit AmneziaWG device package (0.997 s).
+Full affected race/shuffle passes in 570.50 s wall: service 447.812 s,
+database 80.654 s and controller 19.665 s. This compiles the final regression
+fixtures. All five reviewed production hashes remain unchanged through final
+gates. No core/frontend production source changed; preceding native-core and
+frontend suite evidence remains applicable, without a fresh full native-core
+or frontend suite claim. The earlier default frontend timeout/split validation
+record remains unchanged. Clean builds are distinct artifact checks.
+Live legacy alias-counter handoff, generic credential creation, anonymous
+ownership, foreign-owner import and remaining protocol/single-core work remain
+unfinished. This increment does not complete Task5B or the original goal.

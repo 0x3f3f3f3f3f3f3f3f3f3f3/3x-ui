@@ -1690,6 +1690,26 @@ func (s *ClientService) BulkSetEnable(inboundSvc *InboundService, emails []strin
 			skippedReasons[email] = "client not found"
 		}
 	}
+	var captured []*model.ClientRecord
+	for _, record := range recordsByEmail {
+		captured = append(captured, record)
+	}
+	selections, err := capturePasswordOwnerFieldSelections(db, captured)
+	if err != nil {
+		return result, false, err
+	}
+	ownedChanged, needRestart, err := s.bulkPasswordOwnerEnable(inboundSvc, recordsByEmail, selections, skippedReasons, enable)
+	result.Changed = ownedChanged
+	finish := func(err error) (BulkSetEnableResult, bool, error) {
+		result.Skipped = nil
+		for email, reason := range skippedReasons {
+			result.Skipped = append(result.Skipped, BulkSetEnableReport{Email: email, Reason: reason})
+		}
+		return result, needRestart, err
+	}
+	if err != nil {
+		return finish(err)
+	}
 
 	clientIds := make([]int, 0, len(recordsByEmail))
 	recordIdToEmail := make(map[int]string, len(recordsByEmail))
@@ -1704,7 +1724,7 @@ func (s *ClientService) BulkSetEnable(inboundSvc *InboundService, emails []strin
 		for _, batch := range chunkInts(clientIds, sqlInChunk) {
 			var rows []model.ClientInbound
 			if err := db.Where("client_id IN ?", batch).Find(&rows).Error; err != nil {
-				return result, false, err
+				return finish(err)
 			}
 			mappings = append(mappings, rows...)
 		}
@@ -1717,10 +1737,9 @@ func (s *ClientService) BulkSetEnable(inboundSvc *InboundService, emails []strin
 		}
 	}
 
-	needRestart := false
 	enableIds := sortedInboundIds(emailsByInbound)
 	enableResults, enablePanics := fanoutInboundResults(enableIds, inboundFanoutConcurrency, func(i int) bulkSetEnableInboundResult {
-		return s.bulkSetEnableInboundClients(inboundSvc, enableIds[i], emailsByInbound[enableIds[i]], enable)
+		return s.bulkSetEnableInboundClients(inboundSvc, enableIds[i], emailsByInbound[enableIds[i]], enable, selections)
 	})
 	for i, ibRes := range enableResults {
 		if enablePanics[i] != nil {
@@ -1753,26 +1772,35 @@ func (s *ClientService) BulkSetEnable(inboundSvc *InboundService, emails []strin
 	if len(successEmails) > 0 {
 		now := time.Now().UnixMilli()
 		if err := runSerializedTx(func(tx *gorm.DB) error {
+			selected := make(map[int]*passwordOwnerFieldSelection)
+			var successIDs []int
+			for _, email := range successEmails {
+				record := recordsByEmail[email]
+				selected[record.Id] = selections[record.Id]
+				successIDs = append(successIDs, record.Id)
+			}
+			if err := guardPasswordOwnerFieldSelections(tx, selected, true); err != nil {
+				return err
+			}
 			for _, batch := range chunkStrings(successEmails, sqlInChunk) {
 				if e := tx.Model(xray.ClientTraffic{}).Where("email IN ?", batch).Update("enable", enable).Error; e != nil {
 					return e
 				}
-				if e := tx.Model(&model.ClientRecord{}).Where("email IN ?", batch).
+			}
+			for _, batch := range chunkInts(successIDs, sqlInChunk) {
+				if e := tx.Model(&model.ClientRecord{}).Where("id IN ?", batch).
 					Updates(map[string]any{"enable": enable, "updated_at": now}).Error; e != nil {
 					return e
 				}
 			}
 			return nil
 		}); err != nil {
-			return result, needRestart, err
+			return finish(err)
 		}
 	}
 
-	result.Changed = len(successEmails)
-	for email, reason := range skippedReasons {
-		result.Skipped = append(result.Skipped, BulkSetEnableReport{Email: email, Reason: reason})
-	}
-	return result, needRestart, nil
+	result.Changed += len(successEmails)
+	return finish(nil)
 }
 
 type bulkSetEnableInboundResult struct {
@@ -1780,7 +1808,7 @@ type bulkSetEnableInboundResult struct {
 	needRestart     bool
 }
 
-func (s *ClientService) bulkSetEnableInboundClients(inboundSvc *InboundService, inboundId int, emails []string, enable bool) bulkSetEnableInboundResult {
+func (s *ClientService) bulkSetEnableInboundClients(inboundSvc *InboundService, inboundId int, emails []string, enable bool, fieldSelections ...map[int]*passwordOwnerFieldSelection) bulkSetEnableInboundResult {
 	res := bulkSetEnableInboundResult{perEmailSkipped: map[string]string{}}
 
 	defer lockInbound(inboundId).Unlock()
@@ -1883,6 +1911,17 @@ func (s *ClientService) bulkSetEnableInboundClients(inboundSvc *InboundService, 
 	}
 
 	txErr := runSerializedTx(func(tx *gorm.DB) error {
+		if len(fieldSelections) != 0 {
+			selected := make(map[int]*passwordOwnerFieldSelection)
+			for id, selection := range fieldSelections[0] {
+				if _, ok := wanted[selection.Record.Email]; ok {
+					selected[id] = selection
+				}
+			}
+			if err := guardPasswordOwnerFieldSelections(tx, selected, true); err != nil {
+				return err
+			}
+		}
 		if e := commitInboundClientSettings(tx, oldInbound, prevSettings); e != nil {
 			return e
 		}

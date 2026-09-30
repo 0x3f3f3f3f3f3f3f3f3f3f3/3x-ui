@@ -90,6 +90,12 @@ func guardPasswordProxyOwnerUpdate(tx *gorm.DB, current *model.ClientRecord, pol
 	if err := failed[current.Id]; err != nil {
 		return err
 	}
+	return guardPasswordProxyOwnerUpdateScope(tx, current, policy)
+}
+
+// Call only after the complete password graph was validated for the selected
+// records. Bulk field changes validate that shared graph once per batch.
+func guardPasswordProxyOwnerUpdateScope(tx *gorm.DB, current *model.ClientRecord, policy *model.ClientPolicyOptions) error {
 	if err := guardClientPolicyTargets(tx, current, policy, nil, false); err != nil {
 		return err
 	}

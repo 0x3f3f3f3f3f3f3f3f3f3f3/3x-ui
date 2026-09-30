@@ -132,13 +132,35 @@ func updateManagedRenewalInbounds(tx *gorm.DB, expiries map[string]int64, now in
 			return err
 		}
 		for _, inbound := range inbounds {
+			if isPasswordProxy(inbound.Protocol) {
+				continue
+			}
 			var settings map[string]json.RawMessage
 			if err := json.Unmarshal([]byte(inbound.Settings), &settings); err != nil {
 				return err
 			}
 			var clients []map[string]json.RawMessage
-			if err := json.Unmarshal(settings["clients"], &clients); err != nil {
-				return err
+			if raw := settings["clients"]; len(raw) != 0 {
+				if err := json.Unmarshal(raw, &clients); err != nil {
+					return err
+				}
+			}
+			if inbound.Protocol == model.Tunnel && len(clients) == 0 {
+				var owners []string
+				if err := tx.Table("client_inbounds ci").Joins("JOIN clients c ON c.id = ci.client_id").
+					Where("ci.inbound_id = ?", inbound.Id).Pluck("c.email", &owners).Error; err != nil {
+					return err
+				}
+				if len(owners) != 1 {
+					return errors.New("renewal empty Tunnel requires exactly one owner")
+				}
+				if _, ok := expiries[owners[0]]; !ok {
+					return errors.New("renewal empty Tunnel owner missing from expiry selection")
+				}
+				if err := validateStoredTunnelOwnerSettings(tx, inbound.Id); err != nil {
+					return err
+				}
+				continue
 			}
 			found := false
 			for _, client := range clients {

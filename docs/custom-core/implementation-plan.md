@@ -864,19 +864,23 @@ BulkSetEnable for local explicit Mixed/HTTP owners. Legacy ordinary/remote
 fanout and public result contracts remain. Generic creation, Telegram traffic-ID
 writer, external links, anonymous ownership and live legacy handoff stay separate.
 
-- [ ] Observe actual public RED for both protocols and password-only,
+- [x] Observe actual public RED for both protocols and password-only,
   ordinary and empty-Tunnel graphs. Cover reads, setters, toggle, dedup/missing
   bulk reporting; verify preserved resource credentials/history/links/ledger.
-- [ ] Implement narrow current-field mutation, canonical enable reads and
+- [x] Implement narrow current-field mutation, canonical enable reads and
   matching-intent retry. Validate full graph before writes and under locks;
   retain legacy fanout/Changed/Skipped behavior and unrelated current fields.
-- [ ] Verify malformed/missing/remote/ambiguous graphs before fanout, stable
+- [x] Verify malformed/missing/remote/ambiguous graphs before fanout, stable
   identity through name reuse, late SQL rollback and actual PostgreSQL locks.
-- [ ] Real core: A alias active/idle TCP/UDP and Tunnel disable/re-enable,
+- [x] Fence captured classification in both owned and legacy writers; preserve
+  committed bulk results after later failures. Settle actual relative-expiry
+  first-use receipts across password-only, ordinary and sole-owner empty Tunnel
+  graphs, rejecting late ambiguous membership with atomic rollback.
+- [x] Real core: A alias active/idle TCP/UDP and Tunnel disable/re-enable,
   quota/expiry; B survives at same source IP/core boot with independent target
   bytes and exact shared lifetime ledger. Lost response stops/recovers saved
   field intent and permits retry without replay.
-- [ ] One read-only review and same-review corrections; freeze source, named
+- [x] One read-only review and same-review corrections; freeze source, named
   SQLite/PostgreSQL contracts and required generation/lint/vet/full Go/race.
 - [ ] Scoped docs/matrix/checklist, logical commit+exact fork SHA push, distinct
   clean builds and provenance. Whole Task5B and original goal remain open.

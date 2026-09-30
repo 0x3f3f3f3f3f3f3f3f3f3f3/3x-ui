@@ -680,7 +680,7 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 	return s.updateInboundClient(inboundSvc, data, oldEmail, nil, false)
 }
 
-func (s *ClientService) updateInboundClient(inboundSvc *InboundService, data *model.Inbound, oldEmail string, expected *model.ClientRecord, preserveCanonicalCredentials bool) (bool, error) {
+func (s *ClientService) updateInboundClient(inboundSvc *InboundService, data *model.Inbound, oldEmail string, expected *model.ClientRecord, preserveCanonicalCredentials bool, fieldSelections ...*passwordOwnerFieldSelection) (bool, error) {
 	defer lockInbound(data.Id).Unlock()
 
 	clients, err := inboundSvc.GetClients(data)
@@ -951,6 +951,12 @@ func (s *ClientService) updateInboundClient(inboundSvc *InboundService, data *mo
 	// Persist client stats + inbound atomically, serialized against the traffic
 	// poll to avoid the cross-transaction lock-order deadlock (runSerializedTx).
 	if txErr := runSerializedTx(func(tx *gorm.DB) error {
+		if len(fieldSelections) != 0 && fieldSelections[0] != nil {
+			selection := fieldSelections[0]
+			if err := guardPasswordOwnerFieldSelections(tx, map[int]*passwordOwnerFieldSelection{selection.Record.Id: selection}, true); err != nil {
+				return err
+			}
+		}
 		var canonical *model.ClientRecord
 		statEmail := oldEmail
 		if expected != nil {
@@ -1456,6 +1462,17 @@ func (s *ClientService) SetClientTelegramUserID(inboundSvc *InboundService, traf
 }
 
 func (s *ClientService) CheckIsEnabledByEmail(inboundSvc *InboundService, clientEmail string) (bool, error) {
+	owner, err := s.passwordProxyFieldSelectionByEmail(clientEmail)
+	if err != nil {
+		return false, err
+	}
+	if owner != nil && owner.Owned {
+		return owner.Record.Enable, nil
+	}
+	return s.checkLegacyClientEnableByEmail(inboundSvc, clientEmail)
+}
+
+func (s *ClientService) checkLegacyClientEnableByEmail(inboundSvc *InboundService, clientEmail string) (bool, error) {
 	_, inbound, err := inboundSvc.GetClientInboundByEmail(clientEmail)
 	if err != nil {
 		return false, err
@@ -1482,12 +1499,23 @@ func (s *ClientService) CheckIsEnabledByEmail(inboundSvc *InboundService, client
 }
 
 func (s *ClientService) ToggleClientEnableByEmail(inboundSvc *InboundService, clientEmail string) (bool, bool, error) {
-	current, err := s.CheckIsEnabledByEmail(inboundSvc, clientEmail)
+	owner, err := s.passwordProxyFieldSelectionByEmail(clientEmail)
+	if err != nil {
+		return false, false, err
+	}
+	if owner != nil && owner.Owned {
+		result, restart, err := s.updatePasswordOwnerFields(inboundSvc, []*passwordOwnerFieldSelection{owner}, "enable", nil)
+		if err != nil {
+			return false, restart, err
+		}
+		return result[owner.Record.Id].Value.(bool), restart, nil
+	}
+	current, err := s.checkLegacyClientEnableByEmail(inboundSvc, clientEmail)
 	if err != nil {
 		return false, false, err
 	}
 	target := !current
-	needRestart, err := s.applyClientFieldByEmail(inboundSvc, clientEmail, func(c map[string]any) {
+	needRestart, err := s.applyClientFieldSelectionByEmail(inboundSvc, clientEmail, owner, func(c map[string]any) {
 		c["enable"] = target
 	})
 	if err != nil {
@@ -1497,14 +1525,25 @@ func (s *ClientService) ToggleClientEnableByEmail(inboundSvc *InboundService, cl
 }
 
 func (s *ClientService) SetClientEnableByEmail(inboundSvc *InboundService, clientEmail string, enable bool) (bool, bool, error) {
-	current, err := s.CheckIsEnabledByEmail(inboundSvc, clientEmail)
+	owner, err := s.passwordProxyFieldSelectionByEmail(clientEmail)
+	if err != nil {
+		return false, false, err
+	}
+	if owner != nil && owner.Owned {
+		result, restart, err := s.updatePasswordOwnerFields(inboundSvc, []*passwordOwnerFieldSelection{owner}, "enable", enable)
+		if err != nil {
+			return false, restart, err
+		}
+		return result[owner.Record.Id].Changed, restart, nil
+	}
+	current, err := s.checkLegacyClientEnableByEmail(inboundSvc, clientEmail)
 	if err != nil {
 		return false, false, err
 	}
 	if current == enable {
 		return false, false, nil
 	}
-	needRestart, err := s.applyClientFieldByEmail(inboundSvc, clientEmail, func(c map[string]any) {
+	needRestart, err := s.applyClientFieldSelectionByEmail(inboundSvc, clientEmail, owner, func(c map[string]any) {
 		c["enable"] = enable
 	})
 	if err != nil {
@@ -1513,19 +1552,19 @@ func (s *ClientService) SetClientEnableByEmail(inboundSvc *InboundService, clien
 	return true, needRestart, nil
 }
 
-// applyClientFieldByEmail loads the inbound currently hosting clientEmail,
+// applyClientFieldSelectionByEmail loads the inbound currently hosting clientEmail,
 // confirms the client exists, applies mutate to the matching client (plus a
 // refreshed updated_at), and hands a single-client update payload to
 // UpdateInboundClient. The rebuilt clients array intentionally contains only
 // the matched client — that is the input contract UpdateInboundClient expects
 // (clients[0] is the new data; clientEmail locates the row to replace). It
 // backs the single-field by-email setters below.
-// applyClientFieldByEmail mutates a client field on every inbound the email is
+// applyClientFieldSelectionByEmail mutates a client field on every inbound the email is
 // attached to. A multi-inbound client is one logical identity: patching only
 // the first inbound's JSON would leave the siblings stale, and the next
 // SyncInbound over a stale sibling would revert the edit in the normalized
 // records (#5039).
-func (s *ClientService) applyClientFieldByEmail(inboundSvc *InboundService, clientEmail string, mutate func(c map[string]any)) (bool, error) {
+func (s *ClientService) applyClientFieldSelectionByEmail(inboundSvc *InboundService, clientEmail string, selected *passwordOwnerFieldSelection, mutate func(c map[string]any)) (bool, error) {
 	inboundIds, err := s.GetInboundIdsForEmail(database.GetDB(), clientEmail)
 	if err != nil {
 		return false, err
@@ -1586,7 +1625,7 @@ func (s *ClientService) applyClientFieldByEmail(inboundSvc *InboundService, clie
 		inbound.Settings = string(modifiedSettings)
 		data := inbound
 		applies = append(applies, inboundApply{id: ibId, run: func() (bool, error) {
-			return s.UpdateInboundClient(inboundSvc, data, clientEmail)
+			return s.updateInboundClient(inboundSvc, data, clientEmail, nil, false, selected)
 		}})
 	}
 
@@ -1598,22 +1637,16 @@ func (s *ClientService) applyClientFieldByEmail(inboundSvc *InboundService, clie
 }
 
 func (s *ClientService) ResetClientIpLimitByEmail(inboundSvc *InboundService, clientEmail string, count int) (bool, error) {
-	return s.applyClientFieldByEmail(inboundSvc, clientEmail, func(c map[string]any) {
-		c["limitIp"] = count
-	})
+	return s.applySharedClientFieldByEmail(inboundSvc, clientEmail, "limitIp", count)
 }
 
 func (s *ClientService) ResetClientExpiryTimeByEmail(inboundSvc *InboundService, clientEmail string, expiry_time int64) (bool, error) {
-	return s.applyClientFieldByEmail(inboundSvc, clientEmail, func(c map[string]any) {
-		c["expiryTime"] = expiry_time
-	})
+	return s.applySharedClientFieldByEmail(inboundSvc, clientEmail, "expiryTime", expiry_time)
 }
 
 func (s *ClientService) ResetClientTrafficLimitByEmail(inboundSvc *InboundService, clientEmail string, totalGB int) (bool, error) {
 	if totalGB < 0 {
 		return false, common.NewError("totalGB must be >= 0")
 	}
-	return s.applyClientFieldByEmail(inboundSvc, clientEmail, func(c map[string]any) {
-		c["totalGB"] = totalGB * 1024 * 1024 * 1024
-	})
+	return s.applySharedClientFieldByEmail(inboundSvc, clientEmail, "totalGB", int64(totalGB)*1024*1024*1024)
 }
