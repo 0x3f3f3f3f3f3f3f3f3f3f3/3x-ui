@@ -145,3 +145,9 @@ without a receipt, complete listener application status, Tunnel owner selection,
 bulk policy controls and coordinated multi-node enforcement remain unfinished.
 
 The local owner picker checkpoint covers stable-ID selection, legacy nullable settings, single-inbound import, former-owner history, local-only scope before first activation, and real same-port TCP/UDP reassignment with a surviving sibling. It does not complete Tunnel ACLs, every routing mode, global node budgets or migration of existing unowned rules.
+
+Standalone client creation is I/V for the existing form/API, atomic identity and
+disabled-state persistence, duplicate rejection and the first owned Tunnel on an
+empty panel. SQLite and PostgreSQL real TCP/UDP tests retain the generated stable
+ID and settle exact multiplier-adjusted usage. It does not complete the remaining
+Tunnel ACL, forwarding-mode or unowned migration requirements.

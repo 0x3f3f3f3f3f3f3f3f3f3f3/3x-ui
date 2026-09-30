@@ -5,6 +5,7 @@ import { useFormContext, useWatch } from 'react-hook-form';
 import { Button, Input, InputNumber, Select, Switch } from 'antd';
 
 import { HeaderMapEditor } from '@/components/form';
+import { keys } from '@/api/queryKeys';
 import { FormField } from '@/components/form/rhf';
 import { fetchClientPage } from '@/hooks/useClients';
 import type { InboundFormValues } from '@/schemas/forms/inbound-form';
@@ -24,7 +25,7 @@ export default function TunnelFields({ requireOwner = false }: { requireOwner?: 
     return () => clearTimeout(timer);
   }, [search]);
   const owners = useInfiniteQuery({
-    queryKey: ['tunnel-owner-choices', query],
+    queryKey: keys.clients.tunnelOwners(query),
     initialPageParam: 1,
     queryFn: ({ pageParam }) => fetchClientPage({ page: pageParam, pageSize: 25, search: query }),
     getNextPageParam: (page) =>

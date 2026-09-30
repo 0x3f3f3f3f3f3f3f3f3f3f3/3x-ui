@@ -20,6 +20,15 @@ The policy engine is instance-scoped, not a process-global singleton. All creden
 
 `proxy/dokodemo/dokodemo.go` rewrites targets, creates an anonymous `MemoryUser` containing only Level, sets `CanSpliceCopy=1`, then calls `Dispatcher.DispatchLink`. TCP uses stream readers/writers; UDP uses packet readers/sequential writers and has a distinct transparent-forwarding branch. This proves existing userLevel is not a client identity. Required extensions: trusted client ID/legacy email, listener ACL and lifecycle binding, common runtime policy, and a managed fast-path guard. Default forwarding is explicit userspace L4, without transparent redirect/NAT or claimed source-address preservation.
 
+## Creating clients before listeners
+
+Canonical clients may be created before any listener exists. Empty or omitted
+`inboundIds` on the existing client create API produce a new server-generated
+stable UUID in one SQL transaction, without protocol credentials, traffic rows
+or runtime activation. Duplicate email or subscription identity is an error,
+never an implicit update. Tunnel owner selection subsequently links that same
+canonical account; policy activation follows the existing local attachment path.
+
 ## Existing paths requiring migration
 
 Source evidence: `internal/mtproto` supervises mtg-multi (one process per inbound); `internal/tuic` supervises tuic-server behind a panel UDP relay; `internal/amneziawgnet` runs AmneziaWG/gVisor inside the panel and bridges per-peer authenticated SOCKS into Xray. Their current behavior/data must be retained while moving to core adapters. Until all three migrations are tested, the installation is not fully single-core. Host administrative SSH and existing security services remain untouched.

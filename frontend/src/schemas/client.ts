@@ -413,9 +413,7 @@ export const ClientFormSchema = z.object({
   inboundIds: z.array(z.number()),
 });
 
-export const ClientCreateFormSchema = ClientFormSchema.extend({
-  inboundIds: z.array(z.number()).min(1, 'pages.clients.selectInbound'),
-});
+export const ClientCreateFormSchema = ClientFormSchema;
 
 export const ClientBulkAdjustFormSchema = z
   .object({

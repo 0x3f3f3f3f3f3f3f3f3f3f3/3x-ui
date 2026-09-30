@@ -1191,3 +1191,47 @@ findings. A separate module-only scan reports
 version listed. The application does not import the affected package according
 to the symbol scan; the module-only warning is retained, not counted as a failure
 of the default reachable-code check or silently suppressed.
+
+### Standalone clients before the first listener (2026-09-30)
+
+Five Go regressions first failed because create required an inbound. The repaired
+existing API accepts empty or omitted IDs, creates a server-owned stable UUID,
+preserves disabled state and exact quota `9007199254740993`, and retains explicit
+policy/HWID settings. Duplicate email (including a case variant) or subscription
+identity cannot overwrite the original account. An injected disabled-state write
+failure rolls back creation. An unattached account has no listener, traffic row,
+protocol credentials, policy version or core restart.
+
+`TestClientStandaloneCreationFeedsRealTunnelLedger` starts from an empty database,
+creates the canonical client, attaches a Tunnel, starts the real managed core and
+echoes six TCP bytes and six UDP bytes. Both SQLite and PostgreSQL retain the same
+stable identity and settle exactly 12 upload, 12 download and 36 billed bytes at
+multiplier 1.5. The five standalone tests pass under race on SQLite (service
+3.760 s / controller 2.893 s) and PostgreSQL (service 14.099 s / controller 2.983 s,
+including the three existing multi-inbound creation regressions).
+
+The form regression first failed because its create schema required a binding;
+the fixed form and existing policy form pass 13 tests. Review also exposed an
+owner-picker cache outside the client invalidation family. A real QueryClient
+using production's 30-second freshness and the real `useClients.create` hook
+reproduces the missing new owner after caching an empty list. Owner choices now
+use the shared client query-key family.
+
+The owner-cache regression and standalone form pass together (2 files / 6 tests,
+13.19 s). Read-only backend and frontend review found no remaining issue after
+that cache repair. The complete frontend gate passes 181 files / 1799 tests
+(330.27 s suite), with TypeScript, lint, format, production and Storybook builds
+also passing. The earlier full frontend run was deliberately interrupted before
+changing the cache key and is not counted as a passing run.
+
+The serial complete shuffled Go regression (`make test-go`) passes in 265.85 s,
+including the explicit managed AmneziaWG dependency suite. Go static checks report
+zero issues (52.84 s), and `go build -mod=readonly ./...` passes (8.27 s).
+
+The complete `make race` gate also passes (745.85 s), including the full service
+package (333.342 s), the Xray adapter and the explicit managed AmneziaWG device
+suite. No production code changed during this final serial gate.
+
+Final `make gen-check` passes; the frontend/docs OpenAPI copies and the installed
+MSW worker match, all 13 locale JSON files parse, and workflow YAML plus all
+19 shell blocks validate. The staged diff has no whitespace errors.

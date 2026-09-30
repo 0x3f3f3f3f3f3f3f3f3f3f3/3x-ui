@@ -1,14 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, renderHook, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import InboundFormModal from '@/pages/inbounds/form/InboundFormModal';
 import { DBInbound } from '@/models/dbinbound';
+import { useClients } from '@/hooks/useClients';
+import { queryClient as appQueryClient } from '@/queryClient';
 import { HttpUtil } from '@/utils';
 import { chooseSelectOption, renderWithProviders } from './test-utils';
 
 const firstID = 'a6426bfc-42c6-45d6-8182-1108f7986d89';
 const secondID = '97af23ee-90d3-48d3-bb9f-790322466bea';
 
-function renderTunnel(remote = false) {
+function renderTunnel(remote = false, queryClient?: QueryClient) {
   const inbound = new DBInbound({
     id: 42,
     protocol: 'tunnel',
@@ -22,7 +25,7 @@ function renderTunnel(remote = false) {
       clients: [{ email: 'former-owner', enable: true }],
     },
   });
-  renderWithProviders(
+  return renderWithProviders(
     <InboundFormModal
       open
       mode="edit"
@@ -32,6 +35,7 @@ function renderTunnel(remote = false) {
       onClose={() => {}}
       onSaved={() => {}}
     />,
+    { queryClient },
   );
 }
 
@@ -63,6 +67,52 @@ function mockOwnerPage() {
 }
 
 describe('Tunnel owner form', () => {
+  it('refreshes a cached owner list immediately after standalone client creation', async () => {
+    const queryClient = new QueryClient({ defaultOptions: appQueryClient.getDefaultOptions() });
+    let created = false;
+    const get = vi.mocked(HttpUtil.get);
+    get.mockImplementation(async (url) => ({
+      success: true,
+      msg: '',
+      obj: String(url).includes('/clients/list/paged')
+        ? {
+            items: created ? [{ clientId: secondID, email: 'new-standalone-owner' }] : [],
+            total: created ? 1 : 0,
+            filtered: created ? 1 : 0,
+            page: 1,
+            pageSize: 25,
+          }
+        : [],
+    }));
+    vi.mocked(HttpUtil.post).mockImplementation(async (url) => {
+      if (url === '/panel/api/clients/add') created = true;
+      return { success: true, msg: '', obj: {} };
+    });
+    const first = renderTunnel(false, queryClient);
+    await waitFor(() => {
+      expect(get.mock.calls.some(([url]) => String(url).includes('/clients/list/paged'))).toBe(
+        true,
+      );
+      expect(queryClient.isFetching()).toBe(0);
+    });
+    first.unmount();
+    const { result, unmount } = renderHook(() => useClients({ list: false }), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      ),
+    });
+    await act(async () => {
+      await result.current.create({ client: { email: 'new-standalone-owner' }, inboundIds: [] });
+    });
+    renderTunnel(false, queryClient);
+    fireEvent.mouseDown((await screen.findByLabelText('Owner client')).closest('.ant-select')!);
+    await screen.findByText('new-standalone-owner', {
+      selector: '.ant-select-item-option-content',
+    });
+    unmount();
+    queryClient.clear();
+  });
+
   it('searches and loads further choices without changing the selected account label', async () => {
     const get = vi.mocked(HttpUtil.get);
     get.mockImplementation(async (url) => {

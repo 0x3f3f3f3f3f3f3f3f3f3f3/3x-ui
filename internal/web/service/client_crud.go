@@ -116,8 +116,8 @@ func normalizeClientTrafficReset(c *model.Client) {
 	c.TrafficResetDay = normalizeTrafficResetDay(c.TrafficResetDay)
 }
 
-// Create applies the client to every requested inbound: one failing inbound no
-// longer aborts the others, so the error can name several and needRestart holds.
+// Create saves an unattached account atomically or applies the client to each
+// requested inbound independently, preserving partial fanout results.
 func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreatePayload) (bool, error) {
 	if payload == nil {
 		return false, common.NewError("empty payload")
@@ -142,9 +142,6 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 		return false, err
 	}
 	normalizeClientTrafficReset(&client)
-	if len(payload.InboundIds) == 0 {
-		return false, common.NewError("at least one inbound is required")
-	}
 
 	if client.SubID == "" {
 		client.SubID = uuid.NewString()
@@ -155,6 +152,13 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 		client.CreatedAt = now
 	}
 	client.UpdatedAt = now
+	if len(payload.InboundIds) == 0 {
+		err := s.createUnattached(client, payload.LimitHwid)
+		if err == nil {
+			withdrawClientTombstones(client.Email)
+		}
+		return false, err
+	}
 
 	existing := &model.ClientRecord{}
 	err := database.GetDB().Where("email = ?", client.Email).First(existing).Error
@@ -237,6 +241,34 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 	// standing makes the next node merge prune the new client's inbound links.
 	withdrawClientTombstones(client.Email)
 	return needRestart, s.setClientLimitHwidByEmail(client.Email, payload.LimitHwid)
+}
+
+func (s *ClientService) createUnattached(client model.Client, limitHwid int) error {
+	return runSerializedTx(func(tx *gorm.DB) error {
+		var taken int64
+		if err := tx.Model(&model.ClientRecord{}).Where("LOWER(email) = ?", strings.ToLower(client.Email)).Count(&taken).Error; err != nil {
+			return err
+		}
+		if taken != 0 {
+			return common.NewError("email already in use:", client.Email)
+		}
+		if err := tx.Model(&model.ClientRecord{}).Where("sub_id = ?", client.SubID).Count(&taken).Error; err != nil {
+			return err
+		}
+		if taken != 0 {
+			return common.NewError("subId already in use:", client.SubID)
+		}
+		record := client.ToRecord()
+		record.LimitHwid = max(0, limitHwid)
+		if err := tx.Create(record).Error; err != nil {
+			return err
+		}
+		// GORM's default:true replaces false during Create; correct it in this transaction.
+		if !client.Enable {
+			return tx.Model(&model.ClientRecord{}).Where("id = ?", record.Id).UpdateColumn("enable", false).Error
+		}
+		return nil
+	})
 }
 
 // inboundFanoutConcurrency caps how many inbounds one client op applies at

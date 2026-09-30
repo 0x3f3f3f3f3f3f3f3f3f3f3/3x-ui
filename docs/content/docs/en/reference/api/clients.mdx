@@ -33,10 +33,11 @@ _openapi:
         clients can share the same Telegram ID.
       url: '#fetch-clients-by-telegram-user-id-returns-an-array-since-multiple-clients-can-share-the-same-telegram-id'
     - depth: 2
-      title: Create a new client and attach it to one or more inbounds in a single
-        call. Body is JSON. Per-protocol secrets are generated server-side when
-        omitted, so callers can send only the universal fields.
-      url: '#create-a-new-client-and-attach-it-to-one-or-more-inbounds-in-a-single-call-body-is-json-per-protocol-secrets-are-generated-server-side-when-omitted-so-callers-can-send-only-the-universal-fields'
+      title: Create a new client with optional inbound attachments. Body is JSON. An
+        empty or omitted inboundIds list saves an unattached account that can
+        own a Tunnel later. Protocol credentials are generated only when
+        attaching to a selected protocol.
+      url: '#create-a-new-client-with-optional-inbound-attachments-body-is-json-an-empty-or-omitted-inboundids-list-saves-an-unattached-account-that-can-own-a-tunnel-later-protocol-credentials-are-generated-only-when-attaching-to-a-selected-protocol'
     - depth: 2
       title: Preview client auto-renewal dates without saving or resetting anything.
       url: '#preview-client-auto-renewal-dates-without-saving-or-resetting-anything'
@@ -321,10 +322,11 @@ _openapi:
       - content: Fetch clients by Telegram user ID. Returns an array since multiple
           clients can share the same Telegram ID.
         id: fetch-clients-by-telegram-user-id-returns-an-array-since-multiple-clients-can-share-the-same-telegram-id
-      - content: Create a new client and attach it to one or more inbounds in a single
-          call. Body is JSON. Per-protocol secrets are generated server-side
-          when omitted, so callers can send only the universal fields.
-        id: create-a-new-client-and-attach-it-to-one-or-more-inbounds-in-a-single-call-body-is-json-per-protocol-secrets-are-generated-server-side-when-omitted-so-callers-can-send-only-the-universal-fields
+      - content: Create a new client with optional inbound attachments. Body is JSON. An
+          empty or omitted inboundIds list saves an unattached account that can
+          own a Tunnel later. Protocol credentials are generated only when
+          attaching to a selected protocol.
+        id: create-a-new-client-with-optional-inbound-attachments-body-is-json-an-empty-or-omitted-inboundids-list-saves-an-unattached-account-that-can-own-a-tunnel-later-protocol-credentials-are-generated-only-when-attaching-to-a-selected-protocol
       - content: Preview client auto-renewal dates without saving or resetting anything.
         id: preview-client-auto-renewal-dates-without-saving-or-resetting-anything
       - content: Update an existing client by email. Changes propagate to every attached
@@ -554,11 +556,22 @@ _openapi:
         id: return-every-url-for-one-client-across-all-attached-inbounds-one-per-advertised-endpoint-the-managed-hosts-of-the-inbound-else-its-streamsettingsexternalproxy-entries-else-its-own-address-supported-protocols-vmess-vless-trojan-shadowsocks-hysteria-mtproto-protocols-without-a-url-form-socks-http-mixed-wireguard-dokodemo-tunnel-contribute-nothing
     contents:
       - content: >-
-          Fields the server fills in when they are omitted — a valid value sent
-          by the caller is never overwritten. Re-adding an email that already
-          exists, with its stored `subId`, reuses the stored `id`, `password`,
-          `auth` and `secret` instead of minting new ones, so the identity stays
-          in sync across its inbounds.
+          With empty or omitted `inboundIds`, creation is one database
+          transaction and rejects an existing email (case-insensitive) or
+          subscription ID, including an exact email/subId match. It preserves
+          account settings and optional traffic policy, generates a stable
+          `clientId` and an omitted `subId`, and does not create protocol
+          credentials or restart the core. Read the account back or use the
+          paged client list to select it as a Tunnel owner. Traffic policy is
+          saved for application when a supported local listener is attached and
+          started.
+
+
+          With non-empty `inboundIds`, fields the server fills in when they are
+          omitted — a valid value sent by the caller is never overwritten.
+          Re-adding an email that already exists, with its stored `subId`,
+          reuses the stored `id`, `password`, `auth` and `secret` instead of
+          minting new ones, so the identity stays in sync across its inbounds.
 
 
           - **VLESS / VMess** — `id`, a fresh UUID
@@ -610,7 +623,7 @@ _openapi:
           (`inbound 7: <message>`), and several failures are reported together,
           one per line. `limitHwid` is applied only when every inbound
           succeeded, so re-run the call after fixing the failure.
-        heading: create-a-new-client-and-attach-it-to-one-or-more-inbounds-in-a-single-call-body-is-json-per-protocol-secrets-are-generated-server-side-when-omitted-so-callers-can-send-only-the-universal-fields
+        heading: create-a-new-client-with-optional-inbound-attachments-body-is-json-an-empty-or-omitted-inboundids-list-saves-an-unattached-account-that-can-own-a-tunnel-later-protocol-credentials-are-generated-only-when-attaching-to-a-selected-protocol
       - content: Uses the same calendar and catch-up calculation as auto-renew in the
           panel timezone. resetWeekday is 1 (Monday) to 7 (Sunday), 0 disables
           weekly mode; it cannot be combined with positive reset or resetDay.

@@ -371,11 +371,9 @@ unimplemented. Final verification and source review pass as recorded in testing.
 
 Task 6 local Tunnel editor checkpoint: add/update accepts an optional `ownerClientId` command naming an existing stable UUID. The server resolves and locks the canonical client inside the same SQL transaction as listener/traffic/membership changes, and changes only the link, not the account. The form uses paged client search, requires an owner for new local rules, preserves legacy unowned edits and `clients:null`, and keeps remote ownership read-only. Reassignment rehomes the former owner’s legacy accumulator to a sibling or an unattached canonical account; migration no longer deletes the latter. Read APIs derive the annotation from membership, and single-inbound import discards a source-panel UUID annotation while retaining portable settings/statistics. Local Tunnel ownership blocks later remote binding even before a desired version exists, including raw mirror input before identity filtering. Real same-port TCP/UDP reassignment and SQLite/PostgreSQL history/rollback/scope tests are present. Full Tunnel ACL/routing-mode UI, unowned-rule migration, distributed budgets, other requested protocols and packaging remain open.
 
-Next dependency: allow creating an unattached canonical client in the existing
-client form/API, then selecting it as the first Tunnel's owner. Currently creation
-requires an ordinary inbound, so a fresh panel cannot complete that flow through
-the owner picker alone. Source ACL implementation follows this creation path;
-both remain unimplemented at this checkpoint.
+The next dependency identified here was standalone client creation: the existing
+form/API required an ordinary inbound before the first Tunnel could get an owner.
+The implementation checkpoint below closes that dependency; source ACLs follow.
 
 
 Task 6 regression repair checkpoint: the complete root race gate exposed an
@@ -387,3 +385,13 @@ root/dependency race, static check, build, parser fuzz and reachable-code vulner
 checks pass. This preserves the current panel-side AWG implementation; migration
 into the Custom Xray process is still open. Continue with standalone client
 creation so a fresh panel can assign an owner to its first Tunnel.
+
+Task 6 standalone client checkpoint: the existing create endpoint and form accept
+empty or omitted inbound IDs. An atomic create-only transaction generates the
+stable UUID, preserves disabled state, exact quota and policy, rejects duplicate
+email/subscription identities, and creates no listener, credentials, traffic row
+or policy version before attachment. A real first-Tunnel flow exercises TCP/UDP
+and exact billed totals on both databases. Owner choices share client cache
+invalidation so creating an account refreshes an already cached empty list.
+Tunnel source ACL/routing-mode coverage and the other remaining goal items are
+still open.
