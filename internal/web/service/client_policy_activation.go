@@ -65,7 +65,7 @@ func (s *XrayService) managedPolicyRequested() (bool, error) {
 		Joins("JOIN client_inbounds ci ON ci.client_id = c.id").
 		Joins("JOIN inbounds i ON i.id = ci.inbound_id").
 		Where("i.node_id IS NULL AND i.enable = ?", true).
-		Where("i.protocol = ? OR c.policy_upload_bytes_per_second IS NOT NULL OR c.policy_download_bytes_per_second IS NOT NULL OR c.policy_multiplier IS NOT NULL", model.Tunnel).
+		Where("i.protocol IN ? OR c.policy_upload_bytes_per_second IS NOT NULL OR c.policy_download_bytes_per_second IS NOT NULL OR c.policy_multiplier IS NOT NULL", []model.Protocol{model.Tunnel, model.Mixed, model.HTTP}).
 		Limit(1).Scan(&clientID).Error
 	return clientID != 0, err
 }

@@ -541,10 +541,10 @@ Primary source anchors: `frontend/src/pages/inbounds/form/protocols/accounts-lis
 `frontend/src/schemas/protocols/inbound/{mixed,http}.ts`,
 `internal/web/service/{inbound,client_link,tunnel_owner,client_policy_config,client_policy_activation,client_policy_handoff}.go`.
 
-- [ ] Specify per-account canonical owner selection and authoritative database
+- [x] Specify per-account canonical owner selection and authoritative database
   validation. Keep wire usernames/passwords resource-specific; never infer an
   existing owner from a display email, username or supplied raw core client ID.
-- [ ] Add transactional create/update/read guards, membership reconciliation and
+- [x] Add transactional create/update/read guards, membership reconciliation and
   detached-history preservation. Test late SQL rollback, stale settings, two
   aliases for one owner, owner reassignment, credential rotation and unchanged
   sibling credentials/policy. Run SQLite and PostgreSQL row-lock regressions.
@@ -586,16 +586,70 @@ wire commands; `resolvePasswordProxyOwners(*gorm.DB, *model.Inbound)
 writes links only. Stored-binding validation compares distinct account owner
 UUIDs against joined canonical membership and refuses missing/mismatched rows.
 
-- [ ] Write `TestPasswordProxyOwnersPreserveCanonicalRecords` using two resource
+- [x] Write `TestPasswordProxyOwnersPreserveCanonicalRecords` using two resource
   aliases and two owners. Assert two normalized memberships, byte-preserved wire
   credentials, unchanged canonical policy/credentials and original usage.
-- [ ] Observe RED through the actual AddInbound/UpdateInbound API service path.
-- [ ] Implement command validation, transactional owner resolution/reconciliation,
+- [x] Observe RED through the actual AddInbound/UpdateInbound API service path.
+- [x] Implement command validation, transactional owner resolution/reconciliation,
   protected HTTP empty authentication and detached history retention. Add named
   regressions for missing/noauth/remote owners, mixed ownership, duplicate user,
   forged core identity, last removal, reassignment and late SQL rollback.
-- [ ] Reject generic settings-client sync/delta bypasses; add read-time canonical
+- [x] Reject generic settings-client sync/delta bypasses; add read-time canonical
   membership guards and remote attachment guards before filtering/fanout.
 - [ ] Run the focused tests under race on SQLite and PostgreSQL and existing
   Tunnel/client-link/scope/activation regressions. Then run panel checks, record
   evidence, commit and push with an exact remote SHA check.
+
+Task 5B1 review decisions: normalize native account aliases and field case
+folding, retain owned authentication across Mixed-to-empty-HTTP conversion, and
+accept ignored legacy email on reads while removing it on the next write. All
+three important review findings have observed RED/GREEN regressions. A further
+legacy conversion regression limits the new authentication requirement to owned
+Mixed accounts. A valid-read regression distinguishes preloaded SQL stats from
+caller-supplied mirrors. Preserve existing Tunnel ACL error precedence.
+
+The actual form adapter and schemas initially dropped ownership metadata; their
+round-trip regressions now retain it. This preservation belongs in the database
+foundation because existing form edits otherwise erase selected ownership.
+No owner picker, canonical runtime binding, grouped hot diff, generic client
+lifecycle or legacy counter handoff is completed by Task 5B1.
+
+### Task 5B2: Canonical password runtime configuration
+
+Spec: architecture.md, "Canonical password account ownership increment".
+Consumes validated account owner UUIDs and canonical memberships from Task 5B1.
+Ruling: generate account-specific user/pass plus canonical email/stable ID from
+one repeatable-read snapshot; never substitute global client credentials.
+Keep the live legacy handoff adapter gate until username-counter ownership is
+verified separately. Grouped native hot changes and owner UI are later steps.
+
+Files: new `internal/web/service/password_proxy_config.go`,
+`password_proxy_config_test.go` and `password_proxy_config_runtime_test.go`;
+change `client_policy_config.go` and `xray.go`.
+Interface: `bindManagedPasswordProxyIdentity(*xray.InboundConfig,
+[]model.ClientRecord) error` validates every stored account owner and emits
+native identity metadata. Strip ownerClientId, dormant users and settings.clients
+from the runtime payload. Include policies for every linked owner, including
+disabled owners; omit explicitly disabled owners' authentication credentials
+while retaining Mixed password auth and HTTP required-auth in empty listeners.
+
+- [ ] Write `TestPasswordProxyConfigUsesCanonicalOwners` through the actual
+  compiler, using two aliases, two owners, resource passwords different from
+  canonical shared passwords, and existing traffic. Assert exact wire
+  credentials/identities, one policy per distinct owner and no settings.clients.
+- [ ] Observe rejection by the current unsupported-adapter gate before changes.
+- [ ] Implement the native binding and skip generic clients generation for
+  password protocols. Reject unowned active credentials and malformed bindings;
+  protected empty listeners require no invented owner. Do not use display names
+  or caller-provided core identity as authority.
+- [ ] Write snapshot-reassignment, stale membership, all-disabled and empty-auth
+  regressions. Assert compilation neither mixes owners/credentials from two
+  revisions nor mutates stored settings/shared credentials.
+- [ ] Prove generated Mixed SOCKS/HTTP and HTTP listeners feed the real core
+  ledger using independent standard clients and targets; aliases share a stable
+  ledger with Tunnel, wrong credentials reach no target, disabled owners remain
+  blocked, and another owner remains usable. Run SQLite/PostgreSQL compiler
+  tests and affected capability/activation regressions under race.
+- [ ] Record evidence, review once, fix Important/Critical findings with
+  RED/GREEN, commit and push the validated configuration increment. Preserve
+  the live legacy handoff guard and existing upstream hot-diff restrictions.

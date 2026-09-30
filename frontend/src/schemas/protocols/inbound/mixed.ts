@@ -9,6 +9,7 @@ export type MixedAuth = z.infer<typeof MixedAuthSchema>;
 export const MixedAccountSchema = z.object({
   user: z.string().min(1),
   pass: z.string().min(1),
+  ownerClientId: z.uuid().optional(),
 });
 export type MixedAccount = z.infer<typeof MixedAccountSchema>;
 

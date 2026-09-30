@@ -1685,3 +1685,78 @@ frontend code or contract changed in this increment; the earlier complete
 frontend verification remains the applicable checkpoint. Panel canonical
 binding, anonymous resource ownership and policy-only closure before first
 dispatch remain open.
+
+## Canonical password account persistence checkpoint
+
+Task 5B1 exercises the actual AddInbound/UpdateInbound service and real SQL
+transactions. The original implementation saved no owner links, accepted missing
+owners and could not trigger the injected late membership failure. RED/GREEN
+logs under `/root/task-evidence/password-owner-*.log` record these failures and
+the corresponding implementation. Fixtures use two canonical owners, aliases
+`alice`, `ALICE` and `用户`, distinct resource passwords, canonical policies and
+existing raw usage 123/456. Reassignment, credential rotation, last detach,
+protocol conversion and listener deletion preserve shared records and history.
+
+The read-time membership guard initially treated preloaded SQL statistics as
+caller-supplied mirrors; a valid detail/read regression exposed that distinction
+before the guard was corrected. Deleting a membership rejects raw/detail/list
+reads and updates. Generic client sync/delta cannot bypass account ownership.
+Configuration generation refuses owned accounts on an unmanaged path, while
+managed password adapter activation remains gated.
+
+One inline review found three important issues, all corrected with RED/GREEN:
+native users/case aliases bypassed the initial parser; owned Mixed-to-empty-HTTP
+conversion lost authentication; ignored legacy email prevented reads and
+repair. Tests cover Go JSON Unicode case folding (`uſers`), non-null accounts
+precedence including empty arrays, null accounts with active users, ambiguous
+case spellings and dormant owner rejection. Dormant unowned users remain
+preserved. A further ordinary conversion test prevents imposing custom-core
+authentication requirements on an unowned legacy listener. The full root
+suite also exposed a restored Tunnel ACL error-precedence regression; its
+original assertion passes after the read guard validates that ACL first.
+
+Latest focused SQLite ownership/ACL tests passed in 21.200 s
+(`password-owner-final-corrected.log`); PostgreSQL ownership/ACL tests passed in
+76.869 s (`password-owner-postgres-corrected.log`). The PostgreSQL case
+`TestPasswordProxyOwnerPostgresLocksCompetingRemoteAttachment` holds actual
+inbound/client row locks while another transaction attempts a remote attachment.
+The latter waits until the first commits, then rechecks and rejects the new
+local-only membership even with no explicit policy. This case intentionally
+skips on SQLite; its PostgreSQL PASS is required in custom-core CI. Earlier
+broader SQLite Tunnel/link/scope regressions passed in 52.327 s. The final full
+gates below provide coverage after the last scoped corrections.
+
+The real frontend form adapter initially dropped owner metadata in both
+protocols and dropped protected-empty-HTTP authentication. Schema changes retain
+those values through validation and wire serialization; the three-file scoped
+run passed all 57 tests in 3.03 s (`password-owner-form-green.log`). This proves
+metadata preservation, not a completed owner selection interface.
+
+Two preliminary full gate retries failed in the unchanged AmneziaWG
+`TestPortForwardSetReconcileOpensAndClosesListeners`: binding fixed TCP port
+58910 returned address-in-use. Failed logs are preserved as
+`password-owner-port-collision-verify.log` and
+`password-owner-port-collision-replay-verify.log`. No test assertion or
+production listener was changed. An isolated package replay with the exact
+failed shuffle seed and real core fixture passed in 7.506 s
+(`password-owner-port-fixture-isolation.log`); no persistent listener appeared
+in the subsequent socket inspection. The source of those transient collisions
+has not been established. The final gate records that port's changes in
+`password-owner-port-monitor.log`.
+
+Full `make verify` passed in 792.68 s, including all root Go packages and the
+explicit AmneziaWG device package, linters, generation freshness, formatting,
+type checking, worker freshness, frontend/panel builds and Storybook build.
+The frontend run passed 186 files and 1828 tests in 483.53 s. The unchanged
+AmneziaWG socket package passed in this full run; monitored port changes did
+not establish the source of the preceding transient collisions.
+Full `make race` passed in 800.71 s, including all root packages with the actual
+capability fixtures and the explicit AmneziaWG device package. Service race
+tests passed in 357.574 s, adapter race in 22.448 s and device race in 14.303 s.
+Results are recorded in `password-owner-gate-results.json`; earlier failed
+results remain preserved. The latest scoped PostgreSQL tests also ran under
+race against the real server; CI requires explicit named PASS evidence.
+No core source changed in Task 5B1, so the preceding native full-core/race
+checkpoint remains applicable. Owner UI, canonical runtime generation, grouped
+credential hot changes, generic client lifecycle and legacy username-counter
+handoff remain unfinished.

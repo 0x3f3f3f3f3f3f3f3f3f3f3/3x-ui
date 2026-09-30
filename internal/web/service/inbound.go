@@ -197,6 +197,9 @@ func (s *InboundService) GetInbounds(userId int) ([]*model.Inbound, error) {
 	if err := annotateTunnelOwners(db, inbounds); err != nil {
 		return nil, err
 	}
+	if err := validatePasswordProxyInbounds(db, inbounds); err != nil {
+		return nil, err
+	}
 	s.enrichClientStats(db, inbounds)
 	s.annotateFallbackParents(db, inbounds)
 	s.annotateLocalOriginGuid(inbounds)
@@ -241,6 +244,9 @@ func (s *InboundService) GetInboundsSlim(userId int) ([]*model.Inbound, error) {
 		return nil, err
 	}
 	if err := annotateTunnelOwners(db, inbounds); err != nil {
+		return nil, err
+	}
+	if err := validatePasswordProxyInbounds(db, inbounds); err != nil {
 		return nil, err
 	}
 	s.annotateFallbackParents(db, inbounds)
@@ -556,6 +562,9 @@ func (s *InboundService) getAllInboundsFromDB(db *gorm.DB) ([]*model.Inbound, er
 	var inbounds []*model.Inbound
 	err := db.Model(model.Inbound{}).Preload("ClientStats").Find(&inbounds).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	if err := validatePasswordProxyInbounds(db, inbounds); err != nil {
 		return nil, err
 	}
 	s.enrichClientStats(db, inbounds)
@@ -1097,6 +1106,9 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	if err := prepareTunnelOwnerCommand(inbound); err != nil {
 		return inbound, false, err
 	}
+	if err := preparePasswordProxyOwnerCommand(inbound); err != nil {
+		return inbound, false, err
+	}
 	legacyShareAddr := legacyMtprotoShareAddr(inbound)
 	inbound.TrafficResetDay = normalizeTrafficResetDay(inbound.TrafficResetDay)
 	// Normalize streamSettings based on protocol
@@ -1258,6 +1270,10 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		if err != nil {
 			return err
 		}
+		passwordOwners, err := resolvePasswordProxyOwners(tx, inbound)
+		if err != nil {
+			return err
+		}
 		if owner != nil {
 			clients = []model.Client{*owner.ToClient()}
 		}
@@ -1311,6 +1327,9 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 				return err
 			}
 		}
+		if isPasswordProxy(inbound.Protocol) {
+			clients = nil
+		}
 		for _, client := range clients {
 			if statEmails[client.Email] {
 				continue
@@ -1319,7 +1338,11 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 				return err
 			}
 		}
-		if owner != nil {
+		if isPasswordProxy(inbound.Protocol) {
+			if err := s.clientService.syncPasswordProxyOwnerLinks(tx, inbound, passwordOwners); err != nil {
+				return err
+			}
+		} else if owner != nil {
 			if err := s.clientService.syncTunnelOwnerLink(tx, inbound.Id, owner); err != nil {
 				return err
 			}
@@ -1457,6 +1480,21 @@ func (s *InboundService) delInbound(id int) (bool, func(), error) {
 	}
 
 	if err := db.Transaction(func(tx *gorm.DB) error {
+		var current model.Inbound
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id", "protocol").Where("id = ?", id).Find(&current).Error; err != nil {
+			return err
+		}
+		if current.Id != 0 && isPasswordProxy(current.Protocol) {
+			var owners []model.ClientRecord
+			if err := tx.Table("clients c").Select("c.*").Joins("JOIN client_inbounds ci ON ci.client_id = c.id").Where("ci.inbound_id = ?", id).Find(&owners).Error; err != nil {
+				return err
+			}
+			for _, owner := range owners {
+				if _, err := preserveDetachedTunnelOwnerTraffic(tx, id, owner.Email); err != nil {
+					return err
+				}
+			}
+		}
 		if err := s.clientService.DetachInbound(tx, id); err != nil {
 			return err
 		}
@@ -1570,6 +1608,9 @@ func (s *InboundService) GetInbound(id int) (*model.Inbound, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := validatePasswordProxyOwnerBindings(db, inbound); err != nil {
+		return nil, err
+	}
 	return inbound, nil
 }
 
@@ -1581,6 +1622,9 @@ func (s *InboundService) GetInboundDetail(id int) (*model.Inbound, error) {
 		return nil, err
 	}
 	if err := annotateTunnelOwners(db, []*model.Inbound{inbound}); err != nil {
+		return nil, err
+	}
+	if err := validatePasswordProxyOwnerBindings(db, inbound); err != nil {
 		return nil, err
 	}
 	s.enrichClientStats(db, []*model.Inbound{inbound})
@@ -1780,6 +1824,9 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	if err := prepareTunnelOwnerCommand(inbound); err != nil {
 		return inbound, false, err
 	}
+	if err := preparePasswordProxyOwnerCommand(inbound); err != nil {
+		return inbound, false, err
+	}
 	if err := validateTunnelSourceACLConfig(inbound); err != nil {
 		return inbound, false, err
 	}
@@ -1861,8 +1908,20 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		if err != nil {
 			return err
 		}
-		if err := s.updateClientTraffics(tx, oldInbound, inbound); err != nil {
+		passwordOwners, err := resolvePasswordProxyOwners(tx, inbound)
+		if err != nil {
 			return err
+		}
+		var priorPasswordOwners []model.ClientRecord
+		if isPasswordProxy(oldInbound.Protocol) && !isPasswordProxy(inbound.Protocol) {
+			if err := tx.Table("clients c").Select("c.*").Joins("JOIN client_inbounds ci ON ci.client_id = c.id").Where("ci.inbound_id = ?", inbound.Id).Find(&priorPasswordOwners).Error; err != nil {
+				return err
+			}
+		}
+		if !isPasswordProxy(oldInbound.Protocol) && !isPasswordProxy(inbound.Protocol) {
+			if err := s.updateClientTraffics(tx, oldInbound, inbound); err != nil {
+				return err
+			}
 		}
 
 		// Ensure created_at and updated_at exist in inbound.Settings clients
@@ -1998,11 +2057,18 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		if gcErr != nil {
 			return gcErr
 		}
-		if owner != nil {
+		if isPasswordProxy(oldInbound.Protocol) {
+			if err := s.clientService.syncPasswordProxyOwnerLinks(tx, oldInbound, passwordOwners); err != nil {
+				return err
+			}
+		} else if owner != nil {
 			if err := s.clientService.syncTunnelOwnerLink(tx, oldInbound.Id, owner); err != nil {
 				return err
 			}
 		} else if err := s.clientService.SyncInbound(tx, oldInbound.Id, newClients); err != nil {
+			return err
+		}
+		if err := preserveRemovedPasswordProxyHistory(tx, oldInbound.Id, priorPasswordOwners); err != nil {
 			return err
 		}
 		if oldInbound.Protocol == model.Tunnel {
@@ -2157,6 +2223,9 @@ func (s *InboundService) buildInboundForNodePush(tx *gorm.DB, inbound *model.Inb
 // Strips disabled clients on top of the node payload. Safe only because the
 // target here is an in-memory Xray/mtg config, not another panel's database.
 func (s *InboundService) buildInboundForLocalRuntime(tx *gorm.DB, inbound *model.Inbound) (*model.Inbound, error) {
+	if err := guardUnmanagedPasswordProxy(inbound); err != nil {
+		return nil, err
+	}
 	built, err := s.buildInboundForNodePush(tx, inbound)
 	if err != nil {
 		return nil, err

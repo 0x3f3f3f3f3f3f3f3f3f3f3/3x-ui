@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
@@ -105,6 +106,13 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 		return runSerializedTx(func(tx *gorm.DB) error {
 			return s.syncInboundClients(tx, inboundId, clients, detachEmails, prune)
 		})
+	}
+	var target model.Inbound
+	if err := tx.Select("protocol").First(&target, inboundId).Error; err != nil {
+		return err
+	}
+	if isPasswordProxy(target.Protocol) {
+		return fmt.Errorf("%w: edit account ownership instead of settings.clients", ErrPasswordProxyOwner)
 	}
 	removedTunnelOwner, err := validateTunnelOwnerLinks(tx, inboundId, clients, detachEmails, prune)
 	if err != nil {

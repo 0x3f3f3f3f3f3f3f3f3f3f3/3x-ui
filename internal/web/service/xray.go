@@ -210,6 +210,11 @@ func (s *XrayService) getXrayConfigFromDB(managed bool, db *gorm.DB) (*xray.Conf
 		if inbound.NodeID != nil {
 			continue
 		}
+		if !managed {
+			if err := guardUnmanagedPasswordProxy(inbound); err != nil {
+				return nil, err
+			}
+		}
 		if err := validateTunnelSourceACLConfig(inbound); err != nil {
 			return nil, err
 		}

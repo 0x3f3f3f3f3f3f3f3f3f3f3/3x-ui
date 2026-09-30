@@ -26,8 +26,8 @@ func guardRemoteClientPolicyAttachments(tx *gorm.DB, inboundID int, existing map
 	for _, record := range existing {
 		hasPolicy = hasPolicy || record.Policy != nil || record.DesiredPolicyVersion != 0
 	}
-	localTunnel := inbound.NodeID == nil && inbound.Protocol == model.Tunnel
-	if inbound.NodeID == nil && !hasPolicy && !localTunnel {
+	localOwnedResource := inbound.NodeID == nil && (inbound.Protocol == model.Tunnel || isPasswordProxy(inbound.Protocol))
+	if inbound.NodeID == nil && !hasPolicy && !localOwnedResource {
 		return nil
 	}
 	ids := make([]string, 0, len(existing))
@@ -60,7 +60,7 @@ func guardRemoteClientPolicyAttachments(tx *gorm.DB, inboundID int, existing map
 	seen := make(map[int]bool)
 	for _, client := range clients {
 		record := existing[strings.TrimSpace(client.Email)]
-		if record != nil && !seen[record.Id] && (inbound.NodeID != nil || localTunnel || client.Policy != nil || record.Policy != nil || record.DesiredPolicyVersion != 0) {
+		if record != nil && !seen[record.Id] && (inbound.NodeID != nil || localOwnedResource || client.Policy != nil || record.Policy != nil || record.DesiredPolicyVersion != 0) {
 			seen[record.Id] = true
 			policyIDs = append(policyIDs, record.Id)
 		}
@@ -68,12 +68,12 @@ func guardRemoteClientPolicyAttachments(tx *gorm.DB, inboundID int, existing map
 	linked, remote := make(map[int]bool), make(map[int]bool)
 	for _, batch := range chunkInts(policyIDs, 400) {
 		if inbound.NodeID != nil {
-			var tunnelOwners int64
+			var localOwners int64
 			if err := tx.Model(&model.ClientInbound{}).Joins("JOIN inbounds ON inbounds.id = client_inbounds.inbound_id").
-				Where("client_inbounds.client_id IN ? AND inbounds.node_id IS NULL AND inbounds.protocol = ?", batch, model.Tunnel).Count(&tunnelOwners).Error; err != nil {
+				Where("client_inbounds.client_id IN ? AND inbounds.node_id IS NULL AND inbounds.protocol IN ?", batch, []model.Protocol{model.Tunnel, model.Mixed, model.HTTP}).Count(&localOwners).Error; err != nil {
 				return err
 			}
-			if tunnelOwners != 0 {
+			if localOwners != 0 {
 				return remoteClientPolicyScopeError()
 			}
 		}
@@ -103,7 +103,7 @@ func guardRemoteClientPolicyAttachments(tx *gorm.DB, inboundID int, existing map
 			continue
 		}
 		changed := client.Policy != nil && !sameClientPolicy(client.Policy, record.Policy)
-		if localTunnel && remote[record.Id] {
+		if localOwnedResource && remote[record.Id] {
 			return remoteClientPolicyScopeError()
 		}
 		attaching := !linked[record.Id] && (client.Policy != nil || record.Policy != nil || record.DesiredPolicyVersion != 0)
@@ -123,23 +123,23 @@ func sameClientPolicy(a, b *model.ClientPolicyOptions) bool {
 }
 
 func guardClientPolicyTargets(tx *gorm.DB, record *model.ClientRecord, policy *model.ClientPolicyOptions, inboundIDs []int, attaching bool) error {
-	localTunnel := false
+	localOwnedResource := false
 	for _, batch := range chunkInts(inboundIDs, 400) {
 		var count int64
-		if err := tx.Model(&model.Inbound{}).Where("id IN ? AND node_id IS NULL AND protocol = ?", batch, model.Tunnel).Count(&count).Error; err != nil {
+		if err := tx.Model(&model.Inbound{}).Where("id IN ? AND node_id IS NULL AND protocol IN ?", batch, []model.Protocol{model.Tunnel, model.Mixed, model.HTTP}).Count(&count).Error; err != nil {
 			return err
 		}
-		localTunnel = localTunnel || count != 0
+		localOwnedResource = localOwnedResource || count != 0
 	}
-	if record != nil && !localTunnel {
+	if record != nil && !localOwnedResource {
 		var count int64
 		if err := tx.Model(&model.ClientInbound{}).Joins("JOIN inbounds ON inbounds.id = client_inbounds.inbound_id").
-			Where("client_inbounds.client_id = ? AND inbounds.node_id IS NULL AND inbounds.protocol = ?", record.Id, model.Tunnel).Count(&count).Error; err != nil {
+			Where("client_inbounds.client_id = ? AND inbounds.node_id IS NULL AND inbounds.protocol IN ?", record.Id, []model.Protocol{model.Tunnel, model.Mixed, model.HTTP}).Count(&count).Error; err != nil {
 			return err
 		}
-		localTunnel = count != 0
+		localOwnedResource = count != 0
 	}
-	if !localTunnel {
+	if !localOwnedResource {
 		if attaching {
 			if policy == nil && (record == nil || record.Policy == nil && record.DesiredPolicyVersion == 0) {
 				return nil

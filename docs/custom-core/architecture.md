@@ -162,7 +162,7 @@ Evaluate OpenSnell's GPLv3 implementation at a pinned commit, separately for eac
 
 Local budgets/rates are not global limits. Multi-node work must allocate disjoint budgets and rate shares with bounded leases; expired/lost control cannot turn a limited user unlimited. Snapshot restore must be fenced from outstanding node leases. A recoverable core store is execution state under panel-issued policy, not a second administrator/control plane.
 
-## Canonical password account ownership increment (planned)
+## Canonical password account ownership increment (database foundation)
 
 The original task authorizes routine engineering decisions. This increment
 uses the existing inbound settings and normalized `client_inbounds` membership
@@ -189,10 +189,42 @@ the final account does not restore HTTP anonymous access; preserve an explicit
 required-auth marker. Move detached stat associations to a sibling membership
 or detached history instead of deleting shared usage.
 
-The first database increment keeps managed Mixed/HTTP compilation gated and
-adds authoritative write/read guards plus local/remote attachment restrictions.
+The database foundation implements authoritative write/read guards, owner-link
+reconciliation, detached-history retention and local/remote attachment
+restrictions. A real PostgreSQL competing attachment waits on the canonical
+client row lock and then rejects the newly local-only owner after the first
+transaction commits. Local ownership requires this restriction even before an
+explicit rate or billing policy exists.
+
+Normalize native `users` aliases and JSON field case folding before validation,
+including Unicode case equivalents accepted by Go's JSON decoder. Preserve the
+native precedence: non-null `accounts` overrides `users`, including
+`accounts: []`; null or omitted `accounts` leaves `users` active. Canonicalize active users
+to accounts on writes. Reject ambiguous case spellings and owners on dormant
+users, while retaining dormant legacy credentials. Strip supplied transport
+identity from both arrays. Bare legacy email without a core client ID remains
+readable because native authentication ignores it; the next write removes it.
+
+Owned Mixed-to-empty-HTTP conversion retains required authentication. Ordinary
+unowned conversion retains upstream compatibility without introducing a custom
+core requirement. Frontend schemas preserve owner UUIDs and required-auth
+markers through normal form edits; owner selection UI remains unfinished.
+
+Managed Mixed/HTTP compilation and unmanaged activation of owned accounts stay
+gated until canonical runtime generation is verified.
 It does not claim owner selection UI, canonical runtime generation, generic
 client lifecycle fanout, credential hot diffs or legacy username-counter
 migration. Those follow with real-process regressions before activation is
 opened. API/import/export continue using existing settings JSON; restores must
 preserve canonical stable IDs and links rather than minting replacement owners.
+
+The next runtime configuration increment derives every active account's native
+email/stable-ID pair from that verified owner set and the same SQL snapshot as
+its resource credentials. Global UUID/password fields do not supply password
+proxy credentials. Runtime JSON removes panel-only owner selection and dormant
+aliases. Policies include disabled linked owners; disabled account credentials
+are omitted, with authentication protection retained when none remain.
+Unowned credentials and anonymous empty HTTP listeners cannot enter this scoped
+managed adapter. Protected empty listeners need no invented owner. Live legacy
+username-counter handoff retains its protocol gate until an unambiguous mapping
+and final settlement are independently verified.
