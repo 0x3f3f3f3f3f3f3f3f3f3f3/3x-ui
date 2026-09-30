@@ -455,6 +455,7 @@ export const EXAMPLES: Record<string, unknown> = {
     ],
     "items": [
       {
+        "clientId": "a6426bfc-42c6-45d6-8182-1108f7986d89",
         "comment": "Primary device",
         "createdAt": 1735000000000,
         "email": "alice@example.com",
@@ -590,6 +591,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "tag": ""
   },
   "ClientSlim": {
+    "clientId": "a6426bfc-42c6-45d6-8182-1108f7986d89",
     "comment": "Primary device",
     "createdAt": 1735000000000,
     "email": "alice@example.com",
@@ -849,6 +851,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "listen": "",
     "nodeId": null,
     "originNodeGuid": "",
+    "ownerClientId": null,
     "port": 443,
     "protocol": "vless",
     "remark": "VLESS-443",

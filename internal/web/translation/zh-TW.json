@@ -694,7 +694,13 @@
           "listen": "入站監聽地址",
           "custom": "自訂"
         },
-        "autoFill": "自動填入"
+        "autoFill": "自動填入",
+        "ownerClient": "Owner client",
+        "ownerClientRequired": "Select an owner client",
+        "ownerClientHelp": "Traffic from this listener uses the selected client’s shared limits and accounting.",
+        "ownerClientLocalOnly": "Owner selection is available for local Tunnel listeners only.",
+        "ownerClientLoadError": "Unable to load clients. Search again to retry.",
+        "ownerClientLoadMore": "Load more clients"
       },
       "info": {
         "mode": "模式",

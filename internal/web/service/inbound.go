@@ -194,6 +194,9 @@ func (s *InboundService) GetInbounds(userId int) ([]*model.Inbound, error) {
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
+	if err := annotateTunnelOwners(db, inbounds); err != nil {
+		return nil, err
+	}
 	s.enrichClientStats(db, inbounds)
 	s.annotateFallbackParents(db, inbounds)
 	s.annotateLocalOriginGuid(inbounds)
@@ -235,6 +238,9 @@ func (s *InboundService) GetInboundsSlim(userId int) ([]*model.Inbound, error) {
 	var inbounds []*model.Inbound
 	err := db.Model(model.Inbound{}).Preload("ClientStats").Where("user_id = ?", userId).Order("id ASC").Find(&inbounds).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	if err := annotateTunnelOwners(db, inbounds); err != nil {
 		return nil, err
 	}
 	s.annotateFallbackParents(db, inbounds)
@@ -1088,6 +1094,9 @@ func (s *InboundService) normalizeMtprotoXrayPort(inbound *model.Inbound, oldSet
 // Returns the created inbound, whether Xray needs restart, and any error.
 func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, bool, error) {
 	inbound.Id = 0
+	if err := prepareTunnelOwnerCommand(inbound); err != nil {
+		return inbound, false, err
+	}
 	legacyShareAddr := legacyMtprotoShareAddr(inbound)
 	inbound.TrafficResetDay = normalizeTrafficResetDay(inbound.TrafficResetDay)
 	// Normalize streamSettings based on protocol
@@ -1239,6 +1248,13 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		if conflict != nil {
 			return common.NewError(conflict.String())
 		}
+		owner, err := resolveTunnelOwnerCommand(tx, inbound)
+		if err != nil {
+			return err
+		}
+		if owner != nil {
+			clients = []model.Client{*owner.ToClient()}
+		}
 		markDirty := false
 		if err := tx.Omit("ClientStats").Save(inbound).Error; err != nil {
 			return err
@@ -1297,7 +1313,11 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 				return err
 			}
 		}
-		if err := s.clientService.SyncInbound(tx, inbound.Id, clients); err != nil {
+		if owner != nil {
+			if err := s.clientService.syncTunnelOwnerLink(tx, inbound.Id, owner); err != nil {
+				return err
+			}
+		} else if err := s.clientService.SyncInbound(tx, inbound.Id, clients); err != nil {
 			return err
 		}
 		if _, err := database.CreateHostsFromExternalProxy(tx, inbound.Id, inbound.StreamSettings); err != nil {
@@ -1554,6 +1574,9 @@ func (s *InboundService) GetInboundDetail(id int) (*model.Inbound, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := annotateTunnelOwners(db, []*model.Inbound{inbound}); err != nil {
+		return nil, err
+	}
 	s.enrichClientStats(db, []*model.Inbound{inbound})
 	if err := s.overlayInboundsClientStats(db, []*model.Inbound{inbound}); err != nil {
 		return nil, err
@@ -1719,6 +1742,10 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		return inbound, false, err
 	}
 	inbound.SubSortIndex = normalizeSubSortIndex(inbound.SubSortIndex)
+	inbound.NodeID = oldInbound.NodeID
+	if err := prepareTunnelOwnerCommand(inbound); err != nil {
+		return inbound, false, err
+	}
 
 	clients, err := s.GetClients(inbound)
 	if err != nil {
@@ -1789,6 +1816,10 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		}
 		if conflict != nil {
 			return common.NewError(conflict.String())
+		}
+		owner, err := resolveTunnelOwnerCommand(tx, inbound)
+		if err != nil {
+			return err
 		}
 		if err := s.updateClientTraffics(tx, oldInbound, inbound); err != nil {
 			return err
@@ -1875,6 +1906,12 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 			}
 		}
 
+		if owner != nil {
+			if err := setTunnelOwnerClients(inbound, owner); err != nil {
+				return err
+			}
+		}
+		oldInbound.OwnerClientID = inbound.OwnerClientID
 		oldInbound.Total = inbound.Total
 		oldInbound.Remark = inbound.Remark
 		oldInbound.SubSortIndex = inbound.SubSortIndex
@@ -1921,7 +1958,11 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		if gcErr != nil {
 			return gcErr
 		}
-		if err := s.clientService.SyncInbound(tx, oldInbound.Id, newClients); err != nil {
+		if owner != nil {
+			if err := s.clientService.syncTunnelOwnerLink(tx, oldInbound.Id, owner); err != nil {
+				return err
+			}
+		} else if err := s.clientService.SyncInbound(tx, oldInbound.Id, newClients); err != nil {
 			return err
 		}
 		if oldInbound.Protocol == model.Tunnel {
@@ -2138,6 +2179,15 @@ func (s *InboundService) updateClientTraffics(tx *gorm.DB, oldInbound *model.Inb
 	if err != nil {
 		return err
 	}
+	if oldInbound.Protocol == model.Tunnel {
+		owners, err := s.clientService.ListForInbound(tx, oldInbound.Id)
+		if err != nil {
+			return err
+		}
+		if len(owners) != 0 {
+			oldClients = owners
+		}
+	}
 	newClients, err := s.GetClients(newInbound)
 	if err != nil {
 		return err
@@ -2170,6 +2220,15 @@ func (s *InboundService) updateClientTraffics(tx *gorm.DB, oldInbound *model.Inb
 		}
 		if _, kept := newEmails[email]; kept {
 			continue
+		}
+		if oldInbound.Protocol == model.Tunnel {
+			preserved, err := preserveDetachedTunnelOwnerTraffic(tx, oldInbound.Id, email)
+			if err != nil {
+				return err
+			}
+			if preserved {
+				continue
+			}
 		}
 		stillUsed, err := s.emailUsedByOtherInbounds(email, oldInbound.Id)
 		if err != nil {

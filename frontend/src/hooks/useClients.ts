@@ -142,7 +142,7 @@ function buildQS(p: ClientQueryParams): string {
   return sp.toString();
 }
 
-async function fetchClientPage(params: ClientQueryParams): Promise<ClientPageResponse> {
+export async function fetchClientPage(params: ClientQueryParams): Promise<ClientPageResponse> {
   const qs = buildQS(params);
   const msg = await HttpUtil.get(`/panel/api/clients/list/paged?${qs}`, undefined, {
     silent: true,

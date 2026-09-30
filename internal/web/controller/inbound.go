@@ -410,6 +410,8 @@ func (a *InboundController) importInbound(c *gin.Context) {
 		return
 	}
 	user := session.GetLoginUser(c)
+	// A single-inbound export carries a source-panel read annotation, not a local command.
+	inbound.OwnerClientID = nil
 	inbound.Id = 0
 	inbound.UserId = user.Id
 	// Node IDs are panel-local and not portable across panels. Drop a node

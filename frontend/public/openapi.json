@@ -2290,6 +2290,10 @@
       "ClientSlim": {
         "description": "ClientSlim is the row-shape used by the clients page. It drops fields the\ntable never reads (UUID, password, auth, flow, security, reverse, tgId)\nso the list payload stays compact even when the panel manages thousands\nof clients. Modals that need the full record still call /get/:email.",
         "properties": {
+          "clientId": {
+            "example": "a6426bfc-42c6-45d6-8182-1108f7986d89",
+            "type": "string"
+          },
           "comment": {
             "example": "Primary device",
             "type": "string"
@@ -2374,6 +2378,7 @@
           }
         },
         "required": [
+          "clientId",
           "createdAt",
           "email",
           "enable",
@@ -3246,6 +3251,10 @@
           },
           "originNodeGuid": {
             "description": "OriginNodeGuid is the panelGuid of the node that physically hosts this\ninbound, propagated up across hops (#4983). Empty for an inbound that\nlives on this panel's own xray; set to the originating node's GUID when\nthe inbound was synced from a node (kept as-is across further hops). Lets\nthe master attribute a deeply nested inbound to the real node instead of\nthe intermediate one it was fetched through.",
+            "type": "string"
+          },
+          "ownerClientId": {
+            "nullable": true,
             "type": "string"
           },
           "port": {
@@ -5337,6 +5346,7 @@
                       "listen": "",
                       "nodeId": null,
                       "originNodeGuid": "",
+                      "ownerClientId": null,
                       "port": 443,
                       "protocol": "vless",
                       "remark": "VLESS-443",
@@ -5520,7 +5530,7 @@
         "tags": [
           "Inbounds"
         ],
-        "summary": "Fetch a single inbound by numeric ID.",
+        "summary": "Fetch a single inbound by numeric ID. Tunnel responses include ownerClientId when an authoritative client membership exists.",
         "operationId": "get_panel_api_inbounds_get_id",
         "parameters": [
           {
@@ -5561,7 +5571,7 @@
         "tags": [
           "Inbounds"
         ],
-        "summary": "Create a new inbound. Send the full inbound payload (protocol, port, settings, streamSettings, sniffing, remark, expiryTime, total, enable). settings, streamSettings, and sniffing may be sent as nested JSON objects (preferred) or as JSON-encoded strings (legacy).",
+        "summary": "Create a new inbound. Send the full inbound payload (protocol, port, settings, streamSettings, sniffing, remark, expiryTime, total, enable). settings, streamSettings, and sniffing may be sent as nested JSON objects (preferred) or as JSON-encoded strings (legacy). A local Tunnel may include ownerClientId (an existing stable client UUID); the server resolves the canonical owner atomically, ignores settings.clients from the request, and rejects nonempty clientStats or owners with remote bindings.",
         "operationId": "post_panel_api_inbounds_add",
         "requestBody": {
           "required": true,
@@ -5757,7 +5767,7 @@
         "tags": [
           "Inbounds"
         ],
-        "summary": "Replace an inbound’s configuration. Body shape mirrors /add. Heavy on inbounds with thousands of clients — prefer /setEnable for enable-only flips.",
+        "summary": "Replace an inbound’s configuration. Body shape mirrors /add. For a local Tunnel, ownerClientId atomically selects an existing stable client without changing that account or resetting its history. Omit the field for legacy settings-based editing. Heavy on inbounds with thousands of clients — prefer /setEnable for enable-only flips.",
         "operationId": "post_panel_api_inbounds_update_id",
         "parameters": [
           {
@@ -6068,7 +6078,7 @@
         "tags": [
           "Inbounds"
         ],
-        "summary": "Bulk-import an inbound from a JSON blob (e.g. one exported via the UI). The body uses form encoding with a single \"data\" field.",
+        "summary": "Bulk-import an inbound from a JSON blob (e.g. one exported via the UI). The body uses form encoding with a single \"data\" field. Any ownerClientId annotation from the source panel is ignored; settings and exported client statistics remain portable.",
         "operationId": "post_panel_api_inbounds_import",
         "requestBody": {
           "required": true,
@@ -8540,6 +8550,7 @@
                     ],
                     "items": [
                       {
+                        "clientId": "a6426bfc-42c6-45d6-8182-1108f7986d89",
                         "comment": "Primary device",
                         "createdAt": 1735000000000,
                         "email": "alice@example.com",
@@ -16486,6 +16497,7 @@
                   "listen": "",
                   "nodeId": null,
                   "originNodeGuid": "",
+                  "ownerClientId": null,
                   "port": 443,
                   "protocol": "vless",
                   "remark": "VLESS-443",

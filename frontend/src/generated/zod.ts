@@ -576,6 +576,7 @@ export const ClientReverseSchema = z.object({
 export type ClientReverse = z.infer<typeof ClientReverseSchema>;
 
 export const ClientSlimSchema = z.object({
+  clientId: z.string(),
   comment: z.string().optional(),
   createdAt: z.number().int(),
   email: z.string(),
@@ -800,6 +801,7 @@ export const InboundSchema = z.object({
   listen: z.string(),
   nodeId: z.number().int().nullable().optional(),
   originNodeGuid: z.string().optional(),
+  ownerClientId: z.string().nullable().optional(),
   port: z.number().int().min(0).max(65535),
   protocol: z.enum(['vmess', 'vless', 'trojan', 'shadowsocks', 'wireguard', 'hysteria', 'http', 'mixed', 'tunnel', 'tun', 'mtproto', 'amneziawg', 'tuic']),
   remark: z.string(),

@@ -694,7 +694,13 @@
         "bytesPerSecTip": "حد السرعة (بايت/ثانية) المطبّق على مرور الـ fallback بعد العتبة، عشان الفحوصات ماتقدرش تستخدم سيرفرك كنطاق ترددي مجاني للهدف. 0 = بلا حد (بيعطّل الاتجاه ده).",
         "burstBytesPerSec": "بايت في الثانية للدفقة",
         "burstBytesPerSecTip": "السماح بدفقات قصيرة فوق المعدل الثابت (حجم token-bucket). لو أقل من بايت في الثانية بيترفع ليطابقه.",
-        "autoFill": "الملء التلقائي"
+        "autoFill": "الملء التلقائي",
+        "ownerClient": "Owner client",
+        "ownerClientRequired": "Select an owner client",
+        "ownerClientHelp": "Traffic from this listener uses the selected client’s shared limits and accounting.",
+        "ownerClientLocalOnly": "Owner selection is available for local Tunnel listeners only.",
+        "ownerClientLoadError": "Unable to load clients. Search again to retry.",
+        "ownerClientLoadMore": "Load more clients"
       },
       "info": {
         "mode": "الوضع",

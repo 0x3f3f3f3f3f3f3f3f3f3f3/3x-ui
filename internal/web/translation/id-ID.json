@@ -694,7 +694,13 @@
         "bytesPerSecTip": "Batas kecepatan (byte/detik) yang diterapkan pada lalu lintas fallback setelah ambang batas, agar probe tidak dapat memakai server Anda sebagai bandwidth gratis menuju target. 0 = tanpa batas (menonaktifkan arah ini).",
         "burstBytesPerSec": "Byte per detik burst",
         "burstBytesPerSecTip": "Kelonggaran untuk burst singkat di atas laju tetap (ukuran token-bucket). Jika lebih kecil dari Byte per detik, nilainya dinaikkan agar sama.",
-        "autoFill": "Isi Otomatis"
+        "autoFill": "Isi Otomatis",
+        "ownerClient": "Owner client",
+        "ownerClientRequired": "Select an owner client",
+        "ownerClientHelp": "Traffic from this listener uses the selected client’s shared limits and accounting.",
+        "ownerClientLocalOnly": "Owner selection is available for local Tunnel listeners only.",
+        "ownerClientLoadError": "Unable to load clients. Search again to retry.",
+        "ownerClientLoadMore": "Load more clients"
       },
       "info": {
         "mode": "Mode",

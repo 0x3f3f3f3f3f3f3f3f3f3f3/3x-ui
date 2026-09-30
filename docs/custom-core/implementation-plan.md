@@ -93,7 +93,7 @@ Files: `internal/database/{db.go,model/*}`, `internal/web/{service,controller,ru
 
 - [ ] Migrate SQLite/PostgreSQL legacy clients to stable IDs, preserve usage, default multiplier 1/unlimited rates; test rename/rotation/import.
 - [ ] Bind existing client records to forwarding rules, node, ACL, outbounds and exclusive listener resources.
-- [x] Scoped managed candidate compiler: authoritative database identities, private control, strict adapter/owner validation, durable policy batches and real generated Tunnel ledger. Automatic production activation remains open.
+- [x] Scoped managed candidate compiler: authoritative database identities, private control, strict adapter/owner validation, durable policy batches and real generated Tunnel ledger. Local automatic activation is covered below; remote managed activation remains open.
 - [x] Scoped Tunnel attachment ownership: credential-free create/attach/rename, single-owner transactional sync/delta validation, concurrent attachment exclusion and explicit reassignment preserve stable client records.
 - [ ] Extend Runtime lifecycle, batch operations and state/reason/statistics UI, API registry/codegen and all locale keys (English/Chinese translations).
 - [ ] Test wildcard/dual-stack/control-port collision, reassignment, reset/renew restrictions and active connection termination.
@@ -367,3 +367,12 @@ rolls back unsupported or malformed policies. Historical values remain read-only
 and unrelated metadata preserves them. This closes unsupported mutation paths;
 coordinated remote budgets, stable identity transport and managed receipts remain
 unimplemented. Final verification and source review pass as recorded in testing.md.
+
+
+Task 6 local Tunnel editor checkpoint: add/update accepts an optional `ownerClientId` command naming an existing stable UUID. The server resolves and locks the canonical client inside the same SQL transaction as listener/traffic/membership changes, and changes only the link, not the account. The form uses paged client search, requires an owner for new local rules, preserves legacy unowned edits and `clients:null`, and keeps remote ownership read-only. Reassignment rehomes the former owner’s legacy accumulator to a sibling or an unattached canonical account; migration no longer deletes the latter. Read APIs derive the annotation from membership, and single-inbound import discards a source-panel UUID annotation while retaining portable settings/statistics. Local Tunnel ownership blocks later remote binding even before a desired version exists, including raw mirror input before identity filtering. Real same-port TCP/UDP reassignment and SQLite/PostgreSQL history/rollback/scope tests are present. Full Tunnel ACL/routing-mode UI, unowned-rule migration, distributed budgets, other requested protocols and packaging remain open.
+
+Next dependency: allow creating an unattached canonical client in the existing
+client form/API, then selecting it as the first Tunnel's owner. Currently creation
+requires an ordinary inbound, so a fresh panel cannot complete that flow through
+the owner picker alone. Source ACL implementation follows this creation path;
+both remain unimplemented at this checkpoint.

@@ -2,16 +2,137 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
+	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
 
 var ErrTunnelOwnerConflict = errors.New("Tunnel listener can belong to only one client")
+
+func prepareTunnelOwnerCommand(inbound *model.Inbound) error {
+	if inbound.OwnerClientID == nil {
+		return nil
+	}
+	if inbound.Protocol != model.Tunnel || inbound.NodeID != nil {
+		return errors.New("ownerClientId requires a local Tunnel listener")
+	}
+	if _, err := uuid.Parse(*inbound.OwnerClientID); err != nil {
+		return errors.New("ownerClientId requires an existing stable client UUID")
+	}
+	if len(inbound.ClientStats) != 0 {
+		return errors.New("ownerClientId cannot be combined with clientStats")
+	}
+	return setTunnelOwnerClients(inbound, nil)
+}
+
+func setTunnelOwnerClients(inbound *model.Inbound, owner *model.ClientRecord) error {
+	var settings map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(inbound.Settings), &settings); err != nil {
+		return err
+	}
+	if settings == nil {
+		return errors.New("Tunnel settings must be an object")
+	}
+	clients := []model.Client{}
+	if owner != nil {
+		clients = append(clients, *owner.ToClient())
+	}
+	raw, err := json.Marshal(clients)
+	if err != nil {
+		return err
+	}
+	settings["clients"] = raw
+	raw, err = json.Marshal(settings)
+	if err == nil {
+		inbound.Settings = string(raw)
+	}
+	return err
+}
+
+func resolveTunnelOwnerCommand(tx *gorm.DB, inbound *model.Inbound) (*model.ClientRecord, error) {
+	if inbound.OwnerClientID == nil {
+		return nil, nil
+	}
+	if inbound.Id != 0 {
+		if _, err := validateTunnelOwnerLinks(tx, inbound.Id, nil, nil, false); err != nil {
+			return nil, err
+		}
+	}
+	var owner model.ClientRecord
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("stable_id = ?", *inbound.OwnerClientID).First(&owner).Error; err != nil {
+		return nil, fmt.Errorf("resolve Tunnel owner: %w", err)
+	}
+	if err := validateLocalClientPolicyResetScope(tx, []string{owner.StableID}); err != nil {
+		return nil, fmt.Errorf("Tunnel owner must have only local memberships: %w", err)
+	}
+	if err := setTunnelOwnerClients(inbound, &owner); err != nil {
+		return nil, err
+	}
+	return &owner, nil
+}
+
+func (s *ClientService) syncTunnelOwnerLink(tx *gorm.DB, inboundID int, owner *model.ClientRecord) error {
+	if _, err := validateTunnelOwnerLinks(tx, inboundID, []model.Client{*owner.ToClient()}, nil, true); err != nil {
+		return err
+	}
+	return s.reconcileInboundLinks(tx, inboundID, map[int]string{owner.Id: ""}, []int{owner.Id}, nil, true)
+}
+
+func preserveDetachedTunnelOwnerTraffic(tx *gorm.DB, inboundID int, email string) (bool, error) {
+	var owner model.ClientRecord
+	if err := tx.Select("id").Where("email = ?", email).Find(&owner).Error; err != nil {
+		return false, err
+	}
+	if owner.Id == 0 {
+		return false, nil
+	}
+	var sibling model.ClientInbound
+	if err := tx.Where("client_id = ? AND inbound_id <> ?", owner.Id, inboundID).
+		Order("inbound_id").Limit(1).Find(&sibling).Error; err != nil {
+		return false, err
+	}
+	err := tx.Model(&xray.ClientTraffic{}).Where("email = ? AND inbound_id = ?", email, inboundID).
+		Update("inbound_id", sibling.InboundId).Error
+	return true, err
+}
+
+func annotateTunnelOwners(db *gorm.DB, inbounds []*model.Inbound) error {
+	byID := make(map[int]*model.Inbound)
+	var ids []int
+	for _, inbound := range inbounds {
+		inbound.OwnerClientID = nil
+		if inbound.Protocol == model.Tunnel {
+			byID[inbound.Id] = inbound
+			ids = append(ids, inbound.Id)
+		}
+	}
+	for _, batch := range chunkInts(ids, 400) {
+		var links []struct {
+			InboundID int
+			StableID  string
+		}
+		if err := db.Table("client_inbounds ci").Select("ci.inbound_id, c.stable_id").
+			Joins("JOIN clients c ON c.id = ci.client_id").Where("ci.inbound_id IN ?", batch).Scan(&links).Error; err != nil {
+			return err
+		}
+		for _, link := range links {
+			inbound := byID[link.InboundID]
+			if inbound.OwnerClientID != nil {
+				return ErrTunnelOwnerConflict
+			}
+			inbound.OwnerClientID = &link.StableID
+		}
+	}
+	return nil
+}
 
 func validateTunnelOwnerLinks(tx *gorm.DB, inboundID int, clients []model.Client, detachEmails []string, prune bool) (bool, error) {
 	var inbound model.Inbound

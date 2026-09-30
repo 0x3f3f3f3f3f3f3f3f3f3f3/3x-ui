@@ -51,6 +51,7 @@ export interface RawInboundRow {
   trafficResetDay?: number;
   lastTrafficResetTime?: number;
   nodeId?: number | null;
+  ownerClientId?: string | null;
   shareAddrStrategy?: string;
   shareAddr?: string;
   subSortIndex?: number;
@@ -81,6 +82,7 @@ export interface WireInboundPayload {
   tag: string;
   clientStats?: unknown;
   nodeId?: number;
+  ownerClientId?: string;
   shareAddrStrategy: ShareAddrStrategy;
   shareAddr: string;
   subSortIndex: number;
@@ -218,6 +220,7 @@ export function rawInboundToFormValues(row: RawInboundRow): InboundFormValues {
     trafficResetDay: Math.min(31, Math.max(1, row.trafficResetDay ?? 1)),
     lastTrafficResetTime: row.lastTrafficResetTime ?? 0,
     nodeId: row.nodeId ?? null,
+    ownerClientId: row.ownerClientId ?? null,
     shareAddrStrategy: coerceShareAddrStrategy(row.shareAddrStrategy),
     shareAddr: row.shareAddr ?? '',
     subSortIndex: row.subSortIndex == null || row.subSortIndex === 0 ? 1 : row.subSortIndex,
@@ -355,6 +358,9 @@ export function dropLegacyOptionalEmpties(
 
 export function formValuesToWirePayload(values: InboundFormValues): WireInboundPayload {
   const settingsPruned = (pruneEmpty(values.settings ?? {}) ?? {}) as Record<string, unknown>;
+  const ownerClientId =
+    values.protocol === 'tunnel' && values.nodeId == null ? values.ownerClientId : null;
+  if (ownerClientId) delete settingsPruned.clients;
   if (Array.isArray(settingsPruned.clients)) {
     settingsPruned.clients = normalizeClients(values.protocol, settingsPruned.clients);
   }
@@ -394,5 +400,6 @@ export function formValuesToWirePayload(values: InboundFormValues): WireInboundP
     disableFlow: values.disableFlow,
   };
   if (values.nodeId != null) payload.nodeId = values.nodeId;
+  if (ownerClientId) payload.ownerClientId = ownerClientId;
   return payload;
 }

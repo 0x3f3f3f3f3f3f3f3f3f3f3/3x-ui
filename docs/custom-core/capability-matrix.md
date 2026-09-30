@@ -15,7 +15,7 @@ This is the initial source-audit matrix, not a support announcement. `E/U` = exi
 | Hysteria2 | E/U both | E/U | N | QUIC/mux/UDP and auth updates |
 | WireGuard | E/U both | E/U | N | per-peer identity, IP/payload accounting distinction |
 | TUN | E/U inbound | no account auth; resource identity required | N | packet semantics, route and owner mapping |
-| Tunnel/dokodemo-door | E/U inbound; NA outbound (listener adapter) | database and scoped ordinary Runtime owner lifecycle I/V; complete UI/unowned-rule migration N | I/V for scoped Tunnel/local persistence/SQL settlement and explicit managed local startup; automatic cutover N | TCP/UDP, all routing modes, owner lifecycle, shared policy |
+| Tunnel/dokodemo-door | E/U inbound; NA outbound (listener adapter) | database, local stable-owner picker and scoped ordinary Runtime owner lifecycle I/V; complete forwarding UI/unowned-rule migration N | I/V for scoped Tunnel/local persistence/SQL settlement and explicit managed local startup; automatic cutover N | TCP/UDP, all routing modes, owner lifecycle, shared policy |
 | Snell v4 | N both | N | N | official Surge interoperability + independent outbound test |
 | Snell v5 | N both | N | N | v4-like paths separately, QUIC Proxy Mode mandatory |
 | Snell v6 beta | N both | N | N | fixed beta client/server, shaping modes, TCP/UDP/reuse |
@@ -143,3 +143,5 @@ Confirmed accounting's saved-but-unprepared pending indication is I/V, including
 real compiler failure and equal prepared/acknowledged versions. First activation
 without a receipt, complete listener application status, Tunnel owner selection,
 bulk policy controls and coordinated multi-node enforcement remain unfinished.
+
+The local owner picker checkpoint covers stable-ID selection, legacy nullable settings, single-inbound import, former-owner history, local-only scope before first activation, and real same-port TCP/UDP reassignment with a surviving sibling. It does not complete Tunnel ACLs, every routing mode, global node budgets or migration of existing unowned rules.

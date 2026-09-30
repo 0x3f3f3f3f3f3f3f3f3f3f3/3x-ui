@@ -545,6 +545,7 @@ export interface ClientReverse {
 }
 
 export interface ClientSlim {
+  clientId: string;
   comment?: string;
   createdAt: number;
   email: string;
@@ -752,6 +753,7 @@ export interface Inbound {
   listen: string;
   nodeId?: number | null;
   originNodeGuid?: string;
+  ownerClientId?: string | null;
   port: number;
   protocol: Protocol;
   remark: string;

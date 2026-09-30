@@ -694,7 +694,13 @@
           "custom": "自定义"
         },
         "verifyPeerCertByName": "按名称验证对端证书",
-        "autoFill": "自动填充"
+        "autoFill": "自动填充",
+        "ownerClient": "归属客户端",
+        "ownerClientRequired": "请选择归属客户端",
+        "ownerClientHelp": "此监听的流量使用所选客户端共享的限制和计费。",
+        "ownerClientLocalOnly": "仅本地 Tunnel 监听支持选择归属客户端。",
+        "ownerClientLoadError": "无法加载客户端，请重新搜索后重试。",
+        "ownerClientLoadMore": "加载更多客户端"
       },
       "info": {
         "mode": "模式",

@@ -548,3 +548,14 @@ and do not acquire an adopted fingerprint. These checks do not implement remote
 managed policies. Historical full reconciliation and revocation keep their existing
 transport behavior; a generic node synchronization acknowledgement is not evidence
 of coordinated limits, billing or policy application.
+
+
+## Selecting a local Tunnel owner
+
+A local Tunnel add/update can carry `ownerClientId`, the existing stable client UUID returned by client APIs. The command atomically links the listener to the canonical account. It ignores the request’s `settings.clients` and rejects nonempty `clientStats`; quota, expiry, enable state, credentials, intended Flow, rates and multiplier remain server-owned. The final typed snapshot preserves 64-bit quotas even when they exceed JavaScript’s exact integer range. Omit the command for the legacy settings-based API.
+
+The editor requires an owner for new local Tunnel rules, provides 25-row searchable pages of existing accounts, and permits existing unowned rules to remain editable. Remote owner changes are unavailable until coordinated identity/budget support exists. A local Tunnel membership protects that scope even while disabled or awaiting its first policy preparation: remote attachment and mirror input cannot reuse the account, and a historical mixed graph is rejected before client-update fanout.
+
+Replacing a listener owner closes its old TCP flow and makes later TCP/UDP traffic use the replacement account; another listener for the old account continues using its own shared ledger. Removing the old link retains the canonical account and its historical accumulator, including after migration and deletion of the reassigned listener. The accumulator moves to a remaining sibling, or uses inbound ID zero while the canonical account remains. This does not change deliberate client deletion/reset semantics or establish general backup rollback/replay fencing.
+
+`ownerClientId` in list/detail responses is a membership-derived annotation, not a new database ownership column. A single-inbound import clears that source-panel annotation so portable settings and statistics can create a destination identity. Full database restoration continues to use the stored stable IDs; restore fencing and all-protocol migration guarantees remain separate work.

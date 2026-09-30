@@ -694,7 +694,13 @@
           "listen": "آدرس شنود ورودی",
           "custom": "سفارشی"
         },
-        "autoFill": "تکمیل خودکار"
+        "autoFill": "تکمیل خودکار",
+        "ownerClient": "Owner client",
+        "ownerClientRequired": "Select an owner client",
+        "ownerClientHelp": "Traffic from this listener uses the selected client’s shared limits and accounting.",
+        "ownerClientLocalOnly": "Owner selection is available for local Tunnel listeners only.",
+        "ownerClientLoadError": "Unable to load clients. Search again to retry.",
+        "ownerClientLoadMore": "Load more clients"
       },
       "info": {
         "mode": "حالت",

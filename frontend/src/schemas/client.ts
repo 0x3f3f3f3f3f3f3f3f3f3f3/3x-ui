@@ -85,6 +85,7 @@ export const ClientPolicyOptionsSchema = z.object({
 
 export const ClientRecordSchema = z
   .object({
+    clientId: z.uuid().optional(),
     id: z.number().optional(),
     email: z.string(),
     subId: z.string().optional(),

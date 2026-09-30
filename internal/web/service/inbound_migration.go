@@ -196,12 +196,14 @@ func (s *InboundService) MigrationRequirements() (err error) {
 			return
 		}
 	}
-	if err = tx.Save(inbounds).Error; err != nil {
-		return
+	if len(inbounds) != 0 {
+		if err = tx.Save(inbounds).Error; err != nil {
+			return
+		}
 	}
 
 	// Remove orphaned traffics
-	if err = tx.Where("inbound_id = 0").Delete(xray.ClientTraffic{}).Error; err != nil {
+	if err = tx.Where("inbound_id = 0 AND email NOT IN (?)", tx.Model(&model.ClientRecord{}).Select("email")).Delete(xray.ClientTraffic{}).Error; err != nil {
 		return
 	}
 

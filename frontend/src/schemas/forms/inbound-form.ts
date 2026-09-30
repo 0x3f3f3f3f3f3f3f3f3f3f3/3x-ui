@@ -78,6 +78,7 @@ export const InboundDbFieldsSchema = z.object({
   trafficResetDay: z.number().int().min(1).max(31).default(1),
   lastTrafficResetTime: z.number().int().default(0),
   nodeId: z.number().int().nullable().optional(),
+  ownerClientId: z.uuid().nullable().optional(),
   shareAddrStrategy: ShareAddrStrategySchema.default('node'),
   shareAddr: z.string().default(''),
   subSortIndex: z.number().int().default(1),

@@ -43,6 +43,7 @@ export type DBInboundInit = Partial<{
   sniffing: RawJsonField;
   clientStats: ClientStats[];
   nodeId: number | null;
+  ownerClientId: string | null;
   shareAddrStrategy: string;
   shareAddr: string;
   subSortIndex: number;
@@ -93,6 +94,7 @@ export class DBInbound {
   sniffing: RawJsonField;
   clientStats: ClientStats[];
   nodeId: number | null;
+  ownerClientId: string | null;
   shareAddrStrategy: string;
   shareAddr: string;
   subSortIndex: number;
@@ -125,6 +127,7 @@ export class DBInbound {
     this.sniffing = '';
     this.clientStats = [];
     this.nodeId = null;
+    this.ownerClientId = null;
     this.shareAddrStrategy = 'node';
     this.shareAddr = '';
     this.subSortIndex = 1;

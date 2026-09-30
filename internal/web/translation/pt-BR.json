@@ -694,7 +694,13 @@
           "listen": "Endereço de escuta do inbound",
           "custom": "Personalizada"
         },
-        "autoFill": "Preenchimento automático"
+        "autoFill": "Preenchimento automático",
+        "ownerClient": "Owner client",
+        "ownerClientRequired": "Select an owner client",
+        "ownerClientHelp": "Traffic from this listener uses the selected client’s shared limits and accounting.",
+        "ownerClientLocalOnly": "Owner selection is available for local Tunnel listeners only.",
+        "ownerClientLoadError": "Unable to load clients. Search again to retry.",
+        "ownerClientLoadMore": "Load more clients"
       },
       "info": {
         "mode": "Modo",

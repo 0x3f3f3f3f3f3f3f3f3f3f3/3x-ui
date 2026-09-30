@@ -15,15 +15,19 @@ func guardRemoteClientPolicyAttachments(tx *gorm.DB, inboundID int, existing map
 	if len(clients) == 0 {
 		return nil
 	}
-	var inbound struct{ NodeID *int }
-	if err := tx.Model(&model.Inbound{}).Select("node_id").First(&inbound, inboundID).Error; err != nil {
+	var inbound struct {
+		NodeID   *int
+		Protocol model.Protocol
+	}
+	if err := tx.Model(&model.Inbound{}).Select("node_id", "protocol").First(&inbound, inboundID).Error; err != nil {
 		return err
 	}
 	hasPolicy := slices.ContainsFunc(clients, func(client model.Client) bool { return client.Policy != nil })
 	for _, record := range existing {
 		hasPolicy = hasPolicy || record.Policy != nil || record.DesiredPolicyVersion != 0
 	}
-	if inbound.NodeID == nil && !hasPolicy {
+	localTunnel := inbound.NodeID == nil && inbound.Protocol == model.Tunnel
+	if inbound.NodeID == nil && !hasPolicy && !localTunnel {
 		return nil
 	}
 	ids := make([]string, 0, len(existing))
@@ -56,13 +60,23 @@ func guardRemoteClientPolicyAttachments(tx *gorm.DB, inboundID int, existing map
 	seen := make(map[int]bool)
 	for _, client := range clients {
 		record := existing[strings.TrimSpace(client.Email)]
-		if record != nil && !seen[record.Id] && (client.Policy != nil || record.Policy != nil || record.DesiredPolicyVersion != 0) {
+		if record != nil && !seen[record.Id] && (inbound.NodeID != nil || localTunnel || client.Policy != nil || record.Policy != nil || record.DesiredPolicyVersion != 0) {
 			seen[record.Id] = true
 			policyIDs = append(policyIDs, record.Id)
 		}
 	}
 	linked, remote := make(map[int]bool), make(map[int]bool)
 	for _, batch := range chunkInts(policyIDs, 400) {
+		if inbound.NodeID != nil {
+			var tunnelOwners int64
+			if err := tx.Model(&model.ClientInbound{}).Joins("JOIN inbounds ON inbounds.id = client_inbounds.inbound_id").
+				Where("client_inbounds.client_id IN ? AND inbounds.node_id IS NULL AND inbounds.protocol = ?", batch, model.Tunnel).Count(&tunnelOwners).Error; err != nil {
+				return err
+			}
+			if tunnelOwners != 0 {
+				return remoteClientPolicyScopeError()
+			}
+		}
 		var currentIDs, remoteIDs []int
 		if err := tx.Model(&model.ClientInbound{}).Where("client_id IN ? AND inbound_id = ?", batch, inboundID).Pluck("client_id", &currentIDs).Error; err != nil {
 			return err
@@ -89,6 +103,9 @@ func guardRemoteClientPolicyAttachments(tx *gorm.DB, inboundID int, existing map
 			continue
 		}
 		changed := client.Policy != nil && !sameClientPolicy(client.Policy, record.Policy)
+		if localTunnel && remote[record.Id] {
+			return remoteClientPolicyScopeError()
+		}
 		attaching := !linked[record.Id] && (client.Policy != nil || record.Policy != nil || record.DesiredPolicyVersion != 0)
 		if (changed || attaching) && (inbound.NodeID != nil || remote[record.Id]) {
 			return remoteClientPolicyScopeError()
@@ -106,12 +123,30 @@ func sameClientPolicy(a, b *model.ClientPolicyOptions) bool {
 }
 
 func guardClientPolicyTargets(tx *gorm.DB, record *model.ClientRecord, policy *model.ClientPolicyOptions, inboundIDs []int, attaching bool) error {
-	if attaching {
-		if policy == nil && (record == nil || record.Policy == nil && record.DesiredPolicyVersion == 0) {
+	localTunnel := false
+	for _, batch := range chunkInts(inboundIDs, 400) {
+		var count int64
+		if err := tx.Model(&model.Inbound{}).Where("id IN ? AND node_id IS NULL AND protocol = ?", batch, model.Tunnel).Count(&count).Error; err != nil {
+			return err
+		}
+		localTunnel = localTunnel || count != 0
+	}
+	if record != nil && !localTunnel {
+		var count int64
+		if err := tx.Model(&model.ClientInbound{}).Joins("JOIN inbounds ON inbounds.id = client_inbounds.inbound_id").
+			Where("client_inbounds.client_id = ? AND inbounds.node_id IS NULL AND inbounds.protocol = ?", record.Id, model.Tunnel).Count(&count).Error; err != nil {
+			return err
+		}
+		localTunnel = count != 0
+	}
+	if !localTunnel {
+		if attaching {
+			if policy == nil && (record == nil || record.Policy == nil && record.DesiredPolicyVersion == 0) {
+				return nil
+			}
+		} else if policy == nil || record != nil && sameClientPolicy(policy, record.Policy) {
 			return nil
 		}
-	} else if policy == nil || record != nil && sameClientPolicy(policy, record.Policy) {
-		return nil
 	}
 	for _, batch := range chunkInts(inboundIDs, 400) {
 		var count int64
@@ -145,11 +180,10 @@ func guardMirroredClientPolicies(tx *gorm.DB, inboundID int, settings string) er
 	if err != nil {
 		return err
 	}
-	if !slices.ContainsFunc(clients, func(client model.Client) bool { return client.Policy != nil }) {
-		return nil
-	}
-	if err := validateClientsSettings(clients); err != nil {
-		return err
+	if slices.ContainsFunc(clients, func(client model.Client) bool { return client.Policy != nil }) {
+		if err := validateClientsSettings(clients); err != nil {
+			return err
+		}
 	}
 	emails := make([]string, 0, len(clients))
 	for _, client := range clients {

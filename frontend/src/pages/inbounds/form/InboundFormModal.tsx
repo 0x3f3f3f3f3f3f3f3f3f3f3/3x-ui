@@ -149,7 +149,7 @@ function firstRhfValidationIssue(
 }
 
 function tabForValidationPath(path: PropertyKey[]): string {
-  if (path[0] === 'settings') return 'protocol';
+  if (path[0] === 'settings' || path[0] === 'ownerClientId') return 'protocol';
   if (path[0] === 'sniffing') return 'sniffing';
   if (path[0] === 'streamSettings') {
     if (path[1] === 'security' || path[1] === 'realitySettings' || path[1] === 'tlsSettings')
@@ -814,7 +814,9 @@ export default function InboundFormModal({
 
       {protocol === Protocols.TUN && <TunFields />}
 
-      {protocol === Protocols.TUNNEL && <TunnelFields />}
+      {protocol === Protocols.TUNNEL && (
+        <TunnelFields requireOwner={mode === 'add' || Boolean(dbInbound?.ownerClientId)} />
+      )}
 
       {protocol === Protocols.HTTP && <HttpFields />}
       {protocol === Protocols.MIXED && <MixedFields mixedUdpOn={mixedUdpOn} />}

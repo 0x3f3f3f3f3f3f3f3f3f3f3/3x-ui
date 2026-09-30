@@ -295,14 +295,15 @@ export const sections: readonly Section[] = [
       {
         method: 'GET',
         path: '/panel/api/inbounds/get/:id',
-        summary: 'Fetch a single inbound by numeric ID.',
+        summary:
+          'Fetch a single inbound by numeric ID. Tunnel responses include ownerClientId when an authoritative client membership exists.',
         params: [{ name: 'id', in: 'path', type: 'number', desc: 'Inbound ID.' }],
       },
       {
         method: 'POST',
         path: '/panel/api/inbounds/add',
         summary:
-          'Create a new inbound. Send the full inbound payload (protocol, port, settings, streamSettings, sniffing, remark, expiryTime, total, enable). settings, streamSettings, and sniffing may be sent as nested JSON objects (preferred) or as JSON-encoded strings (legacy).',
+          'Create a new inbound. Send the full inbound payload (protocol, port, settings, streamSettings, sniffing, remark, expiryTime, total, enable). settings, streamSettings, and sniffing may be sent as nested JSON objects (preferred) or as JSON-encoded strings (legacy). A local Tunnel may include ownerClientId (an existing stable client UUID); the server resolves the canonical owner atomically, ignores settings.clients from the request, and rejects nonempty clientStats or owners with remote bindings.',
         body: inboundBody,
         errorResponse: '{\n  "success": false,\n  "msg": "Port 443 is already in use"\n}',
       },
@@ -325,7 +326,7 @@ export const sections: readonly Section[] = [
         method: 'POST',
         path: '/panel/api/inbounds/update/:id',
         summary:
-          'Replace an inbound’s configuration. Body shape mirrors /add. Heavy on inbounds with thousands of clients — prefer /setEnable for enable-only flips.',
+          'Replace an inbound’s configuration. Body shape mirrors /add. For a local Tunnel, ownerClientId atomically selects an existing stable client without changing that account or resetting its history. Omit the field for legacy settings-based editing. Heavy on inbounds with thousands of clients — prefer /setEnable for enable-only flips.',
         params: [{ name: 'id', in: 'path', type: 'number', desc: 'Inbound ID.' }],
         body: inboundBody,
       },
@@ -370,7 +371,7 @@ export const sections: readonly Section[] = [
         method: 'POST',
         path: '/panel/api/inbounds/import',
         summary:
-          'Bulk-import an inbound from a JSON blob (e.g. one exported via the UI). The body uses form encoding with a single "data" field.',
+          'Bulk-import an inbound from a JSON blob (e.g. one exported via the UI). The body uses form encoding with a single "data" field. Any ownerClientId annotation from the source panel is ignored; settings and exported client statistics remain portable.',
         params: [
           {
             name: 'data',

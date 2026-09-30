@@ -18,6 +18,7 @@ import (
 // so the list payload stays compact even when the panel manages thousands
 // of clients. Modals that need the full record still call /get/:email.
 type ClientSlim struct {
+	StableID     string              `json:"clientId" example:"a6426bfc-42c6-45d6-8182-1108f7986d89"`
 	Email        string              `json:"email" example:"alice@example.com"`
 	SubID        string              `json:"subId" example:"abcd1234"`
 	Enable       bool                `json:"enable" example:"true"`
@@ -602,6 +603,7 @@ func sqlInt(v int64) string {
 
 func toClientSlim(c ClientWithAttachments) ClientSlim {
 	return ClientSlim{
+		StableID:     c.StableID,
 		Email:        c.Email,
 		SubID:        c.SubID,
 		Enable:       c.Enable,

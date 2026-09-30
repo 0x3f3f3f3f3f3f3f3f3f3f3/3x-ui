@@ -1062,3 +1062,86 @@ full lint with zero issues (24.05 s), and build (8.23 s). No production code or
 assertions changed for that repair. Source review, all locale JSON, workflow YAML
 and all 19 embedded shell blocks pass. The unchanged core source did not require
 repeating its previously recorded full suite.
+
+
+## Local Tunnel owner selection and history
+
+The owner command is tested through JSON decoding and ordinary Add/Update, using
+an existing stable UUID with quota `9007199254740993`, disabled state, credentials,
+Vision Flow, rates and an exact decimal multiplier. A forged settings client is
+ignored. Late link failures roll back listener/membership/traffic writes; replacing
+the sole owner preserves its accumulator, while a sibling receives the detached
+row when present. Migration and subsequent deletion of the reassigned listener
+retain the former account's counters. A stale settings email cannot determine the
+former identity. Read APIs reject ambiguous ownership and SQL lookup errors.
+
+Scope tests cover empty/malformed/unknown IDs, protocol/node restrictions,
+nonempty imported statistics, existing remote memberships, later remote binding
+before any desired policy version, raw mirrors before foreign-identity filtering,
+and historical mixed graphs before client-update fanout. The PostgreSQL race
+synchronizes both transaction orders at the stable-ID lock; only one membership
+commits. Single-inbound controller import discards the source-panel annotation
+and retains imported usage under a newly generated destination identity.
+
+The real core reassignment test shares an initial owner between two listeners,
+starts at raw upload/download `100/200` and billed `300`, transfers 21 bytes each
+way at multiplier 2, and reassigns one listener. Its old TCP flow closes; the
+sibling still transfers. New TCP and UDP traffic (including the old UDP peer)
+bills the replacement owner at multiplier 3. Final old-owner totals are
+`126/226/404`, and replacement totals are `24/34/114`, including its `10/20/30`
+history. Both SQLite and PostgreSQL real-core runs passed before the final gate.
+
+Ten frontend tests cover DBInbound/form/wire round trips, server-owned account
+fields, nullable legacy clients, local-only commands, required-owner navigation,
+paged search, and selected-label retention. An initial picker timeout occurred
+while Go compilation ran concurrently; an isolated serial rerun passed all ten
+in 10.46 seconds. Test syntax and sandbox startup errors are not counted as RED
+behavior evidence. The discarded remote-create fixture tried to use a deployment
+selector that existing protocol eligibility deliberately omits for Tunnel.
+
+Behavioral RED evidence is retained under `/root/task-evidence/tunnel-owner-*`:
+ignored stable-owner selection, history deletion/misattribution, missing read
+annotations and client IDs, source UUID import rejection, unprepared remote
+scope bypass, raw mirror filtering, partial update fanout, lost legacy client
+arrays/null, wrong validation tab, and missing paged selection. CI requires actual
+PASS results for the real-core test and, on PostgreSQL, the identity-lock race.
+This checkpoint does not validate all restore/replay fences, global node budgets,
+Tunnel source ACLs or every forwarding mode.
+
+The complete Go regression initially exposed a legacy node expiry failure:
+GORM `Save` allocated a nil embedded policy while assigning fields, turning an
+ordinary metadata update into an explicit default policy. The stricter raw mirror
+scope check then correctly refused the second node. A real SyncInbound regression
+and the existing legacy JSON seeder both failed for this unwanted policy creation.
+`model.SaveClientRecord` now preserves absent policy columns in all four production
+record-save paths; explicit defaults, custom values and explicit resets still
+persist. Both reproductions and the original two-node expiry test pass. CI also
+requires the policy-presence regression on SQLite and PostgreSQL.
+
+The first PostgreSQL controller-import run reused the public test schema and
+collided with its previous fixture port. The controller test now uses the existing
+per-test schema isolation helper; three consecutive runs pass. This fixture repair
+does not change production port conflict checks.
+
+Checkpoint verification (Linux arm64, Go 1.27.1, Node 26.10.0; commands run
+serially except the short isolated dependency-race reproduction):
+
+| Check | Result |
+| --- | --- |
+| Full frontend | 180 files / 1797 tests, 317.91 s suite; typecheck, lint, format, production and Storybook builds pass |
+| Final PostgreSQL owner/scope/policy-presence race set | Pass, 140.25 s command / 97.857 s service package; real core and both lock interleavings executed |
+| SQLite owner/scope/migration race set | Pass, 27.17 s command; final nil-policy regressions and original node-expiry reproduction also pass |
+| Complete shuffled panel Go suite | Pass, 287.12 s command |
+| Final real TCP/UDP owner reassignment after error-assertion lint repair | SQLite and PostgreSQL race pass, 3.197 s and 3.393 s packages |
+| Final Go static check / build | Zero lint issues, 23.92 s; build passes, 8.21 s |
+| Workflow and generated assets | `make gen-check` passes; YAML and 19 shell blocks valid; locales parse; frontend/docs OpenAPI and installed MSW worker copies match |
+| Complete repository race | Not a pass: inherited AmneziaWG timer race found; see below |
+
+The broader race gate exposed `Timer.duration` being cleared after unlocking in
+`amneziawg-go/v3 v3.1.20260828` during the existing IPv6 domain-egress test.
+The main baseline already pins this dependency; its integration sources and root
+module files are unchanged by the owner editor. An isolated real-timer regression
+reproduces the race, and moving the clear into the existing critical section passes
+ten repetitions in a temporary candidate. The reproducible repository dependency
+repair and its integrated validation are follow-up work; the candidate result does
+not establish a passing whole-repository race gate.

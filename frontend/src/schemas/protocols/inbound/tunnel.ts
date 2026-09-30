@@ -10,6 +10,7 @@ export type TunnelNetwork = z.infer<typeof TunnelNetworkSchema>;
 // flattens an internal array-of-{name,value} into that map via toV2Headers
 // with arr=false.
 export const TunnelInboundSettingsSchema = z.object({
+  clients: z.array(z.record(z.string(), z.unknown())).nullable().optional(),
   rewriteAddress: z.string().optional(),
   // AntD InputNumber writes null when cleared; accept it and collapse to
   // undefined so the field is omitted from the payload instead of crashing

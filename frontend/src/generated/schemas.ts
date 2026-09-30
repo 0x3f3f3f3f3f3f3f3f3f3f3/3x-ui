@@ -2264,6 +2264,10 @@ export const SCHEMAS: Record<string, unknown> = {
   "ClientSlim": {
     "description": "ClientSlim is the row-shape used by the clients page. It drops fields the\ntable never reads (UUID, password, auth, flow, security, reverse, tgId)\nso the list payload stays compact even when the panel manages thousands\nof clients. Modals that need the full record still call /get/:email.",
     "properties": {
+      "clientId": {
+        "example": "a6426bfc-42c6-45d6-8182-1108f7986d89",
+        "type": "string"
+      },
       "comment": {
         "example": "Primary device",
         "type": "string"
@@ -2348,6 +2352,7 @@ export const SCHEMAS: Record<string, unknown> = {
       }
     },
     "required": [
+      "clientId",
       "createdAt",
       "email",
       "enable",
@@ -3220,6 +3225,10 @@ export const SCHEMAS: Record<string, unknown> = {
       },
       "originNodeGuid": {
         "description": "OriginNodeGuid is the panelGuid of the node that physically hosts this\ninbound, propagated up across hops (#4983). Empty for an inbound that\nlives on this panel's own xray; set to the originating node's GUID when\nthe inbound was synced from a node (kept as-is across further hops). Lets\nthe master attribute a deeply nested inbound to the real node instead of\nthe intermediate one it was fetched through.",
+        "type": "string"
+      },
+      "ownerClientId": {
+        "nullable": true,
         "type": "string"
       },
       "port": {
