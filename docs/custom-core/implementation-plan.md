@@ -552,7 +552,7 @@ Primary source anchors: `frontend/src/pages/inbounds/form/protocols/accounts-lis
   owners. Preserve protected authentication when all users are disabled or
   removed. Refuse mixed owned/unowned activation until every path has a trusted
   binding; legacy accounts retain existing behavior outside managed activation.
-- [ ] Add owner selection to the existing account form with generated API/schema
+- [x] Add owner selection to the existing account form with generated API/schema
   contracts and Chinese/English strings. Validate through API, configuration
   export and backup/import paths; don't expose internal core capabilities as a
   user choice or generate unsupported subscription formats.
@@ -739,18 +739,18 @@ FormField, with independent selected-label state and shared server query cache.
 Schema validation rejects partially owned lists and owned Mixed noauth before
 save; UUID existence/remote membership remains an authoritative SQL check.
 
-- [ ] Write actual modal regressions for Mixed/HTTP alias owner selection and
+- [x] Write actual modal regressions for Mixed/HTTP alias owner selection and
   saving exact account credentials/UUIDs without settings.clients or traffic.
   Observe missing-picker RED before implementation.
-- [ ] Add paged, searched and cached owner selection. Test selected labels
+- [x] Add paged, searched and cached owner selection. Test selected labels
   outside later searches, pagination, list errors, standalone-client mutation
   invalidation, noauth/remote read-only behavior and legacy unowned saves.
-- [ ] Add failing schema/save regressions for partial ownership and owned
+- [x] Add failing schema/save regressions for partial ownership and owned
   noauth. Implement shared account checks without erasing wire credentials.
-- [ ] Verify real controller add/update/read/export JSON with canonical owners,
+- [x] Verify real controller add/update/read/export JSON with canonical owners,
   rejected unknown/remote/traffic commands and unchanged shared credentials.
   Verify single-inbound import guards without weakening them.
-- [ ] Verify full SQLite backup/dump/restore plus actual PostgreSQL migration,
+- [x] Verify full SQLite backup/dump/restore plus actual PostgreSQL migration,
   export/dump/restore preserve both aliases, owner UUID/membership, policy and
   traffic; distinguish these from portable single-inbound import.
 - [ ] Regenerate API artifacts, run frontend checks/full tests and affected

@@ -1883,3 +1883,56 @@ fixture uses a private os.MkdirTemp directory; no production guard was relaxed.
 No core/frontend source changed. Their preceding verified evidence remains
 applicable; no new full-core/frontend execution is claimed. Owner UI, generic
 lifecycle and live legacy username-counter handoff remain open.
+
+## Password account owner form and preservation checkpoint
+
+The existing Mixed/HTTP account editor selects canonical owner UUIDs from the
+paged clients API, with searched choices and invalidation below the clients
+query root. Each resource keeps its username/password. Actual modal tests save
+two aliases, reject partial ownership and owned Mixed noauth, preserve dormant
+ownership across auth changes, and cover remote/noauth read-only behavior,
+pagination, search, query failure/retry and standalone-client invalidation.
+Persisted UUIDs and known labels survive search results that omit the owner.
+Chinese/English help is translated and all locale key sets remain complete.
+
+The original five modal/schema regressions failed before implementation
+(11.29 s). One independent read-only review found the saved owner's label was
+lost after an excluding search without a new selection. Its actual-modal
+regression failed (12.23 s); the corrected guarded derived-state cache passes
+React lint without exceptions. Final focused frontend checks pass: lint
+1.21 s, format 0.53 s, typecheck 9.88 s, and 24 owner/Tunnel/locale tests
+22.91 s. The reviewer had no other important or critical finding.
+
+Real controller add/update/get/export/import tests cover both protocols,
+unchanged canonical credentials/policy/history, rotated resource credentials,
+alias reassignment and atomic rejection of unknown/remote owners, clients
+mirrors and supplied traffic. Unknown-owner import directly asserts the
+ownership error and unchanged inbound count. Single-inbound import resolves
+existing destination owners; foreign identity remapping remains unimplemented.
+SQLite backup/dump/restore and actual PostgreSQL migration/export/dump/restore
+preserve canonical UUIDs, all aliases/memberships, disabled state, policy,
+legacy traffic and the stable-ID ledger. Final shuffled race contract runs
+pass on SQLite (15.25 s) and PostgreSQL (15.99 s), requiring named PASS results.
+
+The final source-frozen default `make verify` passed generation, linters,
+format, types, MSW freshness and all Go tests (service 119.213 s), plus the
+explicit AmneziaWG device package. The frontend run passed 1841/1842 tests;
+one existing client-policy form test exceeded its unchanged 5 s limit.
+All twelve tests in that file passed when repeated in isolation (31.41 s).
+The full suite passes with the installed CLI's `--maxWorkers=1`: 187 files,
+1842 tests, 502.50 s wall time (Vitest duration 499.38 s). Repository concurrency,
+timeouts and assertions are unchanged. Frontend/panel/Storybook builds pass
+24.11 s, vet 3.38 s, and the full affected shuffled race packages pass 107.06 s:
+database 80.959 s and controller 19.600 s. Combined with the source-frozen
+pre-frontend gate stages, every required constituent passes; default
+`make verify` itself remains a failed run. Final production source hashes match
+the reviewed version. CI YAML and all 31 Bash blocks parse; no remote CI run is
+claimed. Evidence is under `/root/task-evidence/password-owner-ui-`, including
+`default-workers-gate-results.json`, `serial-gate-results.json`,
+`reviewed-contracts.json` and `review.json`.
+
+Earlier failed runs remain in the evidence directory: initial concurrent
+frontend/source-change run, effect-cache lint rejection and source-frozen
+default-worker timeout. Default, isolated and serial runs have different observed timings; the exact
+source of each timeout has not been proven. Clean-source artifact provenance is recorded separately in deployment.md. Generic lifecycle, live legacy alias-counter
+handoff, anonymous ownership and portable import remapping remain open.

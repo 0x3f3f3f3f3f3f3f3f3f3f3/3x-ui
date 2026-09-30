@@ -5530,7 +5530,7 @@
         "tags": [
           "Inbounds"
         ],
-        "summary": "Fetch a single inbound by numeric ID. Tunnel responses include ownerClientId when an authoritative client membership exists.",
+        "summary": "Fetch a single inbound by numeric ID. Tunnel responses include ownerClientId when an authoritative client membership exists. Mixed/HTTP settings.accounts retain each resource credential and its canonical ownerClientId when selected.",
         "operationId": "get_panel_api_inbounds_get_id",
         "parameters": [
           {
@@ -5571,7 +5571,7 @@
         "tags": [
           "Inbounds"
         ],
-        "summary": "Create a new inbound. Send the full inbound payload (protocol, port, settings, streamSettings, sniffing, remark, expiryTime, total, enable). settings, streamSettings, and sniffing may be sent as nested JSON objects (preferred) or as JSON-encoded strings (legacy). A local Tunnel may include ownerClientId (an existing stable client UUID); the server resolves the canonical owner atomically, ignores settings.clients from the request, and rejects nonempty clientStats or owners with remote bindings. Tunnel settings.allowedSourceCidrs accepts up to 256 native IPv4/IPv6 CIDRs; omitted, null or empty allows every source. A nonempty ACL requires a local raw TCP/UDP listener (ordinary TCP TLS is supported) and a canonical owner while enabled. PROXY protocol, other transports and masks are rejected before saving. Use the exact allowedSourceCidrs spelling. Tunnel settings.outboundTag selects one concrete template or active subscription outbound; omitted, null or empty uses routing rules, including balancers. Enabled fixed selections require a canonical local owner. Missing or ambiguous selected tags reject saving or re-enabling. If the selected outbound is removed later, the saved selection remains and forwarding fails when that configuration is applied; it never silently changes to the default outbound. Use the exact outboundTag spelling.",
+        "summary": "Create a new inbound. Send the full inbound payload (protocol, port, settings, streamSettings, sniffing, remark, expiryTime, total, enable). settings, streamSettings, and sniffing may be sent as nested JSON objects (preferred) or as JSON-encoded strings (legacy). For local Mixed/HTTP proxies, settings.accounts[].ownerClientId selects an existing canonical client UUID for each resource-specific user/pass. If one active account selects an owner, all active accounts must do so; Mixed requires auth=password. Shared client credentials and policy are not copied into these accounts. Nonempty settings.clients or clientStats, unknown UUIDs and owners with remote bindings are rejected. A local Tunnel may include ownerClientId (an existing stable client UUID); the server resolves the canonical owner atomically, ignores settings.clients from the request, and rejects nonempty clientStats or owners with remote bindings. Tunnel settings.allowedSourceCidrs accepts up to 256 native IPv4/IPv6 CIDRs; omitted, null or empty allows every source. A nonempty ACL requires a local raw TCP/UDP listener (ordinary TCP TLS is supported) and a canonical owner while enabled. PROXY protocol, other transports and masks are rejected before saving. Use the exact allowedSourceCidrs spelling. Tunnel settings.outboundTag selects one concrete template or active subscription outbound; omitted, null or empty uses routing rules, including balancers. Enabled fixed selections require a canonical local owner. Missing or ambiguous selected tags reject saving or re-enabling. If the selected outbound is removed later, the saved selection remains and forwarding fails when that configuration is applied; it never silently changes to the default outbound. Use the exact outboundTag spelling.",
         "operationId": "post_panel_api_inbounds_add",
         "requestBody": {
           "required": true,
@@ -5767,7 +5767,7 @@
         "tags": [
           "Inbounds"
         ],
-        "summary": "Replace an inbound’s configuration. Body shape mirrors /add. For a local Tunnel, ownerClientId atomically selects an existing stable client without changing that account or resetting its history. Omit the field for legacy settings-based editing. Source ACL and fixed outbound validation match /add. Narrowing the ACL, changing a fixed outbound or clearing it to resume routing replaces this listener and terminates its old TCP/UDP flows while other listeners remain active. Heavy on inbounds with thousands of clients — prefer /setEnable for enable-only flips.",
+        "summary": "Replace an inbound’s configuration. Body shape mirrors /add. For a local Tunnel, ownerClientId atomically selects an existing stable client without changing that account or resetting its history. Omit the field for legacy settings-based editing. Mixed/HTTP account owners follow /add validation; resource credential edits preserve shared client credentials and history. Managed account-only changes revoke the changed owner’s proxy alias sessions while other owners and its Tunnel bindings continue. Source ACL and fixed outbound validation match /add. Narrowing the ACL, changing a fixed outbound or clearing it to resume routing replaces this listener and terminates its old TCP/UDP flows while other listeners remain active. Heavy on inbounds with thousands of clients — prefer /setEnable for enable-only flips.",
         "operationId": "post_panel_api_inbounds_update_id",
         "parameters": [
           {
@@ -6078,7 +6078,7 @@
         "tags": [
           "Inbounds"
         ],
-        "summary": "Bulk-import an inbound from a JSON blob (e.g. one exported via the UI). The body uses form encoding with a single \"data\" field. Any ownerClientId annotation from the source panel is ignored; settings and exported client statistics remain portable.",
+        "summary": "Bulk-import an inbound from a JSON blob (e.g. one exported via the UI). The body uses form encoding with a single \"data\" field. The top-level Tunnel ownerClientId read annotation from the source panel is ignored; Tunnel settings and exported client statistics remain portable. Nested Mixed/HTTP account ownerClientId values must resolve to existing local destination clients, and nonempty clientStats is rejected for owned password accounts. Use a complete database backup/restore to preserve canonical identities, memberships and history together; single-inbound import does not remap foreign owner UUIDs.",
         "operationId": "post_panel_api_inbounds_import",
         "requestBody": {
           "required": true,

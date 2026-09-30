@@ -37,4 +37,53 @@ describe('password proxy account ownership form', () => {
     );
     expect(JSON.parse(formValuesToWirePayload(parsed).settings).requireAuthentication).toBe(true);
   });
+
+  it.each(['mixed', 'http'] as const)('rejects partially owned %s account lists', (protocol) => {
+    const result = InboundFormSchema.safeParse(
+      rawInboundToFormValues({
+        protocol,
+        port: 1080,
+        settings: {
+          auth: 'password',
+          accounts: [
+            { user: 'owned', pass: 'owned-password', ownerClientId },
+            { user: 'unowned', pass: 'unowned-password' },
+          ],
+        },
+      }),
+    );
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: ['settings', 'accounts', 1, 'ownerClientId'],
+            message: 'pages.inbounds.form.ownerClientRequired',
+          }),
+        ]),
+      );
+    }
+  });
+
+  it('rejects owned Mixed noauth without discarding stored credentials', () => {
+    const values = rawInboundToFormValues({
+      protocol: 'mixed',
+      port: 1080,
+      settings: { auth: 'noauth', accounts: [{ user: 'owned', pass: 'secret', ownerClientId }] },
+    });
+    const result = InboundFormSchema.safeParse(values);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: ['settings', 'auth'],
+            message: 'pages.inbounds.form.passwordOwnerRequiresAuth',
+          }),
+        ]),
+      );
+    }
+    if (values.protocol !== 'mixed') throw new Error('fixture did not retain Mixed protocol');
+    expect(values.settings.accounts).toEqual([{ user: 'owned', pass: 'secret', ownerClientId }]);
+  });
 });

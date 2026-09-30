@@ -208,7 +208,8 @@ readable because native authentication ignores it; the next write removes it.
 Owned Mixed-to-empty-HTTP conversion retains required authentication. Ordinary
 unowned conversion retains upstream compatibility without introducing a custom
 core requirement. Frontend schemas preserve owner UUIDs and required-auth
-markers through normal form edits; owner selection UI remains unfinished.
+markers through normal form edits. The later owner selection checkpoint verifies
+the picker and preservation paths; generic lifecycle remains unfinished.
 
 Task 5B1 kept both managed compilation and unmanaged activation of owned
 accounts gated. Task 5B2 verifies canonical managed runtime generation;
@@ -297,3 +298,7 @@ canonical traffic mirrors; it does not infer foreign-panel identity. A complete
 database backup/restore or cross-database migration preserves canonical UUIDs,
 memberships, credentials, policy and history together. Verify those paths
 separately. Portable ownership remapping and generic lifecycle are later work.
+
+Task 5B4 verifies this form and preservation contract with actual modal, API,
+SQLite backup and PostgreSQL migration/export/restore tests. Generic owner
+lifecycle, live legacy handoff and foreign-owner remapping remain unfinished.

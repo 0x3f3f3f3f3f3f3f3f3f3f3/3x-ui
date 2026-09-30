@@ -10,8 +10,8 @@ This is the initial source-audit matrix, not a support announcement. `E/U` = exi
 | VMess | E/U both | E/U | I/V scoped TCP/UDP/Mux identity, shared rate/billing/live close; production activation N | complete account lifecycle and independent client regression |
 | Trojan | E/U both | E/U | I/V scoped TCP/UDP/Mux identity, shared rate/billing/live close; production activation N | fallback and complete account lifecycle |
 | Shadowsocks/2022 | E/U both | E/U | classic AEAD TCP/UDP/Mux scoped I/V; 2022 managed identity N | other cipher variants, 2022 user-update isolation/relay, complete lifecycle |
-| Mixed/SOCKS | existing inbound/outbound; native authenticated core increment I/V | native typed CRUD/alias revocation and idle/active UDP cleanup I/V; panel owner persistence/read guards, form metadata preservation, canonical runtime configuration and scoped managed grouped credential edits I/V; owner UI/full lifecycle/export N | scoped password-auth TCP/UDP stable ID and shared directional rate/billing/live close I/V; generated SOCKS/CONNECT plus Tunnel shared ledger I/V; anonymous resource ownership and full panel lifecycle N | legacy counter migration, managed idle policy control, full protocol matrix |
-| HTTP | existing inbound/outbound; native authenticated core increment I/V | native CRUD, empty required-auth and request identity isolation I/V; panel owner persistence/read guards, form metadata preservation, canonical runtime configuration and scoped managed grouped credential edits I/V; owner UI/full lifecycle/export N | scoped CONNECT and plain-request stable ID/accounting/live close I/V; generated CONNECT plus Tunnel shared ledger I/V; full panel lifecycle N | legacy counter migration, managed idle policy control, full protocol matrix |
+| Mixed/SOCKS | existing inbound/outbound; native authenticated core increment I/V | native typed CRUD/alias revocation and idle/active UDP cleanup I/V; panel owner persistence/read guards, form metadata preservation, canonical runtime configuration and scoped managed grouped credential edits I/V; owner picker, JSON API/export and full-database preservation I/V; generic lifecycle and portable foreign-owner import N | scoped password-auth TCP/UDP stable ID and shared directional rate/billing/live close I/V; generated SOCKS/CONNECT plus Tunnel shared ledger I/V; anonymous resource ownership and full panel lifecycle N | legacy counter migration, managed idle policy control, full protocol matrix |
+| HTTP | existing inbound/outbound; native authenticated core increment I/V | native CRUD, empty required-auth and request identity isolation I/V; panel owner persistence/read guards, form metadata preservation, canonical runtime configuration and scoped managed grouped credential edits I/V; owner picker, JSON API/export and full-database preservation I/V; generic lifecycle and portable foreign-owner import N | scoped CONNECT and plain-request stable ID/accounting/live close I/V; generated CONNECT plus Tunnel shared ledger I/V; full panel lifecycle N | legacy counter migration, managed idle policy control, full protocol matrix |
 | Hysteria2 | E/U both | E/U | N | QUIC/mux/UDP and auth updates |
 | WireGuard | E/U both | E/U | N | per-peer identity, IP/payload accounting distinction |
 | TUN | E/U inbound | no account auth; resource identity required | N | packet semantics, route and owner mapping |
@@ -202,3 +202,11 @@ all protocol rows from the narrower fixtures.
 | Inbound: all remaining address/transport modes | I/U or E/U | Fixed-outbound tests here use IPv4 raw TCP/UDP; separate ACL IPv6/TLS evidence does not prove every fixed-outbound mode |
 | Outbound: Tunnel as a proxy protocol | NA | Tunnel is a forwarding listener, selects existing outbounds |
 | Distribution / whole-system single core | N | Original installers/sidecars and panel-side AmneziaWG remain; no process/deployment parity claim |
+
+Password owner UI checkpoint: actual Mixed/HTTP modal, schema, paged client
+queries and API contracts are verified. Full database backup/migration restores
+canonical UUIDs, memberships, credentials, policy and history. Single-inbound
+JSON resolves existing destination owners and rejects unknown owners or supplied
+traffic; foreign-owner remapping is N. Generic lifecycle and live username-based
+legacy handoff remain N. See testing.md for the complete split validation gate,
+including the retained default-worker timeout.
