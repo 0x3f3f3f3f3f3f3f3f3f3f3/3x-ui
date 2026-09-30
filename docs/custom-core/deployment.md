@@ -122,8 +122,6 @@ build/custom-xray policy-init -file /private/path/policy.db -instance panel-assi
 Set `clientPolicy.stateFile` to that path and `clientPolicy.instanceId` to the same ID, alongside `policies`. Existing, missing, corrupt, mismatched or locked state must not be deleted/reinitialized to bypass an error. Lost state requires authoritative ledger reconciliation; that workflow is not implemented yet. Keep the state on durable local storage; installer/Docker volume setup and backup fencing remain open.
 
 
-## Interrupted live handoff
-
 ### Clean-source grouped password hot-change checkpoint build
 
 Commit `6f9705206d81ea772ba082c8f6607d45c8aef098` was rebuilt from a new
@@ -145,7 +143,7 @@ Evidence: `/root/task-evidence/password-hot-clean-build-results.json` and
 are verified. Owner UI, generic lifecycle and legacy username-counter handoff
 remain open. No installation or production deployment was performed.
 
-### Interrupted live handoff recovery
+## Interrupted live handoff
 
 A live legacy-to-managed transition records its old child boot in the panel SQL
 source before draining. Back up this source together with `legacy_traffic_receipts`,

@@ -718,3 +718,41 @@ read-only review found no findings. The fork feature branch's remote SHA
 matched the implementation exactly. A fresh clean-source build passed and
 preserved distinct artifacts; provenance is recorded in deployment.md. Owner
 selection UI, generic lifecycle and live legacy counter handoff remain open.
+
+### Task 5B4: Password account owner form and preservation contracts
+
+Spec: architecture.md, "Password account owner selection". Execute inline.
+Ruling: add selection to existing account rows; reuse the paged clients API and
+existing query invalidation, without changing the verified Tunnel form.
+Keep legacy unowned editing. Source-owned single-inbound JSON must not bypass
+canonical identity/traffic guards; portable remapping remains separate.
+
+Files: new `frontend/src/pages/inbounds/form/protocols/password-account-owner.tsx`
+and actual form tests; modify `accounts-list.tsx`, `api/queryKeys.ts`, Mixed/HTTP
+settings schemas, shared account validation and translation JSON files.
+Update `pages/api-docs/endpoints.ts` and regenerate existing API artifacts.
+Add controller contract and database backup/migration preservation tests.
+
+Interface: `PasswordAccountOwner({ index, disabled }: { index: number;
+disabled: boolean })` binds `settings.accounts[index].ownerClientId` through
+FormField, with independent selected-label state and shared server query cache.
+Schema validation rejects partially owned lists and owned Mixed noauth before
+save; UUID existence/remote membership remains an authoritative SQL check.
+
+- [ ] Write actual modal regressions for Mixed/HTTP alias owner selection and
+  saving exact account credentials/UUIDs without settings.clients or traffic.
+  Observe missing-picker RED before implementation.
+- [ ] Add paged, searched and cached owner selection. Test selected labels
+  outside later searches, pagination, list errors, standalone-client mutation
+  invalidation, noauth/remote read-only behavior and legacy unowned saves.
+- [ ] Add failing schema/save regressions for partial ownership and owned
+  noauth. Implement shared account checks without erasing wire credentials.
+- [ ] Verify real controller add/update/read/export JSON with canonical owners,
+  rejected unknown/remote/traffic commands and unchanged shared credentials.
+  Verify single-inbound import guards without weakening them.
+- [ ] Verify full SQLite backup/dump/restore plus actual PostgreSQL migration,
+  export/dump/restore preserve both aliases, owner UUID/membership, policy and
+  traffic; distinguish these from portable single-inbound import.
+- [ ] Regenerate API artifacts, run frontend checks/full tests and affected
+  Go/race/database checks. Review once, record scoped evidence, commit/push and
+  verify exact remote SHA. Owner lifecycle/handoff remain open.

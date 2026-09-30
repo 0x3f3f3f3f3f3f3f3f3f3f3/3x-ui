@@ -269,3 +269,31 @@ successful saves. A lost acknowledgement after actual handler mutation stops
 the whole core through the existing safety boundary; restart uses saved
 credentials without replaying usage. UI, generic lifecycle and legacy
 username-counter handoff remain separate work.
+
+## Password account owner selection
+
+Use the existing Mixed/HTTP account editor and client pagination API. Each
+resource credential selects a canonical client UUID; labels are display-only.
+Two aliases may select the same client. Never copy that client's shared
+password, UUID, policy or traffic into the resource command. Legacy unowned
+accounts remain editable. Once any row selects an owner, every active row
+requires an owner. Mixed ownership requires password authentication; switching
+authentication does not silently delete ownership or credentials.
+
+Owner choices use 25-row pages and 300 ms server-search debounce, keyed below
+the existing clients query root so client mutations invalidate them. Preserve
+a selected UUID even when its row is outside the loaded/search result, and
+preserve its selected display label across searches. Remote listeners and
+Mixed noauth listeners do not request local choices and keep selection read-only.
+Use Chinese/English help explaining shared limits and resource credentials;
+maintain the repository's complete locale key set.
+
+Keep the existing JSON API settings contract; document nested
+`settings.accounts[].ownerClientId`, whole-list ownership and local-only
+validation. The server remains authoritative for UUID resolution and scope.
+JSON configuration export preserves resource credentials and owner UUIDs.
+Single-inbound import still validates destination owners and rejects supplied
+canonical traffic mirrors; it does not infer foreign-panel identity. A complete
+database backup/restore or cross-database migration preserves canonical UUIDs,
+memberships, credentials, policy and history together. Verify those paths
+separately. Portable ownership remapping and generic lifecycle are later work.
