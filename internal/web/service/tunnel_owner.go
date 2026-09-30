@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -83,7 +84,10 @@ func (s *ClientService) syncTunnelOwnerLink(tx *gorm.DB, inboundID int, owner *m
 	if _, err := validateTunnelOwnerLinks(tx, inboundID, []model.Client{*owner.ToClient()}, nil, true); err != nil {
 		return err
 	}
-	return s.reconcileInboundLinks(tx, inboundID, map[int]string{owner.Id: ""}, []int{owner.Id}, nil, true)
+	if err := s.reconcileInboundLinks(tx, inboundID, map[int]string{owner.Id: ""}, []int{owner.Id}, nil, true); err != nil {
+		return err
+	}
+	return validateStoredTunnelSourceACLOwner(tx, inboundID)
 }
 
 func preserveDetachedTunnelOwnerTraffic(tx *gorm.DB, inboundID int, email string) (bool, error) {
@@ -102,6 +106,57 @@ func preserveDetachedTunnelOwnerTraffic(tx *gorm.DB, inboundID int, email string
 	err := tx.Model(&xray.ClientTraffic{}).Where("email = ? AND inbound_id = ?", email, inboundID).
 		Update("inbound_id", sibling.InboundId).Error
 	return true, err
+}
+
+// Final deletion rechecks canonical memberships created after the fanout snapshot.
+func deleteClientLinksAndDisableTunnels(tx *gorm.DB, clientIDs []int) (bool, error) {
+	candidates := make(map[int]struct{})
+	for _, batch := range chunkInts(clientIDs, sqlInChunk) {
+		var ids []int
+		if err := tx.Table("inbounds i").Select("i.id").Joins("JOIN client_inbounds ci ON ci.inbound_id = i.id").
+			Where("i.protocol = ? AND ci.client_id IN ?", model.Tunnel, batch).Pluck("i.id", &ids).Error; err != nil {
+			return false, err
+		}
+		for _, id := range ids {
+			candidates[id] = struct{}{}
+		}
+	}
+	ids := make([]int, 0, len(candidates))
+	for id := range candidates {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	var tunnels []model.Inbound
+	for _, batch := range chunkInts(ids, sqlInChunk) {
+		var rows []model.Inbound
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id", "enable", "node_id").
+			Where("id IN ? AND protocol = ?", batch, model.Tunnel).Order("id").Find(&rows).Error; err != nil {
+			return false, err
+		}
+		tunnels = append(tunnels, rows...)
+	}
+	for _, batch := range chunkInts(clientIDs, sqlInChunk) {
+		if err := tx.Where("client_id IN ?", batch).Delete(&model.ClientInbound{}).Error; err != nil {
+			return false, err
+		}
+	}
+	localChanged := false
+	for _, tunnel := range tunnels {
+		linked := tx.Model(&model.ClientInbound{}).Select("1").Where("inbound_id = ?", tunnel.Id)
+		changed := tx.Model(&model.Inbound{}).Where("id = ? AND enable = ? AND NOT EXISTS (?)", tunnel.Id, true, linked).Update("enable", false)
+		if changed.Error != nil {
+			return false, changed.Error
+		}
+		if changed.RowsAffected == 0 {
+			continue
+		}
+		if tunnel.NodeID == nil {
+			localChanged = true
+		} else if err := (&NodeService{}).MarkNodeDirtyTx(tx, *tunnel.NodeID); err != nil {
+			return false, err
+		}
+	}
+	return localChanged, nil
 }
 
 func annotateTunnelOwners(db *gorm.DB, inbounds []*model.Inbound) error {

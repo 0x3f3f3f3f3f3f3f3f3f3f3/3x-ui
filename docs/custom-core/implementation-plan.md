@@ -395,3 +395,17 @@ and exact billed totals on both databases. Owner choices share client cache
 invalidation so creating an account refreshes an already cached empty list.
 Tunnel source ACL/routing-mode coverage and the other remaining goal items are
 still open.
+
+
+Task 6 source ACL checkpoint: the existing Tunnel form
+and API carry up to 256 native IPv4/IPv6 source CIDRs. The same core validates
+JSON/typed transports and checks physical peers before dispatch/accounting;
+capability negotiation prevents older cores ignoring the ACL. Create/update,
+startup restoration and re-enable enforce local canonical ownership. Final
+client deletion checks canonical links again after fanout and reconciles removed
+listeners, including concurrent attachments and stale embedded client lists.
+Scoped real IPv4/IPv6 TCP/UDP/TLS and panel hot-replacement checks pass. Full
+make verify/race, core unit/scoped race and construction race gates pass;
+commands, results and final review are recorded in testing.md.
+Routing/outbound selection UI, additional forwarding modes and unowned migration,
+other requested protocols, distributed policy and packaging remain open.

@@ -54,8 +54,13 @@ _openapi:
         may include ownerClientId (an existing stable client UUID); the server
         resolves the canonical owner atomically, ignores settings.clients from
         the request, and rejects nonempty clientStats or owners with remote
-        bindings.
-      url: '#create-a-new-inbound-send-the-full-inbound-payload-protocol-port-settings-streamsettings-sniffing-remark-expirytime-total-enable-settings-streamsettings-and-sniffing-may-be-sent-as-nested-json-objects-preferred-or-as-json-encoded-strings-legacy-a-local-tunnel-may-include-ownerclientid-an-existing-stable-client-uuid-the-server-resolves-the-canonical-owner-atomically-ignores-settingsclients-from-the-request-and-rejects-nonempty-clientstats-or-owners-with-remote-bindings'
+        bindings. Tunnel settings.allowedSourceCidrs accepts up to 256 native
+        IPv4/IPv6 CIDRs; omitted, null or empty allows every source. A nonempty
+        ACL requires a local raw TCP/UDP listener (ordinary TCP TLS is
+        supported) and a canonical owner while enabled. PROXY protocol, other
+        transports and masks are rejected before saving. Use the exact
+        allowedSourceCidrs spelling.
+      url: '#create-a-new-inbound-send-the-full-inbound-payload-protocol-port-settings-streamsettings-sniffing-remark-expirytime-total-enable-settings-streamsettings-and-sniffing-may-be-sent-as-nested-json-objects-preferred-or-as-json-encoded-strings-legacy-a-local-tunnel-may-include-ownerclientid-an-existing-stable-client-uuid-the-server-resolves-the-canonical-owner-atomically-ignores-settingsclients-from-the-request-and-rejects-nonempty-clientstats-or-owners-with-remote-bindings-tunnel-settingsallowedsourcecidrs-accepts-up-to-256-native-ipv4ipv6-cidrs-omitted-null-or-empty-allows-every-source-a-nonempty-acl-requires-a-local-raw-tcpudp-listener-ordinary-tcp-tls-is-supported-and-a-canonical-owner-while-enabled-proxy-protocol-other-transports-and-masks-are-rejected-before-saving-use-the-exact-allowedsourcecidrs-spelling'
     - depth: 2
       title: Delete an inbound by ID. Also removes its associated client stats rows.
       url: '#delete-an-inbound-by-id-also-removes-its-associated-client-stats-rows'
@@ -68,13 +73,17 @@ _openapi:
       title: Replace an inbound’s configuration. Body shape mirrors /add. For a local
         Tunnel, ownerClientId atomically selects an existing stable client
         without changing that account or resetting its history. Omit the field
-        for legacy settings-based editing. Heavy on inbounds with thousands of
+        for legacy settings-based editing. Source ACL validation matches /add;
+        narrowing replaces this listener and terminates its old TCP/UDP flows
+        while other listeners remain active. Heavy on inbounds with thousands of
         clients — prefer /setEnable for enable-only flips.
-      url: '#replace-an-inbounds-configuration-body-shape-mirrors-add-for-a-local-tunnel-ownerclientid-atomically-selects-an-existing-stable-client-without-changing-that-account-or-resetting-its-history-omit-the-field-for-legacy-settings-based-editing-heavy-on-inbounds-with-thousands-of-clients--prefer-setenable-for-enable-only-flips'
+      url: '#replace-an-inbounds-configuration-body-shape-mirrors-add-for-a-local-tunnel-ownerclientid-atomically-selects-an-existing-stable-client-without-changing-that-account-or-resetting-its-history-omit-the-field-for-legacy-settings-based-editing-source-acl-validation-matches-add-narrowing-replaces-this-listener-and-terminates-its-old-tcpudp-flows-while-other-listeners-remain-active-heavy-on-inbounds-with-thousands-of-clients--prefer-setenable-for-enable-only-flips'
     - depth: 2
       title: Toggle only the enable flag without serialising the whole settings JSON.
-        Recommended for UI switches on large inbounds.
-      url: '#toggle-only-the-enable-flag-without-serialising-the-whole-settings-json-recommended-for-ui-switches-on-large-inbounds'
+        Recommended for UI switches on large inbounds. Enabling a Tunnel with a
+        nonempty source ACL rechecks its canonical owner and supported transport
+        in the same transaction.
+      url: '#toggle-only-the-enable-flag-without-serialising-the-whole-settings-json-recommended-for-ui-switches-on-large-inbounds-enabling-a-tunnel-with-a-nonempty-source-acl-rechecks-its-canonical-owner-and-supported-transport-in-the-same-transaction'
     - depth: 2
       title: Set only the subscription sort order. Reads the stored inbound, so a
         reorder cannot carry a stale client list over a concurrent edit.
@@ -157,8 +166,13 @@ _openapi:
           Tunnel may include ownerClientId (an existing stable client UUID); the
           server resolves the canonical owner atomically, ignores
           settings.clients from the request, and rejects nonempty clientStats or
-          owners with remote bindings.
-        id: create-a-new-inbound-send-the-full-inbound-payload-protocol-port-settings-streamsettings-sniffing-remark-expirytime-total-enable-settings-streamsettings-and-sniffing-may-be-sent-as-nested-json-objects-preferred-or-as-json-encoded-strings-legacy-a-local-tunnel-may-include-ownerclientid-an-existing-stable-client-uuid-the-server-resolves-the-canonical-owner-atomically-ignores-settingsclients-from-the-request-and-rejects-nonempty-clientstats-or-owners-with-remote-bindings
+          owners with remote bindings. Tunnel settings.allowedSourceCidrs
+          accepts up to 256 native IPv4/IPv6 CIDRs; omitted, null or empty
+          allows every source. A nonempty ACL requires a local raw TCP/UDP
+          listener (ordinary TCP TLS is supported) and a canonical owner while
+          enabled. PROXY protocol, other transports and masks are rejected
+          before saving. Use the exact allowedSourceCidrs spelling.
+        id: create-a-new-inbound-send-the-full-inbound-payload-protocol-port-settings-streamsettings-sniffing-remark-expirytime-total-enable-settings-streamsettings-and-sniffing-may-be-sent-as-nested-json-objects-preferred-or-as-json-encoded-strings-legacy-a-local-tunnel-may-include-ownerclientid-an-existing-stable-client-uuid-the-server-resolves-the-canonical-owner-atomically-ignores-settingsclients-from-the-request-and-rejects-nonempty-clientstats-or-owners-with-remote-bindings-tunnel-settingsallowedsourcecidrs-accepts-up-to-256-native-ipv4ipv6-cidrs-omitted-null-or-empty-allows-every-source-a-nonempty-acl-requires-a-local-raw-tcpudp-listener-ordinary-tcp-tls-is-supported-and-a-canonical-owner-while-enabled-proxy-protocol-other-transports-and-masks-are-rejected-before-saving-use-the-exact-allowedsourcecidrs-spelling
       - content: Delete an inbound by ID. Also removes its associated client stats rows.
         id: delete-an-inbound-by-id-also-removes-its-associated-client-stats-rows
       - content: Delete many inbounds in one call. Processes the list sequentially;
@@ -168,12 +182,16 @@ _openapi:
       - content: Replace an inbound’s configuration. Body shape mirrors /add. For a
           local Tunnel, ownerClientId atomically selects an existing stable
           client without changing that account or resetting its history. Omit
-          the field for legacy settings-based editing. Heavy on inbounds with
-          thousands of clients — prefer /setEnable for enable-only flips.
-        id: replace-an-inbounds-configuration-body-shape-mirrors-add-for-a-local-tunnel-ownerclientid-atomically-selects-an-existing-stable-client-without-changing-that-account-or-resetting-its-history-omit-the-field-for-legacy-settings-based-editing-heavy-on-inbounds-with-thousands-of-clients--prefer-setenable-for-enable-only-flips
+          the field for legacy settings-based editing. Source ACL validation
+          matches /add; narrowing replaces this listener and terminates its old
+          TCP/UDP flows while other listeners remain active. Heavy on inbounds
+          with thousands of clients — prefer /setEnable for enable-only flips.
+        id: replace-an-inbounds-configuration-body-shape-mirrors-add-for-a-local-tunnel-ownerclientid-atomically-selects-an-existing-stable-client-without-changing-that-account-or-resetting-its-history-omit-the-field-for-legacy-settings-based-editing-source-acl-validation-matches-add-narrowing-replaces-this-listener-and-terminates-its-old-tcpudp-flows-while-other-listeners-remain-active-heavy-on-inbounds-with-thousands-of-clients--prefer-setenable-for-enable-only-flips
       - content: Toggle only the enable flag without serialising the whole settings
-          JSON. Recommended for UI switches on large inbounds.
-        id: toggle-only-the-enable-flag-without-serialising-the-whole-settings-json-recommended-for-ui-switches-on-large-inbounds
+          JSON. Recommended for UI switches on large inbounds. Enabling a Tunnel
+          with a nonempty source ACL rechecks its canonical owner and supported
+          transport in the same transaction.
+        id: toggle-only-the-enable-flag-without-serialising-the-whole-settings-json-recommended-for-ui-switches-on-large-inbounds-enabling-a-tunnel-with-a-nonempty-source-acl-rechecks-its-canonical-owner-and-supported-transport-in-the-same-transaction
       - content: Set only the subscription sort order. Reads the stored inbound, so a
           reorder cannot carry a stale client list over a concurrent edit.
         id: set-only-the-subscription-sort-order-reads-the-stored-inbound-so-a-reorder-cannot-carry-a-stale-client-list-over-a-concurrent-edit

@@ -1235,3 +1235,117 @@ suite. No production code changed during this final serial gate.
 Final `make gen-check` passes; the frontend/docs OpenAPI copies and the installed
 MSW worker match, all 13 locale JSON files parse, and workflow YAML plus all
 19 shell blocks validate. The staged diff has no whitespace errors.
+
+### Tunnel physical-source CIDR ACL (2026-09-30)
+
+Environment: Linux ARM64, two CPUs, Go 1.27.1, Node 26.10.0, the managed Xray
+26.9.9-custom.1 source. Tests run serially with `GOFLAGS=-p=1`. The candidate
+binary reports `0878e1e1986a633d597966ef0d758457d337afff-dirty`; the actual older
+custom-core fixture reports `23b1b4b` and lacks `tunnel-source-acl-v1`. Build the
+candidate using `bash tools/build-custom-core.sh /tmp/custom-xray-source-acl-test`.
+CI additionally builds an overlay fixture that removes only the ACL capability,
+and explicitly requires each new process/service test to report PASS.
+
+Core behavioral RED tests first showed invalid CIDRs and unsafe transports being
+accepted, and disallowed IPv4/IPv6 TCP/UDP peers reaching the echo target. A
+verified-TLS test also showed a disallowed peer completing its handshake. Shared
+JSON and typed-construction validation plus the pre-dispatch peer check make the
+regressions pass. An additional typed `localhost` receiver with no port list was
+accepted as a Unix listener before the port guard; zero/empty/nil/reversed and
+out-of-range port cases now fail configuration validation. Valid raw TCP/UDP,
+ordinary verified TLS, no-op headers and normal localhost remain supported.
+PROXY socket/raw settings, WebSocket/HTTPUpgrade/XHTTP, custom headers, transport
+masks and mapped IPv6 prefixes are rejected when the ACL is nonempty. Effective
+`method` and raw-versus-legacy settings precedence are tested.
+
+The real IPv4 and IPv6 tests independently count target TCP accepts and UDP
+packets. Three allowed six-byte echoes across TCP, UDP and a sibling listener
+produce exactly 18 upload / 18 download / 54 billed bytes at multiplier 1.5.
+Disallowed sources reach neither the target nor the policy ledger. Replacing the
+handler closes its old TCP flow and rejects old/new UDP and new TCP from the now
+excluded source. The sibling stays alive and another six-byte echo advances the
+same ledger to exactly 24 / 24 / 72. The TLS test validates a generated certificate
+against an explicit trust root and bills plaintext payload, not TLS framing.
+
+Panel RED tests showed invalid create/update configuration being committed,
+ownerless ACL listeners being enabled, and restored invalid rows reaching config
+generation. Review then found that case-insensitive core JSON fields could bypass
+the panel's exact map lookup. Regressions cover one alternate spelling and both
+orders of mixed empty/nonempty spellings, including startup restoration. The
+panel now rejects noncanonical spellings before mutation, avoiding map reordering
+changing the effective ACL. Re-enable checks the canonical owner transactionally;
+detach retains the ACL while disabling the last-owner listener.
+
+Deletion regressions cover stale embedded client lists and a new canonical
+attachment created after the deletion membership snapshot, through the actual
+single and bulk APIs. Final cleanup locks current Tunnel rows in ascending order,
+deletes canonical memberships and disables newly ownerless listeners atomically.
+It performs one postcommit reconciliation after revocation. A real process test
+proves both listening ports become reusable, the deleted owner's established TCP
+flow closes, its tag disappears from the live config, and another client's
+connection survives without a core restart. The stale-settings bulk path was
+already correct; an initial raw-string assertion failed solely because JSON was
+reformatted and was corrected to compare the saved settings semantically.
+
+The real panel hot-narrowing test starts with historical 100 upload / 200 download
+/ 300 billed bytes and multiplier 2. Three six-byte echoes produce 118 / 218 / 372.
+Invalid normal and mixed-case ACL updates leave the database and live flows
+unchanged. Two more echoes precede narrowing; rejected sources leave totals at
+130 / 230 / 420 and the UDP target has seen exactly one datagram. The newly
+allowed source and surviving sibling bring totals to 148 / 248 / 492 and two UDP
+datagrams. The core boot identity is unchanged. Actual older/current-core startup
+checks reject the missing capability before preparation or any business listener;
+hot AddInbound rejects before HandlerService mutation, even without clientId.
+
+Focused commands and observed results:
+
+```sh
+# From core/xray: real IPv4/IPv6, TLS, JSON and typed configuration.
+GOTOOLCHAIN=go1.27.1 GOFLAGS=-p=1 go test -race -count=1 -v \
+  ./infra/conf ./testing/policy -run TestTunnelSourceACL
+# From the repository root, with the two binaries described above.
+GOTOOLCHAIN=go1.27.1 GOFLAGS=-p=1 \
+  XRAY_E2E_BINARY=/tmp/custom-xray-source-acl-test \
+  XRAY_PRE_SOURCE_ACL_E2E_BINARY=/tmp/custom-xray-auto-control-test \
+  go test -race -count=1 -v ./internal/web/service ./internal/xray \
+  -run TestTunnelSourceACL
+# Use an isolated PostgreSQL database and the same candidate core.
+XUI_DB_TYPE=postgres XUI_DB_DSN='<isolated test DSN>' \
+  XRAY_E2E_BINARY=/tmp/custom-xray-source-acl-test \
+  GOTOOLCHAIN=go1.27.1 GOFLAGS=-p=1 go test -race -count=1 -v \
+  ./internal/web/service \
+  -run 'TestTunnelSourceACL|TestTunnelOwnerSelection|TestTunnelOwnerReplacement'
+```
+
+Expanded core tests pass (policy 2.379 s); the SQLite service/adapter race set
+passes in 9.681 s / 1.401 s. The PostgreSQL set, including the subsequently added
+real port-release test, passes in 97.076 s. No IPv6 or named ACL scenario is skipped
+in these runs. The complete SQLite gate below also includes the port-release test.
+
+Frontend RED tests showed the schema dropping the new field and accepting invalid
+CIDRs. The real edit form now sends both the original IPv4 and newly typed IPv6
+prefix with its canonical owner. Its initial test omitted Ant Design's required
+Enter keyCode; correcting that interaction fixture made the actual save assertion
+pass. Additional RED regressions caught mapped IPv6 spellings and legacy null.
+The final four-file set passes 23 tests in 18.52 s, covering those inputs, empty
+clearing and existing owner behavior. English/Chinese copy and the other 11
+locale keys are present; API registry, both OpenAPI copies and API MDX were
+regenerated. Final read-only core/backend and frontend review found no remaining
+blocking issue. A subsequent static check requested only a simpler boolean in
+the concurrency test; that expression was corrected without changing semantics.
+
+The complete canonical `make verify` gate passes in 651.34 s: zero Go lint
+issues, frontend lint/format/type checking, generated-file and MSW consistency,
+all shuffled Go tests (service 106.477 s, Xray adapter 17.095 s, explicit AmneziaWG
+dependency 1.042 s), 183 frontend files / 1811 tests (324.85 s), the production
+frontend/Go builds and Storybook. The initial static-check failure is retained as
+a failed run, not counted as a passing gate.
+
+The complete `make race` gate passes in 790.01 s, including service 338.080 s,
+Xray adapter 20.380 s and the explicit managed AmneziaWG dependency suite.
+The complete shuffled core suite passes in 626.54 s, the workflow-scoped core
+race suite in 85.57 s (policy integration 14.965 s), and construction/traffic-drain
+race checks in 3.73 s. All five final gate commands exit successfully. Product
+code and tests remained unchanged during these final gates. Routing/outbound-mode UI,
+arbitrary transport ACLs, unowned migration, distributed policy and the other
+goal items remain open.

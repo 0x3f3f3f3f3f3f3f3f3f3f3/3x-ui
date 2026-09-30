@@ -25,16 +25,17 @@ const (
 type Config struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// List of networks that the Dokodemo accepts.
-	AllowedNetworks []net.Network     `protobuf:"varint,7,rep,packed,name=allowed_networks,json=allowedNetworks,proto3,enum=xray.common.net.Network" json:"allowed_networks,omitempty"`
-	RewriteAddress  *net.IPOrDomain   `protobuf:"bytes,1,opt,name=rewrite_address,json=rewriteAddress,proto3" json:"rewrite_address,omitempty"`
-	RewritePort     uint32            `protobuf:"varint,2,opt,name=rewrite_port,json=rewritePort,proto3" json:"rewrite_port,omitempty"`
-	PortMap         map[string]string `protobuf:"bytes,3,rep,name=port_map,json=portMap,proto3" json:"port_map,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	FollowRedirect  bool              `protobuf:"varint,5,opt,name=follow_redirect,json=followRedirect,proto3" json:"follow_redirect,omitempty"`
-	UserLevel       uint32            `protobuf:"varint,6,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
-	ClientId        string            `protobuf:"bytes,8,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	Email           string            `protobuf:"bytes,9,opt,name=email,proto3" json:"email,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	AllowedNetworks    []net.Network     `protobuf:"varint,7,rep,packed,name=allowed_networks,json=allowedNetworks,proto3,enum=xray.common.net.Network" json:"allowed_networks,omitempty"`
+	RewriteAddress     *net.IPOrDomain   `protobuf:"bytes,1,opt,name=rewrite_address,json=rewriteAddress,proto3" json:"rewrite_address,omitempty"`
+	RewritePort        uint32            `protobuf:"varint,2,opt,name=rewrite_port,json=rewritePort,proto3" json:"rewrite_port,omitempty"`
+	PortMap            map[string]string `protobuf:"bytes,3,rep,name=port_map,json=portMap,proto3" json:"port_map,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	FollowRedirect     bool              `protobuf:"varint,5,opt,name=follow_redirect,json=followRedirect,proto3" json:"follow_redirect,omitempty"`
+	UserLevel          uint32            `protobuf:"varint,6,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
+	ClientId           string            `protobuf:"bytes,8,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	Email              string            `protobuf:"bytes,9,opt,name=email,proto3" json:"email,omitempty"`
+	AllowedSourceCidrs []string          `protobuf:"bytes,10,rep,name=allowed_source_cidrs,json=allowedSourceCidrs,proto3" json:"allowed_source_cidrs,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
@@ -123,11 +124,18 @@ func (x *Config) GetEmail() string {
 	return ""
 }
 
+func (x *Config) GetAllowedSourceCidrs() []string {
+	if x != nil {
+		return x.AllowedSourceCidrs
+	}
+	return nil
+}
+
 var File_proxy_dokodemo_config_proto protoreflect.FileDescriptor
 
 const file_proxy_dokodemo_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1bproxy/dokodemo/config.proto\x12\x13xray.proxy.dokodemo\x1a\x18common/net/address.proto\x1a\x18common/net/network.proto\"\xb2\x03\n" +
+	"\x1bproxy/dokodemo/config.proto\x12\x13xray.proxy.dokodemo\x1a\x18common/net/address.proto\x1a\x18common/net/network.proto\"\xe4\x03\n" +
 	"\x06Config\x12C\n" +
 	"\x10allowed_networks\x18\a \x03(\x0e2\x18.xray.common.net.NetworkR\x0fallowedNetworks\x12D\n" +
 	"\x0frewrite_address\x18\x01 \x01(\v2\x1b.xray.common.net.IPOrDomainR\x0erewriteAddress\x12!\n" +
@@ -137,7 +145,9 @@ const file_proxy_dokodemo_config_proto_rawDesc = "" +
 	"\n" +
 	"user_level\x18\x06 \x01(\rR\tuserLevel\x12\x1b\n" +
 	"\tclient_id\x18\b \x01(\tR\bclientId\x12\x14\n" +
-	"\x05email\x18\t \x01(\tR\x05email\x1a:\n" +
+	"\x05email\x18\t \x01(\tR\x05email\x120\n" +
+	"\x14allowed_source_cidrs\x18\n" +
+	" \x03(\tR\x12allowedSourceCidrs\x1a:\n" +
 	"\fPortMapEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B[\n" +

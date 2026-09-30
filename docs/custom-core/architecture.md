@@ -29,6 +29,36 @@ or runtime activation. Duplicate email or subscription identity is an error,
 never an implicit update. Tunnel owner selection subsequently links that same
 canonical account; policy activation follows the existing local attachment path.
 
+## Local Tunnel source access
+
+A nonempty `settings.allowedSourceCidrs` admits only the physical TCP/UDP peer
+before target selection, identity assignment, dispatch or payload accounting.
+The canonical listener owner remains the billing identity; an allowed source
+never becomes a client identity. The list is limited to 256 native IPv4/IPv6
+CIDRs. Empty, omitted or null means unrestricted. IPv4-mapped IPv6 prefixes are
+rejected; observed mapped IPv4 peers are unwrapped before membership checks.
+
+The first implementation supports raw TCP/UDP and ordinary TCP TLS, including
+its normal no-op header. It rejects PROXY protocol, non-raw transports, other
+security/header wrappers, transport masks and Unix listeners whenever the ACL
+is nonempty. Both JSON configuration and typed handler construction validate
+these constraints. Configuration without the ACL retains legacy transport modes.
+
+The panel accepts only the exact `allowedSourceCidrs` spelling to avoid
+case-insensitive core JSON decoding and map reordering producing different
+policies. Create/update validate before committing. An enabled ACL requires a
+local Tunnel with exactly one canonical owner; startup also validates restored
+rows. Last-owner detach/delete disables the listener while preserving its ACL,
+including final canonical memberships added during deletion fanout. Runtime
+reconciliation releases its ports after committing and revoking the identity.
+Re-enable rechecks ownership in the write transaction.
+
+`tunnel-source-acl-v1` is required independently of the trusted-owner capability
+before startup preparation or hot handler mutations. ACL edits replace only the
+affected handler, draining existing TCP/UDP flows. Other listeners remain live.
+This increment does not claim source-address preservation, transparent NAT,
+all transport wrappers or complete forwarding-mode/routing UI coverage.
+
 ## Existing paths requiring migration
 
 Source evidence: `internal/mtproto` supervises mtg-multi (one process per inbound); `internal/tuic` supervises tuic-server behind a panel UDP relay; `internal/amneziawgnet` runs AmneziaWG/gVisor inside the panel and bridges per-peer authenticated SOCKS into Xray. Their current behavior/data must be retained while moving to core adapters. Until all three migrations are tested, the installation is not fully single-core. Host administrative SSH and existing security services remain untouched.

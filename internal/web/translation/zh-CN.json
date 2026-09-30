@@ -698,6 +698,9 @@
         "ownerClient": "归属客户端",
         "ownerClientRequired": "请选择归属客户端",
         "ownerClientHelp": "此监听的流量使用所选客户端共享的限制和计费。",
+        "allowedSourceCidrs": "允许的来源 CIDR",
+        "allowedSourceCidrsHelp": "留空允许任何来源。按本地原生 TCP/UDP 的连接来源地址检查（TCP 可使用 TLS），不支持 PROXY 来源头或其他传输。通过检查的流量计入所属客户额度。",
+        "allowedSourceCidrsInvalid": "请输入最多 256 个 IPv4 或 IPv6 CIDR。",
         "ownerClientLocalOnly": "仅本地 Tunnel 监听支持选择归属客户端。",
         "ownerClientLoadError": "无法加载客户端，请重新搜索后重试。",
         "ownerClientLoadMore": "加载更多客户端"

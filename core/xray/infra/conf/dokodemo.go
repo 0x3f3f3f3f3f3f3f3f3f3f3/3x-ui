@@ -8,20 +8,24 @@ import (
 )
 
 type DokodemoConfig struct {
-	ClientID       string            `json:"clientId"`
-	Email          string            `json:"email"`
-	AllowedNetwork *NetworkList      `json:"allowedNetwork"`
-	RewriteAddress *Address          `json:"rewriteAddress"`
-	RewritePort    uint16            `json:"rewritePort"`
-	Network        *NetworkList      `json:"network"`
-	Address        *Address          `json:"address"`
-	Port           uint16            `json:"port"`
-	PortMap        map[string]string `json:"portMap"`
-	FollowRedirect bool              `json:"followRedirect"`
-	UserLevel      uint32            `json:"userLevel"`
+	ClientID           string            `json:"clientId"`
+	Email              string            `json:"email"`
+	AllowedSourceCIDRs []string          `json:"allowedSourceCidrs"`
+	AllowedNetwork     *NetworkList      `json:"allowedNetwork"`
+	RewriteAddress     *Address          `json:"rewriteAddress"`
+	RewritePort        uint16            `json:"rewritePort"`
+	Network            *NetworkList      `json:"network"`
+	Address            *Address          `json:"address"`
+	Port               uint16            `json:"port"`
+	PortMap            map[string]string `json:"portMap"`
+	FollowRedirect     bool              `json:"followRedirect"`
+	UserLevel          uint32            `json:"userLevel"`
 }
 
 func (v *DokodemoConfig) Build() (proto.Message, error) {
+	if _, err := dokodemo.ParseSourceCIDRs(v.AllowedSourceCIDRs); err != nil {
+		return nil, err
+	}
 	if v.Network != nil {
 		v.AllowedNetwork = v.Network
 	}
@@ -47,5 +51,6 @@ func (v *DokodemoConfig) Build() (proto.Message, error) {
 	config.UserLevel = v.UserLevel
 	config.ClientId = v.ClientID
 	config.Email = v.Email
+	config.AllowedSourceCidrs = v.AllowedSourceCIDRs
 	return config, nil
 }

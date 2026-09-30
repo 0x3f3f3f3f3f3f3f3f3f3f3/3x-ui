@@ -15,6 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/proxy/dokodemo"
 	"github.com/xtls/xray-core/proxy/freedom"
 	"github.com/xtls/xray-core/transport/internet"
 )
@@ -198,6 +199,18 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 	}
 	if dokodemoConfig, ok := rawConfig.(*DokodemoConfig); ok {
 		receiverSettings.ReceiveOriginalDestination = dokodemoConfig.FollowRedirect
+		if len(dokodemoConfig.AllowedSourceCIDRs) > 0 {
+			if err := dokodemo.ValidateSourceACLPorts(receiverSettings.PortList); err != nil {
+				return nil, err
+			}
+			stream, err := internet.ToMemoryStreamConfig(receiverSettings.StreamSettings)
+			if err != nil {
+				return nil, err
+			}
+			if err := dokodemo.ValidateSourceACLTransport(stream, receiverSettings.Listen.AsAddress()); err != nil {
+				return nil, err
+			}
+		}
 	}
 	ts, err := rawConfig.(Buildable).Build()
 	if err != nil {

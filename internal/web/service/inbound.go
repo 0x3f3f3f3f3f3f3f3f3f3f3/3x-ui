@@ -1122,6 +1122,9 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	if inbound.NodeID != nil && !isNodeEligibleProtocol(inbound.Protocol) {
 		return inbound, false, common.NewErrorf("%s inbounds cannot be assigned to a node", inbound.Protocol)
 	}
+	if err := validateTunnelSourceACLConfig(inbound); err != nil {
+		return inbound, false, err
+	}
 	inbound.SubSortIndex = normalizeSubSortIndex(inbound.SubSortIndex)
 	if err := normalizeInboundShareAddressStrict(inbound); err != nil {
 		return inbound, false, err
@@ -1639,22 +1642,38 @@ func (s *InboundService) SetInboundEnable(id int, enable bool) (bool, error) {
 		return false, err
 	}
 	if inbound.Enable == enable {
+		if enable {
+			if err := validateTunnelSourceACLConfig(inbound); err != nil {
+				return false, err
+			}
+			return false, validateTunnelSourceACLOwner(database.GetDB(), inbound)
+		}
 		return false, nil
 	}
 
 	db := database.GetDB()
-	// Enabling puts this row's ports into the running config, and the guards ran
-	// only if it was saved: a restored or hand-edited row reaches it unchecked.
-	if enable && inbound.NodeID == nil {
-		conflict, err := checkPortConflictTx(db, inbound, inbound.Id)
-		if err != nil {
-			return false, err
+	if err := runSerializedTx(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(inbound, id).Error; err != nil {
+			return err
 		}
-		if conflict != nil {
-			return false, common.NewError(conflict.String())
+		inbound.Enable = enable
+		if enable {
+			if err := validateTunnelSourceACLConfig(inbound); err != nil {
+				return err
+			}
+			if err := validateTunnelSourceACLOwner(tx, inbound); err != nil {
+				return err
+			}
+			if inbound.NodeID == nil {
+				conflict, err := checkPortConflictTx(tx, inbound, inbound.Id)
+				if err != nil {
+					return err
+				}
+				if conflict != nil {
+					return common.NewError(conflict.String())
+				}
+			}
 		}
-	}
-	if err := db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(model.Inbound{}).Where("id = ?", id).
 			Update("enable", enable).Error; err != nil {
 			return err
@@ -1744,6 +1763,9 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	inbound.SubSortIndex = normalizeSubSortIndex(inbound.SubSortIndex)
 	inbound.NodeID = oldInbound.NodeID
 	if err := prepareTunnelOwnerCommand(inbound); err != nil {
+		return inbound, false, err
+	}
+	if err := validateTunnelSourceACLConfig(inbound); err != nil {
 		return inbound, false, err
 	}
 

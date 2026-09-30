@@ -698,6 +698,9 @@
         "ownerClient": "Owner client",
         "ownerClientRequired": "Select an owner client",
         "ownerClientHelp": "Traffic from this listener uses the selected client’s shared limits and accounting.",
+        "allowedSourceCidrs": "Allowed source CIDRs",
+        "allowedSourceCidrsHelp": "Empty allows any source. Uses the connection peer address on local raw TCP/UDP (TCP may use TLS); PROXY headers and other transports are unsupported. Allowed traffic consumes the owner client’s quota.",
+        "allowedSourceCidrsInvalid": "Enter up to 256 IPv4 or IPv6 CIDRs.",
         "ownerClientLocalOnly": "Owner selection is available for local Tunnel listeners only.",
         "ownerClientLoadError": "Unable to load clients. Search again to retry.",
         "ownerClientLoadMore": "Load more clients"

@@ -938,14 +938,17 @@ func (s *ClientService) Delete(inboundSvc *InboundService, id int, keepTraffic b
 		return needRestart, errors.Join(delErrs...)
 	}
 
+	tunnelsDisabled := false
 	if err := runSerializedTx(func(tx *gorm.DB) error {
+		var err error
+		tunnelsDisabled, err = deleteClientLinksAndDisableTunnels(tx, []int{id})
+		if err != nil {
+			return err
+		}
 		if existing.Email != "" {
 			if err := adjustGroupBaselinesForRemovedTraffic(tx, []string{existing.Email}); err != nil {
 				return err
 			}
-		}
-		if err := tx.Where("client_id = ?", id).Delete(&model.ClientInbound{}).Error; err != nil {
-			return err
 		}
 		if err := tx.Where("client_id = ?", id).Delete(&model.ClientExternalLink{}).Error; err != nil {
 			return err
@@ -977,6 +980,13 @@ func (s *ClientService) Delete(inboundSvc *InboundService, id int, keepTraffic b
 	}
 	if err := reconcileDeletedClientPolicies([]string{existing.StableID}); err != nil {
 		return true, err
+	}
+	if tunnelsDisabled {
+		handled, err := inboundSvc.reconcileManagedChange(&model.Inbound{Protocol: model.Tunnel})
+		needRestart = needRestart || !handled || err != nil
+		if err != nil {
+			return needRestart, err
+		}
 	}
 	return needRestart, nil
 }

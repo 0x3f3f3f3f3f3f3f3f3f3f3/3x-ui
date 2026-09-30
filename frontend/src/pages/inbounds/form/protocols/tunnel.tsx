@@ -95,6 +95,19 @@ export default function TunnelFields({ requireOwner = false }: { requireOwner?: 
         />
       </FormField>
       <FormField
+        name={['settings', 'allowedSourceCidrs']}
+        label={t('pages.inbounds.form.allowedSourceCidrs')}
+        extra={t('pages.inbounds.form.allowedSourceCidrsHelp')}
+      >
+        <Select
+          mode="tags"
+          disabled={remote}
+          tokenSeparators={[',', ' ', '\n']}
+          placeholder="192.0.2.0/24, 2001:db8::/32"
+          allowClear
+        />
+      </FormField>
+      <FormField
         name={['settings', 'rewriteAddress']}
         label={t('pages.inbounds.form.rewriteAddress')}
       >

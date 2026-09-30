@@ -988,10 +988,16 @@ func (s *ClientService) BulkDelete(inboundSvc *InboundService, emails []string, 
 	}
 	withdrawClientTombstones(failedEmails...)
 
+	tunnelsDisabled := false
 	if len(successIds) > 0 {
 		// Serialize the row cleanup against the traffic poll to avoid the
 		// cross-transaction lock-order deadlock on client_traffics/inbounds.
 		if err := runSerializedTx(func(tx *gorm.DB) error {
+			var err error
+			tunnelsDisabled, err = deleteClientLinksAndDisableTunnels(tx, successIds)
+			if err != nil {
+				return err
+			}
 			if e := adjustGroupBaselinesForRemovedTraffic(tx, successEmails); e != nil {
 				return e
 			}
@@ -999,9 +1005,6 @@ func (s *ClientService) BulkDelete(inboundSvc *InboundService, emails []string, 
 				return e
 			}
 			for _, batch := range chunkInts(successIds, sqlInChunk) {
-				if e := tx.Where("client_id IN ?", batch).Delete(&model.ClientInbound{}).Error; e != nil {
-					return e
-				}
 				if e := tx.Where("client_id IN ?", batch).Delete(&model.ClientExternalLink{}).Error; e != nil {
 					return e
 				}
@@ -1038,6 +1041,13 @@ func (s *ClientService) BulkDelete(inboundSvc *InboundService, emails []string, 
 	if len(deletedStableIDs) > 0 {
 		if err := reconcileDeletedClientPolicies(deletedStableIDs); err != nil {
 			return result, true, err
+		}
+	}
+	if tunnelsDisabled {
+		handled, err := inboundSvc.reconcileManagedChange(&model.Inbound{Protocol: model.Tunnel})
+		needRestart = needRestart || !handled || err != nil
+		if err != nil {
+			return result, needRestart, err
 		}
 	}
 	result.Deleted = len(successEmails)

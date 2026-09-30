@@ -2,6 +2,7 @@ package dokodemo
 
 import (
 	"context"
+	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,12 +18,23 @@ import (
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
+		if len(config.(*Config).AllowedSourceCidrs) > 0 {
+			stream, _ := session.StreamSettingsFromContext(ctx).(*internet.MemoryStreamConfig)
+			inbound := session.InboundFromContext(ctx)
+			if inbound == nil {
+				return nil, errors.New("Tunnel source ACL requires a known listener context")
+			}
+			if err := ValidateSourceACLTransport(stream, inbound.Source.Address); err != nil {
+				return nil, err
+			}
+		}
 		d := new(DokodemoDoor)
 		err := core.RequireFeatures(ctx, func(pm policy.Manager) error {
 			return d.Init(config.(*Config), pm, session.SockoptFromContext(ctx))
@@ -32,12 +44,13 @@ func init() {
 }
 
 type DokodemoDoor struct {
-	policyManager  policy.Manager
-	config         *Config
-	rewriteAddress net.Address
-	rewritePort    net.Port
-	portMap        map[string]string
-	sockopt        *session.Sockopt
+	policyManager         policy.Manager
+	config                *Config
+	rewriteAddress        net.Address
+	rewritePort           net.Port
+	portMap               map[string]string
+	sockopt               *session.Sockopt
+	allowedSourcePrefixes []netip.Prefix
 }
 
 // Init initializes the DokodemoDoor instance with necessary parameters.
@@ -45,6 +58,11 @@ func (d *DokodemoDoor) Init(config *Config, pm policy.Manager, sockopt *session.
 	if len(config.AllowedNetworks) == 0 {
 		return errors.New("no network specified")
 	}
+	prefixes, err := ParseSourceCIDRs(config.AllowedSourceCidrs)
+	if err != nil {
+		return err
+	}
+	d.allowedSourcePrefixes = prefixes
 	d.config = config
 	d.rewriteAddress = config.GetPredefinedAddress()
 	d.rewritePort = net.Port(config.RewritePort)
@@ -71,6 +89,9 @@ func (d *DokodemoDoor) policy() policy.Session {
 
 // Process implements proxy.Inbound.
 func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
+	if len(d.allowedSourcePrefixes) > 0 && !d.sourceAllowed(network, conn.RemoteAddr()) {
+		return errors.New("source is not allowed by Tunnel ACL")
+	}
 	errors.LogDebug(ctx, "processing connection from: ", conn.RemoteAddr())
 	// forward to TCP if from UNIX
 	if network == net.Network_UNIX {

@@ -19,4 +19,5 @@ message Config {
   uint32 user_level = 6;
   string client_id = 8;
   string email = 9;
+  repeated string allowed_source_cidrs = 10;
 }

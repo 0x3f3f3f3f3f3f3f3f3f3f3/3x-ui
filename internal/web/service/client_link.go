@@ -232,9 +232,11 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 		return err
 	}
 	if removedTunnelOwner {
-		return tx.Model(&model.Inbound{}).Where("id = ?", inboundId).Update("enable", false).Error
+		if err := tx.Model(&model.Inbound{}).Where("id = ?", inboundId).Update("enable", false).Error; err != nil {
+			return err
+		}
 	}
-	return nil
+	return validateStoredTunnelSourceACLOwner(tx, inboundId)
 }
 
 // reconcileInboundLinks writes only the client_inbounds rows that differ. prune

@@ -15,7 +15,7 @@ This is the initial source-audit matrix, not a support announcement. `E/U` = exi
 | Hysteria2 | E/U both | E/U | N | QUIC/mux/UDP and auth updates |
 | WireGuard | E/U both | E/U | N | per-peer identity, IP/payload accounting distinction |
 | TUN | E/U inbound | no account auth; resource identity required | N | packet semantics, route and owner mapping |
-| Tunnel/dokodemo-door | E/U inbound; NA outbound (listener adapter) | database, local stable-owner picker and scoped ordinary Runtime owner lifecycle I/V; complete forwarding UI/unowned-rule migration N | I/V for scoped Tunnel/local persistence/SQL settlement and explicit managed local startup; automatic cutover N | TCP/UDP, all routing modes, owner lifecycle, shared policy |
+| Tunnel/dokodemo-door | E/U inbound; NA outbound (listener adapter) | database, local stable-owner picker, raw TCP/UDP source ACL and scoped ordinary Runtime owner lifecycle I/V; complete forwarding UI/unowned-rule migration N | I/V for scoped Tunnel/local persistence/SQL settlement, automatic local activation and guarded handoff | all routing modes, remaining owner lifecycle, full shared-policy coverage |
 | Snell v4 | N both | N | N | official Surge interoperability + independent outbound test |
 | Snell v5 | N both | N | N | v4-like paths separately, QUIC Proxy Mode mandatory |
 | Snell v6 beta | N both | N | N | fixed beta client/server, shaping modes, TCP/UDP/reuse |
@@ -151,3 +151,13 @@ disabled-state persistence, duplicate rejection and the first owned Tunnel on an
 empty panel. SQLite and PostgreSQL real TCP/UDP tests retain the generated stable
 ID and settle exact multiplier-adjusted usage. It does not complete the remaining
 Tunnel ACL, forwarding-mode or unowned migration requirements.
+
+
+Local Tunnel source ACL increment: raw TCP/UDP and ordinary TCP TLS check native
+IPv4/IPv6 CIDRs against the physical peer before dispatch and billing. Empty is
+unrestricted; PROXY, other transports, masks and Unix listeners are rejected
+when configured. The form/API, typed construction, capability negotiation,
+atomic validation and hot narrowing are I/V within this local scope. Full
+make verify/race and core unit/scoped race gates pass; results are in testing.md. This does not establish arbitrary
+transport ACLs, transparent interception, complete forwarding modes or global
+node policy.

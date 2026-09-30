@@ -14,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy"
+	"github.com/xtls/xray-core/proxy/dokodemo"
 	"github.com/xtls/xray-core/transport/internet"
 	"google.golang.org/protobuf/proto"
 )
@@ -53,6 +54,11 @@ type AlwaysOnInboundHandler struct {
 }
 
 func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *proxyman.ReceiverConfig, proxyConfig interface{}) (*AlwaysOnInboundHandler, error) {
+	if config, ok := proxyConfig.(*dokodemo.Config); ok && len(config.AllowedSourceCidrs) > 0 {
+		if err := dokodemo.ValidateSourceACLPorts(receiverConfig.PortList); err != nil {
+			return nil, err
+		}
+	}
 	sniffingRequest, err := proxyman.BuildSniffingRequest(receiverConfig.SniffingSettings)
 	if err != nil {
 		return nil, err

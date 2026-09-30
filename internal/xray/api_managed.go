@@ -106,6 +106,9 @@ func managedIdentityCapabilities(message protoreflect.Message, required map[stri
 		}
 		return nil
 	case *dokodemo.Config:
+		if len(value.GetAllowedSourceCidrs()) > 0 {
+			required["tunnel-source-acl-v1"] = true
+		}
 		if value.GetClientId() != "" {
 			required["trusted-tunnel-client-id-v1"] = true
 		}
