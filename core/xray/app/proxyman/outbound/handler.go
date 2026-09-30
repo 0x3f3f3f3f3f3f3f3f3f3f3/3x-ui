@@ -258,7 +258,8 @@ out:
 		return
 	}
 	defer finish()
-	stopInterrupt := context.AfterFunc(ctx, func() { common.Interrupt(link.Reader); common.Interrupt(link.Writer) })
+	reader, writer := link.Reader, link.Writer
+	stopInterrupt := context.AfterFunc(ctx, func() { common.Interrupt(reader); common.Interrupt(writer) })
 	defer stopInterrupt()
 	err = h.proxy.Process(ctx, link, h)
 	var errC error

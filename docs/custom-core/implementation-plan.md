@@ -409,3 +409,14 @@ make verify/race, core unit/scoped race and construction race gates pass;
 commands, results and final review are recorded in testing.md.
 Routing/outbound selection UI, additional forwarding modes and unowned migration,
 other requested protocols, distributed policy and packaging remain open.
+
+Task 6 loopback accounting checkpoint: real
+one/two-hop tests exposed repeated policy sessions and payload billing, repeated
+legacy counters and an asynchronous access-log race. Same-link redispatch now
+retains its original admission, rejects identity changes and separately meters
+new links. Explicit loopback cycle/hop limits replace the incidental repeated
+session cap. Review added UDP domain/sniff timeout preservation and cancellation
+endpoint capture. Focused real TCP/UDP/sniff/quota/disable and race checks pass. Complete core
+unit tests, scoped core/construction race, all panel Go tests, affected panel
+race, static checks and both builds pass; results and skips are in testing.md.
+Per-rule outbound/routing UI and the remaining goal items are still open.

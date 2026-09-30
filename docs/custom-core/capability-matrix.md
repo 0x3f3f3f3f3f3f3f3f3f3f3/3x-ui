@@ -24,7 +24,7 @@ This is the initial source-audit matrix, not a support announcement. `E/U` = exi
 | MTProto | E/U external mtg-multi; migration N | E/U secrets/ad-tags | N | preserve features, move execution into core |
 | TUIC v5 | E/U external tuic-server; migration N | E/U | N | preserve QUIC/UDP, remove panel relay after parity |
 | AmneziaWG | E/U panel-side runtime; migration N | E/U peers/forwarding | N | preserve obfuscation/IPv6/per-peer data, direct dispatcher |
-| Freedom/direct, block, DNS, loopback | E/U outbound | NA account service | managed-flow traversal N | route correctness, no fallback or loop/bypass |
+| Freedom/direct, block, DNS, loopback | E/U outbound | NA account service | finite local loopback TCP/UDP metering, sniffing, quota/disable and explicit cycle rejection I/V; full core and affected panel regressions pass | full DNS/balancer/chain correctness, selected-outbound UI and network-listener loop detection |
 
 ## Feature cross-product checklist
 

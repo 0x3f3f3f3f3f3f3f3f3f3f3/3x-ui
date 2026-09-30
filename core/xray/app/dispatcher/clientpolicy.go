@@ -2,17 +2,41 @@ package dispatcher
 
 import (
 	"context"
+	"errors"
 
 	"github.com/xtls/xray-core/app/clientpolicy"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport"
 )
 
+type managedLinkKey struct{}
+
+type managedLinkState struct {
+	link     *transport.Link
+	user     *protocol.MemoryUser
+	clientID string
+}
+
+func managedLinkFromContext(ctx context.Context, link *transport.Link) *managedLinkState {
+	state, _ := ctx.Value(managedLinkKey{}).(*managedLinkState)
+	if state != nil && state.link == link {
+		return state
+	}
+	return nil
+}
+
 func (d *DefaultDispatcher) manageLink(ctx context.Context, destination net.Destination, link *transport.Link) (context.Context, func(), error) {
 	in := session.InboundFromContext(ctx)
+	if state := managedLinkFromContext(ctx, link); state != nil {
+		if in == nil || in.User != state.user || in.User.ClientID != state.clientID {
+			return ctx, nil, errors.New("managed link identity changed during redispatch")
+		}
+		return ctx, func() {}, nil
+	}
 	if in == nil || in.User == nil || in.User.ClientID == "" {
 		return ctx, func() {}, nil
 	}
@@ -44,6 +68,7 @@ func (d *DefaultDispatcher) manageLink(ctx context.Context, destination net.Dest
 	}
 	link.Reader = &managedReader{Reader: reader, session: s}
 	link.Writer = &managedWriter{Writer: writer, session: s}
+	child = context.WithValue(child, managedLinkKey{}, &managedLinkState{link: link, user: in.User, clientID: in.User.ClientID})
 	return child, func() { untrack(); s.Release(); cancel() }, nil
 }
 

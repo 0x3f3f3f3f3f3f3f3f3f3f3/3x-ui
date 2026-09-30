@@ -19,7 +19,29 @@ type Loopback struct {
 	dispatcherInstance routing.Dispatcher
 }
 
+type loopbackPathKey struct{}
+
+type loopbackPath struct {
+	loop     *Loopback
+	previous *loopbackPath
+}
+
 func (l *Loopback) Process(ctx context.Context, link *transport.Link, _ internet.Dialer) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	previous, _ := ctx.Value(loopbackPathKey{}).(*loopbackPath)
+	hops := 1
+	for path := previous; path != nil; path = path.previous {
+		if path.loop == l {
+			return errors.New("loopback routing cycle")
+		}
+		hops++
+	}
+	if hops > 16 {
+		return errors.New("loopback hop limit exceeded")
+	}
+	ctx = context.WithValue(ctx, loopbackPathKey{}, &loopbackPath{loop: l, previous: previous})
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 	if !ob.Target.IsValid() {
@@ -45,7 +67,7 @@ func (l *Loopback) Process(ctx context.Context, link *transport.Link, _ internet
 
 	err := l.dispatcherInstance.DispatchLink(ctx, destination, link)
 	if err != nil {
-		return errors.New(ctx, "failed to process loopback connection").Base(err)
+		return errors.New("failed to process loopback connection").Base(err)
 	}
 	return nil
 }

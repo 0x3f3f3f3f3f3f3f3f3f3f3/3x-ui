@@ -193,6 +193,12 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 }
 
 func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager stats.Manager, link *transport.Link) *transport.Link {
+	if managedLinkFromContext(ctx, link) != nil {
+		if _, ok := link.Reader.(buf.TimeoutReader); !ok {
+			link.Reader = &buf.TimeoutWrapperReader{Reader: link.Reader}
+		}
+		return link
+	}
 	sessionInbound := session.InboundFromContext(ctx)
 	var user *protocol.MemoryUser
 	if sessionInbound != nil {
@@ -503,7 +509,8 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 	}
 
 	ob.Tag = handler.Tag()
-	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil {
+	if original := log.AccessMessageFromContext(ctx); original != nil {
+		accessMessage := *original
 		if tag := handler.Tag(); tag != "" {
 			if inTag == "" {
 				accessMessage.Detour = tag
@@ -515,7 +522,7 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 				accessMessage.Detour = inTag + " >> " + tag
 			}
 		}
-		log.Record(accessMessage)
+		log.Record(&accessMessage)
 	}
 
 	handler.Dispatch(ctx, link)

@@ -559,3 +559,27 @@ The editor requires an owner for new local Tunnel rules, provides 25-row searcha
 Replacing a listener owner closes its old TCP flow and makes later TCP/UDP traffic use the replacement account; another listener for the old account continues using its own shared ledger. Removing the old link retains the canonical account and its historical accumulator, including after migration and deletion of the reassigned listener. The accumulator moves to a remaining sibling, or uses inbound ID zero while the canonical account remains. This does not change deliberate client deletion/reset semantics or establish general backup rollback/replay fencing.
 
 `ownerClientId` in list/detail responses is a membership-derived annotation, not a new database ownership column. A single-inbound import clears that source-panel annotation so portable settings and statistics can create a destination identity. Full database restoration continues to use the stored stable IDs; restore fencing and all-protocol migration guarantees remain separate work.
+
+## Loopback redispatch of a managed flow
+
+A loopback outbound redispatches the same business link. Its existing admission,
+shared rate limiter, credential revocation hook and policy session remain owned
+by the outer dispatch. A private context record matches the actual link and the
+authenticated credential, so internal hops do not add sessions or charge the same
+payload again. Changing that link's identity is rejected. A new link under the
+same parent context receives its own admission and metering.
+
+Legacy user counters also remain installed once. A redispatched reader receives
+a timeout wrapper only when needed; the wrapper covers both reading and rate
+admission and retains pending data after a sniff timeout. It does not add a
+TimeoutReader interface to ordinary managed protocol outbounds. Sniff replay and
+UDP endpoint rewriting preserve the original metered path. Each access-log hop
+gets its own message snapshot, and cancellation captures the I/O endpoints before
+subsequent redispatch wrapping can replace link fields.
+
+Loopback rejects re-entering the same loopback instance within a dispatch chain
+and caps a chain at 16 distinct loopback hops. This also bounds unmanaged chains;
+it does not claim detection of network-level listener loops or every proxy-chain
+cycle. Local TCP/UDP, repeated sniffing, exact billing, quota and live disable are
+covered by the tests recorded in testing.md. General selected-outbound UI,
+original-target semantics and distributed policy remain separate work.

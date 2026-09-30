@@ -1349,3 +1349,85 @@ race checks in 3.73 s. All five final gate commands exit successfully. Product
 code and tests remained unchanged during these final gates. Routing/outbound-mode UI,
 arbitrary transport ACLs, unowned migration, distributed policy and the other
 goal items remain open.
+
+### Managed loopback accounting and bounded routing (2026-09-30)
+
+Same Linux ARM64/two-CPU environment and pinned Go toolchain as the source ACL
+checkpoint; this increment starts at d00770f05156ee32f1bd3868cb6458ed95b67e2a.
+Real RED tests observed a six-byte TCP echo become 12 upload / 12 download / 36
+billed bytes through one loopback, and 18 / 18 / 54 through two, at multiplier
+1.5. Active sessions were incorrectly two and three. After policy deduplication,
+separate RED assertions still found legacy uplink counters of 12 and 18. Race
+checking exposed shared AccessMessage.Detour mutation during asynchronous log
+formatting. All three paths are covered by the final regression.
+
+Review then identified two additional boundaries. A real UDP localhost target
+with ForceIPv4 and loopback sniffing panicked because EndpointOverrideReader does
+not implement TimeoutReader. A shared upload bucket at one byte/second made the
+initial managed TimeoutReader take 1.00046 s for a 20 ms sniff timeout. The final
+implementation preserves the existing managed-reader interface and adapts only
+redispatch, without another counter. A timeout retains its pending byte; later
+reading returns it once and total admitted upload remains exactly two bytes.
+A separate RED race test exposed the outbound cancellation callback reading link
+fields concurrently with wrapping; it now captures the endpoints beforehand.
+
+Bounded fake dispatch first proved one/two-hop cycles and a 17-hop chain were not
+rejected. The final guard accepts 16 distinct loopback hops, rejects the 17th and
+rejects revisiting the same loopback instance. Real one/two-hop cyclic routes
+terminate with zero target bytes, zero usage and no surviving session, even with
+a working direct default outbound. This is not a network-listener loop test.
+
+Focused command from core/xray:
+
+```sh
+GOTOOLCHAIN=go1.27.1 GOFLAGS=-p=1 go test -race -count=1 -v \
+  ./app/dispatcher ./app/proxyman/outbound ./proxy/loopback ./testing/policy \
+  -run 'TestManagedRedispatch|TestOutboundCancellationCanOverlapRedispatchWrapping|TestLoopbackBounds|TestTunnelLoopback'
+```
+
+The final focused run passes: dispatcher 2.045 s, outbound lifecycle 1.059 s,
+loopback 1.028 s and policy integration 4.220 s. Real one/two-hop cases cover TCP,
+UDP, repeated HTTP sniffing and resolved UDP targets with sniffing. Two independent
+six-byte echoes give exactly 12 upload / 12 download / 36 billed bytes, two active
+sessions and legacy counters of 12 each. An independent echo server counts the
+payload. Disable closes both TCP streams and blocks both UDP flows without more
+usage or target bytes. Independent links under an inherited context still meter
+separately; credential revocation closes both and releases all sessions.
+
+The quota test uses a 60-byte budget at multiplier 1.5. Three six-byte echoes
+complete at 18 / 18 / 54. A final two-byte echo reaches exactly 20 / 20 / 60;
+the target observes exactly 20 upload bytes, both connections close and reconnect
+is rejected. The final two admitted download bytes may be in flight when close
+occurs. An initial 55-byte fixture incorrectly required delivery after only one
+billed byte remained (less than the next raw-byte charge); that fixture was
+corrected to exercise a complete final echo and explicitly bound its in-flight
+payload. No policy or quota implementation was changed to accommodate the test.
+
+The candidate core build passes in 7.20 s and scoped go vet in 10.75 s. The
+complete shuffled core suite passes in 626.77 s; the workflow-scoped core race
+suite, including the added loopback package, passes in 92.12 s (policy 17.924 s).
+Construction/traffic-drain race checks pass in 3.75 s. Complete `make test-go`
+passes in 309.03 s (service 107.548 s, adapter 16.931 s, explicit managed
+AmneziaWG device 0.979 s). The affected panel race set passes in 64.01 s (service
+21.809 s, runtime 1.324 s, adapter 1.486 s), using the new candidate binary.
+Its two PostgreSQL-only row-lock subcases are skipped on SQLite and are not
+counted as passes. This repair changes no database code; the preceding ACL
+checkpoint separately records PostgreSQL coverage.
+
+The scoped panel race command is:
+
+```sh
+GOTOOLCHAIN=go1.27.1 GOFLAGS=-p=1 \
+  XRAY_E2E_BINARY=/tmp/custom-xray-loopback-test \
+  XRAY_PRE_SOURCE_ACL_E2E_BINARY=/tmp/custom-xray-auto-control-test \
+  go test -race -count=1 -v \
+  ./internal/web/service ./internal/web/runtime ./internal/xray \
+  -run 'TestTunnel|TestClientPolicy(AutomaticallyActivatesOwnedTunnel|ConfigFeedsRealTunnelLedger|NormalUserMutationPreservesIdentityAndOtherFlows|DetachPreservesSiblingInboundFlow|DisableWithCompilerFailureStopsExistingAccess|RuntimeBootstrapPreservesLedgerAcrossChildRestarts)|TestLocalRuntimeUsesPrivateControlForHandlersRoutingAndStats'
+```
+
+`make lint-go` reports zero issues (26.68 s); `go build -mod=readonly ./...`
+passes in 8.42 s. All nine final commands exit successfully, with no product or
+test changes during the gate. Workflow YAML and 21 shell blocks validate. Final
+read-only review found no remaining blocker after the three boundary repairs;
+the reviewer did not run tests. Frontend behavior, API and schema are unchanged
+by this core repair, so the preceding ACL frontend gate remains its evidence.
