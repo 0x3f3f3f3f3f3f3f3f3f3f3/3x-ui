@@ -509,7 +509,7 @@ existing `proxy.UserManager`, with no new RPC service or field renumbering.
 - [x] Negotiate both capabilities, including HTTP required-auth without owners;
   older-capability handler probes must fail before mutation. Keep the panel
   compiler's unsupported-protocol gate until canonical bindings are implemented.
-- [ ] Run affected core/config/adapter race and static checks, existing protocol
+- [x] Run affected core/config/adapter race and static checks, existing protocol
   mux and policy regressions, complete core shuffled tests and scoped core race.
   Review this increment, fix findings, update status/evidence, commit and push
   with exact remote SHA verification before proceeding to panel account binding.
@@ -522,7 +522,9 @@ directional rate buckets and exact historical multiplier totals. A read-only
 review found no important/critical issue; its unmanaged HTTP CONNECT splice
 observation was resolved by retaining the raw connection for terminal CONNECT
 while earlier plain requests retain separate inactive leases. All final full-suite
-gates passed (see testing.md); staged commit/push is in progress. The panel
+gates passed (see testing.md). Commits `ef8e87dd` (spec), `e390be67` (core) and
+`e9adcccf` (adapter/CI/evidence) were pushed to the fork feature branch; its
+remote SHA matched `e9adcccf8865fbd8f05b7788ea3c6f96bdb0333d`. The panel
 compiler gate is unchanged. Ruling: Mixed noauth ignores unused accounts in both
 branches, matching the pinned upstream constructor; an initially contrary test
 expectation was corrected rather than changing legacy authentication behavior.

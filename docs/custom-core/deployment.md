@@ -47,6 +47,27 @@ and core SHA-256 is
 Later source commits have different version stamps/checksums. Installer,
 Docker, platform-matrix and recovery requirements remain open.
 
+### Clean-source password identity checkpoint build
+
+Commit `e9adcccf8865fbd8f05b7788ea3c6f96bdb0333d` was rebuilt using the same
+clean-clone procedure and toolchains above. `npm ci`, the frontend build,
+panel/core builds and both version smoke commands passed; the clone remained
+clean. The panel reports `dev+e9adcccf` and the core reports the full revision
+without `-dirty`. These artifacts verify the native password-proxy increment;
+the panel compiler still refuses managed Mixed/HTTP activation until canonical
+account bindings and migration are implemented.
+
+Distinct local checkpoint files preserve the earlier Tunnel artifact provenance:
+
+- `build/x-ui-password-checkpoint`: SHA-256
+  `d258c582002af664b931e2acc60011293be086abca3bb06df63378dd92980b43`.
+- `build/custom-xray-password-checkpoint`: SHA-256
+  `61aec53ad615b98584101ef7fd0e15feb6271dce24d7ece9fe33c4164da4fbd1`.
+
+Evidence: `/root/task-evidence/password-clean-build-results.json` and
+`password-clean-build-manifest.json`. No installation, service startup or
+production deployment was performed.
+
 Build with `bash tools/build-custom-core.sh`. For a **new** panel-assigned instance, initialize a private persistent path once:
 
 ```sh
