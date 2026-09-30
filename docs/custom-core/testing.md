@@ -1760,3 +1760,66 @@ No core source changed in Task 5B1, so the preceding native full-core/race
 checkpoint remains applicable. Owner UI, canonical runtime generation, grouped
 credential hot changes, generic client lifecycle and legacy username-counter
 handoff remain unfinished.
+
+## Canonical password runtime configuration checkpoint
+
+Task 5B2 first ran its configuration regressions against the unchanged
+unsupported-adapter gate: owned Mixed/HTTP, disabled/empty listeners and the
+real generated listener test failed (`password-config-red.log`, 0.943 s).
+The implementation binds account-specific user/pass to canonical UUID/email
+from the same SQL snapshot, includes every linked owner's policy and removes
+disabled owners' credentials without opening anonymous access. Initial real
+core and configuration race tests passed in 4.934 s.
+
+A restored-data regression then reproduced deletion of the last owned HTTP
+account opening anonymous access when the saved required-auth marker was
+omitted or false (`password-config-restored-http-red.log`, 0.656 s). Preserving
+the native protection implicit in the prior owned account list fixes both
+cases; ordinary unowned legacy removals retain their old behavior. The combined
+owner/configuration race tests passed in 13.132 s after that fix.
+
+The final focused run includes all ten new configuration tests, owner
+persistence tests and existing `TestClientPolicyConfig` cases. SQLite passed
+in 21.275 s and real PostgreSQL in 132.336 s, both under race and shuffle.
+`password-config-database-results.json` records their logs and command wall
+times. The PostgreSQL run includes the existing competing remote-attachment
+row-lock regression. Each new test has an explicit named PASS in both logs;
+custom-core CI now requires those PASS lines, including the real-core case.
+The workflow YAML parses and all 29 Bash run blocks pass `bash -n`; no remote
+CI execution is claimed.
+
+`TestPasswordProxyConfigFeedsRealSharedLedger` uses the actual SQL-to-compiler
+output with independent SOCKS5 and wire HTTP CONNECT clients, Mixed fallback,
+standalone HTTP, Tunnel and a separately counted echo target. Seven connections
+deliver exactly 42 bytes to the target. The first owner's aliases and Tunnel
+share 30 upload/30 download bytes, preserving a historical 100/200 seed and
+settling 390 billed bytes at multiplier 1.5. A second owner settles 12/12/36;
+wrong, unknown and disabled credentials reach no target, and the disabled
+owner's ledger remains zero. This new test covers TCP/CONNECT; the preceding
+native UDP/plain-HTTP checkpoint remains its separate evidence.
+
+Snapshot reassignment commits new credentials and membership while compilation
+is reading. The candidate must contain a coherent original or replacement
+owner/credential pair; the next compile contains the replacement. Other cases
+reject stale membership before policy preparation, unowned credentials and
+anonymous resources, and normalize native case/alias precedence while removing
+dormant users from runtime JSON. Stored resource settings and shared canonical
+credentials remain unchanged by compilation.
+
+One independent read-only review found no Critical or Important issue. Its
+minor diagnostic correction states that owned credentials require managed
+activation; the unmanaged guard itself remains. Grouped hot changes, live
+legacy username-counter handoff, owner UI and generic lifecycle remain open.
+
+Final generation freshness, Go lint and vet passed. `make test-go` passed all
+root packages and the explicit AmneziaWG device package in 268.85 s wall time;
+service tests passed in 110.598 s. The full affected service/adapter/Runtime
+race run passed in 410.36 s wall time, with service race in 360.258 s.
+`password-config-gate-results.json` records each command, exit status and log.
+The preliminary lint run found a De Morgan expression style issue in the
+snapshot assertion; equivalent named booleans corrected it, and the failed
+log/results were preserved. No production behavior or assertion was relaxed.
+No core/frontend source changed in Task 5B2, so Task 5A native core and Task
+5B1 full frontend evidence remain applicable; this increment reruns the full
+root Go tests and all affected race packages rather than claiming fresh
+whole-core/frontend executions.

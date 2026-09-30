@@ -186,7 +186,7 @@ func localManagedInboundBindings(tx *gorm.DB) (map[string][]model.ClientRecord, 
 		tags := make(map[int]string, len(inbounds))
 		for _, inbound := range inbounds {
 			switch inbound.Protocol {
-			case model.Tunnel, model.VLESS, model.VMESS, model.Trojan, model.Shadowsocks:
+			case model.Tunnel, model.VLESS, model.VMESS, model.Trojan, model.Shadowsocks, model.Mixed, model.HTTP:
 			default:
 				return fmt.Errorf("%w: managed adapter for %s is not implemented", xray.ErrClientPolicyCapability, inbound.Protocol)
 			}
@@ -234,6 +234,9 @@ func localManagedInboundBindings(tx *gorm.DB) (map[string][]model.ClientRecord, 
 }
 
 func bindManagedInboundIdentity(inbound *xray.InboundConfig, records []model.ClientRecord) error {
+	if isPasswordProxy(model.Protocol(inbound.Protocol)) {
+		return bindManagedPasswordProxyIdentity(inbound, records)
+	}
 	var settings map[string]any
 	if err := json.Unmarshal(inbound.Settings, &settings); err != nil {
 		return err

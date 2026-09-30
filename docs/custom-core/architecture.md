@@ -210,15 +210,15 @@ unowned conversion retains upstream compatibility without introducing a custom
 core requirement. Frontend schemas preserve owner UUIDs and required-auth
 markers through normal form edits; owner selection UI remains unfinished.
 
-Managed Mixed/HTTP compilation and unmanaged activation of owned accounts stay
-gated until canonical runtime generation is verified.
-It does not claim owner selection UI, canonical runtime generation, generic
-client lifecycle fanout, credential hot diffs or legacy username-counter
-migration. Those follow with real-process regressions before activation is
-opened. API/import/export continue using existing settings JSON; restores must
+Task 5B1 kept both managed compilation and unmanaged activation of owned
+accounts gated. Task 5B2 verifies canonical managed runtime generation;
+owned accounts continue to require managed activation. Owner selection UI,
+generic client lifecycle fanout, grouped credential hot diffs and legacy
+username-counter migration remain open. API/import/export continue using
+existing settings JSON; restores must
 preserve canonical stable IDs and links rather than minting replacement owners.
 
-The next runtime configuration increment derives every active account's native
+The runtime configuration increment derives every active account's native
 email/stable-ID pair from that verified owner set and the same SQL snapshot as
 its resource credentials. Global UUID/password fields do not supply password
 proxy credentials. Runtime JSON removes panel-only owner selection and dormant
@@ -228,3 +228,12 @@ Unowned credentials and anonymous empty HTTP listeners cannot enter this scoped
 managed adapter. Protected empty listeners need no invented owner. Live legacy
 username-counter handoff retains its protocol gate until an unambiguous mapping
 and final settlement are independently verified.
+
+Validate complete owner coverage before filtering disabled credentials. The
+compiler never rewrites persisted resource credentials or canonical shared
+credentials. Restored nonempty owned HTTP accounts imply protected
+authentication even when their explicit marker was omitted or false; removing
+the last account preserves protection. Ordinary unowned restores keep their
+legacy removal behavior. Real generated Mixed SOCKS/HTTP, standalone HTTP and
+Tunnel listeners share one core ledger, with independent target byte counts
+and separate owner attribution verified on SQLite and PostgreSQL.

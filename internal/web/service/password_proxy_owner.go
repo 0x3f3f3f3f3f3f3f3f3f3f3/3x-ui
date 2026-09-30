@@ -212,6 +212,7 @@ func resolvePasswordProxyOwners(tx *gorm.DB, inbound *model.Inbound) ([]model.Cl
 				return nil, err
 			}
 			var required bool
+			owned := slices.ContainsFunc(priorAccounts, func(account passwordProxyAccount) bool { return account.OwnerClientID != "" })
 			if raw := prior["requireAuthentication"]; len(raw) != 0 {
 				if err := json.Unmarshal(raw, &required); err != nil {
 					return nil, err
@@ -224,8 +225,11 @@ func resolvePasswordProxyOwners(tx *gorm.DB, inbound *model.Inbound) ([]model.Cl
 						return nil, err
 					}
 				}
-				owned := slices.ContainsFunc(priorAccounts, func(account passwordProxyAccount) bool { return account.OwnerClientID != "" })
 				required = owned && auth == "password"
+			} else if owned {
+				// Nonempty native HTTP accounts already required authentication even
+				// if an older restore omitted the explicit empty-list protection.
+				required = true
 			}
 			if required {
 				settings, _, err := passwordProxyAccounts(inbound)
@@ -367,8 +371,8 @@ func validatePasswordProxyInbounds(tx *gorm.DB, inbounds []*model.Inbound) error
 	return nil
 }
 
-// Until canonical runtime generation is verified, an owned account cannot enter
-// an unmanaged data path that would ignore its panel ownership metadata.
+// An owned account requires managed activation; an unmanaged data path would
+// ignore its panel ownership metadata.
 func guardUnmanagedPasswordProxy(inbound *model.Inbound) error {
 	if !isPasswordProxy(inbound.Protocol) {
 		return nil
@@ -379,7 +383,7 @@ func guardUnmanagedPasswordProxy(inbound *model.Inbound) error {
 	}
 	for _, account := range accounts {
 		if account.OwnerClientID != "" {
-			return fmt.Errorf("%w: canonical password account activation is not implemented", xray.ErrClientPolicyCapability)
+			return fmt.Errorf("%w: canonical password accounts require managed activation", xray.ErrClientPolicyCapability)
 		}
 	}
 	return nil

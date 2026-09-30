@@ -254,6 +254,9 @@ func (s *XrayService) getXrayConfigFromDB(managed bool, db *gorm.DB) (*xray.Conf
 		finalClients := make([]any, 0, len(dbClients))
 		var wgPeers []any
 		for i := range dbClients {
+			if managed && isPasswordProxy(inbound.Protocol) {
+				continue
+			}
 			c := dbClients[i]
 			if enable, exists := enableMap[c.Email]; !managed && exists && !enable {
 				logger.Infof("Remove Inbound User %s due to expiration or traffic limit", c.Email)
@@ -322,6 +325,9 @@ func (s *XrayService) getXrayConfigFromDB(managed bool, db *gorm.DB) (*xray.Conf
 			}
 			settings["peers"] = wgPeers
 			mutated = true
+		} else if managed && isPasswordProxy(inbound.Protocol) {
+			_, mutated = settings["clients"]
+			delete(settings, "clients")
 		} else {
 			_, hadClients := settings["clients"]
 			mutated = hadClients || len(finalClients) > 0

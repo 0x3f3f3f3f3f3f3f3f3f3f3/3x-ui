@@ -548,7 +548,7 @@ Primary source anchors: `frontend/src/pages/inbounds/form/protocols/accounts-lis
   detached-history preservation. Test late SQL rollback, stale settings, two
   aliases for one owner, owner reassignment, credential rotation and unchanged
   sibling credentials/policy. Run SQLite and PostgreSQL row-lock regressions.
-- [ ] Bind every managed credential from canonical records, including disabled
+- [x] Bind every managed credential from canonical records, including disabled
   owners. Preserve protected authentication when all users are disabled or
   removed. Refuse mixed owned/unowned activation until every path has a trusted
   binding; legacy accounts retain existing behavior outside managed activation.
@@ -630,7 +630,8 @@ verified separately. Grouped native hot changes and owner UI are later steps.
 
 Files: new `internal/web/service/password_proxy_config.go`,
 `password_proxy_config_test.go` and `password_proxy_config_runtime_test.go`;
-change `client_policy_config.go` and `xray.go`.
+change `client_policy_config.go`, `xray.go` and the restored HTTP protection
+boundary in `password_proxy_owner.go`.
 Interface: `bindManagedPasswordProxyIdentity(*xray.InboundConfig,
 []model.ClientRecord) error` validates every stored account owner and emits
 native identity metadata. Strip ownerClientId, dormant users and settings.clients
@@ -638,19 +639,19 @@ from the runtime payload. Include policies for every linked owner, including
 disabled owners; omit explicitly disabled owners' authentication credentials
 while retaining Mixed password auth and HTTP required-auth in empty listeners.
 
-- [ ] Write `TestPasswordProxyConfigUsesCanonicalOwners` through the actual
+- [x] Write `TestPasswordProxyConfigUsesCanonicalOwners` through the actual
   compiler, using two aliases, two owners, resource passwords different from
   canonical shared passwords, and existing traffic. Assert exact wire
   credentials/identities, one policy per distinct owner and no settings.clients.
-- [ ] Observe rejection by the current unsupported-adapter gate before changes.
-- [ ] Implement the native binding and skip generic clients generation for
+- [x] Observe rejection by the current unsupported-adapter gate before changes.
+- [x] Implement the native binding and skip generic clients generation for
   password protocols. Reject unowned active credentials and malformed bindings;
   protected empty listeners require no invented owner. Do not use display names
   or caller-provided core identity as authority.
-- [ ] Write snapshot-reassignment, stale membership, all-disabled and empty-auth
+- [x] Write snapshot-reassignment, stale membership, all-disabled and empty-auth
   regressions. Assert compilation neither mixes owners/credentials from two
   revisions nor mutates stored settings/shared credentials.
-- [ ] Prove generated Mixed SOCKS/HTTP and HTTP listeners feed the real core
+- [x] Prove generated Mixed SOCKS/HTTP and HTTP listeners feed the real core
   ledger using independent standard clients and targets; aliases share a stable
   ledger with Tunnel, wrong credentials reach no target, disabled owners remain
   blocked, and another owner remains usable. Run SQLite/PostgreSQL compiler
