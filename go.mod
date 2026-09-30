@@ -4,6 +4,8 @@ go 1.27.1
 
 replace github.com/xtls/xray-core => ./core/xray
 
+replace github.com/amnezia-vpn/amneziawg-go/v3 => ./core/deps/amneziawg-go
+
 require (
 	github.com/amnezia-vpn/amneziawg-go/v3 v3.1.20260828
 	github.com/gin-contrib/gzip v1.2.8

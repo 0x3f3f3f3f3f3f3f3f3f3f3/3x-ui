@@ -2,6 +2,17 @@
 
 The imported Xray-core retains its own LICENSE and source notices. This file adds notices for new dependencies.
 
+## AmneziaWG Go v3.1.20260828 (existing panel runtime)
+
+Source: https://github.com/amnezia-vpn/amneziawg-go/tree/b5928efb6ca19f0153958460c3d141f04abc5c2e
+
+The module source is retained under `deps/amneziawg-go`, with its complete
+[MIT license](deps/amneziawg-go/LICENSE) and original file notices. Its immutable
+origin and the timer synchronization / TUN padding patches are recorded in
+[the source manifest](deps/amneziawg-go.UPSTREAM.json). The root module uses this
+local source for reproducible builds. This dependency still serves the existing
+panel-side AmneziaWG runtime; it has not yet been migrated into Custom Xray-core.
+
 ## bbolt v1.5.0
 
 Source: https://github.com/etcd-io/bbolt/tree/v1.5.0

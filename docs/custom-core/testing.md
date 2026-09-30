@@ -1135,13 +1135,59 @@ serially except the short isolated dependency-race reproduction):
 | Final real TCP/UDP owner reassignment after error-assertion lint repair | SQLite and PostgreSQL race pass, 3.197 s and 3.393 s packages |
 | Final Go static check / build | Zero lint issues, 23.92 s; build passes, 8.21 s |
 | Workflow and generated assets | `make gen-check` passes; YAML and 19 shell blocks valid; locales parse; frontend/docs OpenAPI and installed MSW worker copies match |
-| Complete repository race | Not a pass: inherited AmneziaWG timer race found; see below |
+| First complete repository race, before dependency repair | Failed on inherited AmneziaWG timer race; subsequent repair gate below passes |
 
 The broader race gate exposed `Timer.duration` being cleared after unlocking in
 `amneziawg-go/v3 v3.1.20260828` during the existing IPv6 domain-egress test.
 The main baseline already pins this dependency; its integration sources and root
 module files are unchanged by the owner editor. An isolated real-timer regression
 reproduces the race, and moving the clear into the existing critical section passes
-ten repetitions in a temporary candidate. The reproducible repository dependency
-repair and its integrated validation are follow-up work; the candidate result does
-not establish a passing whole-repository race gate.
+ten repetitions in a temporary candidate. The candidate result alone does not establish a passing whole-repository race
+gate. The managed-source repair and its subsequent validation are recorded below.
+
+
+### AmneziaWG dependency synchronization and first-packet repair (2026-09-30)
+
+The managed source retains all 121 files of v3.1.20260828. A byte comparison against
+the verified module found only two modified upstream files (`device/timers.go`
+and `device/send.go`) and one added regression test; LICENSE is unchanged.
+This repairs the existing panel-side runtime, not the pending single-core migration.
+
+The real timer regression fails on the original unlocked duration clear and passes
+ten times with the repository replacement under `-race -mod=readonly`. Callbacks
+remain outside the modifying lock so they can rearm the timer.
+
+The dependency device suite then exposed `TestAWGDevicePing` timing out. Five
+repetitions fail both with the timer-only patch and the original module, with
+unknown transport packet types after successful handshakes. A deterministic TUN
+wrapper waits until both real devices have entered their read, changes S4, then
+sends actual packets in both directions. Before the send-path repair both first
+packets time out at S4=25. Afterward, increases to 25, decreases to 7 and clearing
+to 0 retain the exact payload. That test and the real UDP socket Ping test each
+pass ten times under `-race` (1.994 s package). The change covers configuration
+applied during a blocked TUN read; it does not promise atomic reconfiguration of
+packets already queued for encryption.
+
+`make test-go`, `make race`, and both corresponding CI jobs explicitly run the
+patched dependency device suite because `./...` excludes nested modules. CI YAML
+and all 25 shell blocks parse. Read-only source review found no outstanding issue.
+
+Serial integrated checks use Go 1.27.1 / Linux arm64 and the real custom/upstream/
+legacy core fixtures recorded above. Intermediate results: the AWG runtime,
+protocol and dependency-device race suites pass (44.66 s command), golangci-lint
+reports zero issues (88.93 s), and the panel build passes (8.40 s). The complete `make race` passes (783.05 s), including the service package
+(337.941 s), internal/xray (20.357 s), and the explicit dependency device suite
+(13.650 s). The existing upstream interactive, endless handshake test remains
+skipped as designed; it is not counted as automated interoperability evidence.
+
+
+The two required parser fuzz targets each complete 30 seconds of exploration:
+`FuzzParseLink` (56.88 s including build) and `FuzzDecodeCertPin` (300.31 s including
+its first instrumentation build; 79,276 executions). `make vulncheck` passes using
+govulncheck v1.8.0 (14.25 s): zero reachable-symbol and zero imported-package
+findings. A separate module-only scan reports
+[GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932) for unmaintained
+`golang.org/x/crypto/openpgp` in required module x/crypto v0.57.0, with no fixed
+version listed. The application does not import the affected package according
+to the symbol scan; the module-only warning is retained, not counted as a failure
+of the default reachable-code check or silently suppressed.

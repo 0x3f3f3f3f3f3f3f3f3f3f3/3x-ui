@@ -376,3 +376,14 @@ client form/API, then selecting it as the first Tunnel's owner. Currently creati
 requires an ordinary inbound, so a fresh panel cannot complete that flow through
 the owner picker alone. Source ACL implementation follows this creation path;
 both remain unimplemented at this checkpoint.
+
+
+Task 6 regression repair checkpoint: the complete root race gate exposed an
+inherited AmneziaWG timer data race. The exact pinned module is now managed in
+`core/deps/amneziawg-go` with provenance and licenses. Its dependency suite also
+exposed an independently reproduced first-packet padding bug during blocked TUN
+reads. Deterministic regressions, repeated real UDP checks, source review, complete
+root/dependency race, static check, build, parser fuzz and reachable-code vulnerability
+checks pass. This preserves the current panel-side AWG implementation; migration
+into the Custom Xray process is still open. Continue with standalone client
+creation so a fresh panel can assign an owner to its first Tunnel.

@@ -40,6 +40,7 @@ jobs:
         run: |
           go list ./... | grep -v '/frontend/node_modules/' > /tmp/go-packages.txt
           go test -shuffle=on -count=1 $(cat /tmp/go-packages.txt)
+          go test -shuffle=on -count=1 github.com/amnezia-vpn/amneziawg-go/v3/device
 
   postgres-durable-first:
     runs-on: ubuntu-latest
@@ -140,6 +141,7 @@ jobs:
           go list ./... | grep -v '/frontend/node_modules/' > /tmp/go-packages.txt
           # internal/web/service runs ~10x slower under -race and overruns the 10m default.
           go test -race -shuffle=on -count=1 -timeout 25m $(cat /tmp/go-packages.txt)
+          go test -race -shuffle=on -count=1 github.com/amnezia-vpn/amneziawg-go/v3/device
 
   # Brief native-fuzz smoke on the security-/parser-critical decoders. Each runs the
   # generated corpus plus 30s of exploration; a crash here is a real input-handling bug.

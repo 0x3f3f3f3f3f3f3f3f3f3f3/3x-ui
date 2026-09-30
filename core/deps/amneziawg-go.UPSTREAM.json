@@ -1,0 +1,25 @@
+{
+  "upstream": "https://github.com/amnezia-vpn/amneziawg-go",
+  "module": "github.com/amnezia-vpn/amneziawg-go/v3",
+  "tag": "v3.1.20260828",
+  "commit": "b5928efb6ca19f0153958460c3d141f04abc5c2e",
+  "module_sum": "h1:D8d8gGvwXcTxUIsE4z6F6vjy4/VZddu95vMNtOygh1c=",
+  "go_mod_sum": "h1:YoPc6qcOZqD7TXZ1xpedD8Sx3aSKsxN05ZqEFmXDNHk=",
+  "source_files": 121,
+  "import_method": "complete verified Go module source; original LICENSE and file notices retained",
+  "license": "MIT; retain file-specific notices",
+  "patched_files": {
+    "device/timers.go": {
+      "upstream_sha256": "4c91e359d7851b24e5b98b2eff00e9b15d49a342aaa3a9027e906e0afc77b2ff",
+      "change": "Clear duration while holding modifyingLock; invoke the expiration callback after releasing it."
+    },
+    "device/send.go": {
+      "upstream_sha256": "71b2dabe20deffb3802d2351ca4779c9a7729b8d96fbebcb553cd3f7f24d9c00",
+      "change": "Reload transport padding after a blocking TUN read and relocate packet payload before encryption; reject packets that no longer fit the buffer."
+    }
+  },
+  "runtime_scope": "existing panel-side AmneziaWG runtime; core migration remains unimplemented",
+  "additional_files": {
+    "device/tun_padding_test.go": "Deterministic paired-device regression for padding changes during a pending TUN read."
+  }
+}

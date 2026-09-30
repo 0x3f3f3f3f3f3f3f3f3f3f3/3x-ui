@@ -43,3 +43,26 @@ Protobuf generation used official protoc 36.2 (download SHA-256 `8b8f18bd2b30346
 ## Durable-store dependency
 
 bbolt v1.5.0, commit `e7a8b2dd498494a3766ba24dd94d3509e5588485`, module `go.etcd.io/bbolt`, checksum `h1:S7GAl7Fxv12yohbwFfIbQCGDWbQbtDGPET4P/bD4lxU=`. MIT license inspected in downloaded source; attribution retained in [third-party notice](../../core/THIRD_PARTY_NOTICES.md). Primary release evidence: [bbolt 1.5 changelog](https://github.com/etcd-io/bbolt/blob/v1.5.0/CHANGELOG/CHANGELOG-1.5.md) and pinned source. The store is embedded in the same core process, with fsync enabled; it is execution state, not another configuration authority.
+
+## Existing AmneziaWG dependency repair
+
+The main baseline pins `github.com/amnezia-vpn/amneziawg-go/v3 v3.1.20260828`,
+commit `b5928efb6ca19f0153958460c3d141f04abc5c2e`, module checksum
+`h1:D8d8gGvwXcTxUIsE4z6F6vjy4/VZddu95vMNtOygh1c=`. The complete 121-file Go
+module source is managed in `core/deps/amneziawg-go`, retaining its MIT license
+and file-specific notices. The [manifest](../../core/deps/amneziawg-go.UPSTREAM.json)
+records the immutable origin, both modified upstream files and the added regression test.
+
+The full panel race gate exposed an unlocked write in the
+[pinned timer callback](https://github.com/amnezia-vpn/amneziawg-go/blob/b5928efb6ca19f0153958460c3d141f04abc5c2e/device/timers.go).
+The patch clears the pending duration while holding its existing mutex, before
+invoking the callback outside that lock. The observed upstream master still had
+the same write on 2026-09-30; no unverified version upgrade is assumed to fix it.
+The dependency suite also exposed first-packet loss when a blocked TUN read
+retained the old S4 padding while configuration changed. The unchanged upstream
+module reproduces the same failure. The send path now reloads padding after the
+read and relocates the payload, with an explicit buffer limit; a deterministic
+paired-device regression covers increasing, decreasing and clearing padding.
+A root-module `replace` makes normal builds and CI use the checked-in repairs.
+This preserves the current panel-side runtime; AmneziaWG's single-core migration
+remains a separate, unimplemented requirement.
