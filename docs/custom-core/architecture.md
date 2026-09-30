@@ -94,6 +94,58 @@ shared policy enforcement.
 
 ## Existing paths requiring migration
 
+### Planned Mixed/SOCKS and HTTP identity increment
+
+This is the next Task 5 increment, not an implemented protocol claim. Existing
+password accounts gain optional server-configured `clientId` and canonical
+`email`. Username/password authentication returns an immutable `MemoryUser`
+with the typed authenticated account and stable ID. A wire username never acts
+as a client ID. Legacy accounts retain username-based statistics; anonymous
+SOCKS/HTTP and SOCKS4 retain their existing behavior without a managed identity.
+Managed identity on no-auth SOCKS is rejected. Anonymous resource ownership,
+panel account-to-client binding/migration and remote/global policy remain later
+work; the managed compiler must continue to reject unsupported activation.
+
+Keep the existing protobuf `accounts` credential maps and all field numbers.
+Add SOCKS fields 7 `client_ids` and 8 `account_emails`; HTTP fields 5
+`client_ids`, 6 `account_emails` and 7 `require_authentication`. The latter keeps
+an intentionally password-protected empty HTTP listener closed. Omitted legacy
+settings preserve their old behavior. Metadata must resolve to an existing
+credential, and managed duplicate usernames are rejected before construction.
+HTTP's required-auth mode cannot turn anonymous after deleting its last user.
+Changing a no-auth listener's mode requires configuration replacement rather
+than an AddUser RPC silently changing authentication for existing streams.
+
+A shared username/password validator holds immutable credential objects behind
+a mutex. Authentication is a direct username lookup; removal removes both
+indexes, then revokes the credential outside the lock. SOCKS and its built-in
+HTTP fallback share this validator, so deleting either account view cannot leave
+another protocol path active. Native UserManager CRUD/list APIs use typed SOCKS
+or HTTP accounts. Closing a handler revokes all accounts and prevents later adds.
+`trusted-socks-client-id-v1` and `trusted-http-client-id-v1` are advertised only
+with the complete corresponding adapter; HTTP's empty required-auth setting
+also requires the latter capability before handler/startup mutation.
+
+SOCKS UDP retains the selected core's per-authenticated-TCP ephemeral listener.
+It inherits the exact authenticated user, not a source-IP lookup. Credential
+tracking covers the associated TCP connection before the first datagram, and
+closing it must release its UDP listener safely even during timer setup. UDP
+payload still passes through the existing Dispatcher and common policy engine.
+
+Each HTTP request receives a separate inbound context and a connection lease.
+An active request may close its physical connection on quota/disable/revocation;
+after its response completes, the lease becomes inactive. Thus delayed cleanup
+of user A's upstream cannot close a later user B request/CONNECT on the same
+keep-alive client socket. Plain HTTP accounting retains the existing dispatched
+HTTP-message boundary (serialized request/response headers plus body); CONNECT
+and SOCKS meter the target payload. No target dialer is added outside Xray.
+
+Acceptance uses independent standard SOCKS5/HTTP clients, observable targets,
+exact shared totals with Tunnel, wrong credentials, deletion/re-add, idle and
+active UDP association cleanup, same-IP different users, last-account HTTP
+refusal, ordinary anonymous regressions and delayed HTTP upstream cleanup.
+Ordinary mux and native handler construction tests remain part of regression.
+
 Source evidence: `internal/mtproto` supervises mtg-multi (one process per inbound); `internal/tuic` supervises tuic-server behind a panel UDP relay; `internal/amneziawgnet` runs AmneziaWG/gVisor inside the panel and bridges per-peer authenticated SOCKS into Xray. Their current behavior/data must be retained while moving to core adapters. Until all three migrations are tested, the installation is not fully single-core. Host administrative SSH and existing security services remain untouched.
 
 ## Protocol choices

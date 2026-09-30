@@ -461,3 +461,55 @@ TCP context and closes it with that context; do not assume a shared unauthentica
 UDP listener from older versions. Verify that boundary and HTTP's repeated
 request authentication with real traffic before extending the existing policy
 coverage. No Mixed/HTTP stable-ID support is claimed by the outbound-proxy tests.
+
+### Task 5A: Native password-proxy identity and credential lifecycle
+
+Spec: architecture.md, “Planned Mixed/SOCKS and HTTP identity increment”.
+Execution remains inline under the original authorization to decide routine
+engineering choices. This core increment precedes panel binding/migration; it
+does not make unsupported panel configurations eligible for managed activation.
+
+Files: create `core/xray/common/protocol/password_validator.go` and its tests;
+extend `proxy/{socks,http}/config.proto`, generated protobuf, server lifecycle
+and `infra/conf/{socks,http}.go`; create HTTP request connection lease helper;
+extend `proxy/socks/temp_udp_listen.go`; add real `testing/policy` regressions;
+negotiate the new capabilities in `app/clientpolicy/command` and panel adapter.
+
+Interfaces: `protocol.PasswordValidator` provides
+`Add(username, password string, user *MemoryUser) error`,
+`Authenticate(username, password string) *MemoryUser`,
+`Remove(email string) error`, `GetUser(email string) *MemoryUser`,
+`GetUsers() []*MemoryUser`, `GetCount() int64` and `Close() error`.
+HTTP's shared-validator constructor accepts the same validator from SOCKS;
+existing `NewServer` signatures remain unchanged. Both handlers implement the
+existing `proxy.UserManager`, with no new RPC service or field renumbering.
+
+- [ ] Write real failing `TestPasswordProxiesShareTunnelIdentityAndDisconnect`
+  using standard SOCKS5/HTTP connections: six-byte echoes from two account
+  streams plus Tunnel share 18 upload / 18 download / 54 billed at 1.5;
+  disable closes all three, wrong passwords never reach either target.
+- [ ] Verify RED with `go test -race -count=1 -v ./testing/policy -run
+  '^TestPasswordProxies'`; retain failure logs without weakening assertions.
+- [ ] Write config regressions for both aliases, explicit metadata, no-auth
+  rejection, legacy omitted fields, managed duplicate usernames, orphan protobuf
+  metadata and HTTP empty required-auth. Preserve legacy expected protobufs.
+- [ ] Implement the additive fields and shared validator. Test exact Unicode
+  usernames, distinct case-sensitive credentials, duplicate index rejection,
+  removal/re-add with old-pointer revocation, closed-handler rejection and
+  concurrent authentication/removal under race.
+- [ ] Implement native handlers/UserManager and per-connection credential
+  tracking; test active TCP, mixed HTTP fallback, idle/active UDP association
+  cleanup and two same-IP users with distinct stable IDs. Re-add keeps the
+  existing client's ledger and does not restore revoked old streams.
+- [ ] Implement request context/lease isolation. Keep user A's upstream open
+  after a complete HTTP response, reuse the client socket for user B CONNECT,
+  then disable/remove A: B must keep echoing and ledger attribution must stay
+  separate. Removing the last authenticated HTTP user must return 407 for an
+  unauthenticated request, including explicit empty required-auth construction.
+- [ ] Negotiate both capabilities, including HTTP required-auth without owners;
+  older-capability handler probes must fail before mutation. Keep the panel
+  compiler's unsupported-protocol gate until canonical bindings are implemented.
+- [ ] Run affected core/config/adapter race and static checks, existing protocol
+  mux and policy regressions, complete core shuffled tests and scoped core race.
+  Review this increment, fix findings, update status/evidence, commit and push
+  with exact remote SHA verification before proceeding to panel account binding.
