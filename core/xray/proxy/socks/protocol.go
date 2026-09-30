@@ -43,10 +43,12 @@ var addrParser = protocol.NewAddressParser(
 )
 
 type ServerSession struct {
-	config       *ServerConfig
-	address      net.Address
-	port         net.Port
-	localAddress net.Address
+	config          *ServerConfig
+	users           *protocol.PasswordValidator
+	onAuthenticated func(*protocol.MemoryUser) error
+	address         net.Address
+	port            net.Port
+	localAddress    net.Address
 }
 
 func (s *ServerSession) handshake4(cmd byte, reader io.Reader, writer io.Writer) (*protocol.RequestHeader, error) {
@@ -98,12 +100,12 @@ func (s *ServerSession) handshake4(cmd byte, reader io.Reader, writer io.Writer)
 	}
 }
 
-func (s *ServerSession) auth5(nMethod byte, reader io.Reader, writer io.Writer) (username string, err error) {
+func (s *ServerSession) auth5(nMethod byte, reader io.Reader, writer io.Writer) (user *protocol.MemoryUser, err error) {
 	buffer := buf.StackNew()
 	defer buffer.Release()
 
 	if _, err = buffer.ReadFullFrom(reader, int32(nMethod)); err != nil {
-		return "", errors.New("failed to read auth methods").Base(err)
+		return nil, errors.New("failed to read auth methods").Base(err)
 	}
 
 	var expectedAuth byte = authNotRequired
@@ -113,39 +115,50 @@ func (s *ServerSession) auth5(nMethod byte, reader io.Reader, writer io.Writer) 
 
 	if !hasAuthMethod(expectedAuth, buffer.BytesRange(0, int32(nMethod))) {
 		writeSocks5AuthenticationResponse(writer, socks5Version, authNoMatchingMethod)
-		return "", errors.New("no matching auth method")
+		return nil, errors.New("no matching auth method")
 	}
 
 	if err := writeSocks5AuthenticationResponse(writer, socks5Version, expectedAuth); err != nil {
-		return "", errors.New("failed to write auth response").Base(err)
+		return nil, errors.New("failed to write auth response").Base(err)
 	}
 
 	if expectedAuth == authPassword {
 		username, password, err := ReadUsernamePassword(reader)
 		if err != nil {
-			return "", errors.New("failed to read username and password for authentication").Base(err)
+			return nil, errors.New("failed to read username and password for authentication").Base(err)
 		}
 
-		if !s.config.HasAccount(username, password) {
+		if s.users != nil {
+			user = s.users.Authenticate(username, password)
+		} else if s.config.HasAccount(username, password) {
+			user = &protocol.MemoryUser{Email: username, Level: s.config.UserLevel}
+		}
+		if user == nil {
 			writeSocks5AuthenticationResponse(writer, 0x01, 0xFF)
-			return "", errors.New("invalid username or password")
+			return nil, errors.New("invalid username or password")
+		}
+		if s.onAuthenticated != nil {
+			if err := s.onAuthenticated(user); err != nil {
+				writeSocks5AuthenticationResponse(writer, 0x01, 0xFF)
+				return nil, err
+			}
 		}
 
 		if err := writeSocks5AuthenticationResponse(writer, 0x01, 0x00); err != nil {
-			return "", errors.New("failed to write auth response").Base(err)
+			return nil, errors.New("failed to write auth response").Base(err)
 		}
-		return username, nil
+		return user, nil
 	}
 
-	return "", nil
+	return nil, nil
 }
 
 func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer net.Conn) (*protocol.RequestHeader, *TempUDPConn, error) {
 	var (
-		username string
-		err      error
+		user *protocol.MemoryUser
+		err  error
 	)
-	if username, err = s.auth5(nMethod, reader, writer); err != nil {
+	if user, err = s.auth5(nMethod, reader, writer); err != nil {
 		return nil, nil, err
 	}
 
@@ -161,9 +174,7 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer net.Co
 	}
 
 	request := new(protocol.RequestHeader)
-	if username != "" {
-		request.User = &protocol.MemoryUser{Email: username}
-	}
+	request.User = user
 	switch cmd {
 	case cmdTCPConnect, cmdTorResolve, cmdTorResolvePTR:
 		// We don't have a solution for Tor case now. Simply treat it as connect command.

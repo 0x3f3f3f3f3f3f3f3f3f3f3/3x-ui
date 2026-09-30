@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -31,14 +32,31 @@ import (
 type Server struct {
 	config        *ServerConfig
 	policyManager policy.Manager
+	users         *protocol.PasswordValidator
+	authRequired  bool
 }
 
 // NewServer creates a new HTTP inbound handler.
 func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
+	users, err := protocol.NewPasswordValidator(config.Accounts, config.ClientIds, config.AccountEmails, config.UserLevel,
+		func(user, password string) protocol.Account { return &Account{Username: user, Password: password} })
+	if err != nil {
+		return nil, err
+	}
+	return NewServerWithAuthentication(ctx, config, users)
+}
+
+// NewServerWithAuthentication shares credential identity with a Mixed listener.
+func NewServerWithAuthentication(ctx context.Context, config *ServerConfig, users *protocol.PasswordValidator) (*Server, error) {
+	if users == nil {
+		return nil, errors.New("HTTP credential validator is required")
+	}
 	v := core.MustFromContext(ctx)
 	s := &Server{
 		config:        config,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		users:         users,
+		authRequired:  config.RequireAuthentication || len(config.Accounts) > 0,
 	}
 
 	return s, nil
@@ -81,6 +99,30 @@ type readerOnly struct {
 	io.Reader
 }
 
+// requestConnection limits revocation to the request that owns this connection.
+// Release waits for a concurrent close before the next request can begin.
+type requestConnection struct {
+	stat.Connection
+	mu     sync.Mutex
+	active bool
+}
+
+func (c *requestConnection) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.active {
+		return nil
+	}
+	c.active = false
+	return c.Connection.Close()
+}
+
+func (c *requestConnection) release() {
+	c.mu.Lock()
+	c.active = false
+	c.mu.Unlock()
+}
+
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	return s.ProcessWithFirstbyte(ctx, network, conn, dispatcher)
 }
@@ -90,7 +132,8 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 // We need to add it back
 // Other parts are the same as the process function
 func (s *Server) ProcessWithFirstbyte(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher, firstbyte ...byte) error {
-	inbound := session.InboundFromContext(ctx)
+	baseInbound := *session.InboundFromContext(ctx)
+	inbound := &baseInbound
 	inbound.Name = "http"
 	inbound.CanSpliceCopy = 2
 	inbound.User = &protocol.MemoryUser{
@@ -108,7 +151,15 @@ func (s *Server) ProcessWithFirstbyte(ctx context.Context, network net.Network, 
 		reader = bufio.NewReaderSize(readerOnly{conn}, buf.Size)
 	}
 
-Start:
+	for {
+		err := s.processRequest(ctx, reader, conn, dispatcher, inbound)
+		if err != errWaitAnother {
+			return err
+		}
+	}
+}
+
+func (s *Server) processRequest(ctx context.Context, reader *bufio.Reader, conn stat.Connection, dispatcher routing.Dispatcher, baseInbound *session.Inbound) error {
 	if err := conn.SetReadDeadline(time.Now().Add(s.policy().Timeouts.Handshake)); err != nil {
 		errors.LogInfoInner(ctx, err, "failed to set read deadline")
 	}
@@ -121,15 +172,33 @@ Start:
 		}
 		return trace
 	}
+	inboundCopy := *baseInbound
+	inbound := &inboundCopy
+	ctx = session.ContextWithInbound(ctx, inbound)
+	lease := &requestConnection{Connection: conn, active: true}
+	inbound.Conn = lease
+	if strings.EqualFold(request.Method, "CONNECT") {
+		// CONNECT owns the remaining connection lifetime and cannot advance to
+		// another request. Preserve the unmanaged TCP splice path for this case.
+		inbound.Conn = conn
+	}
+	defer lease.release()
 
-	if len(s.config.Accounts) > 0 {
+	if s.authRequired {
 		user, pass, ok := parseBasicAuth(request.Header.Get("Proxy-Authorization"))
-		if !ok || !s.config.HasAccount(user, pass) {
+		var authenticated *protocol.MemoryUser
+		if ok {
+			authenticated = s.users.Authenticate(user, pass)
+		}
+		if authenticated == nil {
 			return common.Error2(conn.Write([]byte("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"proxy\"\r\n\r\n")))
 		}
-		if inbound != nil {
-			inbound.User.Email = user
+		release, err := authenticated.TrackSession(func() { lease.Close() })
+		if err != nil {
+			return err
 		}
+		defer release()
+		inbound.User = authenticated
 	}
 
 	errors.LogInfo(ctx, "request to Method [", request.Method, "] Host [", request.Host, "] with URL [", request.URL, "]")
@@ -164,10 +233,9 @@ Start:
 
 	err = s.handlePlainHTTP(ctx, request, conn, dest, dispatcher)
 	if err == errWaitAnother {
-		if keepAlive {
-			goto Start
+		if !keepAlive {
+			return nil
 		}
-		err = nil
 	}
 
 	return err

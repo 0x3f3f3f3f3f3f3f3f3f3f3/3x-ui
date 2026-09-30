@@ -31,23 +31,37 @@ type Server struct {
 	policyManager policy.Manager
 	cone          bool
 	httpServer    *http.Server
+	users         *protocol.PasswordValidator
 }
 
 // NewServer creates a new Server object.
 func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
+	if len(config.ClientIds) > 0 && config.AuthType != AuthType_PASSWORD {
+		return nil, errors.New("managed SOCKS identity requires password authentication")
+	}
+	users, err := protocol.NewPasswordValidator(config.Accounts, config.ClientIds, config.AccountEmails, config.UserLevel,
+		func(user, password string) protocol.Account { return &Account{Username: user, Password: password} })
+	if err != nil {
+		return nil, err
+	}
 	v := core.MustFromContext(ctx)
 	s := &Server{
 		config:        config,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
+		users:         users,
 	}
 	httpConfig := &http.ServerConfig{
-		UserLevel: config.UserLevel,
+		UserLevel:             config.UserLevel,
+		RequireAuthentication: config.AuthType == AuthType_PASSWORD,
 	}
 	if config.AuthType == AuthType_PASSWORD {
 		httpConfig.Accounts = config.Accounts
 	}
-	s.httpServer, _ = http.NewServer(ctx, httpConfig)
+	s.httpServer, err = http.NewServerWithAuthentication(ctx, httpConfig, users)
+	if err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -105,11 +119,27 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 		return errors.New("inbound gateway not specified")
 	}
 
+	var releaseCredential func()
+	defer func() {
+		if releaseCredential != nil {
+			releaseCredential()
+		}
+	}()
 	svrSession := &ServerSession{
 		config:       s.config,
+		users:        s.users,
 		address:      inbound.Gateway.Address,
 		port:         inbound.Gateway.Port,
 		localAddress: net.IPAddress(conn.LocalAddr().(*net.TCPAddr).IP),
+		onAuthenticated: func(user *protocol.MemoryUser) error {
+			release, err := user.TrackSession(func() { conn.Close() })
+			if err != nil {
+				return err
+			}
+			releaseCredential = release
+			inbound.User = user
+			return nil
+		},
 	}
 
 	// Firstbyte is for forwarded conn from SOCKS inbound
@@ -133,7 +163,7 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 		return errors.New("failed to read request").Base(err)
 	}
 	if request.User != nil {
-		inbound.User.Email = request.User.Email
+		inbound.User = request.User
 	}
 
 	if err := conn.SetReadDeadline(time.Time{}); err != nil {

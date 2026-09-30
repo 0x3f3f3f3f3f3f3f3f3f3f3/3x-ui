@@ -75,11 +75,16 @@ func (t *ActivityTimer) SetTimeout(timeout time.Duration) {
 	common.Must(newCheckTask.Start())
 }
 
-func CancelAfterInactivity(ctx context.Context, cancel context.CancelFunc, timeout time.Duration) *ActivityTimer {
-	timer := &ActivityTimer{
+// NewActivityTimer creates a timer that can be cancelled before it is armed.
+func NewActivityTimer(cancel context.CancelFunc) *ActivityTimer {
+	return &ActivityTimer{
 		updated:   make(chan struct{}, 1),
 		onTimeout: cancel,
 	}
+}
+
+func CancelAfterInactivity(ctx context.Context, cancel context.CancelFunc, timeout time.Duration) *ActivityTimer {
+	timer := NewActivityTimer(cancel)
 	timer.SetTimeout(timeout)
 	return timer
 }

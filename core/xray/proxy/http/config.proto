@@ -18,6 +18,11 @@ message ServerConfig {
   map<string, string> accounts = 2;
   bool allow_transparent = 3;
   uint32 user_level = 4;
+  // Custom trusted identity metadata keyed by authenticated username.
+  map<string, string> client_ids = 5;
+  map<string, string> account_emails = 6;
+  // Keep an intentionally password-protected empty listener closed.
+  bool require_authentication = 7;
 }
 
 message Header {

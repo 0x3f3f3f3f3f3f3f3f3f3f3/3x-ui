@@ -1,8 +1,8 @@
 package socks
 
 import (
-	"context"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -15,6 +15,7 @@ func NewTempUDPConn(udpConn net.PacketConn, tcpConn net.Conn, expectedRemote *ne
 		AssociatedTCPConn: tcpConn,
 	}
 	t.ExpectedRemote.Store(expectedRemote)
+	t.Timer = signal.NewActivityTimer(t.closeSockets)
 	return t
 }
 
@@ -25,6 +26,8 @@ type TempUDPConn struct {
 	AssociatedTCPConn net.Conn
 	ExpectedRemote    atomic.Pointer[net.UDPAddr]
 	Timer             *signal.ActivityTimer
+	closeOnce         sync.Once
+	closeErr          error
 }
 
 func (c *TempUDPConn) Read(b []byte) (n int, err error) {
@@ -60,13 +63,18 @@ func (c *TempUDPConn) RemoteAddr() net.Addr {
 }
 
 func (c *TempUDPConn) SetTimeout(d time.Duration) {
-	c.Timer = signal.CancelAfterInactivity(context.Background(), func() {
-		c.Close()
-	}, d)
+	c.Timer.SetTimeout(d)
 }
 
 func (c *TempUDPConn) Close() error {
 	c.Timer.SetTimeout(0)
-	c.AssociatedTCPConn.Close()
-	return c.PacketConn.Close()
+	c.closeSockets()
+	return c.closeErr
+}
+
+func (c *TempUDPConn) closeSockets() {
+	c.closeOnce.Do(func() {
+		c.AssociatedTCPConn.Close()
+		c.closeErr = c.PacketConn.Close()
+	})
 }

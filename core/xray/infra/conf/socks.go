@@ -13,6 +13,8 @@ import (
 type SocksAccount struct {
 	Username string `json:"user"`
 	Password string `json:"pass"`
+	ClientID string `json:"clientId"`
+	Email    string `json:"email"`
 }
 
 func (v *SocksAccount) Build() *socks.Account {
@@ -51,12 +53,20 @@ func (v *SocksServerConfig) Build() (proto.Message, error) {
 	if v.Accounts != nil {
 		v.Users = v.Accounts
 	}
-	// TODO: PB
-	if len(v.Users) > 0 {
-		config.Accounts = make(map[string]string, len(v.Users))
-		for _, account := range v.Users {
-			config.Accounts[account.Username] = account.Password
+	entries := make([]passwordIdentityAccount, 0, len(v.Users))
+	for _, account := range v.Users {
+		if account == nil {
+			return nil, errors.New("SOCKS account must not be null")
 		}
+		entries = append(entries, passwordIdentityAccount{account.Username, account.Password, account.ClientID, account.Email})
+	}
+	var err error
+	config.Accounts, config.ClientIds, config.AccountEmails, err = buildPasswordIdentityAccounts(entries)
+	if err != nil {
+		return nil, err
+	}
+	if len(config.ClientIds) > 0 && config.AuthType != socks.AuthType_PASSWORD {
+		return nil, errors.New("managed SOCKS identity requires password authentication")
 	}
 
 	config.UdpEnabled = v.UDP

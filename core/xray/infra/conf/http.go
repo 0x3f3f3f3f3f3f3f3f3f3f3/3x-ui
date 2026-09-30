@@ -13,6 +13,8 @@ import (
 type HTTPAccount struct {
 	Username string `json:"user"`
 	Password string `json:"pass"`
+	ClientID string `json:"clientId"`
+	Email    string `json:"email"`
 }
 
 func (v *HTTPAccount) Build() *http.Account {
@@ -23,27 +25,34 @@ func (v *HTTPAccount) Build() *http.Account {
 }
 
 type HTTPServerConfig struct {
-	Users       []*HTTPAccount `json:"users"`
-	Accounts    []*HTTPAccount `json:"accounts"`
-	Transparent bool           `json:"allowTransparent"`
-	UserLevel   uint32         `json:"userLevel"`
+	Users                 []*HTTPAccount `json:"users"`
+	Accounts              []*HTTPAccount `json:"accounts"`
+	Transparent           bool           `json:"allowTransparent"`
+	UserLevel             uint32         `json:"userLevel"`
+	RequireAuthentication bool           `json:"requireAuthentication"`
 }
 
 func (c *HTTPServerConfig) Build() (proto.Message, error) {
 	config := &http.ServerConfig{
-		AllowTransparent: c.Transparent,
-		UserLevel:        c.UserLevel,
+		AllowTransparent:      c.Transparent,
+		UserLevel:             c.UserLevel,
+		RequireAuthentication: c.RequireAuthentication,
 	}
 
 	if c.Accounts != nil {
 		c.Users = c.Accounts
 	}
-	// TODO: PB
-	if len(c.Users) > 0 {
-		config.Accounts = make(map[string]string)
-		for _, account := range c.Users {
-			config.Accounts[account.Username] = account.Password
+	entries := make([]passwordIdentityAccount, 0, len(c.Users))
+	for _, account := range c.Users {
+		if account == nil {
+			return nil, errors.New("HTTP account must not be null")
 		}
+		entries = append(entries, passwordIdentityAccount{account.Username, account.Password, account.ClientID, account.Email})
+	}
+	var err error
+	config.Accounts, config.ClientIds, config.AccountEmails, err = buildPasswordIdentityAccounts(entries)
+	if err != nil {
+		return nil, err
 	}
 
 	return config, nil
