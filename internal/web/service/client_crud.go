@@ -592,6 +592,24 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 	if err != nil {
 		return false, err
 	}
+	failed, err := passwordProxyRemovalPreflight(database.GetDB(), []*model.ClientRecord{existing})
+	if err != nil {
+		return false, err
+	}
+	if err := failed[id]; err != nil {
+		return false, err
+	}
+	var passwordBindings int64
+	if err := database.GetDB().Model(&model.ClientInbound{}).
+		Joins("JOIN inbounds ON inbounds.id = client_inbounds.inbound_id").
+		Where("client_inbounds.client_id = ? AND inbounds.protocol IN ?", id, []model.Protocol{model.Mixed, model.HTTP}).Count(&passwordBindings).Error; err != nil {
+		return false, err
+	}
+	if passwordBindings > 0 {
+		if err := guardPasswordProxyOwnerUpdate(database.GetDB(), existing, updated.Policy); err != nil {
+			return false, err
+		}
+	}
 	inboundIds, err := s.GetInboundIdsForRecord(id)
 	if err != nil {
 		return false, err
@@ -694,8 +712,18 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 
 	// Built before any inbound is written, as in Create: fillProtocolDefaults
 	// mints the shared credentials on the first inbound, later ones reuse them.
-	applies := make([]inboundApply, 0, len(inboundIds))
-	for _, ibId := range inboundIds {
+	applyIDs := inboundIds
+	selected := make(map[int]bool, len(inboundIds))
+	for _, ibID := range inboundIds {
+		selected[ibID] = true
+	}
+	if passwordBindings > 0 && updated.Email != existing.Email {
+		// The name is shared by every mirror. Filters still limit resource
+		// credential edits, while excluded resources receive the new name.
+		applyIDs = attachedIds
+	}
+	applies := make([]inboundApply, 0, len(applyIDs))
+	for _, ibId := range applyIDs {
 		inbound, getErr := inboundSvc.GetInbound(ibId)
 		if getErr != nil {
 			if errors.Is(getErr, gorm.ErrRecordNotFound) {
@@ -711,11 +739,51 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 		if existing.Email == "" {
 			continue
 		}
-		if err := s.fillProtocolDefaults(&updated, inbound); err != nil {
-			return false, err
+		if isPasswordProxy(inbound.Protocol) {
+			continue
+		}
+		if passwordBindings > 0 && inbound.Protocol == model.Tunnel {
+			clients, err := inboundSvc.GetClients(inbound)
+			if err != nil {
+				return false, err
+			}
+			if len(clients) == 0 {
+				// Managed Tunnel identity is read from the canonical link; an
+				// empty credential mirror needs only the final shared update.
+				if err := validateStoredTunnelOwnerSettings(database.GetDB(), ibId); err != nil {
+					return false, err
+				}
+				continue
+			}
+		}
+		if selected[ibId] {
+			if err := s.fillProtocolDefaults(&updated, inbound); err != nil {
+				return false, err
+			}
 		}
 		clientForInbound := updated
-		if ips, ok := updated.AllowedIPsByInbound[ibId]; ok {
+		if !selected[ibId] {
+			entries, err := inboundSvc.GetClients(inbound)
+			if err != nil {
+				return false, err
+			}
+			found := false
+			for _, entry := range entries {
+				if entry.Email == existing.Email {
+					clientForInbound.ID, clientForInbound.Password = entry.ID, entry.Password
+					clientForInbound.Auth, clientForInbound.Secret = entry.Auth, entry.Secret
+					clientForInbound.Flow, clientForInbound.Security, clientForInbound.Reverse = entry.Flow, entry.Security, entry.Reverse
+					clientForInbound.PrivateKey, clientForInbound.PublicKey, clientForInbound.AllowedIPs = entry.PrivateKey, entry.PublicKey, entry.AllowedIPs
+					clientForInbound.PreSharedKey, clientForInbound.KeepAlive, clientForInbound.ForwardedPorts = entry.PreSharedKey, entry.KeepAlive, entry.ForwardedPorts
+					clientForInbound.AdTag = entry.AdTag
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false, fmt.Errorf("%w: ordinary identity mirror is missing", ErrManagedConfigStale)
+			}
+		} else if ips, ok := updated.AllowedIPsByInbound[ibId]; ok {
 			clientForInbound.AllowedIPs = ips
 		} else if tunnelCount > 1 && (inbound.Protocol == model.WireGuard || inbound.Protocol == model.AmneziaWG) {
 			// One shared peer field set cannot describe several peers: broadcast
@@ -742,6 +810,9 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 		}
 		data := &model.Inbound{Id: ibId, Settings: string(settingsPayload)}
 		applies = append(applies, inboundApply{id: ibId, run: func() (bool, error) {
+			if passwordBindings > 0 {
+				return s.updateInboundClient(inboundSvc, data, existing.Email, existing, !selected[ibId])
+			}
 			return s.UpdateInboundClient(inboundSvc, data, existing.Email)
 		}})
 	}
@@ -753,6 +824,10 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 	needRestart, applyErr := fanoutInboundApplies(applies)
 	if applyErr != nil {
 		return needRestart, applyErr
+	}
+	if passwordBindings > 0 {
+		nr, err := s.updatePasswordProxyOwner(inboundSvc, existing, updated, limitHwid)
+		return needRestart || nr, err
 	}
 
 	// UpdateInboundClient renames the record atomically with each inbound's

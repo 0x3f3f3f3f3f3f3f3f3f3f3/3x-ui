@@ -2019,3 +2019,90 @@ No ownership rule or assertion was relaxed. Production hashes are unchanged
 through final gates. No core/frontend production source changed, so preceding
 full native-core/frontend evidence remains applicable; no fresh whole-core or
 frontend test suite execution is claimed for this increment.
+
+
+### Single shared password-owner Update
+
+The public ClientService.Update now persists canonical shared fields for local
+explicit Mixed/HTTP owners, including password-only records, ordinary siblings,
+valid empty-mirror Tunnel and optional filters. Resource account arrays and
+specialized links retain usernames/passwords/owner UUIDs. Stable identity,
+current omitted policy, raw history, lifetime billing, scalar clearing and
+credential omission are covered; omitted peer PSK/keepalive retain their values.
+A filtered shared rename updates excluded ordinary names while preserving their
+wire credentials and current canonical credentials after partial runtime failure.
+The ordinary multi-resource partial-success contract still applies.
+
+One read-only review found one Critical and three Important integration issues.
+Actual regressions reproduced destination-name acquisition with a compatible
+subscription, changed-subscription acquisition, stranded global/node history,
+filtered rename follow-up failure, and graph drift after entry preflight.
+Additional correction checks reproduced excluded old credentials overwriting a
+selected committed rotation, and actual PostgreSQL old-label acquisition after
+the reuse check causing replacement history to be swept. Original RED and
+fixture-tracing logs remain preserved. The same reviewer reports no remaining
+Critical/Important issue or new material regression. No fresh reviewer was used.
+Expanded final boundary race tests pass in 6.275 s; the PostgreSQL freed-label
+correction passes in 3.063 s. Late SQL failure now targets the final shared-field
+write after reservation/metadata updates and proves rollback.
+
+The first rename reserves the unique destination and migrates local/global/node
+metadata atomically. Later writes use the locked current canonical label and
+retain ID-based membership; they never sweep or detach using the freed old name.
+Actual PostgreSQL tests acquire the destination after the under-lock count,
+covering password-only and ordinary paths. Current password rotation and omitted
+policy survive a competing canonical row lock. Subscriptions remain intentionally
+nonunique: changed IDs are checked in each serialized writer, but no uniqueness
+or reservation against independent raw SQL after the final count is claimed.
+
+Real core tests for both protocols use public Update for directional rates,
+multiplier, name/shared credential rotation, disable/re-enable, quota lowering
+and lifting, expiry, and restart. A aliases and Tunnel share lifetime usage; B
+stays on the same live stream/core boot. Rename replaces A's Tunnel accounting
+label and closes that flow; reconnect is tested. Rate evidence here verifies
+acknowledged configured rates, not a new quantitative bandwidth measurement.
+Each protocol independently receives 120 target payload bytes and settles:
+
+| Owner | Raw upload | Raw download | Lifetime billed |
+| --- | ---: | ---: | ---: |
+| A | 178 | 278 | 432 |
+| B | 42 | 42 | 126 |
+
+A starts at 100/200/300 with multiplier 2, then changes to 0.5; B uses 1.5.
+Wrong canonical shared passwords cannot replace resource credentials. Restart
+and repeated polling do not replay lifetime usage. Lost ApplyPolicies response
+after real execution makes public Update fail, saves the disable command and
+stops the unacknowledged core. New-boot recovery denies A/anonymous access,
+permits idempotent retry/re-enable, and settles exactly 24 target bytes to A
+124/224/396. Whole-core stop at this uncertainty boundary closes B too.
+
+Earlier passing full gates and intermediate contracts are preserved with
+pre-review-fix and intermediate-review-fix prefixes. A corrected-source
+PostgreSQL contract run failed only because its fixture compared a pre-Attach
+record timestamp; the attached record's current fields/identity were unchanged.
+The failure is preserved under fixture-error. Reading the post-Attach canonical
+snapshot fixes the fixture; the actual PostgreSQL destination test then passes
+twice (9.349 s total). No production behavior or assertion was relaxed.
+
+Final corrected-source race/shuffle contracts pass on SQLite (46.75 s wall;
+service 43.269 s) and PostgreSQL (205.03 s wall; service 200.921 s). All 15
+required non-PostgreSQL tests explicitly pass on both; all 18 names explicitly
+pass on PostgreSQL, including rotation,
+destination reservation and freed-label interleavings. YAML and all 31 Bash
+blocks parse. Named-PASS checks and final production hashes are recorded in
+password-owner-update-named-contract-results.json and reviewed-source.json.
+No remote CI run is claimed. Bulk enable/by-email writers, live
+legacy alias-counter handoff, anonymous ownership, foreign-owner remapping and
+full protocol/single-core migration remain unfinished.
+
+Final generation (0.98 s), Go lint (72.79 s, 0 issues), vet (9.57 s) and
+full make test-go (307.56 s) pass, including service 129.904 s and explicit
+AmneziaWG device 1.495 s. Full affected race/shuffle passes in 555.38 s wall;
+package timings are recorded in affected-race.log. The production hashes
+remain unchanged through all final gates. The post-Attach test-fixture snapshot
+correction is included in the final full affected race and both final database
+contracts; full root production tests passed before that test-only correction.
+No core or frontend production source changed. Prior native-core/frontend
+suite evidence remains applicable; no fresh full native-core/frontend test
+suite or remote CI execution is claimed. Clean checkpoint builds are separate
+artifact verification and do not imply deployment or whole-goal completion.

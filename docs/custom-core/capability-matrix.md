@@ -10,8 +10,8 @@ This is the initial source-audit matrix, not a support announcement. `E/U` = exi
 | VMess | E/U both | E/U | I/V scoped TCP/UDP/Mux identity, shared rate/billing/live close; production activation N | complete account lifecycle and independent client regression |
 | Trojan | E/U both | E/U | I/V scoped TCP/UDP/Mux identity, shared rate/billing/live close; production activation N | fallback and complete account lifecycle |
 | Shadowsocks/2022 | E/U both | E/U | classic AEAD TCP/UDP/Mux scoped I/V; 2022 managed identity N | other cipher variants, 2022 user-update isolation/relay, complete lifecycle |
-| Mixed/SOCKS | existing inbound/outbound; native authenticated core increment I/V | native typed CRUD/alias revocation and idle/active UDP cleanup I/V; panel owner persistence/read guards, form metadata preservation, canonical runtime configuration and scoped managed grouped credential edits I/V; owner picker, JSON API/export and full-database preservation I/V; single/bulk UUID-based owner detach/delete with runtime recovery I/V; shared Update/enable/rename and portable foreign-owner import N | scoped password-auth TCP/UDP stable ID and shared directional rate/billing/live close I/V; generated SOCKS/CONNECT plus Tunnel shared ledger I/V; anonymous resource ownership and full panel lifecycle N | legacy counter migration, managed idle policy control, full protocol matrix |
-| HTTP | existing inbound/outbound; native authenticated core increment I/V | native CRUD, empty required-auth and request identity isolation I/V; panel owner persistence/read guards, form metadata preservation, canonical runtime configuration and scoped managed grouped credential edits I/V; owner picker, JSON API/export and full-database preservation I/V; single/bulk UUID-based owner detach/delete with runtime recovery I/V; shared Update/enable/rename and portable foreign-owner import N | scoped CONNECT and plain-request stable ID/accounting/live close I/V; generated CONNECT plus Tunnel shared ledger I/V; full panel lifecycle N | legacy counter migration, managed idle policy control, full protocol matrix |
+| Mixed/SOCKS | existing inbound/outbound; native authenticated core increment I/V | native typed CRUD/alias revocation and idle/active UDP cleanup I/V; panel owner persistence/read guards, form metadata preservation, canonical runtime configuration and scoped managed grouped credential edits I/V; owner picker, JSON API/export and full-database preservation I/V; single/bulk UUID-based owner detach/delete with runtime recovery I/V; single canonical Update/name/credentials/policy/enable/quota/expiry I/V scoped; bulk/by-email lifecycle and portable foreign-owner import N | scoped password-auth TCP/UDP stable ID and shared directional rate/billing/live close I/V; generated SOCKS/CONNECT plus Tunnel shared ledger I/V; anonymous resource ownership and full panel lifecycle N | legacy counter migration, managed idle policy control, full protocol matrix |
+| HTTP | existing inbound/outbound; native authenticated core increment I/V | native CRUD, empty required-auth and request identity isolation I/V; panel owner persistence/read guards, form metadata preservation, canonical runtime configuration and scoped managed grouped credential edits I/V; owner picker, JSON API/export and full-database preservation I/V; single/bulk UUID-based owner detach/delete with runtime recovery I/V; single canonical Update/name/credentials/policy/enable/quota/expiry I/V scoped; bulk/by-email lifecycle and portable foreign-owner import N | scoped CONNECT and plain-request stable ID/accounting/live close I/V; generated CONNECT plus Tunnel shared ledger I/V; full panel lifecycle N | legacy counter migration, managed idle policy control, full protocol matrix |
 | Hysteria2 | E/U both | E/U | N | QUIC/mux/UDP and auth updates |
 | WireGuard | E/U both | E/U | N | per-peer identity, IP/payload accounting distinction |
 | TUN | E/U inbound | no account auth; resource identity required | N | packet semantics, route and owner mapping |
@@ -219,3 +219,16 @@ SQL row-lock rebasing, final identity/alias fences and uncertain runtime
 stop/recovery are covered on SQLite and PostgreSQL with real-core sockets.
 Shared client updates and live legacy alias-counter handoff remain N; full
 protocol lifecycle and single-core migration are still incomplete.
+
+
+Single password-owner Update increment: canonical persistence, filtered shared
+name propagation, current omitted fields, destination isolation, history,
+full graph/Tunnel validation and saved-command recovery are I/V for local
+explicit Mixed/HTTP owners. Real TCP Update tests preserve resource passwords,
+other-owner flows, stable UUID and exact shared ledger; rate settings are
+acknowledged, without a fresh quantitative shaping claim. Own Tunnel rename
+replaces its accounting label and closes/reconnects that flow. Existing
+ordinary partial-success semantics remain. Subscription IDs are intentionally
+nonunique; independent raw-SQL acquisition after the final check is not covered.
+Bulk/by-email lifecycle, live legacy alias-counter handoff, all remaining
+protocol adapters and complete single-core installation stay N.

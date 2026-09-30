@@ -824,22 +824,21 @@ canonical SQL locks without changing accounts JSON, preserve current omitted
 policy and history, and use managed candidate reconciliation after commit.
 Keep ordinary multi-resource partial-success/retry semantics explicit.
 
-- [ ] Observe public single Update RED for Mixed/HTTP password-only owners,
+- [x] Observe public single Update RED for Mixed/HTTP password-only owners,
   ordinary siblings and filtered ordinary updates. Verify canonical shared
   fields, unchanged resource credentials/other owner/memberships and lifetime.
-- [ ] Implement canonical persistence and identity fencing. Observe scope,
+- [x] Implement canonical persistence and identity fencing. Observe scope,
   reused-email, omitted-policy and late-write failure regressions; verify
   rollback and existing clear/credential/flow behavior on both databases.
-- [ ] Prove actual PostgreSQL concurrent resource password rotation is retained
+- [x] Prove actual PostgreSQL concurrent resource password rotation is retained
   while shared fields update; do not write a stale account list.
-- [ ] Real core: normal Update changes multiplier/rate/name/shared credentials,
+- [x] Real core: normal Update changes multiplier/rate/name/shared credentials,
   enable/quota/expiry across aliases and Tunnel; preserve B and exact usage.
   Verify uncertain acknowledgement, saved-command recovery and no replay.
-- [ ] Require CI names; review once and resolve findings; freeze production,
+- [x] Require CI names; review once and resolve findings; freeze production,
   run generation/lint/vet/full Go/affected race and SQLite/PostgreSQL contracts.
 - [ ] Document scoped evidence, commit/push exact fork SHA, rebuild clean
   distinct artifacts and record provenance. Bulk lifecycle/handoff stay open.
-
 
 Task 5B5 scoped checkpoint: implementation e1efc255bea94da9d9b68e699a068c9f4f110e15
 pushed with exact remote SHA; all final scoped SQLite/PostgreSQL, full Go and

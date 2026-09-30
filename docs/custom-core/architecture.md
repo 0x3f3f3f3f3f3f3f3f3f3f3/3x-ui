@@ -366,7 +366,21 @@ the current locked canonical value. Preserve existing credential omission,
 clearable scalar fields and per-inbound flow override behavior.
 
 Reuse ordinary resource writers and their existing partial-success/retry
-contract. Skip password credential-list construction, then persist shared
+contract. A shared rename updates every attached ordinary mirror's name,
+including resources excluded by an inbound filter. Those resources retain
+wire credentials, and preserve current canonical credentials even when a
+selected resource has already committed a rotation. The first rename reserves
+the unique email and migrates local/global/node metadata in one transaction.
+Later writes use the locked current label and never sweep the freed old label
+or detach memberships by it.
+
+Subscription IDs retain their existing nonunique/shared-subscription model.
+A changed subscription ID is checked against other records inside each
+serialized canonical writer, including after a sibling applied the change.
+This does not reserve that ID against independent raw SQL writes after the
+final check; no cross-writer subscription uniqueness is claimed.
+
+Skip password credential-list construction, then persist shared
 canonical fields even when all attachments are password resources. Keep
 canonical traffic/IP/global/node email metadata consistent while retaining
 history. A concurrent resource password rotation must not be overwritten by

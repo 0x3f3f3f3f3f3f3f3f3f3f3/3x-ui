@@ -677,6 +677,10 @@ func (s *ClientService) AddInboundClient(inboundSvc *InboundService, data *model
 }
 
 func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *model.Inbound, oldEmail string) (bool, error) {
+	return s.updateInboundClient(inboundSvc, data, oldEmail, nil, false)
+}
+
+func (s *ClientService) updateInboundClient(inboundSvc *InboundService, data *model.Inbound, oldEmail string, expected *model.ClientRecord, preserveCanonicalCredentials bool) (bool, error) {
 	defer lockInbound(data.Id).Unlock()
 
 	clients, err := inboundSvc.GetClients(data)
@@ -947,14 +951,44 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 	// Persist client stats + inbound atomically, serialized against the traffic
 	// poll to avoid the cross-transaction lock-order deadlock (runSerializedTx).
 	if txErr := runSerializedTx(func(tx *gorm.DB) error {
+		var canonical *model.ClientRecord
+		statEmail := oldEmail
+		if expected != nil {
+			var err error
+			canonical, err = guardClientUpdateIdentity(tx, expected, clients[0])
+			if err != nil {
+				return err
+			}
+			if err := guardPasswordProxyOwnerUpdate(tx, canonical, clients[0].Policy); err != nil {
+				return err
+			}
+			statEmail = canonical.Email
+			// Canonical ID and membership survive rename. Never detach by a
+			// freed old label that an independent writer can now reuse.
+			detachEmails = nil
+			if err := reserveClientUpdateEmail(tx, canonical, clients[0].Email); err != nil {
+				return err
+			}
+			if canonical.Email != clients[0].Email {
+				for _, table := range []any{&model.ClientGlobalTraffic{}, &model.NodeClientTraffic{}} {
+					if err := tx.Model(table).Where("email = ?", canonical.Email).Update("email", clients[0].Email).Error; err != nil {
+						return err
+					}
+				}
+			}
+		}
 		if policyOmitted {
 			inherited := oldClients[clientIndex].Policy
-			var record model.ClientRecord
-			err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("email = ?", oldEmail).First(&record).Error
-			if err == nil {
-				inherited = record.Policy
-			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-				return err
+			if canonical != nil {
+				inherited = canonical.Policy
+			} else {
+				var record model.ClientRecord
+				err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("email = ?", oldEmail).First(&record).Error
+				if err == nil {
+					inherited = record.Policy
+				} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+					return err
+				}
 			}
 			clients[0].Policy, changedClients[0].Policy = inherited.Clone(), inherited.Clone()
 			entry := interfaceClients[0].(map[string]any)
@@ -980,8 +1014,8 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 			}
 		}
 		if len(clients[0].Email) > 0 {
-			if len(oldEmail) > 0 {
-				emailUnchanged := strings.EqualFold(oldEmail, clients[0].Email)
+			if len(statEmail) > 0 {
+				emailUnchanged := strings.EqualFold(statEmail, clients[0].Email)
 				targetExists := int64(0)
 				if !emailUnchanged {
 					if e := tx.Model(xray.ClientTraffic{}).Where("email = ?", clients[0].Email).Count(&targetExists).Error; e != nil {
@@ -989,22 +1023,22 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 					}
 				}
 				if emailUnchanged || targetExists == 0 {
-					if e := inboundSvc.UpdateClientStat(tx, oldEmail, &clients[0]); e != nil {
+					if e := inboundSvc.UpdateClientStat(tx, statEmail, &clients[0]); e != nil {
 						return e
 					}
-					if e := inboundSvc.UpdateClientIPs(tx, oldEmail, clients[0].Email); e != nil {
+					if e := inboundSvc.UpdateClientIPs(tx, statEmail, clients[0].Email); e != nil {
 						return e
 					}
 				} else {
-					stillUsed, sErr := inboundSvc.emailUsedByOtherInbounds(oldEmail, data.Id)
+					stillUsed, sErr := inboundSvc.emailUsedByOtherInbounds(statEmail, data.Id)
 					if sErr != nil {
 						return sErr
 					}
 					if !stillUsed {
-						if e := inboundSvc.DelClientStat(tx, oldEmail); e != nil {
+						if e := inboundSvc.DelClientStat(tx, statEmail); e != nil {
 							return e
 						}
-						if e := inboundSvc.DelClientIPs(tx, oldEmail); e != nil {
+						if e := inboundSvc.DelClientIPs(tx, statEmail); e != nil {
 							return e
 						}
 					}
@@ -1018,15 +1052,15 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 				}
 			}
 		} else {
-			stillUsed, sErr := inboundSvc.emailUsedByOtherInbounds(oldEmail, data.Id)
+			stillUsed, sErr := inboundSvc.emailUsedByOtherInbounds(statEmail, data.Id)
 			if sErr != nil {
 				return sErr
 			}
 			if !stillUsed {
-				if e := inboundSvc.DelClientStat(tx, oldEmail); e != nil {
+				if e := inboundSvc.DelClientStat(tx, statEmail); e != nil {
 					return e
 				}
-				if e := inboundSvc.DelClientIPs(tx, oldEmail); e != nil {
+				if e := inboundSvc.DelClientIPs(tx, statEmail); e != nil {
 					return e
 				}
 			}
@@ -1052,10 +1086,26 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 		}
 		// detachEmails covers the rename the guard above refused: the old record
 		// keeps this inbound's link otherwise, which the full sync used to drop.
-		if err := s.ApplyInboundClientDelta(tx, oldInbound.Id, changedClients, detachEmails); err != nil {
-			return err
+		if canonical != nil && oldInbound.Protocol != model.WireGuard && oldInbound.Protocol != model.AmneziaWG {
+			// A non-peer mirror cannot clear canonical peer credentials that
+			// this request omitted. Peer resources retain their local carry-forward.
+			if changedClients[0].PreSharedKey == "" {
+				changedClients[0].PreSharedKey = canonical.PreSharedKey
+			}
+			if changedClients[0].KeepAlive == nil {
+				changedClients[0].KeepAlive = model.KeepAlivePtr(canonical.KeepAlive)
+			}
 		}
-		if oldInbound.Protocol == model.VLESS && (clients[0].Reverse == nil || strings.TrimSpace(clients[0].Reverse.Tag) == "") {
+		if preserveCanonicalCredentials && canonical != nil {
+			if err := updateCanonicalMirrorMetadata(tx, canonical, changedClients[0], oldInbound.Id); err != nil {
+				return err
+			}
+		} else {
+			if err := s.ApplyInboundClientDelta(tx, oldInbound.Id, changedClients, detachEmails); err != nil {
+				return err
+			}
+		}
+		if !preserveCanonicalCredentials && oldInbound.Protocol == model.VLESS && (clients[0].Reverse == nil || strings.TrimSpace(clients[0].Reverse.Tag) == "") {
 			if err := tx.Model(&model.ClientRecord{}).Where("email = ?", clients[0].Email).Update("reverse", "").Error; err != nil {
 				return err
 			}
