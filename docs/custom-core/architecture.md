@@ -346,3 +346,40 @@ operations with real sockets, retained sibling/Tunnel flows, unchanged boot ID,
 exact independently counted payload/ledger and restart recovery. Shared client
 Update/enable/rename/quota/expiry, generic credential creation and live legacy
 alias-counter handoff are later increments; this contract does not open them.
+
+## Single shared password-owner updates
+
+The next scoped increment extends ClientService.Update for an explicitly owned
+local Mixed/HTTP resource, including password-only clients and ordinary/Tunnel
+siblings. Shared name, credentials, quota, expiry, policy and enable fields
+belong to the canonical record. Editing them must preserve the stable UUID,
+lifetime ledger, resource usernames/passwords and specialized memberships.
+Never mirror the update into password settings.clients or infer credentials
+from the canonical shared password.
+
+Validate all saved owner references, memberships and local-only scope before
+optional inbound filtering or fanout. Preserve the original canonical ID/UUID
+through ordinary sibling writes. Recheck that identity and the current scope
+under SQL locks before email-based traffic or subscription updates; a changed
+or reused email must not select a replacement owner. Omitted policy inherits
+the current locked canonical value. Preserve existing credential omission,
+clearable scalar fields and per-inbound flow override behavior.
+
+Reuse ordinary resource writers and their existing partial-success/retry
+contract. Skip password credential-list construction, then persist shared
+canonical fields even when all attachments are password resources. Keep
+canonical traffic/IP/global/node email metadata consistent while retaining
+history. A concurrent resource password rotation must not be overwritten by
+an old account array: shared-field updates leave that array untouched.
+
+After persistence, use the existing managed candidate/grouped credential and
+policy application path. A policy-only callback cannot update authentication
+labels after a canonical rename. Successful changes retain unrelated owners
+and the core boot; uncertain runtime application follows saved-command
+stop/recovery semantics. Verify through actual public Update calls, independent
+payload counts, stable ledger history and SQL row-lock interleavings.
+
+Bulk enable/by-email field writers, generic resource credential creation,
+live legacy alias-counter handoff, anonymous ownership and portable import
+remapping remain later work. This spec alone establishes no implementation
+or acceptance claim.

@@ -800,6 +800,50 @@ source/test evidence.
   preserve B sessions and A Tunnel after detach, retain boot ID and exact
   target/ledger conservation. Global deletion revokes A across resources,
   preserves usage and sibling, and survives restart.
-- [ ] Add required CI names, run generation/lint/vet/full affected checks,
+- [x] Add required CI names, run generation/lint/vet/full affected checks,
   review once, document scope, commit/push exact remote SHA and rebuild clean
   distinct artifacts. Shared Update and live legacy handoff remain open.
+
+### Task 5B6: Single shared password-owner Update
+
+Spec: architecture.md, "Single shared password-owner updates". Execute inline.
+Source audit: ClientService.Update currently sends every selected resource to
+UpdateInboundClient with settings.clients; its full canonical fallback runs
+only when no selected inbounds exist. Skipping password resources alone would
+lose fields for password-only owners. Direct policy reconciliation cannot
+update canonical-email authentication labels after rename.
+
+Files: ClientService.Update and its private expected-identity dispatch;
+canonical field persistence helper; SQLite/PostgreSQL/real-core regressions;
+CI named PASS requirements. Preserve generic client and specialized ownership
+guards; account creation and bulk/by-email lifecycle stay separate.
+
+Interface: validate affected full owner graphs before filter/fanout, retain
+captured ID/UUID through ordinary sibling writes, persist shared fields under
+canonical SQL locks without changing accounts JSON, preserve current omitted
+policy and history, and use managed candidate reconciliation after commit.
+Keep ordinary multi-resource partial-success/retry semantics explicit.
+
+- [ ] Observe public single Update RED for Mixed/HTTP password-only owners,
+  ordinary siblings and filtered ordinary updates. Verify canonical shared
+  fields, unchanged resource credentials/other owner/memberships and lifetime.
+- [ ] Implement canonical persistence and identity fencing. Observe scope,
+  reused-email, omitted-policy and late-write failure regressions; verify
+  rollback and existing clear/credential/flow behavior on both databases.
+- [ ] Prove actual PostgreSQL concurrent resource password rotation is retained
+  while shared fields update; do not write a stale account list.
+- [ ] Real core: normal Update changes multiplier/rate/name/shared credentials,
+  enable/quota/expiry across aliases and Tunnel; preserve B and exact usage.
+  Verify uncertain acknowledgement, saved-command recovery and no replay.
+- [ ] Require CI names; review once and resolve findings; freeze production,
+  run generation/lint/vet/full Go/affected race and SQLite/PostgreSQL contracts.
+- [ ] Document scoped evidence, commit/push exact fork SHA, rebuild clean
+  distinct artifacts and record provenance. Bulk lifecycle/handoff stay open.
+
+
+Task 5B5 scoped checkpoint: implementation e1efc255bea94da9d9b68e699a068c9f4f110e15
+pushed with exact remote SHA; all final scoped SQLite/PostgreSQL, full Go and
+race gates pass. Two Important review findings were reproduced and resolved;
+the same reviewer found no new material issue. Clean-source rebuild and
+distinct artifact checks pass, with provenance in deployment.md. Single Update
+and the remaining lifecycle/handoff work stay open. Task 5B is incomplete.

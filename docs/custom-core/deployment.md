@@ -183,3 +183,26 @@ database preservation are verified. Generic owner lifecycle, live legacy
 username-counter handoff and foreign-owner remapping remain open. Default
 frontend concurrency produced one unchanged-test timeout; the complete suite
 passed with one worker. testing.md records the exact split validation gate.
+
+
+### Clean-source password owner removal checkpoint build
+
+Commit `e1efc255bea94da9d9b68e699a068c9f4f110e15` was rebuilt from a clean local clone
+with the pinned toolchains and shared verified caches. npm ci (15.86 s),
+frontend (4.30 s), panel (15.63 s), core (2.40 s) and both version commands
+pass; source status is clean. Panel reports dev+e1efc255 and Custom Xray
+reports the full revision without -dirty. The authorized fork feature branch
+was pushed and its exact remote SHA verified. No deployment occurred.
+
+Distinct artifacts retain all earlier checkpoints:
+
+- `build/x-ui-password-owner-removal-checkpoint`: SHA-256
+  `78bab4989d191c2eeb6876e345571fdc9076b4fec2ead742559697d7a2b18b6f`.
+- `build/custom-xray-password-owner-removal-checkpoint`: SHA-256
+  `f0d013b2ce138dbe234b0cc31633d304c8f13785423212d831fa51ee6e212651`.
+
+Evidence: /root/task-evidence/password-owner-removal-clean-build-results.json
+and clean-build-manifest.json. Scoped single/bulk owner detach/delete and
+recovery are verified. Shared Update, bulk/by-email field lifecycle and live
+legacy alias-counter handoff remain unfinished. Whole Task 5B and the original
+goal remain incomplete; prior testing.md frontend timeout records still apply.
