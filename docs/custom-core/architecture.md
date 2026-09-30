@@ -302,3 +302,35 @@ separately. Portable ownership remapping and generic lifecycle are later work.
 Task 5B4 verifies this form and preservation contract with actual modal, API,
 SQLite backup and PostgreSQL migration/export/restore tests. Generic owner
 lifecycle, live legacy handoff and foreign-owner remapping remain unfinished.
+
+## Password owner detach and deletion
+
+The next scoped increment routes single/bulk client detach and deletion through
+explicit canonical owner UUIDs. Remove every matching resource alias; retain
+other owners' credentials and account fields. Detach keeps the canonical client,
+policy, stable ledger and all other memberships. Global deletion retains the
+existing keepTraffic behavior and durable identity tombstone/revocation path.
+Empty HTTP remains authentication-protected and Mixed retains password auth.
+Repeated detach is idempotent. Never add a settings.clients credential mirror.
+
+Lock and read the current inbound in the serialized SQL transaction, validate
+the full saved ownership graph and resolve current canonical records. Filter
+the current account list, preserving unrelated metadata and concurrent changes.
+The generic settings merge only handles clients by email and cannot safely
+merge password aliases; do not write a stale accounts array through it. Save
+settings, specialized memberships and detached traffic in the same transaction.
+Retain native users/case normalization and restored HTTP protection helpers.
+
+Before filtering or fanout, public multi-inbound operations validate each
+selected password owner and all its bindings. Reject unsupported remote scope,
+malformed settings and stale memberships before another resource is changed.
+Recheck authoritative scope and identity inside each transaction. Preserve
+ordinary legacy-client behavior and existing bulk result reporting.
+
+After commit, use the verified managed reconcile/grouped credential path.
+SQL failure changes no runtime state; uncertain runtime application retains the
+saved command and follows existing stop/recovery semantics. Verify public
+operations with real sockets, retained sibling/Tunnel flows, unchanged boot ID,
+exact independently counted payload/ledger and restart recovery. Shared client
+Update/enable/rename/quota/expiry, generic credential creation and live legacy
+alias-counter handoff are later increments; this contract does not open them.

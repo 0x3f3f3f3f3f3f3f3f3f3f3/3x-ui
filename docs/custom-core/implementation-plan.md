@@ -753,6 +753,53 @@ save; UUID existence/remote membership remains an authoritative SQL check.
 - [x] Verify full SQLite backup/dump/restore plus actual PostgreSQL migration,
   export/dump/restore preserve both aliases, owner UUID/membership, policy and
   traffic; distinguish these from portable single-inbound import.
-- [ ] Regenerate API artifacts, run frontend checks/full tests and affected
+- [x] Regenerate API artifacts, run frontend checks/full tests and affected
   Go/race/database checks. Review once, record scoped evidence, commit/push and
   verify exact remote SHA. Owner lifecycle/handoff remain open.
+
+Task 5B4 scoped checkpoint: implementation `67f5336a70216ffa169efb8978f93aa11cb0b995`
+pushed to the authorized fork with exact remote SHA verification. Actual forms,
+API and full database preservation pass. All 1842 frontend tests pass with one
+worker; default-worker timeout remains recorded. Go/full affected race, lint,
+types, builds and clean-clone artifacts pass. One important review finding was
+reproduced and fixed. Whole Task 5B and the overall goal remain incomplete.
+
+### Task 5B5: Canonical password-owner detach and deletion
+
+Spec: architecture.md, "Password owner detach and deletion". Execute inline.
+Ruling: specialize resource removal by stable UUID and reuse verified native
+grouped changes. Shared client updates and live legacy handoff stay separate.
+
+Files: new `password_proxy_owner_lifecycle.go` and service regressions; dispatch
+from `DelInboundClientByEmail`, `delInboundClients`, `bulkDelInboundClients`.
+Add ownership-aware preflight to public Delete/Detach/BulkDelete/BulkDetach;
+retain their signatures and existing generic membership guards. CI requires
+new named PASS results on SQLite and PostgreSQL.
+
+Interface: one removal helper receives canonical record IDs/stable IDs, reads
+and locks current saved settings, validates the full owner graph, removes all
+selected aliases, reconciles specialized links/history atomically and applies
+the existing managed runtime path after commit. Preserve remaining raw account
+fields and protected empty auth. Adjust the helper shape only with recorded
+source/test evidence.
+
+- [ ] Observe public single/bulk detach/delete RED on Mixed/HTTP. Seed two
+  aliases for A, one for B, independent canonical credentials, disabled B,
+  history, ledger and a sibling resource. Verify all A aliases removed, B
+  unchanged, correct links/client/tombstones, retained usage, empty auth and
+  idempotent detach.
+- [ ] Observe late membership-write rollback and stale-graph RED. Preserve
+  original settings/links/history/records, native users/case and account fields.
+- [ ] Observe remote-sibling preflight RED through all four public operations,
+  including filtered detach. Reject before local/remote mutations; retain
+  ordinary legacy compatibility and recheck concurrent attachment scope.
+- [ ] Implement specialized removal and run focused race/shuffle on SQLite and
+  actual PostgreSQL. Prove competing rotation/reassignment through PG row locks
+  cannot be overwritten by stale whole-account writes.
+- [ ] Verify real core public operations close A active/idle TCP and Mixed UDP,
+  preserve B sessions and A Tunnel after detach, retain boot ID and exact
+  target/ledger conservation. Global deletion revokes A across resources,
+  preserves usage and sibling, and survives restart.
+- [ ] Add required CI names, run generation/lint/vet/full affected checks,
+  review once, document scope, commit/push exact remote SHA and rebuild clean
+  distinct artifacts. Shared Update and live legacy handoff remain open.

@@ -160,3 +160,26 @@ marker or create a fresh policy store to get past the error: doing so can restor
 already-spent quota. Automated reconciliation of an irretrievably lost legacy
 snapshot is not implemented. A rollback still requires the coordinated
 pre-upgrade backup and matching binaries described above.
+
+### Clean-source password owner form checkpoint build
+
+Commit `67f5336a70216ffa169efb8978f93aa11cb0b995` was rebuilt from a new clean local clone
+using the pinned toolchains and shared verified caches. `npm ci` (15.99 s),
+frontend (3.67 s), panel (16.16 s), core (2.82 s) and both version smoke
+commands passed; source status remained clean. The panel reports
+`dev+67f5336a` and Custom Xray includes the full revision without
+`-dirty`. No installation, service startup or production deployment occurred.
+
+Distinct artifacts preserve all preceding checkpoints:
+
+- `build/x-ui-password-owner-ui-checkpoint`: SHA-256
+  `d9f12c7e9ed45f3b4125788e3750622bce14e1f22693192cd86ea961ac035070`.
+- `build/custom-xray-password-owner-ui-checkpoint`: SHA-256
+  `555f71d98c67e59f68b9ff41f5ff9a6202c8314a4daa0013773599c479d85a9f`.
+
+Evidence: `/root/task-evidence/password-owner-ui-clean-build-results.json` and
+`password-owner-ui-clean-build-manifest.json`. Owner form and scoped API/full
+database preservation are verified. Generic owner lifecycle, live legacy
+username-counter handoff and foreign-owner remapping remain open. Default
+frontend concurrency produced one unchanged-test timeout; the complete suite
+passed with one worker. testing.md records the exact split validation gate.
