@@ -591,3 +591,27 @@ balancer fallback remains effective. Removing its last candidate closes existing
 TCP/UDP flows; later traffic is rejected unless that explicit fallback is present.
 The sibling listener and its shared owner's exact accounting remain independent
 of the removed route. This does not add the per-rule outbound selector UI.
+## Native password-proxy accounting boundary
+
+SOCKS password authentication and HTTP Basic authentication resolve a trusted
+server account to its stable client ID before dispatch. Mixed shares one
+validator across both branches. A username submitted on the wire is not a
+client ID, and two users on one source IP remain distinct.
+
+SOCKS TCP, SOCKS UDP and HTTP CONNECT count target payload; SOCKS framing,
+authentication and CONNECT negotiation are outside that boundary. Plain HTTP
+uses Xray's existing dispatched message boundary: the rewritten serialized HTTP
+request/response headers and body. This differs from body-only accounting and
+from the browser-facing response after proxy header rewriting. Tests compare
+the origin's observed request bytes and original response bytes with the ledger.
+
+Each ordinary HTTP request retains its own immutable user/context. Once its
+response completes, revoking its remaining upstream session cannot close a
+later request using another account on the same client socket. Changing a rate
+or multiplier uses the shared policy engine; historical billing is not recomputed.
+Native account deletion revokes every credential alias for its canonical email,
+leaves that client's Tunnel sibling active, and preserves ledger history.
+
+Panel binding/migration and policy registration of authenticated control
+connections before any dispatch are still pending. Idle UDP credential removal
+is tested; idle association termination by a policy update alone is not claimed.

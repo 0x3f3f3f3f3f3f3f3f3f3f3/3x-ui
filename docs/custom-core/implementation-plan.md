@@ -464,7 +464,7 @@ coverage. No Mixed/HTTP stable-ID support is claimed by the outbound-proxy tests
 
 ### Task 5A: Native password-proxy identity and credential lifecycle
 
-Spec: architecture.md, “Planned Mixed/SOCKS and HTTP identity increment”.
+Spec: architecture.md, “Native Mixed/SOCKS and HTTP identity increment”.
 Execution remains inline under the original authorization to decide routine
 engineering choices. This core increment precedes panel binding/migration; it
 does not make unsupported panel configurations eligible for managed activation.
@@ -484,32 +484,84 @@ HTTP's shared-validator constructor accepts the same validator from SOCKS;
 existing `NewServer` signatures remain unchanged. Both handlers implement the
 existing `proxy.UserManager`, with no new RPC service or field renumbering.
 
-- [ ] Write real failing `TestPasswordProxiesShareTunnelIdentityAndDisconnect`
+- [x] Write real failing `TestPasswordProxiesShareTunnelIdentityAndDisconnect`
   using standard SOCKS5/HTTP connections: six-byte echoes from two account
   streams plus Tunnel share 18 upload / 18 download / 54 billed at 1.5;
   disable closes all three, wrong passwords never reach either target.
-- [ ] Verify RED with `go test -race -count=1 -v ./testing/policy -run
+- [x] Verify RED with `go test -race -count=1 -v ./testing/policy -run
   '^TestPasswordProxies'`; retain failure logs without weakening assertions.
-- [ ] Write config regressions for both aliases, explicit metadata, no-auth
+- [x] Write config regressions for both aliases, explicit metadata, no-auth
   rejection, legacy omitted fields, managed duplicate usernames, orphan protobuf
   metadata and HTTP empty required-auth. Preserve legacy expected protobufs.
-- [ ] Implement the additive fields and shared validator. Test exact Unicode
+- [x] Implement the additive fields and shared validator. Test exact Unicode
   usernames, distinct case-sensitive credentials, duplicate index rejection,
   removal/re-add with old-pointer revocation, closed-handler rejection and
   concurrent authentication/removal under race.
-- [ ] Implement native handlers/UserManager and per-connection credential
+- [x] Implement native handlers/UserManager and per-connection credential
   tracking; test active TCP, mixed HTTP fallback, idle/active UDP association
   cleanup and two same-IP users with distinct stable IDs. Re-add keeps the
   existing client's ledger and does not restore revoked old streams.
-- [ ] Implement request context/lease isolation. Keep user A's upstream open
+- [x] Implement request context/lease isolation. Keep user A's upstream open
   after a complete HTTP response, reuse the client socket for user B CONNECT,
   then disable/remove A: B must keep echoing and ledger attribution must stay
   separate. Removing the last authenticated HTTP user must return 407 for an
   unauthenticated request, including explicit empty required-auth construction.
-- [ ] Negotiate both capabilities, including HTTP required-auth without owners;
+- [x] Negotiate both capabilities, including HTTP required-auth without owners;
   older-capability handler probes must fail before mutation. Keep the panel
   compiler's unsupported-protocol gate until canonical bindings are implemented.
 - [ ] Run affected core/config/adapter race and static checks, existing protocol
   mux and policy regressions, complete core shuffled tests and scoped core race.
   Review this increment, fix findings, update status/evidence, commit and push
   with exact remote SHA verification before proceeding to panel account binding.
+
+Task 5A scoped checkpoint: native password identity, shared Mixed validators,
+typed UserManager, idle/active UDP credential cleanup, request-scoped HTTP
+identity, protected empty authentication and capability preflight are implemented
+and verified with real sockets under race. Mixed aliases and Tunnel share both
+directional rate buckets and exact historical multiplier totals. A read-only
+review found no important/critical issue; its unmanaged HTTP CONNECT splice
+observation was resolved by retaining the raw connection for terminal CONNECT
+while earlier plain requests retain separate inactive leases. All final full-suite
+gates passed (see testing.md); staged commit/push is in progress. The panel
+compiler gate is unchanged. Ruling: Mixed noauth ignores unused accounts in both
+branches, matching the pinned upstream constructor; an initially contrary test
+expectation was corrected rather than changing legacy authentication behavior.
+
+### Task 5B: Canonical password account ownership (next, unimplemented)
+
+The source audit found that Mixed/HTTP `settings.accounts` currently contains
+only user/pass, whereas normalized `clients` and `client_inbounds` carry the
+stable ID and shared policy. `SyncInbound` merges nonempty password/UUID fields
+into the global client, so account ownership must use a specialized membership
+transaction rather than passing resource credentials through that merge.
+
+Primary source anchors: `frontend/src/pages/inbounds/form/protocols/accounts-list.tsx`,
+`frontend/src/schemas/protocols/inbound/{mixed,http}.ts`,
+`internal/web/service/{inbound,client_link,tunnel_owner,client_policy_config,client_policy_activation,client_policy_handoff}.go`.
+
+- [ ] Specify per-account canonical owner selection and authoritative database
+  validation. Keep wire usernames/passwords resource-specific; never infer an
+  existing owner from a display email, username or supplied raw core client ID.
+- [ ] Add transactional create/update/read guards, membership reconciliation and
+  detached-history preservation. Test late SQL rollback, stale settings, two
+  aliases for one owner, owner reassignment, credential rotation and unchanged
+  sibling credentials/policy. Run SQLite and PostgreSQL row-lock regressions.
+- [ ] Bind every managed credential from canonical records, including disabled
+  owners. Preserve protected authentication when all users are disabled or
+  removed. Refuse mixed owned/unowned activation until every path has a trusted
+  binding; legacy accounts retain existing behavior outside managed activation.
+- [ ] Add owner selection to the existing account form with generated API/schema
+  contracts and Chinese/English strings. Validate through API, configuration
+  export and backup/import paths; don't expose internal core capabilities as a
+  user choice or generate unsupported subscription formats.
+- [ ] Prove native grouped credential hot changes preserve another owner on the
+  listener, close idle as well as active old credentials, preserve the client
+  ledger and keep the same core boot ID. Do not loosen the legacy production
+  SOCKS hot-diff guard before negotiated custom-core behavior is verified.
+- [ ] Audit legacy username-based statistics during managed handoff. The current
+  handoff implementation keys history by canonical email and rejects password
+  proxy protocols; do not open that gate without alias-to-owner mapping and
+  independent final-counter settlement evidence.
+- [ ] Keep local/remote scope restrictions effective before fanout and import
+  filtering. Anonymous ownership, policy-only pre-dispatch control registration,
+  multi-node budget allocation and remaining protocol families stay open.

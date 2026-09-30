@@ -27,9 +27,11 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/infra/conf"
+	corehttp "github.com/xtls/xray-core/proxy/http"
 	hysteriaAccount "github.com/xtls/xray-core/proxy/hysteria/account"
 	"github.com/xtls/xray-core/proxy/shadowsocks"
 	"github.com/xtls/xray-core/proxy/shadowsocks_2022"
+	"github.com/xtls/xray-core/proxy/socks"
 	"github.com/xtls/xray-core/proxy/trojan"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vmess"
@@ -575,6 +577,22 @@ func isShadowsocks2022Cipher(cipher string) bool {
 // that would panic the core and kill every connection on the server.
 func buildUserAccount(protocolName string, user map[string]any) (*serial.TypedMessage, error) {
 	switch protocolName {
+	case "socks", "mixed", "http":
+		username, err := getRequiredUserString(user, "user")
+		if err != nil {
+			return nil, err
+		}
+		password, err := getRequiredUserString(user, "pass")
+		if err != nil {
+			return nil, err
+		}
+		if username == "" || password == "" {
+			return nil, common.NewError("password proxy requires a nonempty username and password")
+		}
+		if protocolName == "http" {
+			return serial.ToTypedMessage(&corehttp.Account{Username: username, Password: password}), nil
+		}
+		return serial.ToTypedMessage(&socks.Account{Username: username, Password: password}), nil
 	case "vmess":
 		userID, err := getRequiredUserString(user, "id")
 		if err != nil {

@@ -24,7 +24,7 @@ jobs:
       - name: Core race checks
         working-directory: core/xray
         run: |
-          go test -race -count=1 ./app/clientpolicy/... ./app/commander ./app/dispatcher ./app/proxyman/inbound ./app/proxyman/outbound ./app/reverse ./app/router ./app/stats ./app/trafficcontrol ./infra/conf ./proxy ./proxy/dokodemo ./proxy/loopback ./proxy/vless/inbound ./proxy/vless/outbound ./proxy/wireguard ./common/buf ./common/mux ./common/protocol ./transport/internet/udp ./transport/internet/websocket ./transport/internet/splithttp ./transport/internet/httpupgrade ./transport/internet/finalmask/realm ./testing/policy
+          go test -race -count=1 ./app/clientpolicy/... ./app/commander ./app/dispatcher ./app/proxyman/inbound ./app/proxyman/outbound ./app/reverse ./app/router ./app/stats ./app/trafficcontrol ./infra/conf ./proxy ./proxy/dokodemo ./proxy/loopback ./proxy/socks ./proxy/http ./proxy/vless/inbound ./proxy/vless/outbound ./proxy/wireguard ./common/buf ./common/mux ./common/protocol ./common/signal ./transport/internet/udp ./transport/internet/websocket ./transport/internet/splithttp ./transport/internet/httpupgrade ./transport/internet/finalmask/realm ./testing/policy
           go test -race -count=1 ./core -run '^(TestRejectedHandlerConstructionClosesProxy|TestTrafficDrain)'
       - name: Tunnel mux routing and legacy compatibility
         working-directory: core/xray
@@ -36,6 +36,38 @@ jobs:
           done
       - name: Build custom core
         run: bash tools/build-custom-core.sh
+      - name: Password proxy identity and credential lifecycle
+        working-directory: core/xray
+        run: |
+          set -euo pipefail
+          go test -race -count=1 -v ./testing/policy ./proxy/socks -run '^TestPassword|^TestTempUDPConn' | tee /tmp/password-proxy-lifecycle.log
+          for test in TestPasswordProxiesShareTunnelIdentityAndDisconnect TestPasswordProxiesWithoutPolicyFailClosed TestPasswordProxiesCredentialRemovalAndReadd TestPasswordProxiesUDPIdentityAndCredentialCleanup TestPasswordHTTPKeepAlivePreservesRequestIdentity TestPasswordMixedAliasesShareDirectionalRates TestPasswordMixedLegacyNoAuthIgnoresUnusedAccounts TestPasswordProxiesEmptyAccountsStayAuthenticated TestPasswordProxiesPreserveLegacyAnonymousAndLabels TestTempUDPConnCloseBeforeTimeout TestTempUDPConnConcurrentTimeoutAndClose; do
+            grep -q -- "^--- PASS: $test " /tmp/password-proxy-lifecycle.log
+          done
+      - name: Build missing password identity capability fixture
+        run: |
+          python3 - <<'PYCODE'
+          import json, os
+          from pathlib import Path
+          source = Path("core/xray/app/clientpolicy/command/command.go").resolve()
+          fixture = Path(os.environ["RUNNER_TEMP"]) / "password-identity-capability-fixture"
+          fixture.mkdir(exist_ok=True)
+          text = source.read_text()
+          capability = 'features = append(features, "trusted-socks-client-id-v1", "trusted-http-client-id-v1")'
+          assert text.count(capability) == 1
+          replacement = fixture / "command.go"
+          replacement.write_text(text.replace(capability, "", 1))
+          (fixture / "overlay.json").write_text(json.dumps({"Replace": {str(source): str(replacement)}}))
+          PYCODE
+          go -C core/xray build -overlay="$RUNNER_TEMP/password-identity-capability-fixture/overlay.json" -o "$PWD/build/pre-password-identity-xray" ./main
+      - name: Password proxy capability negotiation
+        run: |
+          set -euo pipefail
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" XRAY_PRE_PASSWORD_IDENTITY_E2E_BINARY="$PWD/build/pre-password-identity-xray" \
+            go test -race -count=1 -v ./internal/xray -run '^TestPasswordProxy' | tee /tmp/password-proxy-capability.log
+          for test in TestPasswordProxyHandlerCapabilitiesBeforeMutation TestPasswordProxyEmptyAuthenticationRequiresCapability TestPasswordProxyAccountRejectsInvalidCredentialTypes TestPasswordProxyStartupNegotiatesBeforePreparation; do
+            grep -q -- "^--- PASS: $test " /tmp/password-proxy-capability.log
+          done
       - name: Build missing credential capability fixture
         run: |
           python3 - <<'PY'

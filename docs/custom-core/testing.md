@@ -1600,3 +1600,88 @@ and custom core build (2.02 s), all successfully. Both version smoke commands
 pass and the clone remains clean. Existing caches were shared, but neither
 `node_modules` nor compiled project output was copied into the clone.
 Exact reproducible commands and artifact hashes are in deployment.md.
+
+## Native password-proxy identity and lifecycle checkpoint
+
+Linux arm64, Go 1.27.1, the managed core module, real loopback TCP/UDP and
+private Unix-socket gRPC. No additional protocol dependency or target dialer.
+Independent `golang.org/x/net/proxy` SOCKS5 and standard HTTP/wire clients
+authenticate against the same server implementation used by ordinary configs.
+
+The RED logs under `/root/task-evidence/password-proxy-*.log` cover lost stable
+identity (only Tunnel's six bytes were charged), missing native UserManager,
+an idle authenticated UDP association remaining open, UDP close before timer
+initialization panicking, old plain-HTTP request cleanup closing a later account's
+CONNECT, and missing-capability mutation accepting an empty anonymous fallback.
+These failures were observed before the corresponding implementations.
+
+Scoped verification commands:
+
+```sh
+cd core/xray
+GOTOOLCHAIN=go1.27.1 GOFLAGS=-p=1 go test -race -count=1 -v \
+  ./testing/policy ./common/protocol ./infra/conf ./proxy/socks \
+  -run '^TestPassword|^TestTempUDPConn'
+cd ../..
+GOTOOLCHAIN=go1.27.1 GOFLAGS=-p=1 \
+  XRAY_E2E_BINARY=/tmp/custom-xray-password-identity \
+  XRAY_PRE_PASSWORD_IDENTITY_E2E_BINARY=/tmp/password-proxy-capability-fixture/pre-password-identity-xray \
+  go test -race -count=1 -v ./internal/xray -run '^TestPasswordProxy'
+```
+
+Verified observations:
+
+- Two authenticated streams and Tunnel share 18 upload / 18 download / 54
+  billed bytes at 1.5. Wrong usernames/passwords do not reach the independent
+  target; removing the last account does not enable anonymous access.
+- Mixed SOCKS and HTTP aliases share upload and download buckets with Tunnel.
+  After exhausting a 65,536-byte burst at 1 byte/s, both queued streams remain
+  blocked for 200 ms. A hot change to unlimited and multiplier 0.5 releases
+  both within two seconds. Final raw totals are 65,566 in each direction;
+  billed totals are 196,674 (upload case) and 196,686 (download case), preserving
+  historical admission and the separately observed pre-change uploads.
+- Idle and active per-control-connection UDP associations close and release
+  their ephemeral ports on credential removal; another user on the same IP
+  continues with independent 12 / 12 / 36 usage.
+- A plain HTTP POST observed by the origin has 93 serialized upload bytes;
+  its original response has 70 bytes. At 1.5 the ledger has 244 billed bytes
+  and 500,000 remainder. A later account on the same client socket retains its
+  CONNECT after policy disable or credential removal of the old request.
+- Current and omitted-capability real child processes exercise all three
+  protocol names with populated and intentionally empty account lists. Missing
+  support fails before preparation or any business listener. The test requires
+  both binaries; its CI step also requires an explicit PASS for the named test.
+
+Legacy anonymous HTTP, SOCKS5 and SOCKS4 remain available, and legacy password
+statistics retain the wire username. In the pinned upstream version, a Mixed
+listener with `auth: noauth` ignores unused `accounts` for both SOCKS and HTTP,
+including an incorrect HTTP Basic credential. The new compatibility test
+preserves that behavior. An initial contrary test expectation was corrected
+after inspecting the upstream constructor; it was not a production regression.
+Linux splice commits its counters at EOF;
+the independent compatibility origin sends six bytes and closes to establish
+that boundary. The initial open-origin fixture did not establish this condition
+and its failed statistics assertion was corrected without changing production
+splice code or expected counter totals. CONNECT preserves unmanaged splice;
+managed flows retain the existing policy engine restriction on it.
+
+Final full-suite results are recorded in
+`/root/task-evidence/password-proxy-final-results.json`: complete shuffled core
+tests (662.84 s), expanded CI core race (138.38 s), handler-construction race
+(3.78 s), affected core vet (5.95 s), core build (4.69 s), complete shuffled
+`internal/xray` race with real capability fixtures (29.18 s), panel vet (20.06 s)
+and full `make test-go`, including the explicit AmneziaWG device package
+(286.04 s), all passed. The adapter run omitted the optional legacy-custom
+binary; that named regression passed separately with its real fixture in
+`password-proxy-legacy-custom-control.log` (1.533 s).
+
+The final native password/config/UDP race run in
+`password-proxy-noauth-compatible-final.log` also passed, including the added
+noauth compatibility test. Protobuf regeneration matched both checked-in files,
+`make gen-check`, `make lint-go`, affected-file gofmt and `git diff --check`
+passed. An optional whole-tree `golangci-lint fmt --diff` reported existing
+baseline formatting differences; no unrelated source was reformatted. No
+frontend code or contract changed in this increment; the earlier complete
+frontend verification remains the applicable checkpoint. Panel canonical
+binding, anonymous resource ownership and policy-only closure before first
+dispatch remain open.

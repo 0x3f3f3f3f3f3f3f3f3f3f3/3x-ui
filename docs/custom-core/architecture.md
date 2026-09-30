@@ -94,9 +94,11 @@ shared policy enforcement.
 
 ## Existing paths requiring migration
 
-### Planned Mixed/SOCKS and HTTP identity increment
+### Native Mixed/SOCKS and HTTP identity increment
 
-This is the next Task 5 increment, not an implemented protocol claim. Existing
+Task 5A implements the native core identity/lifecycle path and negotiates it in
+the panel's low-level adapter. Real scoped socket/race tests verify this path;
+panel canonical-account binding and production activation remain unimplemented. Existing
 password accounts gain optional server-configured `clientId` and canonical
 `email`. Username/password authentication returns an immutable `MemoryUser`
 with the typed authenticated account and stable ID. A wire username never acts
@@ -138,7 +140,11 @@ after its response completes, the lease becomes inactive. Thus delayed cleanup
 of user A's upstream cannot close a later user B request/CONNECT on the same
 keep-alive client socket. Plain HTTP accounting retains the existing dispatched
 HTTP-message boundary (serialized request/response headers plus body); CONNECT
-and SOCKS meter the target payload. No target dialer is added outside Xray.
+and SOCKS meter the target payload. CONNECT owns the remaining connection
+lifetime, so its dispatcher retains the original connection for unmanaged
+Linux splice; earlier plain requests retain their inactive lease. Managed
+connections retain the existing common policy restriction on splice.
+No target dialer is added outside Xray.
 
 Acceptance uses independent standard SOCKS5/HTTP clients, observable targets,
 exact shared totals with Tunnel, wrong credentials, deletion/re-add, idle and

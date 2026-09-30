@@ -10,8 +10,8 @@ This is the initial source-audit matrix, not a support announcement. `E/U` = exi
 | VMess | E/U both | E/U | I/V scoped TCP/UDP/Mux identity, shared rate/billing/live close; production activation N | complete account lifecycle and independent client regression |
 | Trojan | E/U both | E/U | I/V scoped TCP/UDP/Mux identity, shared rate/billing/live close; production activation N | fallback and complete account lifecycle |
 | Shadowsocks/2022 | E/U both | E/U | classic AEAD TCP/UDP/Mux scoped I/V; 2022 managed identity N | other cipher variants, 2022 user-update isolation/relay, complete lifecycle |
-| Mixed/SOCKS | E/U both (outbound socks) | E/U | N | authenticated user versus anonymous listener, UDP |
-| HTTP | E/U both | E/U | N | auth, CONNECT, normal request path, raw-copy |
+| Mixed/SOCKS | existing inbound/outbound; native authenticated core increment I/V | native typed CRUD/alias revocation and idle/active UDP cleanup I/V; panel bindings/export N | scoped password-auth TCP/UDP stable ID and shared directional rate/billing/live close I/V; anonymous resource ownership and panel activation N | canonical account binding/migration, managed idle policy control, full protocol matrix |
+| HTTP | existing inbound/outbound; native authenticated core increment I/V | native CRUD, empty required-auth and request identity isolation I/V; panel bindings/export N | scoped CONNECT and plain-request stable ID/accounting/live close I/V; production activation N | canonical account binding/migration, managed idle policy control, full protocol matrix |
 | Hysteria2 | E/U both | E/U | N | QUIC/mux/UDP and auth updates |
 | WireGuard | E/U both | E/U | N | per-peer identity, IP/payload accounting distinction |
 | TUN | E/U inbound | no account auth; resource identity required | N | packet semantics, route and owner mapping |

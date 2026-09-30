@@ -12,6 +12,8 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/proxy/dokodemo"
+	corehttp "github.com/xtls/xray-core/proxy/http"
+	"github.com/xtls/xray-core/proxy/socks"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -86,6 +88,11 @@ func managedUserCapabilities(accountType string) ([]string, error) {
 		capability = "trusted-trojan-client-id-v1"
 	case legacyShadowsocksAccountType:
 		capability = "trusted-shadowsocks-aead-client-id-v1"
+	case "xray.proxy.http.Account":
+		capability = "trusted-http-client-id-v1"
+	case "xray.proxy.socks.Account":
+		// SOCKS listeners also accept HTTP using the same credentials.
+		return []string{"trusted-socks-client-id-v1", "trusted-http-client-id-v1", "authenticated-credential-revocation-v1", "inbound-scoped-session-close-v1"}, nil
 	default:
 		return nil, fmt.Errorf("%w: managed account adapter is not implemented for %q", ErrClientPolicyCapability, accountType)
 	}
@@ -94,6 +101,31 @@ func managedUserCapabilities(accountType string) ([]string, error) {
 
 func managedIdentityCapabilities(message protoreflect.Message, required map[string]bool) error {
 	switch value := message.Interface().(type) {
+	case *socks.ServerConfig:
+		for _, id := range value.ClientIds {
+			if id != "" {
+				required["trusted-socks-client-id-v1"] = true
+				required["trusted-http-client-id-v1"] = true
+				required["authenticated-credential-revocation-v1"] = true
+				required["inbound-scoped-session-close-v1"] = true
+			}
+		}
+		if value.AuthType == socks.AuthType_PASSWORD && len(value.Accounts) == 0 {
+			required["trusted-http-client-id-v1"] = true
+		}
+		return nil
+	case *corehttp.ServerConfig:
+		for _, id := range value.ClientIds {
+			if id != "" {
+				required["trusted-http-client-id-v1"] = true
+				required["authenticated-credential-revocation-v1"] = true
+				required["inbound-scoped-session-close-v1"] = true
+			}
+		}
+		if value.RequireAuthentication {
+			required["trusted-http-client-id-v1"] = true
+		}
+		return nil
 	case *protocol.User:
 		if value.GetClientId() != "" {
 			capabilities, err := managedUserCapabilities(value.Account.GetType())
