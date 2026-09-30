@@ -237,3 +237,33 @@ the last account preserves protection. Ordinary unowned restores keep their
 legacy removal behavior. Real generated Mixed SOCKS/HTTP, standalone HTTP and
 Tunnel listeners share one core ledger, with independent target byte counts
 and separate owner attribution verified on SQLite and PostgreSQL.
+
+## Grouped managed password credential changes
+
+This next increment changes the managed credential diff path. Whole-listener
+replacement currently disrupts other owners' sessions. Keep legacy
+ComputeHotDiff and its SOCKS restart guard; add a managed entry point subject
+to native capability negotiation. A new per-username removal RPC is unnecessary:
+the verified native removal revokes a canonical email's complete alias group.
+Remove each changed old group once, then add every remaining new credential
+in that group. All removals precede additions, including username transfers
+between owners. Unchanged aliases of the changed owner also close; unrelated
+owners and the same owner's Tunnel bindings remain live.
+
+Only account-list changes on otherwise unchanged canonical Mixed/HTTP
+listeners qualify. Complete exact user/pass plus canonical ID/email are
+required; duplicate usernames or inconsistent ID/email groups are refused.
+Compare groups independent of array order, preserve exact-case usernames and
+sort operations. Address, protocol, transport, sniffing, authentication mode
+and other settings changes retain existing replacement/restart behavior.
+
+Negotiate password protocol identity, credential revocation and inbound-close
+capabilities before preparation or handler writes, including removals without
+additions. Resolve each removed identity from its original runtime account
+group before removal. Native startup assigns listener userLevel; typed hot
+additions preserve that level and reject malformed numeric input. Existing
+partial-apply handling stops unsafe access and acknowledges only a fully
+applied candidate. Real runtime tests must preserve another owner's sessions,
+Tunnel, the core boot ID and exact historical/ongoing usage before this
+increment is marked verified. UI, generic lifecycle and legacy username-counter
+handoff remain separate work.

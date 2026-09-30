@@ -656,6 +656,57 @@ while retaining Mixed password auth and HTTP required-auth in empty listeners.
   ledger with Tunnel, wrong credentials reach no target, disabled owners remain
   blocked, and another owner remains usable. Run SQLite/PostgreSQL compiler
   tests and affected capability/activation regressions under race.
-- [ ] Record evidence, review once, fix Important/Critical findings with
+- [x] Record evidence, review once, fix Important/Critical findings with
   RED/GREEN, commit and push the validated configuration increment. Preserve
   the live legacy handoff guard and existing upstream hot-diff restrictions.
+
+Task 5B2 checkpoint: `44df54288ebb77f09074a8ff53e845397852b73d` passed
+SQLite/PostgreSQL compiler/ownership race tests, generation/lint/vet, full root
+Go tests and full affected service/adapter/Runtime race tests. One read-only
+review found no Important or Critical finding. Push to the fork feature branch
+was verified by an exact remote SHA comparison. Scoped runtime binding is
+complete; remaining Task 5B work is still open.
+
+### Task 5B3: Grouped managed password credential hot changes
+
+Spec: architecture.md, "Grouped managed password credential changes".
+Consumes verified native email-group revocation and canonical runtime accounts.
+Ruling: introduce a separate managed diff path; preserve ComputeHotDiff and the
+legacy SOCKS restart guard. Rebuild a changed owner's complete alias group,
+keeping unrelated owners' listeners/sessions and the same owner's Tunnel.
+Live legacy handoff, owner UI and generic lifecycle remain separate tasks.
+
+Files: new `internal/xray/password_proxy_hot_diff.go` and tests;
+modify `hot_diff.go`, `api_managed.go`, password-specific `api.go` level
+handling, `internal/web/runtime/client_policy_config.go` and
+`internal/web/service/client_policy_activation.go`; new service real-runtime
+and capability tests.
+Interface: `ComputeManagedHotDiff(*Config, *Config) (*HotDiff, bool)` shares
+existing static/routing/outbound checks and emits grouped password UserOps.
+Resolve removed identity from all matching runtime accounts before handler
+writes. Negotiate protocol/revocation/inbound-close capabilities before SQL
+preparation, including remove-only operations.
+
+- [ ] Write `TestComputeManagedPasswordHotDiffGroupsOwnerAliases`: two aliases
+  for A plus owner B; rotating one A alias must remove A once, re-add both A
+  aliases and produce no B or listener operation. Observe current-path RED.
+- [ ] Implement the managed entry point and deterministic email-group diff.
+  Test reorder-only no-op, username transfers, additions, final protected
+  removal, malformed ownership and exact-case/Unicode username distinctions.
+  Keep the existing legacy SOCKS regression assertions unchanged.
+- [ ] Require password protocol capabilities on remove-only and rotate paths
+  before preparation or mutations. Test missing each protocol capability,
+  revocation and inbound-close; counters remain zero on preflight rejection.
+- [ ] Preserve listener userLevel on typed password AddUser. Assert the actual
+  protobuf level 7 and canonical identity; reject negative, fractional,
+  overflow, boolean and string level input before handler mutation.
+- [ ] Through actual AddInbound/UpdateInbound and managed Runtime, retain A
+  idle/active SOCKS, CONNECT and UDP sessions plus B and A Tunnel. Rotate A;
+  old credential sessions close, B and Tunnel continue, old auth fails and
+  both remaining A aliases work. Assert unchanged BootID and exact independent
+  target/ledger bytes on Mixed and HTTP paths.
+- [ ] Test last removal preserving authentication and partial RPC failure
+  through the existing stop/recovery boundary, without acknowledging an
+  incomplete candidate or replaying usage. Keep the live handoff gate closed.
+- [ ] Run SQLite/PostgreSQL and affected full race/root gates; add explicit CI
+  PASS checks, review once, record evidence, commit/push and verify remote SHA.

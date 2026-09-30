@@ -91,6 +91,28 @@ owner selection UI and legacy username-counter handoff remain unfinished;
 owned accounts cannot enter an unmanaged configuration. No installation,
 service startup or production deployment was performed.
 
+### Clean-source password runtime configuration checkpoint build
+
+Commit `44df54288ebb77f09074a8ff53e845397852b73d` was rebuilt from a new
+clean local clone using the pinned toolchains and verified shared caches.
+`npm ci` (15.87 s), frontend (4.15 s), panel (15.74 s), core (6.41 s)
+and both version smoke commands passed. Source status remained clean. The
+panel reports `dev+44df5428`; the Custom Xray version includes the full
+revision without `-dirty`.
+
+Distinct artifacts preserve all preceding checkpoints:
+
+- `build/x-ui-password-config-checkpoint`: SHA-256
+  `2e0761c9a9bf0743a202f0b0cf308c811d207fed261f046b7870edb6063fa9c5`.
+- `build/custom-xray-password-config-checkpoint`: SHA-256
+  `5f50576fe8281d397ac356c4cd53cf7de04c36bb1e1be41b2df54271c27f2124`.
+
+Evidence: `/root/task-evidence/password-config-clean-build-results.json` and
+`password-config-clean-build-manifest.json`. Canonical managed password
+configuration is verified; owner UI, grouped credential hot changes, generic
+lifecycle and legacy username-counter handoff remain open. No installation,
+service startup or production deployment was performed.
+
 Build with `bash tools/build-custom-core.sh`. For a **new** panel-assigned instance, initialize a private persistent path once:
 
 ```sh
