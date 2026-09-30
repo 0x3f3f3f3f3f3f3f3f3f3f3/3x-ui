@@ -414,7 +414,8 @@ for mode in cases:
         case = {'case':mode,'exit_code':proc.returncode,'sentinel_files_preserved':preserved,
                 'unexpected_marker_created':(root/'fixture/injected').exists(),
                 'service_stop_attempted':stopped,'actions':actions,'stderr':proc.stderr[-1500:],
-                'output_tail':proc.stdout.splitlines()[-6:]}
+                'output_tail':[re.sub(r'(?i)((?:API Token|Password|Username)\s*:\s*)\S+', r'\1[fixture credential redacted]', line)
+                               for line in proc.stdout.splitlines()[-6:]]}
         report.append(case)
         print(json.dumps(case), flush=True)
         assert (proc.returncode == 0 if args.web or install_success or mode == 'menu-refresh' else proc.returncode != 0) and preserved, case

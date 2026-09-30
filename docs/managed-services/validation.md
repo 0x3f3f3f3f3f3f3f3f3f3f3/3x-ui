@@ -5353,3 +5353,25 @@ issues** (`migration-errors-lint-final.log`). Its initial run found two formatti
 issues in new test files; both were corrected, with no behavioral changes.
 The clean-source chroot migration-failure probe is an additional post-commit gate
 before publishing this increment.
+
+The post-commit gate passed on the normal clean native panel at
+`6ac5bb518c544e4388be2f4574767d1fea85344f` (`release-info.modified=false`). Three
+actual chroot runs — updater, installer over existing files, and first installer
+with a retained database — each reached real managed-core preflight, copied the
+candidate, then exited **2** on the actual migration error. None requested service
+start/restart/enable; existing-install cases stopped the old service, and the
+first-install case had no service to stop. Original malformed settings and a
+separate database sentinel remained; updater status reported failure. Logs:
+`migration-updater-process.jsonl`, `migration-installer-process.jsonl`, and
+`migration-fresh-installer-process.jsonl` under `/tmp/3x-ui-rate-trace/`.
+
+The probe uses fake package/service commands only inside its guarded private
+namespaces; this is not actual systemd/OpenRC execution. Candidate core/panel and
+SQLite migration are real. Fixture credentials are redacted from report tails.
+
+Healthy first-install regression also passed with that clean panel: the actual
+installer completed, the installed panel answered authenticated HTTP, installed
+inventory hashes matched, and the result file was mode 0600
+(`migration-healthy-install-process.jsonl`, one case, exit 0). Service start was
+recorded by the fixture; the real panel HTTP process was launched and reaped by
+the probe, not by a host service manager.
