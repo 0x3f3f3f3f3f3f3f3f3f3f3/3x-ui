@@ -213,6 +213,9 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 		}
 	}
 
+	if d.config.OutboundTag != "" {
+		ctx = session.SetForcedOutboundTagToContext(ctx, d.config.OutboundTag)
+	}
 	if err := dispatcher.DispatchLink(
 		ctx, dest, &transport.Link{
 			Reader: reader,

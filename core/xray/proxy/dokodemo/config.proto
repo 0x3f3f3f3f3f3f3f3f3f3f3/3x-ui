@@ -20,4 +20,5 @@ message Config {
   string client_id = 8;
   string email = 9;
   repeated string allowed_source_cidrs = 10;
+  string outbound_tag = 11;
 }

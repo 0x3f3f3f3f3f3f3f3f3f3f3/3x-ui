@@ -34,6 +34,7 @@ type Config struct {
 	ClientId           string            `protobuf:"bytes,8,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	Email              string            `protobuf:"bytes,9,opt,name=email,proto3" json:"email,omitempty"`
 	AllowedSourceCidrs []string          `protobuf:"bytes,10,rep,name=allowed_source_cidrs,json=allowedSourceCidrs,proto3" json:"allowed_source_cidrs,omitempty"`
+	OutboundTag        string            `protobuf:"bytes,11,opt,name=outbound_tag,json=outboundTag,proto3" json:"outbound_tag,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -131,11 +132,18 @@ func (x *Config) GetAllowedSourceCidrs() []string {
 	return nil
 }
 
+func (x *Config) GetOutboundTag() string {
+	if x != nil {
+		return x.OutboundTag
+	}
+	return ""
+}
+
 var File_proxy_dokodemo_config_proto protoreflect.FileDescriptor
 
 const file_proxy_dokodemo_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1bproxy/dokodemo/config.proto\x12\x13xray.proxy.dokodemo\x1a\x18common/net/address.proto\x1a\x18common/net/network.proto\"\xe4\x03\n" +
+	"\x1bproxy/dokodemo/config.proto\x12\x13xray.proxy.dokodemo\x1a\x18common/net/address.proto\x1a\x18common/net/network.proto\"\x87\x04\n" +
 	"\x06Config\x12C\n" +
 	"\x10allowed_networks\x18\a \x03(\x0e2\x18.xray.common.net.NetworkR\x0fallowedNetworks\x12D\n" +
 	"\x0frewrite_address\x18\x01 \x01(\v2\x1b.xray.common.net.IPOrDomainR\x0erewriteAddress\x12!\n" +
@@ -147,7 +155,8 @@ const file_proxy_dokodemo_config_proto_rawDesc = "" +
 	"\tclient_id\x18\b \x01(\tR\bclientId\x12\x14\n" +
 	"\x05email\x18\t \x01(\tR\x05email\x120\n" +
 	"\x14allowed_source_cidrs\x18\n" +
-	" \x03(\tR\x12allowedSourceCidrs\x1a:\n" +
+	" \x03(\tR\x12allowedSourceCidrs\x12!\n" +
+	"\foutbound_tag\x18\v \x01(\tR\voutboundTag\x1a:\n" +
 	"\fPortMapEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B[\n" +

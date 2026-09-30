@@ -10,6 +10,7 @@ import (
 type DokodemoConfig struct {
 	ClientID           string            `json:"clientId"`
 	Email              string            `json:"email"`
+	OutboundTag        string            `json:"outboundTag"`
 	AllowedSourceCIDRs []string          `json:"allowedSourceCidrs"`
 	AllowedNetwork     *NetworkList      `json:"allowedNetwork"`
 	RewriteAddress     *Address          `json:"rewriteAddress"`
@@ -51,6 +52,7 @@ func (v *DokodemoConfig) Build() (proto.Message, error) {
 	config.UserLevel = v.UserLevel
 	config.ClientId = v.ClientID
 	config.Email = v.Email
+	config.OutboundTag = v.OutboundTag
 	config.AllowedSourceCidrs = v.AllowedSourceCIDRs
 	return config, nil
 }

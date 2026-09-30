@@ -37,9 +37,19 @@ func (s *Server) Type() interface{} {
 	return s.dispatcher.Type()
 }
 
+func isMuxDestination(ctx context.Context, dest net.Destination) bool {
+	if dest.Address != muxCoolAddress {
+		return false
+	}
+	// Tunnel forwards opaque L4 payload, even when its configured target is
+	// the internal mux sentinel. Decoding it would bypass its selected route.
+	inbound := session.InboundFromContext(ctx)
+	return inbound == nil || inbound.Name != "dokodemo-door"
+}
+
 // Dispatch implements routing.Dispatcher
 func (s *Server) Dispatch(ctx context.Context, dest net.Destination) (*transport.Link, error) {
-	if dest.Address != muxCoolAddress {
+	if !isMuxDestination(ctx, dest) {
 		return s.dispatcher.Dispatch(ctx, dest)
 	}
 
@@ -60,7 +70,7 @@ func (s *Server) Dispatch(ctx context.Context, dest net.Destination) (*transport
 
 // DispatchLink implements routing.Dispatcher
 func (s *Server) DispatchLink(ctx context.Context, dest net.Destination, link *transport.Link) error {
-	if dest.Address != muxCoolAddress {
+	if !isMuxDestination(ctx, dest) {
 		return s.dispatcher.DispatchLink(ctx, dest, link)
 	}
 	worker, err := NewServerWorker(ctx, s.dispatcher, link)
