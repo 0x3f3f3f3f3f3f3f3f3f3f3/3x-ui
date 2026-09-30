@@ -1823,3 +1823,63 @@ No core/frontend source changed in Task 5B2, so Task 5A native core and Task
 5B1 full frontend evidence remain applicable; this increment reruns the full
 root Go tests and all affected race packages rather than claiming fresh
 whole-core/frontend executions.
+
+## Grouped managed password credential checkpoint
+
+Task 5B3 begins with the unchanged legacy diff and typed AddUser path. Group
+rotation, alias reorder and listener-level assertions observed RED in 0.077 s;
+additional transfer/removal/capability regressions observed RED in 0.062 s.
+The actual saved-inbound rotation test then reproduced an unrelated owner's
+stream closing on both Mixed and HTTP (0.972 s). A separate managed diff fixes
+these cases while preserving the legacy ComputeHotDiff and SOCKS restart guard.
+Initial unit race passed in 1.311 s; real TCP and existing managed hot tests
+passed in 6.302 s. Logs use the `password-hot-` prefix in task-evidence.
+
+Changed owners are removed once by canonical email and all remaining aliases
+are re-added in deterministic order. Reorder-only edits make no handler calls.
+All removed stable identities resolve before mutation; remove-only operations
+negotiate protocol identity, revocation and inbound-close capabilities before
+preparation. Actual protobuf assertions preserve listener level 7 and reject
+negative/fractional/overflow/boolean/string levels before handler writes.
+
+`TestPasswordProxyHotChangesPreserveSiblingAndLedger` uses ordinary persisted
+AddInbound/UpdateInbound calls and real managed sockets. Independent SOCKS5,
+wire CONNECT, manually encoded SOCKS UDP and echo target counts cover active
+and idle authenticated sockets, two owner aliases, another owner on the same
+IP and the first owner's Tunnel. Rotation closes all old credential-group
+TCP/UDP connections, releases UDP ports, rejects old authentication and admits
+both remaining aliases. Other-owner TCP/UDP and Tunnel continue on the same
+BootID. Final account removal retains password protection.
+
+Mixed delivers exactly 120 target payload bytes: owner A settles upload 166,
+download 266 and billed 564 after preserving history 100/200 at multiplier 2;
+owner B settles 54/54/162 at multiplier 1.5. HTTP delivers 66 target bytes:
+A settles 148/248/492 and B 18/18/54. UDP framing is excluded from payload
+accounting. Existing native plain-request tests remain separate evidence.
+
+`TestPasswordProxyHotPartialFailureStopsAndRecovers` proxies the test-owned
+private control socket and discards the third AlterInbound acknowledgement
+after the real core executed it. The save returns failure and stops the core;
+the process does not acknowledge the incomplete candidate. Restart uses saved
+credentials, rejects the old password and preserves usage: final A totals are
+124/224/396 including independently counted traffic before and after failure.
+The successful-change guarantee of retained sibling/Tunnel sessions does not
+extend to this whole-core failure boundary.
+
+Final SQLite race/shuffle explicitly passes all eleven new test names (adapter
+1.249 s, service 7.398 s). Actual PostgreSQL hot and existing managed hot race
+tests pass in 24.016 s, including all three new service cases. CI requires the
+same named PASS lines; YAML and all 30 Bash blocks parse. No remote CI run is
+claimed. One read-only review found zero Critical, Important or Minor findings.
+
+Generation (0.84 s), lint (62.74 s) and vet (9.01 s) pass. Full `make test-go`
+passes in 276.8 s wall time, including service 115.053 s and the explicit
+AmneziaWG device package. Full affected race/shuffle passes in 401.27 s wall
+time: service 365.389 s, adapter 22.906 s and Runtime 3.882 s.
+`password-hot-gate-results.json` records each command, exit and log. Two test
+fixture errors are preserved: incorrect int64 expectation types, and a control
+directory failing the production private-directory requirement. The corrected
+fixture uses a private os.MkdirTemp directory; no production guard was relaxed.
+No core/frontend source changed. Their preceding verified evidence remains
+applicable; no new full-core/frontend execution is claimed. Owner UI, generic
+lifecycle and live legacy username-counter handoff remain open.

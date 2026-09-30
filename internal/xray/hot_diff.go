@@ -70,6 +70,16 @@ func (d *HotDiff) Empty() bool {
 // the change touches anything that has no runtime reload API (log, dns,
 // policy, ...) and therefore requires a full process restart.
 func ComputeHotDiff(oldCfg, newCfg *Config) (*HotDiff, bool) {
+	return computeHotDiff(oldCfg, newCfg, false)
+}
+
+// ComputeManagedHotDiff also groups canonical password aliases. Callers must
+// negotiate ManagedHotDiffCapabilities before preparing or applying changes.
+func ComputeManagedHotDiff(oldCfg, newCfg *Config) (*HotDiff, bool) {
+	return computeHotDiff(oldCfg, newCfg, true)
+}
+
+func computeHotDiff(oldCfg, newCfg *Config, managedPassword bool) (*HotDiff, bool) {
 	if oldCfg == nil || newCfg == nil {
 		return nil, false
 	}
@@ -107,7 +117,7 @@ func ComputeHotDiff(oldCfg, newCfg *Config) (*HotDiff, bool) {
 
 	diff := &HotDiff{}
 
-	if ok := diffInbounds(oldCfg, newCfg, diff); !ok {
+	if ok := diffInbounds(oldCfg, newCfg, diff, managedPassword); !ok {
 		logger.Debug("hot diff: inbound change is not API-applicable")
 		return nil, false
 	}
@@ -126,7 +136,7 @@ func ComputeHotDiff(oldCfg, newCfg *Config) (*HotDiff, bool) {
 // diffInbounds fills diff with inbound removals/additions (a changed inbound
 // becomes remove+add). The api inbound carries the gRPC server the panel is
 // talking through, so any change touching it forces a restart.
-func diffInbounds(oldCfg, newCfg *Config, diff *HotDiff) bool {
+func diffInbounds(oldCfg, newCfg *Config, diff *HotDiff, managedPassword bool) bool {
 	oldByTag, ok := inboundsByTag(oldCfg.InboundConfigs)
 	if !ok {
 		return false
@@ -153,6 +163,15 @@ func diffInbounds(oldCfg, newCfg *Config, diff *HotDiff) bool {
 		}
 		if exists {
 			diff.DroppedClients = append(diff.DroppedClients, droppedClients(oldIb, newIb)...)
+		}
+		if exists && managedPassword && passwordHotProtocol(oldIb.Protocol) && oldIb.Protocol == newIb.Protocol {
+			handled, err := diffManagedPasswordUsers(oldIb, newIb, diff)
+			if err != nil {
+				return false
+			}
+			if handled {
+				continue
+			}
 		}
 		if exists && diffInboundUsers(oldIb, newIb, diff) {
 			continue

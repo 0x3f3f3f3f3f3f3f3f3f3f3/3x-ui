@@ -213,8 +213,8 @@ markers through normal form edits; owner selection UI remains unfinished.
 Task 5B1 kept both managed compilation and unmanaged activation of owned
 accounts gated. Task 5B2 verifies canonical managed runtime generation;
 owned accounts continue to require managed activation. Owner selection UI,
-generic client lifecycle fanout, grouped credential hot diffs and legacy
-username-counter migration remain open. API/import/export continue using
+generic client lifecycle fanout and legacy username-counter migration remain
+open. Task 5B3 verifies scoped grouped credential hot diffs. API/import/export continue using
 existing settings JSON; restores must
 preserve canonical stable IDs and links rather than minting replacement owners.
 
@@ -240,9 +240,9 @@ and separate owner attribution verified on SQLite and PostgreSQL.
 
 ## Grouped managed password credential changes
 
-This next increment changes the managed credential diff path. Whole-listener
-replacement currently disrupts other owners' sessions. Keep legacy
-ComputeHotDiff and its SOCKS restart guard; add a managed entry point subject
+The managed credential diff path avoids whole-listener replacement for scoped
+account changes, preserving other owners' sessions. Keep legacy
+ComputeHotDiff and its SOCKS restart guard; use a managed entry point subject
 to native capability negotiation. A new per-username removal RPC is unnecessary:
 the verified native removal revokes a canonical email's complete alias group.
 Remove each changed old group once, then add every remaining new credential
@@ -263,7 +263,9 @@ additions. Resolve each removed identity from its original runtime account
 group before removal. Native startup assigns listener userLevel; typed hot
 additions preserve that level and reject malformed numeric input. Existing
 partial-apply handling stops unsafe access and acknowledges only a fully
-applied candidate. Real runtime tests must preserve another owner's sessions,
-Tunnel, the core boot ID and exact historical/ongoing usage before this
-increment is marked verified. UI, generic lifecycle and legacy username-counter
-handoff remain separate work.
+applied candidate. Verified real runtime tests preserve another owner's
+sessions, Tunnel, the core boot ID and exact historical/ongoing usage on
+successful saves. A lost acknowledgement after actual handler mutation stops
+the whole core through the existing safety boundary; restart uses saved
+credentials without replaying usage. UI, generic lifecycle and legacy
+username-counter handoff remain separate work.

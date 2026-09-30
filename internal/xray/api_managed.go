@@ -24,6 +24,24 @@ func ManagedHotDiffCapabilities(diff *HotDiff) ([]string, error) {
 		required["inbound-scoped-session-close-v1"] = true
 		required["authenticated-credential-revocation-v1"] = true
 	}
+	for _, user := range diff.RemovedUsers {
+		var accountType string
+		switch user.Protocol {
+		case "socks", "mixed":
+			accountType = "xray.proxy.socks.Account"
+		case "http":
+			accountType = "xray.proxy.http.Account"
+		default:
+			continue
+		}
+		capabilities, err := managedUserCapabilities(accountType)
+		if err != nil {
+			return nil, err
+		}
+		for _, capability := range capabilities {
+			required[capability] = true
+		}
+	}
 	for _, inbound := range diff.AddedInbounds {
 		var config conf.InboundDetourConfig
 		if err := json.Unmarshal(inbound, &config); err != nil {

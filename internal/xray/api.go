@@ -732,6 +732,18 @@ func buildUserAccount(protocolName string, user map[string]any) (*serial.TypedMe
 // does not reject a duplicate email, and a later removal would then drop just
 // one of the two registrations, leaving a disabled client able to connect.
 func (x *XrayAPI) AddUser(Protocol string, inboundTag string, user map[string]any) error {
+	var level uint32
+	if Protocol == "socks" || passwordHotProtocol(Protocol) {
+		if raw, exists := user["level"]; exists {
+			encoded, err := json.Marshal(raw)
+			if err != nil {
+				return err
+			}
+			if err := json.Unmarshal(encoded, &level); err != nil {
+				return err
+			}
+		}
+	}
 	userEmail, err := getRequiredUserString(user, "email")
 	if err != nil {
 		return err
@@ -776,6 +788,7 @@ func (x *XrayAPI) AddUser(Protocol string, inboundTag string, user map[string]an
 		Tag: inboundTag,
 		Operation: serial.ToTypedMessage(&command.AddUserOperation{
 			User: &protocol.User{
+				Level:    level,
 				ClientId: clientID,
 				Email:    userEmail,
 				Account:  account,

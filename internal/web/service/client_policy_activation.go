@@ -237,7 +237,7 @@ func managedAccessChanged(current, next *xray.Config) bool {
 	}
 	comparable := *next
 	comparable.ClientPolicy = current.ClientPolicy
-	diff, ok := xray.ComputeHotDiff(current, &comparable)
+	diff, ok := xray.ComputeManagedHotDiff(current, &comparable)
 	return !ok || len(diff.RemovedUsers) > 0 || len(diff.RemovedInboundTags) > 0
 }
 

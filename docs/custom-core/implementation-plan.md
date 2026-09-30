@@ -556,7 +556,7 @@ Primary source anchors: `frontend/src/pages/inbounds/form/protocols/accounts-lis
   contracts and Chinese/English strings. Validate through API, configuration
   export and backup/import paths; don't expose internal core capabilities as a
   user choice or generate unsupported subscription formats.
-- [ ] Prove native grouped credential hot changes preserve another owner on the
+- [x] Prove native grouped credential hot changes preserve another owner on the
   listener, close idle as well as active old credentials, preserve the client
   ledger and keep the same core boot ID. Do not loosen the legacy production
   SOCKS hot-diff guard before negotiated custom-core behavior is verified.
@@ -687,25 +687,25 @@ Resolve removed identity from all matching runtime accounts before handler
 writes. Negotiate protocol/revocation/inbound-close capabilities before SQL
 preparation, including remove-only operations.
 
-- [ ] Write `TestComputeManagedPasswordHotDiffGroupsOwnerAliases`: two aliases
+- [x] Write `TestComputeManagedPasswordHotDiffGroupsOwnerAliases`: two aliases
   for A plus owner B; rotating one A alias must remove A once, re-add both A
   aliases and produce no B or listener operation. Observe current-path RED.
-- [ ] Implement the managed entry point and deterministic email-group diff.
+- [x] Implement the managed entry point and deterministic email-group diff.
   Test reorder-only no-op, username transfers, additions, final protected
   removal, malformed ownership and exact-case/Unicode username distinctions.
   Keep the existing legacy SOCKS regression assertions unchanged.
-- [ ] Require password protocol capabilities on remove-only and rotate paths
+- [x] Require password protocol capabilities on remove-only and rotate paths
   before preparation or mutations. Test missing each protocol capability,
   revocation and inbound-close; counters remain zero on preflight rejection.
-- [ ] Preserve listener userLevel on typed password AddUser. Assert the actual
+- [x] Preserve listener userLevel on typed password AddUser. Assert the actual
   protobuf level 7 and canonical identity; reject negative, fractional,
   overflow, boolean and string level input before handler mutation.
-- [ ] Through actual AddInbound/UpdateInbound and managed Runtime, retain A
+- [x] Through actual AddInbound/UpdateInbound and managed Runtime, retain A
   idle/active SOCKS, CONNECT and UDP sessions plus B and A Tunnel. Rotate A;
   old credential sessions close, B and Tunnel continue, old auth fails and
   both remaining A aliases work. Assert unchanged BootID and exact independent
   target/ledger bytes on Mixed and HTTP paths.
-- [ ] Test last removal preserving authentication and partial RPC failure
+- [x] Test last removal preserving authentication and partial RPC failure
   through the existing stop/recovery boundary, without acknowledging an
   incomplete candidate or replaying usage. Keep the live handoff gate closed.
 - [ ] Run SQLite/PostgreSQL and affected full race/root gates; add explicit CI

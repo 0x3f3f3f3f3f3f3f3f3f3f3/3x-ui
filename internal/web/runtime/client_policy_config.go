@@ -45,9 +45,17 @@ func (l *Local) ApplyManagedConfig(ctx context.Context, process *xray.Process, n
 	}
 	comparable := *next
 	comparable.ClientPolicy = current.ClientPolicy
-	diff, ok := xray.ComputeHotDiff(current, &comparable)
+	diff, ok := xray.ComputeManagedHotDiff(current, &comparable)
 	if !ok {
 		return false, nil
+	}
+	removedIDs := make([]string, len(diff.RemovedUsers))
+	for i, user := range diff.RemovedUsers {
+		id, err := managedUserIdentity(current, user)
+		if err != nil {
+			return false, err
+		}
+		removedIDs[i] = id
 	}
 	oldByID := make(map[string]clientpolicy.Policy, len(oldPolicy.Policies))
 	for _, p := range oldPolicy.Policies {
@@ -108,15 +116,11 @@ func (l *Local) ApplyManagedConfig(ctx context.Context, process *xray.Process, n
 		return false, err
 	}
 	defer api.Close()
-	for _, user := range diff.RemovedUsers {
+	for i, user := range diff.RemovedUsers {
 		if err := api.RemoveUser(user.Tag, user.Email); err != nil && !xray.IsMissingHandlerErr(err) {
 			return false, err
 		}
-		id, err := managedUserIdentity(current, user)
-		if err != nil {
-			return false, err
-		}
-		if _, err := policyAPI.CloseInboundConnections(ctx, id, user.Tag); err != nil {
+		if _, err := policyAPI.CloseInboundConnections(ctx, removedIDs[i], user.Tag); err != nil {
 			return false, err
 		}
 	}
@@ -164,19 +168,33 @@ func managedUserIdentity(config *xray.Config, user xray.UserOp) (string, error) 
 		if inbound.Tag != user.Tag {
 			continue
 		}
+		type identity struct {
+			Email    string `json:"email"`
+			ClientID string `json:"clientId"`
+		}
 		var accounts struct {
-			Clients []struct {
-				Email    string `json:"email"`
-				ClientID string `json:"clientId"`
-			} `json:"clients"`
+			Clients  []identity `json:"clients"`
+			Accounts []identity `json:"accounts"`
 		}
 		if err := json.Unmarshal(inbound.Settings, &accounts); err != nil {
 			return "", err
 		}
-		for _, account := range accounts.Clients {
-			if account.Email == user.Email && account.ClientID != "" {
-				return account.ClientID, nil
+		entries := accounts.Clients
+		if inbound.Protocol == "mixed" || inbound.Protocol == "http" {
+			entries = accounts.Accounts
+		}
+		var id string
+		for _, account := range entries {
+			if account.Email != user.Email {
+				continue
 			}
+			if account.ClientID == "" || id != "" && id != account.ClientID {
+				return "", fmt.Errorf("%w: removed account has conflicting identity", xray.ErrClientPolicyCapability)
+			}
+			id = account.ClientID
+		}
+		if id != "" {
+			return id, nil
 		}
 	}
 	return "", fmt.Errorf("%w: removed account has no trusted identity", xray.ErrClientPolicyCapability)
