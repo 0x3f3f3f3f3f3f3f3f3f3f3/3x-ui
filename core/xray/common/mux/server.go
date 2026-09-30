@@ -41,10 +41,16 @@ func isMuxDestination(ctx context.Context, dest net.Destination) bool {
 	if dest.Address != muxCoolAddress {
 		return false
 	}
-	// Tunnel forwards opaque L4 payload, even when its configured target is
-	// the internal mux sentinel. Decoding it would bypass its selected route.
+	// Managed or explicitly routed Tunnel forwards opaque L4 payload. Decoding
+	// the sentinel would bypass its owner policy or selected route. Preserve
+	// the upstream mux gateway for legacy, unowned Tunnel configurations.
 	inbound := session.InboundFromContext(ctx)
-	return inbound == nil || inbound.Name != "dokodemo-door"
+	if inbound != nil && inbound.Name == "dokodemo-door" {
+		if session.GetForcedOutboundTagFromContext(ctx) != "" || inbound.User != nil && inbound.User.ClientID != "" {
+			return false
+		}
+	}
+	return true
 }
 
 // Dispatch implements routing.Dispatcher
