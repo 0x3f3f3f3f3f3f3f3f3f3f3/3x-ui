@@ -71,6 +71,9 @@ func (s *ClientService) delInboundClients(inboundSvc *InboundService, inboundId 
 		logger.Error("Load Old Data Error")
 		return false, err
 	}
+	if isPasswordProxy(oldInbound.Protocol) {
+		return s.removePasswordProxyOwners(inboundSvc, oldInbound, recs)
+	}
 
 	var settings map[string]any
 	if err := json.Unmarshal([]byte(oldInbound.Settings), &settings); err != nil {
@@ -1154,12 +1157,26 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 }
 
 func (s *ClientService) DelInboundClientByEmail(inboundSvc *InboundService, inboundId int, email string, keepTraffic bool, fullDelete bool) (bool, error) {
+	return s.delInboundClient(inboundSvc, inboundId, email, keepTraffic, fullDelete, nil)
+}
+
+func (s *ClientService) delInboundClient(inboundSvc *InboundService, inboundId int, email string, keepTraffic bool, fullDelete bool, expected *model.ClientRecord) (bool, error) {
 	defer lockInbound(inboundId).Unlock()
 
 	oldInbound, err := inboundSvc.GetInbound(inboundId)
 	if err != nil {
 		logger.Error("Load Old Data Error")
 		return false, err
+	}
+	if isPasswordProxy(oldInbound.Protocol) {
+		record := expected
+		if record == nil {
+			record, err = s.GetRecordByEmail(nil, email)
+			if err != nil {
+				return false, err
+			}
+		}
+		return s.removePasswordProxyOwners(inboundSvc, oldInbound, []*model.ClientRecord{record})
 	}
 
 	var settings map[string]any

@@ -783,20 +783,20 @@ the existing managed runtime path after commit. Preserve remaining raw account
 fields and protected empty auth. Adjust the helper shape only with recorded
 source/test evidence.
 
-- [ ] Observe public single/bulk detach/delete RED on Mixed/HTTP. Seed two
+- [x] Observe public single/bulk detach/delete RED on Mixed/HTTP. Seed two
   aliases for A, one for B, independent canonical credentials, disabled B,
   history, ledger and a sibling resource. Verify all A aliases removed, B
   unchanged, correct links/client/tombstones, retained usage, empty auth and
   idempotent detach.
-- [ ] Observe late membership-write rollback and stale-graph RED. Preserve
+- [x] Observe late membership-write rollback and stale-graph RED. Preserve
   original settings/links/history/records, native users/case and account fields.
-- [ ] Observe remote-sibling preflight RED through all four public operations,
+- [x] Observe remote-sibling preflight RED through all four public operations,
   including filtered detach. Reject before local/remote mutations; retain
   ordinary legacy compatibility and recheck concurrent attachment scope.
-- [ ] Implement specialized removal and run focused race/shuffle on SQLite and
+- [x] Implement specialized removal and run focused race/shuffle on SQLite and
   actual PostgreSQL. Prove competing rotation/reassignment through PG row locks
   cannot be overwritten by stale whole-account writes.
-- [ ] Verify real core public operations close A active/idle TCP and Mixed UDP,
+- [x] Verify real core public operations close A active/idle TCP and Mixed UDP,
   preserve B sessions and A Tunnel after detach, retain boot ID and exact
   target/ledger conservation. Global deletion revokes A across resources,
   preserves usage and sibling, and survives restart.

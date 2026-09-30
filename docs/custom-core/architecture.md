@@ -305,7 +305,7 @@ lifecycle, live legacy handoff and foreign-owner remapping remain unfinished.
 
 ## Password owner detach and deletion
 
-The next scoped increment routes single/bulk client detach and deletion through
+Single/bulk client detach and deletion route through
 explicit canonical owner UUIDs. Remove every matching resource alias; retain
 other owners' credentials and account fields. Detach keeps the canonical client,
 policy, stable ledger and all other memberships. Global deletion retains the
@@ -324,8 +324,20 @@ Retain native users/case normalization and restored HTTP protection helpers.
 Before filtering or fanout, public multi-inbound operations validate each
 selected password owner and all its bindings. Reject unsupported remote scope,
 malformed settings and stale memberships before another resource is changed.
+Detect explicit UUID references separately from credential type validation,
+including native case aliases and dormant users. A malformed password or
+missing membership must not hide an affected owner. Single operations carry
+the originally selected record rather than resolving its mutable email again.
 Recheck authoritative scope and identity inside each transaction. Preserve
 ordinary legacy-client behavior and existing bulk result reporting.
+
+Before final global cleanup, lock canonical records in stable UUID order and
+fence the captured UUID/email/subscription snapshot. A concurrent rename
+returns a stale-command error before old-email traffic or subscription data
+can affect a replacement owner; retry uses the current record. Recheck saved
+password aliases at this boundary, so late attachments retain the canonical
+record for ordinary acknowledged removal on retry. Already committed resource
+removals are not rolled back by a later cleanup refusal.
 
 After commit, use the verified managed reconcile/grouped credential path.
 SQL failure changes no runtime state; uncertain runtime application retains the

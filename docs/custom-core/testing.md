@@ -1936,3 +1936,86 @@ frontend/source-change run, effect-cache lint rejection and source-frozen
 default-worker timeout. Default, isolated and serial runs have different observed timings; the exact
 source of each timeout has not been proven. Clean-source artifact provenance is recorded separately in deployment.md. Generic lifecycle, live legacy alias-counter
 handoff, anonymous ownership and portable import remapping remain open.
+
+
+## Canonical password owner removal checkpoint
+
+Task 5B5 covers ClientService single/bulk Delete and Detach for owned local
+Mixed/HTTP resources. Eight database cases remove both A aliases by canonical
+UUID, preserve disabled B and its metadata, retain independent canonical
+credentials/policy/history/ledger, and check memberships, durable tombstones,
+keepTraffic, protected empty authentication and repeated detach. A B username
+matching A's canonical email verifies that resource labels do not select owners.
+The entrypoint regressions observed RED before implementation. Scope cases
+observed RED for all four public operations, including filtered detach; late
+SQL membership failure rolls back settings, links and history together.
+
+Final-deletion interleavings add real saved aliases after the per-resource
+fanout. The final locked recheck retains the canonical record for acknowledged
+retry instead of leaving an ownerless credential. Actual PostgreSQL holds the
+inbound row while rotating B and adding another A alias: removal waits for the
+lock, removes all current A aliases and preserves the latest B fields.
+Missing links cannot hide explicit owner references. Numeric password fields,
+case aliases, conflicting arrays, dormant users and malformed account objects
+are rejected before mutation when they reference the selected owner.
+
+One read-only reviewer found two Important issues: single operations looked
+up a mutable email again, and typed credential failures could hide owner UUIDs
+when links were missing. Both failures were reproduced in four RED cases;
+captured canonical records, independently extracted references and final
+UUID/email/subscription snapshot fences resolve them. The same reviewer
+confirmed both corrections with no new material issues. Rename interleavings
+verify that replacement-owner traffic is preserved and current-identity retry
+succeeds. Final source hashes are recorded in reviewed-source.json.
+
+Eight real-core cases exercise both protocols through all four public
+operations. Removed A aliases close active TCP, idle authenticated SOCKS and
+active/idle Mixed UDP. B TCP/UDP on the same IP survive; A Tunnel survives
+detach and closes on global deletion. Successful removals retain the core boot.
+Independent echo targets count payload bytes, excluding SOCKS UDP framing:
+
+| Case | Target payload | A upload/download/billed, including history | B upload/download/billed |
+| --- | ---: | --- | --- |
+| HTTP detach, single/bulk | 36 | 124 / 224 / 396 | 12 / 12 / 36 |
+| HTTP delete, single/bulk | 30 | 118 / 218 / 372 | 12 / 12 / 36 |
+| Mixed detach, single/bulk | 54 | 130 / 230 / 420 | 24 / 24 / 72 |
+| Mixed delete, single/bulk | 48 | 124 / 224 / 396 | 24 / 24 / 72 |
+
+A starts with history 100/200/300 at multiplier 2; B uses multiplier 1.5.
+Deleted A usage remains correct across an actual restart. Both removed
+credentials and anonymous HTTP are denied; final owner removal leaks no target
+payload. These are scoped loopback protocol tests, not external-client parity.
+
+The lost-acknowledgement test discards the first AlterInbound response after
+the real core executed removal. The public detach fails, saved aliases/links
+remain removed and the unacknowledged core stops. Recovery starts a new boot,
+retains the reusable canonical identity and Tunnel, rejects old credentials
+and anonymous access, and permits idempotent retry. Independently counted
+18 target bytes settle exactly A 118/218/372 without replay. Whole-core stop
+at this failure boundary closes unrelated flows too.
+
+Final race/shuffle contract sets, including previous permanent-deletion and
+Tunnel interleavings, pass on SQLite (58.66 s wall) and actual PostgreSQL
+(182.13 s wall; service 178.725 s). All eight required new top-level tests
+explicitly pass on both; the PostgreSQL row-lock case explicitly passes there
+and is intentionally skipped on SQLite. Logs and command results use the
+/root/task-evidence/password-owner-removal- prefix. Pre-review-fix runs and
+original failed regressions remain preserved. CI requires the named results;
+YAML and all 31 Bash blocks parse. No remote CI execution is claimed.
+
+Shared client Update/enable/rename/quota/expiry, generic credential creation,
+live legacy alias-counter handoff and foreign-owner import remain separate
+unfinished work. This increment does not complete Task 5B or the overall goal.
+
+Final generation (0.82 s), Go lint (50.68 s) and vet (6.84 s) pass.
+Full make test-go passes in 278.49 s wall, including service 120.906 s and
+the explicit AmneziaWG device package. Full affected race/shuffle passes
+in 499.28 s wall: service 377.098 s, database 80.755 s and controller
+19.495 s. Commands, exits and logs are in gate-results.json. One preliminary
+lint failure required wrapping the original parser error with %w; its failed
+log/results remain preserved. Both relevant error/identity paths pass again
+on SQLite (26.20 s wall) and PostgreSQL (29.16 s wall) after that correction.
+No ownership rule or assertion was relaxed. Production hashes are unchanged
+through final gates. No core/frontend production source changed, so preceding
+full native-core/frontend evidence remains applicable; no fresh whole-core or
+frontend test suite execution is claimed for this increment.

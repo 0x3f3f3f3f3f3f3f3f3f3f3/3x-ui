@@ -197,6 +197,7 @@ func (s *ClientService) BulkDetach(inboundSvc *InboundService, emails []string, 
 	emailRepr := make(map[string]string, len(emails))
 	emailFailed := make(map[string]bool, len(emails))
 	seenEmail := make(map[string]struct{}, len(emails))
+	preflightRecords := make([]*model.ClientRecord, 0, len(emails))
 	for _, email := range emails {
 		if email == "" {
 			continue
@@ -212,6 +213,7 @@ func (s *ClientService) BulkDetach(inboundSvc *InboundService, emails []string, 
 			recordErr("%s: %v", email, err)
 			continue
 		}
+		preflightRecords = append(preflightRecords, rec)
 		currentIds, err := s.GetInboundIdsForRecord(rec.Id)
 		if err != nil {
 			recordErr("%s: %v", email, err)
@@ -230,6 +232,29 @@ func (s *ClientService) BulkDetach(inboundSvc *InboundService, emails []string, 
 		}
 		emailOrder = append(emailOrder, key)
 		emailRepr[key] = rec.Email
+	}
+	failed, err := passwordProxyRemovalPreflight(database.GetDB(), preflightRecords)
+	if err != nil {
+		return result, false, err
+	}
+	for _, record := range preflightRecords {
+		if err := failed[record.Id]; err != nil {
+			recordErr("%s: %v", record.Email, err)
+			emailFailed[strings.ToLower(record.Email)] = true
+		}
+	}
+	for id, records := range recsByInbound {
+		kept := records[:0:0]
+		for _, record := range records {
+			if failed[record.Id] == nil {
+				kept = append(kept, record)
+			}
+		}
+		if len(kept) == 0 {
+			delete(recsByInbound, id)
+		} else {
+			recsByInbound[id] = kept
+		}
 	}
 
 	needRestart := false
@@ -907,6 +932,21 @@ func (s *ClientService) BulkDelete(inboundSvc *InboundService, emails []string, 
 	if err != nil {
 		return result, false, err
 	}
+	preflightRecords := make([]*model.ClientRecord, 0, len(recordsByEmail))
+	for _, record := range recordsByEmail {
+		preflightRecords = append(preflightRecords, record)
+	}
+	failed, err := passwordProxyRemovalPreflight(db, preflightRecords)
+	if err != nil {
+		return result, false, err
+	}
+	skippedReasons := map[string]string{}
+	for _, record := range preflightRecords {
+		if err := failed[record.Id]; err != nil {
+			skippedReasons[record.Email] = err.Error()
+			delete(recordsByEmail, record.Email)
+		}
+	}
 	tombstoneEmails := make([]string, 0, len(recordsByEmail))
 	for _, email := range cleanEmails {
 		if recordsByEmail[email] != nil {
@@ -915,10 +955,11 @@ func (s *ClientService) BulkDelete(inboundSvc *InboundService, emails []string, 
 	}
 	tombstoneClientEmails(tombstoneEmails)
 
-	skippedReasons := map[string]string{}
 	for _, email := range cleanEmails {
 		if _, ok := recordsByEmail[email]; !ok {
-			skippedReasons[email] = "client not found"
+			if _, rejected := skippedReasons[email]; !rejected {
+				skippedReasons[email] = "client not found"
+			}
 		}
 	}
 
@@ -993,6 +1034,13 @@ func (s *ClientService) BulkDelete(inboundSvc *InboundService, emails []string, 
 		// Serialize the row cleanup against the traffic poll to avoid the
 		// cross-transaction lock-order deadlock on client_traffics/inbounds.
 		if err := runSerializedTx(func(tx *gorm.DB) error {
+			expected := make([]*model.ClientRecord, 0, len(successEmails))
+			for _, email := range successEmails {
+				expected = append(expected, recordsByEmail[email])
+			}
+			if err := guardClientDeletionSnapshots(tx, expected); err != nil {
+				return err
+			}
 			var err error
 			tunnelsDisabled, err = deleteClientLinksAndDisableTunnels(tx, successIds)
 			if err != nil {
@@ -1083,6 +1131,23 @@ func (s *ClientService) bulkDelInboundClients(
 		logger.Error("Load Old Data Error")
 		for _, e := range emails {
 			res.perEmailSkipped[e] = err.Error()
+		}
+		return res
+	}
+	if isPasswordProxy(oldInbound.Protocol) {
+		selected := make([]*model.ClientRecord, 0, len(emails))
+		for _, email := range emails {
+			if record := records[email]; record != nil {
+				selected = append(selected, record)
+			} else {
+				res.perEmailSkipped[email] = "client not found"
+			}
+		}
+		res.needRestart, err = s.removePasswordProxyOwners(inboundSvc, oldInbound, selected)
+		if err != nil {
+			for _, record := range selected {
+				res.perEmailSkipped[record.Email] = err.Error()
+			}
 		}
 		return res
 	}

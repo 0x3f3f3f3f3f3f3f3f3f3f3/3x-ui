@@ -890,6 +890,13 @@ func (s *ClientService) Delete(inboundSvc *InboundService, id int, keepTraffic b
 	if err != nil {
 		return false, err
 	}
+	failed, err := passwordProxyRemovalPreflight(database.GetDB(), []*model.ClientRecord{existing})
+	if err != nil {
+		return false, err
+	}
+	if err := failed[id]; err != nil {
+		return false, err
+	}
 	tombstoneClientEmail(existing.Email)
 
 	inboundIds, err := s.GetInboundIdsForRecord(id)
@@ -909,15 +916,13 @@ func (s *ClientService) Delete(inboundSvc *InboundService, id int, keepTraffic b
 			continue
 		}
 
-		// Always delete by email — the client's stable identity. This removes
-		// every matching entry from the inbound's settings even when the stored
-		// credential (UUID/password/auth) drifted from the inbound JSON, or a
-		// duplicate entry with the same email exists.
+		// Legacy client entries use the captured email. Password accounts use
+		// the captured canonical identity, including after an email rename.
 		if existing.Email == "" {
 			continue
 		}
 		applies = append(applies, inboundApply{id: ibId, run: func() (bool, error) {
-			nr, delErr := s.DelInboundClientByEmail(inboundSvc, ibId, existing.Email, keepTraffic, true)
+			nr, delErr := s.delInboundClient(inboundSvc, ibId, existing.Email, keepTraffic, true, existing)
 			// The client is already absent from this inbound (data drift or a
 			// retried delete). Skip it — deletion stays idempotent.
 			if errors.Is(delErr, ErrClientNotInInbound) {
@@ -940,6 +945,9 @@ func (s *ClientService) Delete(inboundSvc *InboundService, id int, keepTraffic b
 
 	tunnelsDisabled := false
 	if err := runSerializedTx(func(tx *gorm.DB) error {
+		if err := guardClientDeletionSnapshots(tx, []*model.ClientRecord{existing}); err != nil {
+			return err
+		}
 		var err error
 		tunnelsDisabled, err = deleteClientLinksAndDisableTunnels(tx, []int{id})
 		if err != nil {
@@ -1234,6 +1242,13 @@ func (s *ClientService) Detach(inboundSvc *InboundService, id int, inboundIds []
 	if err != nil {
 		return false, err
 	}
+	failed, err := passwordProxyRemovalPreflight(database.GetDB(), []*model.ClientRecord{existing})
+	if err != nil {
+		return false, err
+	}
+	if err := failed[id]; err != nil {
+		return false, err
+	}
 	currentIds, err := s.GetInboundIdsForRecord(id)
 	if err != nil {
 		return false, err
@@ -1251,12 +1266,12 @@ func (s *ClientService) Detach(inboundSvc *InboundService, id int, inboundIds []
 		if _, getErr := inboundSvc.GetInbound(ibId); getErr != nil {
 			return false, getErr
 		}
-		// Detach by email — the client's stable identity (see Delete).
+		// Keep the original canonical identity for password account removal.
 		if existing.Email == "" {
 			continue
 		}
 		applies = append(applies, inboundApply{id: ibId, run: func() (bool, error) {
-			nr, delErr := s.DelInboundClientByEmail(inboundSvc, ibId, existing.Email, true, false)
+			nr, delErr := s.delInboundClient(inboundSvc, ibId, existing.Email, true, false, existing)
 			if errors.Is(delErr, ErrClientNotInInbound) {
 				return nr, nil
 			}

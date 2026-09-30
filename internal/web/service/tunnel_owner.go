@@ -110,6 +110,9 @@ func preserveDetachedTunnelOwnerTraffic(tx *gorm.DB, inboundID int, email string
 
 // Final deletion rechecks canonical memberships created after the fanout snapshot.
 func deleteClientLinksAndDisableTunnels(tx *gorm.DB, clientIDs []int) (bool, error) {
+	if err := guardPasswordProxyOwnerDeletion(tx, clientIDs); err != nil {
+		return false, err
+	}
 	candidates := make(map[int]struct{})
 	for _, batch := range chunkInts(clientIDs, sqlInChunk) {
 		var ids []int
