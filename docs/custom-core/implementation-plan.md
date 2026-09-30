@@ -708,5 +708,13 @@ preparation, including remove-only operations.
 - [x] Test last removal preserving authentication and partial RPC failure
   through the existing stop/recovery boundary, without acknowledging an
   incomplete candidate or replaying usage. Keep the live handoff gate closed.
-- [ ] Run SQLite/PostgreSQL and affected full race/root gates; add explicit CI
+- [x] Run SQLite/PostgreSQL and affected full race/root gates; add explicit CI
   PASS checks, review once, record evidence, commit/push and verify remote SHA.
+
+Task 5B3 checkpoint: implementation `6f9705206d81ea772ba082c8f6607d45c8aef098`
+passed the eleven named SQLite regressions, actual PostgreSQL hot regressions,
+generation/lint/vet, full root Go tests and full affected race tests. One
+read-only review found no findings. The fork feature branch's remote SHA
+matched the implementation exactly. A fresh clean-source build passed and
+preserved distinct artifacts; provenance is recorded in deployment.md. Owner
+selection UI, generic lifecycle and live legacy counter handoff remain open.

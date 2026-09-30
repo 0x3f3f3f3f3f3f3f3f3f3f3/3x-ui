@@ -124,6 +124,29 @@ Set `clientPolicy.stateFile` to that path and `clientPolicy.instanceId` to the s
 
 ## Interrupted live handoff
 
+### Clean-source grouped password hot-change checkpoint build
+
+Commit `6f9705206d81ea772ba082c8f6607d45c8aef098` was rebuilt from a new
+clean local clone using pinned toolchains and shared verified caches.
+`npm ci` (16.11 s), frontend (4.20 s), panel (25.26 s), core (2.46 s)
+and both version smoke commands passed; source status remained clean.
+The panel reports `dev+6f970520`; Custom Xray reports the full revision
+without `-dirty`.
+
+Distinct artifacts preserve all preceding checkpoints:
+
+- `build/x-ui-password-hot-checkpoint`: SHA-256
+  `5aa8c419bdab720f9a5a371e682a87f533c1dab73cb513f221cd8c78285107f4`.
+- `build/custom-xray-password-hot-checkpoint`: SHA-256
+  `5252e28091f3f58f3f9d97b10aa11ce5adf193d5c009a7ebd488aa6fbe77793d`.
+
+Evidence: `/root/task-evidence/password-hot-clean-build-results.json` and
+`password-hot-clean-build-manifest.json`. Scoped managed credential hot changes
+are verified. Owner UI, generic lifecycle and legacy username-counter handoff
+remain open. No installation or production deployment was performed.
+
+### Interrupted live handoff recovery
+
 A live legacy-to-managed transition records its old child boot in the panel SQL
 source before draining. Back up this source together with `legacy_traffic_receipts`,
 client traffic, identities and the private policy state; do not omit the source's
