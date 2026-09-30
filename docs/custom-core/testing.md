@@ -1590,3 +1590,13 @@ The panel/frontend implementation is unchanged from the successful full gates
 above. The initial core feature commit `d436f7c9` and compatibility correction
 `62e6b3285fa7a2c1e8860c4e42fe25e4636b7c1b` have each been pushed to the fork's
 `feature/custom-xray-unified-policy`; the latter remote SHA was verified exactly.
+
+The panel/UI/API/CI/documentation commit is
+`c635910d40efb320cd361ad138dfb9b24ad3981c`, pushed with an exact remote SHA
+match. Comparing the pre-commit hook backup tree to this commit confirms no
+hook changed the tested sources. Its independent clean local clone runs
+`npm ci` (15.85 s), Vite build (4.29 s), source-stamped panel build (201.03 s)
+and custom core build (2.02 s), all successfully. Both version smoke commands
+pass and the clone remains clean. Existing caches were shared, but neither
+`node_modules` nor compiled project output was copied into the clone.
+Exact reproducible commands and artifact hashes are in deployment.md.

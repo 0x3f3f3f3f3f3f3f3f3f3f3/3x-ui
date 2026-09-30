@@ -13,6 +13,40 @@ Rollback after schema/ledger migration uses a coordinated pre-upgrade backup and
 
 ## Development initialization (not a completed installer)
 
+### Clean-source Tunnel checkpoint build
+
+Commit `c635910d40efb320cd361ad138dfb9b24ad3981c` was rebuilt on Linux arm64
+from an independent local clone without hardlinks or copied `node_modules`.
+Go 1.27.1, Node 26.10.0 and npm 11.19.1 used the existing module/npm download
+caches. This verifies clean-source builds, rather than an empty-cache/offline
+installation, Docker package or deployment. No service was started.
+
+From that commit with these toolchains installed:
+
+```sh
+cd frontend
+npm ci
+npm run build
+cd ..
+task_revision="$(git rev-parse HEAD)"
+GOTOOLCHAIN=go1.27.1 GOFLAGS=-p=1 go build -trimpath -buildvcs=false \
+  -ldflags="-s -w -X github.com/mhsanaei/3x-ui/v3/internal/config.buildCommit=$task_revision" \
+  -o build/x-ui .
+GOFLAGS=-p=1 bash tools/build-custom-core.sh
+build/x-ui -v
+build/custom-xray version
+sha256sum build/x-ui build/custom-xray
+```
+
+The panel reports `dev+c635910d`; the core reports
+`Custom Xray-core 26.9.9-custom.1` and the full source SHA without `-dirty`.
+For this exact build, panel SHA-256 is
+`a519914dccf95320593cdbd09671bc458a38dadb9bdd24c8135691b80f0ecef6`,
+and core SHA-256 is
+`63e875aef9ee2e31b2a83a9538125dc61d969d225880c4fd789bf8eadccefebb`.
+Later source commits have different version stamps/checksums. Installer,
+Docker, platform-matrix and recovery requirements remain open.
+
 Build with `bash tools/build-custom-core.sh`. For a **new** panel-assigned instance, initialize a private persistent path once:
 
 ```sh
