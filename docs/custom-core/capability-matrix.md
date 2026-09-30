@@ -217,7 +217,7 @@ are I/V for local Mixed/HTTP explicit owners. UUID grouping preserves other
 owners, protected empty auth, history and shared ledger. Whole-graph preflight,
 SQL row-lock rebasing, final identity/alias fences and uncertain runtime
 stop/recovery are covered on SQLite and PostgreSQL with real-core sockets.
-Shared client updates and live legacy alias-counter handoff remain N; full
+At the removal checkpoint, shared updates and live legacy handoff remained N; full
 protocol lifecycle and single-core migration are still incomplete.
 
 

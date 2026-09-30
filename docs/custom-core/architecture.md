@@ -397,3 +397,16 @@ Bulk enable/by-email field writers, generic resource credential creation,
 live legacy alias-counter handoff, anonymous ownership and portable import
 remapping remain later work. This spec alone establishes no implementation
 or acceptance claim.
+
+
+## Canonical password-owner field and bulk lifecycle
+
+Extend the public shared enable read/set/toggle, IP limit, quota and expiry setters, plus BulkSetEnable, for explicit local Mixed/HTTP owners. Password-only and valid empty-Tunnel owners use authoritative membership and canonical enable rather than a nonexistent clients mirror. Preserve public return/Changed/Skipped/missing/duplicate contracts. A matching saved enable still reconciles pending managed intent, including stopped-core recovery, without pretending that a previous uncertain application succeeded.
+
+Use a narrow intended-field mutation against the current locked canonical record. Do not replay stale unrelated canonical fields or merge old per-resource wire credentials back into the shared record. Preserve current policy, stable identity, lifetime raw/billed ledger, traffic counters and other restriction reasons. Update the corresponding traffic metadata field without zeroing counters. Ordinary mirrors receive only that intended shared field and timestamp; password account arrays, wire credentials, owner links and unrelated owners remain intact. Empty Tunnel clients mirrors are valid only with the sole selected canonical owner.
+
+Before filtering/fanout, validate affected full password graphs and local-only scope. For the scoped local field batch, collect every attached inbound, acquire inbound locks in sorted order, reload/lock current inbound rows, then lock selected canonical identities in stable order. Revalidate current identity/scope/membership; if the captured graph changed, reject/retry rather than applying stale resource lists. Persist intended canonical/stat/mirror fields transactionally for this local subset. Follow commit with one existing managed candidate/grouped-policy application per bounded batch. Legacy ordinary/remote clients retain their existing independently reported fanout behavior.
+
+Pin names to captured ID/UUID/email/SubID for the operation; an old-name replacement cannot be selected after a race. Bulk preflight reports invalid records before any affected resource write and excludes those identities from candidate batches. Valid selected aliases are grouped by UUID. Uncertain runtime application keeps saved field intent, stops the unacknowledged core and resumes through the same saved-command recovery; no fresh ledger seed or billing replay.
+
+Verify actual public operations on SQLite and PostgreSQL, negative scope/malformed/missing/ambiguous graphs, late rollback and label reuse, current-field preservation and PG locks. Real core proves active/idle TCP and UDP across A aliases/Tunnel and surviving B at the same source IP, exact independent target bytes/lifetime ledger, quota/expiry/enable and lost-response recovery. No other protocol family or live legacy alias-counter handoff is accepted by this increment.

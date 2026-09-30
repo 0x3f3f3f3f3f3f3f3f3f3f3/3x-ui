@@ -837,7 +837,7 @@ Keep ordinary multi-resource partial-success/retry semantics explicit.
   Verify uncertain acknowledgement, saved-command recovery and no replay.
 - [x] Require CI names; review once and resolve findings; freeze production,
   run generation/lint/vet/full Go/affected race and SQLite/PostgreSQL contracts.
-- [ ] Document scoped evidence, commit/push exact fork SHA, rebuild clean
+- [x] Document scoped evidence, commit/push exact fork SHA, rebuild clean
   distinct artifacts and record provenance. Bulk lifecycle/handoff stay open.
 
 Task 5B5 scoped checkpoint: implementation e1efc255bea94da9d9b68e699a068c9f4f110e15
@@ -845,4 +845,47 @@ pushed with exact remote SHA; all final scoped SQLite/PostgreSQL, full Go and
 race gates pass. Two Important review findings were reproduced and resolved;
 the same reviewer found no new material issue. Clean-source rebuild and
 distinct artifact checks pass, with provenance in deployment.md. Single Update
-and the remaining lifecycle/handoff work stay open. Task 5B is incomplete.
+and remaining lifecycle/handoff work were open at that removal checkpoint.
+The following Update checkpoint advances only the single-client scope; Task5B
+still remains incomplete.
+
+
+### Task 5B7: Canonical password-owner field and bulk lifecycle
+
+Spec: architecture.md, "Canonical password-owner field and bulk lifecycle".
+Execute inline. Audit: BulkSetEnable and by-email setters currently search
+settings.clients, absent from explicit password resources and empty Tunnel
+mirrors. Shared enable reads must use canonical state; matching saved intent
+must still reconcile uncertain runtime application. Field writers must retain
+current unrelated fields instead of replaying a stale complete Client.
+
+Scope: CheckIsEnabledByEmail, Set/Toggle enable, IP/expiry/quota setters and
+BulkSetEnable for local explicit Mixed/HTTP owners. Legacy ordinary/remote
+fanout and public result contracts remain. Generic creation, Telegram traffic-ID
+writer, external links, anonymous ownership and live legacy handoff stay separate.
+
+- [ ] Observe actual public RED for both protocols and password-only,
+  ordinary and empty-Tunnel graphs. Cover reads, setters, toggle, dedup/missing
+  bulk reporting; verify preserved resource credentials/history/links/ledger.
+- [ ] Implement narrow current-field mutation, canonical enable reads and
+  matching-intent retry. Validate full graph before writes and under locks;
+  retain legacy fanout/Changed/Skipped behavior and unrelated current fields.
+- [ ] Verify malformed/missing/remote/ambiguous graphs before fanout, stable
+  identity through name reuse, late SQL rollback and actual PostgreSQL locks.
+- [ ] Real core: A alias active/idle TCP/UDP and Tunnel disable/re-enable,
+  quota/expiry; B survives at same source IP/core boot with independent target
+  bytes and exact shared lifetime ledger. Lost response stops/recovers saved
+  field intent and permits retry without replay.
+- [ ] One read-only review and same-review corrections; freeze source, named
+  SQLite/PostgreSQL contracts and required generation/lint/vet/full Go/race.
+- [ ] Scoped docs/matrix/checklist, logical commit+exact fork SHA push, distinct
+  clean builds and provenance. Whole Task5B and original goal remain open.
+
+
+Task 5B6 scoped checkpoint: implementation `3d3590f99d897c1b920b21e79c86ab96d7e16f17`
+is pushed with matching fork SHA. Final SQLite/PostgreSQL named contracts,
+generation/lint/vet/full Go and affected race pass. One Critical/three Important
+review findings and correction follow-ups were reproduced and resolved by the
+same reviewer; final source hashes are unchanged. Distinct clean artifacts and
+version/provenance checks pass. Task5B7 bulk/by-email lifecycle and live legacy
+handoff remain open; Task5B and the original goal are incomplete.

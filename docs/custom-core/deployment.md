@@ -206,3 +206,30 @@ and clean-build-manifest.json. Scoped single/bulk owner detach/delete and
 recovery are verified. Shared Update, bulk/by-email field lifecycle and live
 legacy alias-counter handoff remain unfinished. Whole Task 5B and the original
 goal remain incomplete; prior testing.md frontend timeout records still apply.
+
+
+### Clean-source single password-owner Update checkpoint build
+
+Commit `3d3590f99d897c1b920b21e79c86ab96d7e16f17` was rebuilt from a new clean
+local clone `/tmp/password-owner-update-clean-source-y1gxt5a4` using pinned
+Go 1.27.1, Node 26.10.0/npm 11.19.1 and shared verified caches. npm ci
+(18.17 s), frontend (4.33 s), panel (16.14 s), core (2.62 s) and version
+commands pass. Source status stays clean. Panel reports `dev+3d3590f9`;
+Custom Xray reports the full revision without `-dirty`. The authorized fork
+feature branch was pushed and its exact remote SHA verified. No deployment,
+release, merge or service startup occurred.
+
+Distinct artifacts preserve the earlier owner form/removal checkpoints;
+their recorded hashes were checked again:
+
+- `build/x-ui-password-owner-update-checkpoint`: SHA-256
+  `2f6d99df72de565a2d5f86eedb5050a97c8ce0f6a4f250223b42589cfbc78e0d`.
+- `build/custom-xray-password-owner-update-checkpoint`: SHA-256
+  `a72a242f68000e5672008f12ab25c161cb08dbf3fd6ea94d56e6e6df7ff244fc`.
+
+Evidence: /root/task-evidence/password-owner-update-clean-build-results.json,
+clean-build-manifest.json and push.json. Single canonical Update and its scoped
+runtime recovery are verified. Bulk/by-email lifecycle, live legacy alias-counter
+handoff, remaining adapters and whole-system single-core migration remain open.
+Prior default frontend timeout records and split suite acceptance remain in
+testing.md; this clean build does not claim a fresh frontend test suite.
