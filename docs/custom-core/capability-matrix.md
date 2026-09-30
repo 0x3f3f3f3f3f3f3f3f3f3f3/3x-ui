@@ -249,4 +249,5 @@ IP-limit acceptance is persistence only, without a new runtime enforcement claim
 Live legacy alias-counter handoff, generic creation, anonymous ownership,
 foreign-owner import, remaining adapters and single-core distribution stay N.
 Final generation/lint/vet/full Go/affected race and named database contracts pass.
-Distinct clean artifact provenance remains pending at this entry.
+Distinct clean panel/core builds, version and prior artifact preservation pass;
+see deployment.md. This scoped checkpoint is complete; whole Task5B stays open.

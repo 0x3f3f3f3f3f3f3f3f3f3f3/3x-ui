@@ -233,3 +233,30 @@ runtime recovery are verified. Bulk/by-email lifecycle, live legacy alias-counte
 handoff, remaining adapters and whole-system single-core migration remain open.
 Prior default frontend timeout records and split suite acceptance remain in
 testing.md; this clean build does not claim a fresh frontend test suite.
+
+
+### Clean-source password-owner fields checkpoint build
+
+Commit `5ec2d9dba46ddfee0b76c6166129539dc18ccf5d` was rebuilt from clean local
+clone `/tmp/password-owner-fields-clean-source-ani62r_i` with pinned Go 1.27.1,
+Node 26.10.0/npm 11.19.1 and shared verified caches. npm ci (15.89 s), frontend
+(4.73 s), panel (18.49 s), core (3.95 s) and both version commands pass.
+Source status remains clean. Panel reports `dev+5ec2d9db`; Custom Xray includes
+the full revision without `-dirty`. Fork push and exact remote SHA match pass.
+No deployment, release, merge or business service startup occurred.
+
+Distinct artifacts retain earlier checkpoints; all six preceding owner form,
+removal and Update binaries were rehashed unchanged:
+
+- `build/x-ui-password-owner-fields-checkpoint`: SHA-256
+  `50f9417bf15c44fc57a48b63568244e6061ba93a43e614b85cc97b35db73c99f`.
+- `build/custom-xray-password-owner-fields-checkpoint`: SHA-256
+  `7104e6e7f9339859da289a1806a391496d11123c6715b45624b58733fe10ff57`.
+
+Evidence: /root/task-evidence/password-owner-fields-clean-build-results.json,
+clean-build-manifest.json, prior-artifact-preservation.json and push.json.
+Scoped shared-field and bulk-enable lifecycle is verified. Live legacy alias
+handoff, generic creation, anonymous/foreign ownership, remaining adapters and
+whole-system single-core migration remain incomplete. Existing default frontend
+timeout/split test records remain in testing.md; this clean build does not claim
+a new full frontend or native-core suite run.

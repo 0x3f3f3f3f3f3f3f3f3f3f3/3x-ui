@@ -414,3 +414,55 @@ Capture membership before classifying password ownership. Validate that original
 Relative expiry requires successful first-use ledger settlement. Expiry propagation skips password account arrays, updates ordinary mirrors narrowly, and permits an empty Tunnel only when its sole authoritative owner is selected. Invalid late Tunnel membership rolls back expiry, receipt and totals together; repeated settlement preserves lifetime history.
 
 Verify actual public operations on SQLite and PostgreSQL, negative scope/malformed/missing/ambiguous graphs, late rollback and label reuse, current-field preservation and PG locks. Real core proves active/idle TCP and UDP across A aliases/Tunnel and surviving B at the same source IP, exact independent target bytes/lifetime ledger, quota/expiry/enable and lost-response recovery. No other protocol family or live legacy alias-counter handoff is accepted by this increment.
+
+
+## Unmatched legacy counter retention prerequisite
+
+Normal native-stat settlement currently ignores usernames with no matching
+client_traffics row, then advances the Process cursor. A final-only password
+alias translation cannot recover those consumed deltas. Preserve currently
+unmatched counters before opening Mixed/HTTP live handoff; this prerequisite
+does not assign ownership or enable that gate.
+
+Persist each exact raw label with its source Process ID, source accounting mode
+and managed instance, raw upload/download, and a SHA-256 label key. Keep the
+original label as TEXT to support long UTF-8 and case-sensitive aliases; reject a
+different label at the same key. Nonnegative int64 additions must be exact:
+overflow or late persistence failure rolls back the whole settlement. Use sorted,
+bounded writes. Source metadata must remain consistent within a retained key.
+
+Inside the established serialized settlement transaction, classify matching
+traffic rows once under sorted row locks. Feed only that captured matched subset
+to legacy accumulation and preserve its first-use/renewal behavior. Store the
+unmatched subset with inbound/outbound amounts and the receipt atomically.
+Later client/email creation never adopts retained historical usage automatically.
+
+New receipts bind a deterministic original payload digest: process/sequence/batch,
+final flag, source mode/instance and every relevant label/direction/amount. Retry
+accepts only the same intent; ordering may canonicalize, changed effect cannot.
+Validate identity, negative/duplicate/conflicting counter inputs before writes.
+The applied effect must match the digest even when a validation callback runs.
+Old receipt rows with no digest retain explicit identity-only retry compatibility;
+never invent a prior digest or backfill missing old unknown bytes from a replay.
+The next committed sequence gains an authentic digest.
+
+Capture legacy/managed source mode and instance while creating the immutable
+Process pending batch, before its SQL callback. Native username counters also
+exist for a managed child; future handoff must never charge those bytes again.
+Missing historical/manual source metadata is unknown provenance, not proof of
+legacy mode. Retain that uncertainty rather than consulting a later current
+child. Respect trafficMu/process.mu order in normal and final-drain paths.
+
+Include the bucket and digest in schema migration, full backup and cross-database
+export. Missing old tables/columns preserve existing data without modifying the
+source or fabricating history. Verify actual ordinary polling, committed-but-lost
+SQL acknowledgement, cursor retry/growth, late rollback, long/case-sensitive
+labels, many labels, known siblings, and SQLite/PostgreSQL migration.
+
+Password handoff still requires an unambiguous complete running-config mapping,
+credential/level/resource/UUID fences, historical configuration proof, mapping
+fingerprints and atomic bucket consumption with final settlement. A username
+aggregated across different owners or colliding with another canonical label
+must reject before drain. Already-dropped historic counters cannot be recovered
+without independent evidence. No source IP, display name or case folding grants
+ownership. This spec establishes no implementation or acceptance claim.

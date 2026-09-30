@@ -882,7 +882,7 @@ writer, external links, anonymous ownership and live legacy handoff stay separat
   field intent and permits retry without replay.
 - [x] One read-only review and same-review corrections; freeze source, named
   SQLite/PostgreSQL contracts and required generation/lint/vet/full Go/race.
-- [ ] Scoped docs/matrix/checklist, logical commit+exact fork SHA push, distinct
+- [x] Scoped docs/matrix/checklist, logical commit+exact fork SHA push, distinct
   clean builds and provenance. Whole Task5B and original goal remain open.
 
 
@@ -893,3 +893,46 @@ review findings and correction follow-ups were reproduced and resolved by the
 same reviewer; final source hashes are unchanged. Distinct clean artifacts and
 version/provenance checks pass. Task5B7 bulk/by-email lifecycle and live legacy
 handoff remain open; Task5B and the original goal are incomplete.
+
+
+Task5B7 scoped checkpoint: implementation `5ec2d9dba46ddfee0b76c6166129539dc18ccf5d`
+is pushed with matching fork SHA. All 18 SQLite/20 PostgreSQL required names,
+generation/lint/vet/full Go/affected race pass. The same reviewer resolves three
+Important issues and independently verifies final PostgreSQL writer fences.
+Distinct clean panel/core builds, version and prior artifact preservation pass;
+provenance is in deployment.md. Live legacy handoff and the original goal remain
+incomplete.
+
+
+### Task5B8A: Durable unmatched legacy counter retention
+
+Spec: architecture.md, "Unmatched legacy counter retention prerequisite".
+Execute inline. The normal collector currently drops a native username when no
+client traffic row matches; its cursor still advances. Final alias mapping alone
+cannot recover those earlier deltas. Preserve them before opening password live
+handoff. A committed receipt also needs original payload binding for safe retries.
+
+Files: `internal/xray/process_traffic.go`,
+`internal/database/model/legacy_traffic_receipt.go`, new
+`internal/database/model/legacy_unassigned_traffic.go`, database schema/migration,
+`internal/web/service/xray_traffic_settlement.go`, new
+`internal/web/service/legacy_traffic_retention.go`, and collector/migration tests.
+
+- [ ] Actual RED: unknown labels/case variants/long UTF-8 survive settlement;
+  changed retry payload rejects; late bucket failure rolls back all layers.
+- [ ] Persist raw unmatched source-labelled buckets and original receipt digest
+  transactionally; capture matched rows once and preserve ordinary maintenance.
+  Validate identity/input, checked addition and hash collision; bound SQL batches.
+- [ ] Capture legacy/managed/unknown source mode and managed instance before the
+  SQL callback; retain it in pending retries, digests and buckets. Never infer it
+  from a later current child or reuse managed native bytes as legacy usage.
+- [ ] Real ordinary polling, lost-commit acknowledgement, cursor retry/growth,
+  late-created matching row, many labels and preserved known sibling counters.
+  Existing handoff/first-use/job behavior remains green.
+- [ ] SQLite/PostgreSQL schema/backup/migration/export preserve buckets/digests,
+  including old tables/columns absent without source mutation or fabricated data.
+- [ ] One read-only review/same-review corrections, frozen source and named DB
+  contracts plus required gen/lint/vet/full Go/affected race checks.
+- [ ] Scoped docs/matrix, logical commit/exact fork push and distinct clean
+  artifact provenance. Password live-handoff gate remains closed; owner mapping,
+  conflicting labels and historical configuration proof remain later work.
