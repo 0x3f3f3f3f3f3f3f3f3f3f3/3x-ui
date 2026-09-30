@@ -175,7 +175,7 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 		if *row == before {
 			continue
 		}
-		if err := tx.Save(row).Error; err != nil {
+		if err := model.SaveClientRecord(tx, row); err != nil {
 			return err
 		}
 		if err := tx.Model(&model.ClientRecord{}).

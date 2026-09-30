@@ -117,6 +117,13 @@ func TestSeedClientsFromInboundJSON_IsIdempotentAgainstExistingClients(t *testin
 	if count != 1 {
 		t.Fatalf("alice@example.com should resolve to exactly one row, got %d", count)
 	}
+	var current model.ClientRecord
+	if err := db.First(&current, preExisting.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if current.Policy != nil {
+		t.Fatalf("legacy seed invented an explicit client policy: %+v", current.Policy)
+	}
 }
 
 func TestNormalizeInboundClientSubId_FillsMissingAndPreservesExisting(t *testing.T) {

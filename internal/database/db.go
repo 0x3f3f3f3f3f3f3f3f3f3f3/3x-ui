@@ -599,7 +599,7 @@ func seedWireguardPeersToClients() error {
 					return err
 				} else {
 					model.MergeClientRecord(&row, incoming)
-					if err := tx.Save(&row).Error; err != nil {
+					if err := model.SaveClientRecord(tx, &row); err != nil {
 						return err
 					}
 				}
@@ -728,7 +728,7 @@ func seedMtprotoSecretsToClients() error {
 				return err
 			} else {
 				model.MergeClientRecord(&row, incoming)
-				if err := tx.Save(&row).Error; err != nil {
+				if err := model.SaveClientRecord(tx, &row); err != nil {
 					return err
 				}
 			}
@@ -2604,7 +2604,7 @@ func seedClientsFromInboundJSON() error {
 						log.Printf("client merge: email=%s conflict on %s old=%v new=%v kept=%v",
 							email, x.Field, x.Old, x.New, x.Kept)
 					}
-					if err := tx.Save(row).Error; err != nil {
+					if err := model.SaveClientRecord(tx, row); err != nil {
 						return err
 					}
 				}
