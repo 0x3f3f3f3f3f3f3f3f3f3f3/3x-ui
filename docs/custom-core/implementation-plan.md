@@ -420,3 +420,10 @@ endpoint capture. Focused real TCP/UDP/sniff/quota/disable and race checks pass.
 unit tests, scoped core/construction race, all panel Go tests, affected panel
 race, static checks and both builds pass; results and skips are in testing.md.
 Per-rule outbound/routing UI and the remaining goal items are still open.
+
+Task 6 routing-error prerequisite: the dispatcher distinguishes no matching rule
+from a failed matched balancer. Only no-match retains the default outbound;
+explicit balancer fallbacks remain supported. Real managed/unmanaged TCP and
+dynamic TCP/UDP removal tests observe distinct selected/default targets and exact
+shared accounting. Final gate results are recorded in testing.md. This remains
+a prerequisite for the unfinished Tunnel outbound selector.

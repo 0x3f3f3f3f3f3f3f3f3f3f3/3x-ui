@@ -583,3 +583,11 @@ it does not claim detection of network-level listener loops or every proxy-chain
 cycle. Local TCP/UDP, repeated sniffing, exact billing, quota and live disable are
 covered by the tests recorded in testing.md. General selected-outbound UI,
 original-target semantics and distributed policy remain separate work.
+
+Routing uses the default outbound only when no rule matches. A matched balancer
+that cannot select an outbound now closes the business link and reports the
+routing error, without silently selecting the default. An operator-configured
+balancer fallback remains effective. Removing its last candidate closes existing
+TCP/UDP flows; later traffic is rejected unless that explicit fallback is present.
+The sibling listener and its shared owner's exact accounting remain independent
+of the removed route. This does not add the per-rule outbound selector UI.

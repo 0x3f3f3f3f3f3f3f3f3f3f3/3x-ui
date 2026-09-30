@@ -492,6 +492,12 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 				common.Interrupt(link.Reader)
 				return // DO NOT CHANGE: the traffic shouldn't be processed by default outbound if the specified outbound tag doesn't exist (yet), e.g., VLESS Reverse Proxy
 			}
+		} else if errors.Cause(err) != common.ErrNoClue {
+			errors.LogWarningInner(ctx, err, "routing failed for ", destination)
+			session.SubmitOutboundErrorToOriginator(ctx, err)
+			common.Close(link.Writer)
+			common.Interrupt(link.Reader)
+			return
 		} else {
 			errors.LogInfo(ctx, "default route for ", destination)
 		}

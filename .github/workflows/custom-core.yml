@@ -24,7 +24,7 @@ jobs:
       - name: Core race checks
         working-directory: core/xray
         run: |
-          go test -race -count=1 ./app/clientpolicy/... ./app/commander ./app/dispatcher ./app/proxyman/inbound ./app/proxyman/outbound ./app/reverse ./app/stats ./app/trafficcontrol ./infra/conf ./proxy ./proxy/dokodemo ./proxy/loopback ./proxy/vless/inbound ./proxy/vless/outbound ./proxy/wireguard ./common/buf ./common/mux ./common/protocol ./transport/internet/udp ./transport/internet/websocket ./transport/internet/splithttp ./transport/internet/httpupgrade ./transport/internet/finalmask/realm ./testing/policy
+          go test -race -count=1 ./app/clientpolicy/... ./app/commander ./app/dispatcher ./app/proxyman/inbound ./app/proxyman/outbound ./app/reverse ./app/router ./app/stats ./app/trafficcontrol ./infra/conf ./proxy ./proxy/dokodemo ./proxy/loopback ./proxy/vless/inbound ./proxy/vless/outbound ./proxy/wireguard ./common/buf ./common/mux ./common/protocol ./transport/internet/udp ./transport/internet/websocket ./transport/internet/splithttp ./transport/internet/httpupgrade ./transport/internet/finalmask/realm ./testing/policy
           go test -race -count=1 ./core -run '^(TestRejectedHandlerConstructionClosesProxy|TestTrafficDrain)'
       - name: Build custom core
         run: bash tools/build-custom-core.sh

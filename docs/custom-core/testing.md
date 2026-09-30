@@ -1431,3 +1431,38 @@ test changes during the gate. Workflow YAML and 21 shell blocks validate. Final
 read-only review found no remaining blocker after the three boundary repairs;
 the reviewer did not run tests. Frontend behavior, API and schema are unchanged
 by this core repair, so the preceding ACL frontend gate remains its evidence.
+
+### Routing failures and explicit fallbacks (2026-09-30)
+
+Baseline 997d883b6590a12fb434af1934e87354a4db7004. The real RED run let a matched,
+empty balancer send traffic through a working direct default, both with and
+without managed identity. Its ten controls passed: no-match default, healthy
+selection, explicit direct fallback, explicit block fallback and missing concrete
+outbound, each managed/unmanaged. The dispatcher now reserves default routing
+for `common.ErrNoClue`; other routing errors close the link.
+
+The focused race run (`go test -race -count=1 -v ./testing/policy -run
+'^TestTunnelRouting'`) passes all twelve cases and four dynamic TCP/UDP removal
+cases in 1.852 s. Dynamic tests observe distinct selected/default echo targets.
+Before removal, each gets six bytes and the shared ledger is 12 upload / 12
+download / 36 billed, at multiplier 1.5. Removing the selected handler closes its
+old flow. Without explicit fallback, new traffic and the old UDP source cannot
+reach either target; a sibling echo leaves 18 / 18 / 54 and one session. Explicit
+direct fallback instead produces 24 / 24 / 72 with two surviving sessions.
+
+Read-only review found no product blocker and identified an asynchronous-session
+cleanup assertion: handler removal cancels dispatch without joining its deferred
+release. Only the session-count assertion now waits, bounded to one second;
+payload, ledger and target counts remain strict. All sixteen cases pass twenty
+consecutive race runs (15.133 s). The reviewer did not run tests.
+
+Final serial gates pass: core build 4.30 s, scoped vet 4.68 s, complete shuffled
+core tests 625.76 s (scenarios 337.693 s), workflow-scoped core race 96.22 s
+(policy integration 18.575 s), and candidate-binary panel race 58.78 s. The latter
+uses the preceding checkpoint's scoped command with
+`XRAY_E2E_BINARY=/tmp/custom-xray-routing-test`: service 21.897 s, Runtime 1.325 s
+and adapter 1.464 s. Two PostgreSQL-only row-lock subcases skip on SQLite and are
+not counted as passes; this change touches no database implementation. The final
+core race and repeated focused run cover the review's test-only assertion fix.
+Workflow YAML, 21 shell blocks, formatting and whitespace checks pass. No panel,
+API or frontend behavior changes here; per-rule outbound selection is unfinished.
