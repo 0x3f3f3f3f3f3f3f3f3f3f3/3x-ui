@@ -596,7 +596,7 @@ UUIDs against joined canonical membership and refuses missing/mismatched rows.
   forged core identity, last removal, reassignment and late SQL rollback.
 - [x] Reject generic settings-client sync/delta bypasses; add read-time canonical
   membership guards and remote attachment guards before filtering/fanout.
-- [ ] Run the focused tests under race on SQLite and PostgreSQL and existing
+- [x] Run the focused tests under race on SQLite and PostgreSQL and existing
   Tunnel/client-link/scope/activation regressions. Then run panel checks, record
   evidence, commit and push with an exact remote SHA check.
 
@@ -613,6 +613,11 @@ round-trip regressions now retain it. This preservation belongs in the database
 foundation because existing form edits otherwise erase selected ownership.
 No owner picker, canonical runtime binding, grouped hot diff, generic client
 lifecycle or legacy counter handoff is completed by Task 5B1.
+
+Task 5B1 checkpoint: implementation `65506131` passed complete `make verify`
+and `make race`, then was pushed to the fork feature branch. Its exact remote
+SHA matched `6550613112d073f246cb4aea44d75d8a2ee8f7cb`. The clean-source build
+and distinct artifact provenance follow in deployment.md.
 
 ### Task 5B2: Canonical password runtime configuration
 

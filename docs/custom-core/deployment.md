@@ -68,6 +68,29 @@ Evidence: `/root/task-evidence/password-clean-build-results.json` and
 `password-clean-build-manifest.json`. No installation, service startup or
 production deployment was performed.
 
+### Clean-source password owner checkpoint build
+
+Commit `6550613112d073f246cb4aea44d75d8a2ee8f7cb` was rebuilt from a new local
+clone with shared verified caches and the same pinned toolchains. `npm ci`
+(16.07 s), frontend build (4.34 s), panel build (21.36 s), core build (3.54 s)
+and both version smoke commands passed. The clone remained clean. The panel
+reports `dev+65506131`; the Custom Xray version reports the full revision
+without `-dirty`.
+
+Distinct artifacts preserve both preceding checkpoint builds:
+
+- `build/x-ui-password-owner-checkpoint`: SHA-256
+  `cae85b0e70e39fb26560ac0d3a3f87126e042d26c389a7dd528701443c8530f1`.
+- `build/custom-xray-password-owner-checkpoint`: SHA-256
+  `84604a2f5e55a41eadab0ac956f37c2ea06ebc2886bac3c509e5b8e8f7ee1565`.
+
+Evidence: `/root/task-evidence/password-owner-clean-build-results.json` and
+`password-owner-clean-build-manifest.json`. This verifies the authoritative
+password-owner database foundation and its build. Canonical runtime binding,
+owner selection UI and legacy username-counter handoff remain unfinished;
+owned accounts cannot enter an unmanaged configuration. No installation,
+service startup or production deployment was performed.
+
 Build with `bash tools/build-custom-core.sh`. For a **new** panel-assigned instance, initialize a private persistent path once:
 
 ```sh
