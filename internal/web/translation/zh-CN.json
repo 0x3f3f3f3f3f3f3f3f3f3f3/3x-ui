@@ -978,7 +978,16 @@
       "renewOnDayDesc": "每个自然月的这一天午夜（按面板时区）续期，而不是每 N 天续期一次。若当月没有该日期，则在当月最后一天续期。填 0 保持按天间隔模式。",
       "renewsUsed": "已用续期次数",
       "tuicTotalGBDesc": "TUIC does not support per-client traffic limits; set traffic limit on the inbound instead.",
-      "bulkAdTagHint": "输入 32 位十六进制标签以设置，或输入 'none' 清除 MTProto 赞助频道。"
+      "bulkAdTagHint": "输入 32 位十六进制标签以设置，或输入 'none' 清除 MTProto 赞助频道。",
+      "policy": {
+        "upload": "上传限速（B/s）",
+        "download": "下载限速（B/s）",
+        "rateHint": "此客户端的所有连接和监听器共享限速。留空或填 0 表示不限速。",
+        "multiplier": "计费倍率",
+        "multiplierHint": "应用于新增的上传和下载流量。留空表示 1，不改变已计费流量。",
+        "multiplierInvalid": "请输入大于 0 且不超过 1000 的倍率，最多支持 6 位小数。",
+        "localOnly": "流量策略目前仅支持本地入站。包含远端或未知绑定时只读；跨节点限速和计费尚未支持。请先解绑远端入站并保存，再编辑策略。"
+      }
     },
     "groups": {
       "name": "名称",

@@ -62,6 +62,27 @@ export const ClientTrafficSchema = z.object({
   accounting: ClientPolicyAccountingSchema.nullable().optional(),
 });
 
+export const ClientPolicyOptionsSchema = z.object({
+  uploadBytesPerSecond: z
+    .number()
+    .int()
+    .min(0)
+    .max(2 ** 40),
+  downloadBytesPerSecond: z
+    .number()
+    .int()
+    .min(0)
+    .max(2 ** 40),
+  multiplier: z
+    .string()
+    .refine(
+      (value) =>
+        value === '' ||
+        (/^\d+(?:\.\d{1,6})?$/.test(value) && Number(value) > 0 && Number(value) <= 1000),
+      'pages.clients.policy.multiplierInvalid',
+    ),
+});
+
 export const ClientRecordSchema = z
   .object({
     id: z.number().optional(),
@@ -72,6 +93,7 @@ export const ClientRecordSchema = z
     auth: z.string().optional(),
     flow: z.string().optional(),
     security: z.string().optional(),
+    policy: ClientPolicyOptionsSchema.nullable().optional(),
     totalGB: z.number().optional(),
     expiryTime: z.number().optional(),
     limitIp: z.number().optional(),
@@ -353,6 +375,13 @@ export function hasForbiddenClientChars(value: string): boolean {
 }
 
 export const ClientFormSchema = z.object({
+  policyUploadBytesPerSecond: ClientPolicyOptionsSchema.shape.uploadBytesPerSecond
+    .nullable()
+    .default(null),
+  policyDownloadBytesPerSecond: ClientPolicyOptionsSchema.shape.downloadBytesPerSecond
+    .nullable()
+    .default(null),
+  policyMultiplier: ClientPolicyOptionsSchema.shape.multiplier.default(''),
   email: z
     .string()
     .trim()

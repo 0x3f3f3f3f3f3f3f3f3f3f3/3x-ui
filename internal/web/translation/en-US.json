@@ -978,7 +978,16 @@
       "renewOnDayDesc": "Renew on this day of every calendar month, at midnight in the panel's time zone, instead of every N days. A month too short for the chosen day renews on its last day. 0 keeps the day-interval mode.",
       "renewsUsed": "Renewals used",
       "tuicTotalGBDesc": "TUIC does not support per-client traffic limits; set traffic limit on the inbound instead.",
-      "bulkAdTagHint": "Enter a 32-character hex tag to set, or 'none' to clear sponsor channel on MTProto inbounds."
+      "bulkAdTagHint": "Enter a 32-character hex tag to set, or 'none' to clear sponsor channel on MTProto inbounds.",
+      "policy": {
+        "upload": "Upload limit (B/s)",
+        "download": "Download limit (B/s)",
+        "rateHint": "Shared across this client's connections and listeners. Blank or 0 means unlimited.",
+        "multiplier": "Billing multiplier",
+        "multiplierHint": "Applies to new upload and download traffic. Blank means 1; existing billed usage is unchanged.",
+        "multiplierInvalid": "Enter a multiplier greater than 0 and no more than 1000, with up to 6 decimal places.",
+        "localOnly": "Traffic policy currently requires local listeners. Remote or unknown bindings are read-only; cross-node limits and billing are not yet supported. Detach remote listeners and save before editing policy."
+      }
     },
     "groups": {
       "name": "Name",

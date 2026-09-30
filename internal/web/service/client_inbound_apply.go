@@ -1133,7 +1133,11 @@ func (s *ClientService) UpdateInboundClient(inboundSvc *InboundService, data *mo
 			}
 		} else if push {
 			ctx, cancel := nodePushContext()
-			err1 := rt.UpdateUser(ctx, oldInbound, oldEmail, clients[0])
+			wireClient := clients[0]
+			if policyOmitted {
+				wireClient.Policy = nil
+			}
+			err1 := rt.UpdateUser(ctx, oldInbound, oldEmail, wireClient)
 			cancel()
 			if err1 != nil {
 				logger.Warning("Error in updating client on", rt.Name(), ":", err1)

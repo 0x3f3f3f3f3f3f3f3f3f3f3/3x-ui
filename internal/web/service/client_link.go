@@ -139,7 +139,7 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 		}
 	}
 
-	if err := guardRemoteClientPolicyAttachments(tx, inboundId, existing); err != nil {
+	if err := guardRemoteClientPolicyAttachments(tx, inboundId, existing, clients); err != nil {
 		return err
 	}
 

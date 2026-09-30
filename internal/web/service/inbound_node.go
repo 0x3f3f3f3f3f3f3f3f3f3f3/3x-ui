@@ -750,6 +750,9 @@ func (s *InboundService) setRemoteTrafficLocked(nodeID int, snap *runtime.Traffi
 				logger.Warningf("setRemoteTraffic: create central inbound for tag %q failed: %v", snapIb.Tag, err)
 				continue
 			}
+			if err := guardMirroredClientPolicies(tx, newIb.Id, newIb.Settings); err != nil {
+				return false, err
+			}
 			tagToCentral[snapIb.Tag] = &newIb
 			if newIb.Tag != snapIb.Tag {
 				tagToCentral[newIb.Tag] = &newIb
@@ -1157,6 +1160,9 @@ func (s *InboundService) setRemoteTrafficLocked(nodeID int, snap *runtime.Traffi
 			adoptedSettings = lifted
 			lifecycleLifted = true
 		}
+		if err := guardMirroredClientPolicies(tx, p.central.Id, adoptedSettings); err != nil {
+			return false, err
+		}
 		if p.central.Settings != adoptedSettings {
 			if err := tx.Model(model.Inbound{}).
 				Where("id = ?", p.central.Id).
@@ -1269,6 +1275,9 @@ func (s *InboundService) setRemoteTrafficLocked(nodeID int, snap *runtime.Traffi
 			}
 		}
 		if err := s.clientService.SyncInbound(tx, c.Id, filtered); err != nil {
+			if errors.Is(err, ErrClientPolicyLedger) {
+				return false, err
+			}
 			logger.Warningf("setRemoteTraffic: sync clients for tag %q failed: %v", snapIb.Tag, err)
 			syncFailedInbounds[c.Id] = struct{}{}
 		}

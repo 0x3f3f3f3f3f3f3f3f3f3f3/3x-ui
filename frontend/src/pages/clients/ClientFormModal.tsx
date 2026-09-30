@@ -142,6 +142,9 @@ type Values = ClientFormValues & {
 };
 
 const EMPTY: Values = {
+  policyUploadBytesPerSecond: null,
+  policyDownloadBytesPerSecond: null,
+  policyMultiplier: '',
   email: '',
   subId: '',
   uuid: '',
@@ -260,6 +263,13 @@ export default function ClientFormModal({
 
   const methods = useForm<Values>({ defaultValues: EMPTY });
   const inboundIds = useWatch({ control: methods.control, name: 'inboundIds' });
+  const policyUnsupported = useMemo(() => {
+    const byId = new Map(inbounds.map((inbound) => [inbound.id, inbound]));
+    return [...attachedIds, ...(inboundIds || [])].some((id) => {
+      const inbound = byId.get(id);
+      return !inbound || inbound.nodeId != null;
+    });
+  }, [attachedIds, inboundIds, inbounds]);
   const delayedStart = useWatch({ control: methods.control, name: 'delayedStart' });
   const delayedDays = useWatch({ control: methods.control, name: 'delayedDays' });
   const expiryDate = useWatch({ control: methods.control, name: 'expiryDate' });
@@ -367,6 +377,9 @@ export default function ClientFormModal({
             : client.security,
         reverseTag: client.reverse?.tag || '',
         totalGB: bytesToGB(client.totalGB || 0),
+        policyUploadBytesPerSecond: client.policy?.uploadBytesPerSecond ?? null,
+        policyDownloadBytesPerSecond: client.policy?.downloadBytesPerSecond ?? null,
+        policyMultiplier: client.policy?.multiplier ?? '',
         reset: Number(client.reset) || 0,
         resetDay: Number(client.resetDay) || 0,
         resetWeekday: Number(client.resetWeekday) || 0,
@@ -652,8 +665,26 @@ export default function ClientFormModal({
 
   async function onSubmit() {
     const values = methods.getValues();
+    const policyChanged =
+      values.policyUploadBytesPerSecond !== (client?.policy?.uploadBytesPerSecond ?? null) ||
+      values.policyDownloadBytesPerSecond !== (client?.policy?.downloadBytesPerSecond ?? null) ||
+      values.policyMultiplier !== (client?.policy?.multiplier ?? '');
+    const addsUnsupportedBinding = (values.inboundIds || []).some((id) => {
+      const inbound = inbounds.find((row) => row.id === id);
+      return !attachedIds.includes(id) && (!inbound || inbound.nodeId != null);
+    });
+    if (
+      policyUnsupported &&
+      (policyChanged || (client?.policy != null && addsUnsupportedBinding))
+    ) {
+      messageApi.error(t('pages.clients.policy.localOnly'));
+      return;
+    }
     const schema = isEdit ? ClientFormSchema : ClientCreateFormSchema;
     const validated = schema.safeParse({
+      policyUploadBytesPerSecond: values.policyUploadBytesPerSecond,
+      policyDownloadBytesPerSecond: values.policyDownloadBytesPerSecond,
+      policyMultiplier: values.policyMultiplier,
       email: values.email,
       subId: values.subId,
       uuid: values.uuid,
@@ -712,6 +743,19 @@ export default function ClientFormModal({
       comment: values.comment,
       enable: !!values.enable,
     };
+    if (
+      !policyUnsupported &&
+      (client?.policy != null ||
+        values.policyUploadBytesPerSecond != null ||
+        values.policyDownloadBytesPerSecond != null ||
+        values.policyMultiplier !== '')
+    ) {
+      clientPayload.policy = {
+        uploadBytesPerSecond: values.policyUploadBytesPerSecond ?? 0,
+        downloadBytesPerSecond: values.policyDownloadBytesPerSecond ?? 0,
+        multiplier: values.policyMultiplier,
+      };
+    }
     const reverseTagValue = showReverseTag ? (values.reverseTag || '').trim() : '';
     if (reverseTagValue) {
       clientPayload.reverse = { tag: reverseTagValue };
@@ -955,6 +999,59 @@ export default function ClientFormModal({
                               )}
                             </Space.Compact>
                           </Form.Item>
+                        </Col>
+                      </Row>
+
+                      {policyUnsupported && (
+                        <Typography.Paragraph type="secondary">
+                          {t('pages.clients.policy.localOnly')}
+                        </Typography.Paragraph>
+                      )}
+                      <Row gutter={16}>
+                        <Col xs={24} md={8}>
+                          <FormField
+                            name="policyUploadBytesPerSecond"
+                            label={t('pages.clients.policy.upload')}
+                            tooltip={t('pages.clients.policy.rateHint')}
+                          >
+                            <InputNumber
+                              disabled={policyUnsupported}
+                              min={0}
+                              max={2 ** 40}
+                              precision={0}
+                              placeholder="0"
+                              style={{ width: '100%' }}
+                            />
+                          </FormField>
+                        </Col>
+                        <Col xs={24} md={8}>
+                          <FormField
+                            name="policyDownloadBytesPerSecond"
+                            label={t('pages.clients.policy.download')}
+                            tooltip={t('pages.clients.policy.rateHint')}
+                          >
+                            <InputNumber
+                              disabled={policyUnsupported}
+                              min={0}
+                              max={2 ** 40}
+                              precision={0}
+                              placeholder="0"
+                              style={{ width: '100%' }}
+                            />
+                          </FormField>
+                        </Col>
+                        <Col xs={24} md={8}>
+                          <FormField
+                            name="policyMultiplier"
+                            label={t('pages.clients.policy.multiplier')}
+                            tooltip={t('pages.clients.policy.multiplierHint')}
+                          >
+                            <Input
+                              placeholder="1"
+                              inputMode="decimal"
+                              disabled={policyUnsupported}
+                            />
+                          </FormField>
                         </Col>
                       </Row>
 

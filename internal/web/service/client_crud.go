@@ -24,6 +24,7 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func hasForbiddenClientChar(s string) bool {
@@ -191,6 +192,10 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 		if subTaken > 0 {
 			return false, common.NewError("subId already in use:", client.SubID)
 		}
+	}
+
+	if err := guardClientPolicyTargets(database.GetDB(), existing, client.Policy, payload.InboundIds, true); err != nil {
+		return false, err
 	}
 
 	// Prepared before any inbound is written: fillProtocolDefaults mints the
@@ -562,6 +567,9 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 	// The rename rewrites the one shared client record, so every node holding
 	// this client goes stale — not just the ones an inboundIds filter applies.
 	attachedIds := append([]int(nil), inboundIds...)
+	if err := guardClientPolicyTargets(database.GetDB(), existing, updated.Policy, attachedIds, false); err != nil {
+		return false, err
+	}
 	if len(inboundFilter) > 0 {
 		allow := make(map[int]struct{}, len(inboundFilter))
 		for _, fid := range inboundFilter {
@@ -776,6 +784,15 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 			fields["policy_multiplier"] = updated.Policy.Multiplier
 		}
 		if err := runSerializedTx(func(tx *gorm.DB) error {
+			if updated.Policy != nil {
+				var current model.ClientRecord
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("stable_id = ?", existing.StableID).First(&current).Error; err != nil {
+					return err
+				}
+				if err := guardClientPolicyTargets(tx, &current, updated.Policy, nil, false); err != nil {
+					return err
+				}
+			}
 			return tx.Model(&model.ClientRecord{}).Where("id = ?", id).Updates(fields).Error
 		}); err != nil {
 			return needRestart, err
@@ -1010,6 +1027,9 @@ func addressesFitAmneziaWGInbound(addrs []string, ib *model.Inbound) bool {
 func (s *ClientService) Attach(inboundSvc *InboundService, id int, inboundIds []int) (bool, error) {
 	existing, err := s.GetByID(id)
 	if err != nil {
+		return false, err
+	}
+	if err := guardClientPolicyTargets(database.GetDB(), existing, existing.Policy, inboundIds, true); err != nil {
 		return false, err
 	}
 	currentIds, err := s.GetInboundIdsForRecord(id)

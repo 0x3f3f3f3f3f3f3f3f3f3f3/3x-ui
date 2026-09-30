@@ -978,7 +978,16 @@
       "renewOnDayDesc": "每個自然月的這一天午夜（依面板時區）續期，而不是每 N 天續期一次。若當月沒有該日期，則在當月最後一天續期。填 0 保持按天間隔模式。",
       "renewsUsed": "已用續期次數",
       "tuicTotalGBDesc": "TUIC does not support per-client traffic limits; set traffic limit on the inbound instead.",
-      "bulkAdTagHint": "輸入 32 位十六進位標籤以設定，或輸入 'none' 清除 MTProto 贊助頻道。"
+      "bulkAdTagHint": "輸入 32 位十六進位標籤以設定，或輸入 'none' 清除 MTProto 贊助頻道。",
+      "policy": {
+        "upload": "Upload limit (B/s)",
+        "download": "Download limit (B/s)",
+        "rateHint": "Shared across this client's connections and listeners. Blank or 0 means unlimited.",
+        "multiplier": "Billing multiplier",
+        "multiplierHint": "Applies to new upload and download traffic. Blank means 1; existing billed usage is unchanged.",
+        "multiplierInvalid": "Enter a multiplier greater than 0 and no more than 1000, with up to 6 decimal places.",
+        "localOnly": "Traffic policy currently requires local listeners. Remote or unknown bindings are read-only; cross-node limits and billing are not yet supported. Detach remote listeners and save before editing policy."
+      }
     },
     "groups": {
       "name": "名稱",

@@ -350,5 +350,20 @@ the current saved policy/reset fingerprint as well as acknowledgement versions.
 This prevents pre-preparation compiler failures from concealing pending changes
 in the traffic cell. It preserves exact historical usage and does not claim live
 health or first activation status where no confirmed receipt exists. Ordinary
-client policy editing, bulk editing and complete activation status remain work
-in progress.
+client policy editing is covered below; bulk editing and complete activation
+status remain work in progress.
+
+Ordinary client policy form checkpoint: add/edit exposes shared upload/download
+B/s limits and exact decimal billing multiplier, preserving omitted legacy policy
+and existing explicit values. Real create/edit/clear/invalid-input tests and
+wire-schema boundary regressions pass. Full frontend and Go verification, both
+database scope regressions, lint and builds pass. Tunnel owner selection, bulk controls and
+first-activation/live status are not established by these form tests.
+
+Remote policy scope checkpoint: local-only policy editing is enforced in the form,
+CRUD preflight and transactional membership boundary, including concurrent unbound
+updates. Mirror adoption checks the actual settings before identity filters and
+rolls back unsupported or malformed policies. Historical values remain read-only
+and unrelated metadata preserves them. This closes unsupported mutation paths;
+coordinated remote budgets, stable identity transport and managed receipts remain
+unimplemented. Final verification and source review pass as recorded in testing.md.

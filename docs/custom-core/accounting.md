@@ -511,3 +511,40 @@ prepared desired version; equal numbers alone do not imply the latest saved edit
 was applied. This projection requires an existing confirmed ledger and describes
 enforcement fields, not live process health, first activation without a receipt,
 credential synchronization or complete listener configuration state.
+
+### Existing client form policy controls
+
+The ordinary add/edit client form exposes upload/download rates in whole bytes
+per second and an exact decimal billing multiplier. Rates range from 0 through
+2^40; blank or 0 means unlimited. A multiplier is positive, at most 1000 and has
+at most six decimal places; blank selects 1. Existing policy fields round-trip,
+and clearing existing overrides sends their explicit defaults. An unchanged
+legacy client with no policy fields still omits the optional policy object.
+Explicitly entering defaults can select managed activation through the ordinary
+mutation path; runtime capability and ownership failures retain their existing
+saved-but-not-applied response. The form uses the existing client create/update
+API. English and Simplified Chinese copy is supplied, with English fallback text
+for the other locale keys. Bulk forms and full Tunnel ownership UI remain open.
+
+Policy editing currently requires local-only bindings. The form checks both the
+original and selected listeners; remote or unresolved bindings make the controls
+read-only with an explicit explanation. Deselecting a remote listener does not
+permit changing policy in the same multi-request save. Existing remote values
+remain visible and are omitted from unrelated metadata requests, while SQL and
+inbound settings retain their exact values. New remote clients with omitted policy
+retain their previous behavior. Selecting remote listeners after entering policy
+values fails explicitly instead of silently discarding those edits.
+
+The create/update/attach services check all existing and requested bindings before
+fanout, including update filters that select no listeners. The SQL membership
+boundary repeats the check under stable-ID row locks; even an unbound update
+rechecks its current bindings inside the write transaction. A new explicit policy
+or an additional remote attachment to a policy owner is rejected until coordinated
+budgets and application receipts exist. Existing remote membership with unchanged
+historical policy can retain ordinary metadata edits. Mirror adoption validates
+the actual settings being saved before identity filtering can hide a policy entry;
+invalid values, invalid types and unsupported scope roll back the mirror transaction
+and do not acquire an adopted fingerprint. These checks do not implement remote
+managed policies. Historical full reconciliation and revocation keep their existing
+transport behavior; a generic node synchronization acknowledgement is not evidence
+of coordinated limits, billing or policy application.

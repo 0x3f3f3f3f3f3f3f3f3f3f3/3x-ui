@@ -127,3 +127,19 @@ Startup recovery, never-initialized identity fences and bounded history traversa
 are implemented. This does not upgrade global node revocation, all protocol
 combinations, automatic activation or backup rollback fencing. Verification is
 recorded in testing.md.
+
+
+Local policy form and remote-boundary increment (2026-09-30): ordinary client
+add/edit controls for whole-byte upload/download limits and an exact decimal
+billing multiplier are I/V for local bindings. Legacy omission, explicit defaults,
+clearing overrides and invalid-input correction have real component/schema tests.
+Remote or unresolved bindings are read-only, and staged local policy edits cannot
+be silently discarded when a remote listener is selected. Backend preflight and
+locked SQL membership guards reject unsupported remote policy creation/changes;
+node mirrors validate their saved raw settings before identity filtering. Existing
+remote metadata and revocation compatibility remain, without claiming coordinated
+remote budgets, rates, stable identity transport or managed application receipts.
+Confirmed accounting's saved-but-unprepared pending indication is I/V, including
+real compiler failure and equal prepared/acknowledged versions. First activation
+without a receipt, complete listener application status, Tunnel owner selection,
+bulk policy controls and coordinated multi-node enforcement remain unfinished.

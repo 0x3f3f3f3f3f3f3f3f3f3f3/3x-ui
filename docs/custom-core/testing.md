@@ -1022,3 +1022,43 @@ serial rerun passes every frontend check, including all 178 files / 1781 tests
 (308.66 s), typecheck, lint, format, production build and Storybook. Complete Go
 checks then pass: shuffled panel suite (273.23 s), lint with zero issues (25.73 s),
 and build (8.30 s). No timeouts, assertions or test diagnostics were suppressed.
+
+Policy form tests first reproduced absent fields and lost existing policy in an
+unrelated save. Six real form tests now verify edit payloads, exact multiplier
+strings, unchanged legacy omission, clearing overrides, correcting excessive
+precision, and creating a client with both its selected inbound and explicit
+default policy (11.45 s). Fourteen schema cases cover positive/default bounds,
+invalid rates, exponent/whitespace syntax and fractional precision. Removing
+validation makes ten negative cases fail; the restored implementation passes all
+14. The earlier combined 19-test focused run and TypeScript check pass.
+
+Remote-scope regressions first reproduced partial local writes during mixed-node
+create/attach, filtered updates writing shared policy, and raw SyncInbound accepting
+new or changed remote policy. Metadata HTTP regression reproduced re-sending a
+policy inherited from SQL despite an omitted input field. The corrected projection
+uses a separate request copy and retains SQL/inbound settings. SQLite scope and
+reservation race checks pass (7.309 s), and the earlier PostgreSQL scope set passes
+(30.525 s). Removing the unbound write-transaction recheck in an isolated overlay
+reproduces an update succeeding after a concurrent remote attachment.
+
+Mirror tests additionally reproduce valid/invalid multiplier and wrong-type policy
+fields being saved despite SyncInbound errors, and foreign/tombstoned identities
+being removed from the checked list while retained in raw settings. Guards now
+check the actual saved settings before those filters. The first invalid-input test
+attempt accidentally reused the valid fixture and is not RED evidence; corrected
+wire fixtures fail for the intended cases before the repair. UI regressions use
+the repository's Vitest assertions; unsupported Jest DOM matchers in the first
+attempt were corrected before recording behavioral RED. Remote/unknown binding
+controls then pass the 24-test focused form/schema set; the final set also covers
+legacy remote creation and rejecting a new remote binding on an existing policy.
+The final complete frontend run passes 178 files / 1787 tests (315.97 s command,
+312.94 s suite), plus typecheck, lint, format, production build and Storybook.
+Final PostgreSQL scope race passes (41.713 s package / 60.56 s command), including
+the actual row-lock concurrency test; SQLite scope race passes (7.514 s package /
+10.92 s command). The shuffled complete panel Go suite passes (297.12 s command).
+Lint then requested a tagged switch in the new test's scenario selector; that
+syntax-only repair passes the affected SQLite/PostgreSQL race cases again,
+full lint with zero issues (24.05 s), and build (8.23 s). No production code or
+assertions changed for that repair. Source review, all locale JSON, workflow YAML
+and all 19 embedded shell blocks pass. The unchanged core source did not require
+repeating its previously recorded full suite.
