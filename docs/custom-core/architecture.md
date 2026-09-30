@@ -59,6 +59,39 @@ affected handler, draining existing TCP/UDP flows. Other listeners remain live.
 This increment does not claim source-address preservation, transparent NAT,
 all transport wrappers or complete forwarding-mode/routing UI coverage.
 
+## Local Tunnel outbound selection
+
+`settings.outboundTag` is a custom field, carried as additive Tunnel protobuf
+field 11. Empty, null or omitted selects normal Xray routing, including balancers.
+A nonempty tag selects one concrete outbound through the existing dispatcher's
+forced-detour context. That choice is consumed on the first dispatch: a selected
+loopback then uses normal routing for its next hop. A missing selected handler
+closes the link; it never selects the default handler. Unsupported outbound
+network types retain that outbound's explicit failure behavior.
+
+The panel validates the exact field spelling and string type. Enabled fixed
+selections require one canonical local owner and one available template or active
+subscription outbound. Creation, editing and re-enable validate transactionally.
+An outbound removed later leaves the saved tag intact; traffic fails when the
+corresponding configuration is applied, and re-enable refuses the unavailable
+selection. Startup validates restored canonical ownership.
+
+The existing Tunnel form shares the outbound configuration cache, lists concrete
+tags, preserves unavailable saved choices visibly, and clears to normal routing.
+Remote selection is read-only until remote managed policy support exists.
+Changing or clearing a selection replaces only the listener, draining its old
+TCP connections and UDP sessions without restarting the core or closing sibling
+listeners. Stable owner identity and cumulative accounting are retained.
+
+`tunnel-fixed-outbound-v1` is negotiated independently before startup preparation
+and hot handler mutation. An older core cannot silently discard the new field.
+An owned or explicitly selected Tunnel remains an opaque L4 forwarder even when
+its configured target is the internal `v1.mux.cool` address; the mux wrapper passes
+it to Dispatcher instead of interpreting the payload as internal channels. A
+legacy Tunnel with neither owner nor fixed selection retains the upstream internal
+mux gateway. Authenticated protocol mux paths retain their existing behavior and
+shared policy enforcement.
+
 ## Existing paths requiring migration
 
 Source evidence: `internal/mtproto` supervises mtg-multi (one process per inbound); `internal/tuic` supervises tuic-server behind a panel UDP relay; `internal/amneziawgnet` runs AmneziaWG/gVisor inside the panel and bridges per-peer authenticated SOCKS into Xray. Their current behavior/data must be retained while moving to core adapters. Until all three migrations are tested, the installation is not fully single-core. Host administrative SSH and existing security services remain untouched.

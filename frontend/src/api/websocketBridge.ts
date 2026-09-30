@@ -17,6 +17,12 @@ export function useWebSocketBridge() {
 
     const onInvalidate: Handler = (payload) => {
       const p = payload as { type?: string } | undefined;
+      if (p?.type === 'outbounds') {
+        // Background subscription updates change the available routing tags.
+        // They must refresh even beside an unrelated local client mutation.
+        queryClient.invalidateQueries({ queryKey: keys.xray.config() });
+        return;
+      }
       if (!p || (p.type !== 'inbounds' && p.type !== 'clients')) return;
       if (invalidateTimer != null) clearTimeout(invalidateTimer);
       invalidateTimer = window.setTimeout(() => {

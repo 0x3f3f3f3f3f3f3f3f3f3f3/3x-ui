@@ -703,7 +703,12 @@
         "allowedSourceCidrsInvalid": "Enter up to 256 IPv4 or IPv6 CIDRs.",
         "ownerClientLocalOnly": "Owner selection is available for local Tunnel listeners only.",
         "ownerClientLoadError": "Unable to load clients. Search again to retry.",
-        "ownerClientLoadMore": "Load more clients"
+        "ownerClientLoadMore": "Load more clients",
+        "tunnelOutbound": "Fixed outbound",
+        "tunnelOutboundHelp": "Leave empty to use routing rules. A fixed selection uses this concrete outbound only; if it disappears or does not support the requested network, forwarding fails. An enabled fixed rule requires a local owner.",
+        "tunnelOutboundUnavailable": "{tag} (unavailable)",
+        "tunnelOutboundLoadError": "Could not load available outbounds. Your saved selection is preserved.",
+        "tunnelOutboundLocalOnly": "Fixed outbound selection is available for local Tunnel listeners only."
       },
       "info": {
         "mode": "Modo",

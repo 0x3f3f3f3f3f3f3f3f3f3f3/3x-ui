@@ -71,6 +71,10 @@ func validateTunnelSourceACLOwner(tx *gorm.DB, inbound *model.Inbound) error {
 	if !inbound.Enable {
 		return nil
 	}
+	return validateTunnelCanonicalOwner(tx, inbound, "source ACL")
+}
+
+func validateTunnelCanonicalOwner(tx *gorm.DB, inbound *model.Inbound, feature string) error {
 	var owners []string
 	if err := tx.Table("client_inbounds ci").Select("c.stable_id").
 		Joins("JOIN clients c ON c.id = ci.client_id").Where("ci.inbound_id = ?", inbound.Id).
@@ -78,12 +82,12 @@ func validateTunnelSourceACLOwner(tx *gorm.DB, inbound *model.Inbound) error {
 		return err
 	}
 	if len(owners) != 1 || owners[0] == "" {
-		return fmt.Errorf("enabled Tunnel source ACL requires exactly one canonical owner")
+		return fmt.Errorf("enabled Tunnel %s requires exactly one canonical owner", feature)
 	}
 	return nil
 }
 
-func validateStoredTunnelSourceACLOwner(tx *gorm.DB, inboundID int) error {
+func validateStoredTunnelOwnerSettings(tx *gorm.DB, inboundID int) error {
 	var inbound model.Inbound
 	if err := tx.Select("id", "protocol", "settings", "enable", "node_id").Where("id = ?", inboundID).Find(&inbound).Error; err != nil {
 		return err
@@ -91,5 +95,8 @@ func validateStoredTunnelSourceACLOwner(tx *gorm.DB, inboundID int) error {
 	if inbound.Id == 0 {
 		return nil
 	}
-	return validateTunnelSourceACLOwner(tx, &inbound)
+	if err := validateTunnelSourceACLOwner(tx, &inbound); err != nil {
+		return err
+	}
+	return validateTunnelFixedOutboundOwner(tx, &inbound)
 }

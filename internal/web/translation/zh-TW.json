@@ -703,7 +703,12 @@
         "allowedSourceCidrsInvalid": "Enter up to 256 IPv4 or IPv6 CIDRs.",
         "ownerClientLocalOnly": "Owner selection is available for local Tunnel listeners only.",
         "ownerClientLoadError": "Unable to load clients. Search again to retry.",
-        "ownerClientLoadMore": "Load more clients"
+        "ownerClientLoadMore": "Load more clients",
+        "tunnelOutbound": "固定出站",
+        "tunnelOutboundHelp": "留空時使用路由規則。選擇後僅使用該具體出站；若出站消失或不支援請求的網路類型，轉發將失敗。啟用的固定出站規則必須綁定本機使用者。",
+        "tunnelOutboundUnavailable": "{tag}（無法使用）",
+        "tunnelOutboundLoadError": "無法載入可用出站，已保留原有選擇。",
+        "tunnelOutboundLocalOnly": "固定出站選擇僅適用於本機 Tunnel 監聽。"
       },
       "info": {
         "mode": "模式",

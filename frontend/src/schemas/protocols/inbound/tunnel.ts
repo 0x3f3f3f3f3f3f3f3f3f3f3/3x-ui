@@ -23,6 +23,7 @@ const sourceCIDR = z.union([
 // with arr=false.
 export const TunnelInboundSettingsSchema = z.object({
   clients: z.array(z.record(z.string(), z.unknown())).nullable().optional(),
+  outboundTag: z.string().nullable().optional(),
   allowedSourceCidrs: z
     .array(z.string())
     .max(256, { error: 'pages.inbounds.form.allowedSourceCidrsInvalid' })

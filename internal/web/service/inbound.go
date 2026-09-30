@@ -1244,6 +1244,9 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	needRestart := false
 	var postCommitApply func()
 	err = runSerializedTx(func(tx *gorm.DB) error {
+		if err := validateTunnelFixedOutboundSelection(tx, inbound); err != nil {
+			return err
+		}
 		conflict, cErr := checkPortConflictTx(tx, inbound, 0)
 		if cErr != nil {
 			return cErr
@@ -1646,7 +1649,13 @@ func (s *InboundService) SetInboundEnable(id int, enable bool) (bool, error) {
 			if err := validateTunnelSourceACLConfig(inbound); err != nil {
 				return false, err
 			}
-			return false, validateTunnelSourceACLOwner(database.GetDB(), inbound)
+			if err := validateTunnelSourceACLOwner(database.GetDB(), inbound); err != nil {
+				return false, err
+			}
+			if err := validateTunnelFixedOutboundSelection(database.GetDB(), inbound); err != nil {
+				return false, err
+			}
+			return false, validateTunnelFixedOutboundOwner(database.GetDB(), inbound)
 		}
 		return false, nil
 	}
@@ -1662,6 +1671,12 @@ func (s *InboundService) SetInboundEnable(id int, enable bool) (bool, error) {
 				return err
 			}
 			if err := validateTunnelSourceACLOwner(tx, inbound); err != nil {
+				return err
+			}
+			if err := validateTunnelFixedOutboundSelection(tx, inbound); err != nil {
+				return err
+			}
+			if err := validateTunnelFixedOutboundOwner(tx, inbound); err != nil {
 				return err
 			}
 			if inbound.NodeID == nil {
@@ -1832,6 +1847,9 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	var postCommitApply func()
 
 	txErr := runSerializedTx(func(tx *gorm.DB) error {
+		if err := validateTunnelFixedOutboundSelection(tx, inbound); err != nil {
+			return err
+		}
 		conflict, cErr := checkPortConflictTx(tx, inbound, inbound.Id)
 		if cErr != nil {
 			return cErr

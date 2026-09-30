@@ -1466,3 +1466,127 @@ not counted as passes; this change touches no database implementation. The final
 core race and repeated focused run cover the review's test-only assertion fix.
 Workflow YAML, 21 shell blocks, formatting and whitespace checks pass. No panel,
 API or frontend behavior changes here; per-rule outbound selection is unfinished.
+
+### Tunnel concrete outbound selection (2026-09-30)
+
+Baseline `073114daab9ac65e1d749f1c1f46d86e404c4ad3`. This increment adds
+custom Tunnel protobuf field 11 and `tunnel-fixed-outbound-v1`; it changes no
+dependency versions or database schema. Final commands use Go 1.27.1, Node
+26.10.0/npm 11.19.1 on Linux arm64 and the newly built `build/custom-xray`.
+
+The resumed RED run of `TestTunnelFixedOutboundTreatsMuxDestinationAsPayload`
+reproduced `panic: content.Attributes != nil` in an isolated child process.
+An independently formed valid mux New frame targeted a distinct local echo
+server; the outer Tunnel must send its 14 bytes unchanged to the selected
+target. The mux wrapper treats owned or explicitly selected Tunnel data as opaque.
+The GREEN race run:
+
+```sh
+cd core/xray
+GOTOOLCHAIN=go1.27.1 go test -race ./common/mux ./infra/conf ./testing/policy \
+  -run 'TestTunnelFixedOutbound|TestAuthenticatedProtocolsShareTunnelIdentityAndDisconnect|TestLegacyMuxClose|TestRegressionOutboundLeak' \
+  -count=1 -v
+```
+
+passes (policy package 12.458 s), including inherited selection/block, fixed
+selection/block/missing and the ordinary protocol mux regressions. Each allowed
+14-byte echo gives 14 upload / 14 download / 42 billed bytes at multiplier 1.5;
+the inner mux target gets zero bytes. Fourteen TCP/UDP selected-outbound cases
+cover inherited routing, fixed freedom, blackhole, missing handler, loopback,
+SOCKS and HTTP. The unsupported HTTP UDP case fails with zero payload at both
+echo targets; it does not fall back to direct.
+
+SQLite and PostgreSQL run the same real child-process and transactional checks:
+
+```sh
+GOTOOLCHAIN=go1.27.1 GOFLAGS=-p=1 \
+  XRAY_E2E_BINARY="$PWD/build/custom-xray" \
+  XRAY_PRE_FIXED_OUTBOUND_E2E_BINARY=/tmp/tunnel-outbound-review-fixture/pre-fixed-outbound-xray \
+  XRAY_PRE_SOURCE_ACL_E2E_BINARY=/tmp/custom-xray-auto-control-test \
+  go test -race -count=1 -v ./internal/web/service ./internal/xray \
+  -run '^TestTunnelFixedOutbound|^TestTunnelSourceACL|^TestTunnelOwner|^TestClientPolicyRemoteScope'
+```
+
+The fixture is built with the workflow's Go overlay, removing only the advertised
+fixed-outbound capability. All six named fixed-outbound service/adapter tests
+actually run and pass; unset-binary skips are not accepted. SQLite's command
+passes in 57.16 s (service 26.404 s, adapter 1.749 s); its two PostgreSQL row-lock
+subcases skip and are covered by the separate PostgreSQL run. With
+`XUI_DB_TYPE=postgres` and a private Unix socket database, the same command passes
+in 177.07 s (service 170.314 s, adapter 1.721 s).
+
+The hot-update fixture starts with lifetime usage 100 upload / 200 download /
+300 billed and multiplier 2. TCP's selected and sibling echoes, then direct and
+sibling echoes, then blocked-routing plus sibling echo end at exactly 130 /
+230 / 420. UDP also verifies the old source enters a fresh session after listener
+replacement, ending at 136 / 236 / 444. Distinct echo servers observe the selected
+and direct bytes independently. The child boot remains unchanged, the old TCP
+stream closes, no denied target receives payload, and sibling flows survive.
+
+The read-only source review found one Important integration issue: the selector's
+indefinitely fresh query ignored the server's background `invalidate(outbounds)`
+message. A real WebSocket message through the bridge and a real query hook first
+failed with `old-proxy` instead of `new-proxy`. After the cache invalidation fix,
+the bridge/shared-socket/Tunnel form/adapter selection passes all 16 tests in
+17.02 s with one worker. It also covers an unrelated recent local invalidation
+and adjacent inbound notification. Existing Node/Vite deprecation diagnostics
+remain visible. The reviewer ran no tests. Broader protocol completion,
+distribution, global budgets, packaging and exhaustive transport/accounting gates
+remain open in the original plan, rather than being declared out of scope.
+
+Workflow YAML and all 24 run shell blocks parse; touched frontend formatting and
+`git diff --check` pass. Full gates and the legacy mux correction are recorded below.
+
+The first `make verify` stopped at code generation because the newly generated
+OpenAPI descriptions were not yet staged; the generated file is now included.
+The next run rejected `socket = this` in the new test under the repository's
+`no-this-alias` rule. The test transport now captures an event-delivery closure;
+the 16 focused tests still pass (13.70 s). Another full run found that the local
+runner had pointed `XRAY_PRE_REVOCATION_E2E_BINARY` at a binary already advertising
+credential revocation. This was a runner fixture error, not a reason to weaken
+`TestManagedProcessNegotiatesCredentialRevocationBeforePreparation`. Rebuilding
+the omission fixture exactly as CI does makes both older/current-core cases pass
+under race in 1.445 s. Failed logs are retained in `/root/task-evidence`; none of
+those interrupted gate runs is reported as a full pass.
+
+The two-worker full frontend run completed with 184 files / 1824 tests passing
+and one existing Happ editor test timing out at its unchanged 5000 ms limit.
+Its assertions and timeout were not modified. The installed Vitest supports
+`VITEST_MAX_WORKERS`; the complete serial gate was rerun with that variable set
+to 1. `VITEST_MAX_WORKERS=1 make verify` passes in 780.27 s, including generation,
+both linters, formatting, types, MSW worker consistency, shuffled backend/device
+tests, all 185 frontend files / 1825 tests (476.50 s), Vite, Go and Storybook
+builds. `make race` passes in 786.23 s, including the explicit AmneziaWG device
+package. Both commands use the real current/upstream and capability-omission
+binaries described above and the fresh pre-revocation overlay. Node/Vite
+deprecation and bundle-size diagnostics remain visible. The failed two-worker
+log is retained; only the one-worker full frontend result is a pass.
+
+After that run, a new real regression found the initial mux guard also suppressed
+the upstream internal mux gateway for legacy Tunnel without an owner or fixed
+selection. `TestLegacyUnownedTunnelMuxStillDispatches` first failed with a reset.
+The guard now leaves that legacy path intact while protecting owned or explicitly
+selected Tunnel. A valid New/data frame sends six payload bytes to the inner echo
+target, returns the expected 14-byte Keep/data response, and leaves the unrelated
+owner's usage at zero. Three additional unowned fixed-selection controls verify
+selected/block/missing routing independently of ownership. The focused race
+command below passes (policy 13.994 s):
+
+```sh
+cd core/xray
+GOTOOLCHAIN=go1.27.1 GOFLAGS=-p=1 go test -race -count=1 -v \
+  ./common/mux ./testing/policy \
+  -run 'TestTunnelFixedOutbound|TestLegacyUnownedTunnelMux|TestAuthenticatedProtocolsShareTunnelIdentityAndDisconnect|TestLegacyMuxClose|TestRegressionOutboundLeak'
+```
+
+The corresponding CI step requires explicit PASS lines for both Tunnel mux
+tests. After the correction, fresh `go test -shuffle=on -count=1 ./...` passes
+in 633.80 s (scenarios 336.033 s), the workflow-scoped core race command passes
+in 99.04 s (policy 21.702 s), scoped vet passes in 1.99 s, and the candidate
+core build passes in 5.32 s. The rebuilt binary repeats the full scoped panel
+SQLite command in 55.67 s and PostgreSQL command in 174.95 s, both passing.
+SQLite's two PostgreSQL-only row-lock skips are again covered by PostgreSQL.
+The panel/frontend implementation is unchanged from the successful full gates
+above. The initial core feature commit `d436f7c9` and compatibility correction
+`62e6b3285fa7a2c1e8860c4e42fe25e4636b7c1b` have each been pushed to the fork's
+`feature/custom-xray-unified-policy`; the latter remote SHA was verified exactly.

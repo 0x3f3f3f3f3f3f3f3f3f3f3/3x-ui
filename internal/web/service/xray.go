@@ -216,6 +216,9 @@ func (s *XrayService) getXrayConfigFromDB(managed bool, db *gorm.DB) (*xray.Conf
 		if err := validateTunnelSourceACLOwner(db, inbound); err != nil {
 			return nil, err
 		}
+		if err := validateTunnelFixedOutboundOwner(db, inbound); err != nil {
+			return nil, err
+		}
 		if inbound.Protocol == model.MTProto || inbound.Protocol == model.AmneziaWG || inbound.Protocol == model.TUIC {
 			continue
 		}

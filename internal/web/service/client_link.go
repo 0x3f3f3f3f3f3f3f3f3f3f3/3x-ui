@@ -236,7 +236,7 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 			return err
 		}
 	}
-	return validateStoredTunnelSourceACLOwner(tx, inboundId)
+	return validateStoredTunnelOwnerSettings(tx, inboundId)
 }
 
 // reconcileInboundLinks writes only the client_inbounds rows that differ. prune

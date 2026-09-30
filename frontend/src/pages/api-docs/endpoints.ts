@@ -303,7 +303,7 @@ export const sections: readonly Section[] = [
         method: 'POST',
         path: '/panel/api/inbounds/add',
         summary:
-          'Create a new inbound. Send the full inbound payload (protocol, port, settings, streamSettings, sniffing, remark, expiryTime, total, enable). settings, streamSettings, and sniffing may be sent as nested JSON objects (preferred) or as JSON-encoded strings (legacy). A local Tunnel may include ownerClientId (an existing stable client UUID); the server resolves the canonical owner atomically, ignores settings.clients from the request, and rejects nonempty clientStats or owners with remote bindings. Tunnel settings.allowedSourceCidrs accepts up to 256 native IPv4/IPv6 CIDRs; omitted, null or empty allows every source. A nonempty ACL requires a local raw TCP/UDP listener (ordinary TCP TLS is supported) and a canonical owner while enabled. PROXY protocol, other transports and masks are rejected before saving. Use the exact allowedSourceCidrs spelling.',
+          'Create a new inbound. Send the full inbound payload (protocol, port, settings, streamSettings, sniffing, remark, expiryTime, total, enable). settings, streamSettings, and sniffing may be sent as nested JSON objects (preferred) or as JSON-encoded strings (legacy). A local Tunnel may include ownerClientId (an existing stable client UUID); the server resolves the canonical owner atomically, ignores settings.clients from the request, and rejects nonempty clientStats or owners with remote bindings. Tunnel settings.allowedSourceCidrs accepts up to 256 native IPv4/IPv6 CIDRs; omitted, null or empty allows every source. A nonempty ACL requires a local raw TCP/UDP listener (ordinary TCP TLS is supported) and a canonical owner while enabled. PROXY protocol, other transports and masks are rejected before saving. Use the exact allowedSourceCidrs spelling. Tunnel settings.outboundTag selects one concrete template or active subscription outbound; omitted, null or empty uses routing rules, including balancers. Enabled fixed selections require a canonical local owner. Missing or ambiguous selected tags reject saving or re-enabling. If the selected outbound is removed later, the saved selection remains and forwarding fails when that configuration is applied; it never silently changes to the default outbound. Use the exact outboundTag spelling.',
         body: inboundBody,
         errorResponse: '{\n  "success": false,\n  "msg": "Port 443 is already in use"\n}',
       },
@@ -326,7 +326,7 @@ export const sections: readonly Section[] = [
         method: 'POST',
         path: '/panel/api/inbounds/update/:id',
         summary:
-          'Replace an inbound’s configuration. Body shape mirrors /add. For a local Tunnel, ownerClientId atomically selects an existing stable client without changing that account or resetting its history. Omit the field for legacy settings-based editing. Source ACL validation matches /add; narrowing replaces this listener and terminates its old TCP/UDP flows while other listeners remain active. Heavy on inbounds with thousands of clients — prefer /setEnable for enable-only flips.',
+          'Replace an inbound’s configuration. Body shape mirrors /add. For a local Tunnel, ownerClientId atomically selects an existing stable client without changing that account or resetting its history. Omit the field for legacy settings-based editing. Source ACL and fixed outbound validation match /add. Narrowing the ACL, changing a fixed outbound or clearing it to resume routing replaces this listener and terminates its old TCP/UDP flows while other listeners remain active. Heavy on inbounds with thousands of clients — prefer /setEnable for enable-only flips.',
         params: [{ name: 'id', in: 'path', type: 'number', desc: 'Inbound ID.' }],
         body: inboundBody,
       },
@@ -334,7 +334,7 @@ export const sections: readonly Section[] = [
         method: 'POST',
         path: '/panel/api/inbounds/setEnable/:id',
         summary:
-          'Toggle only the enable flag without serialising the whole settings JSON. Recommended for UI switches on large inbounds. Enabling a Tunnel with a nonempty source ACL rechecks its canonical owner and supported transport in the same transaction.',
+          'Toggle only the enable flag without serialising the whole settings JSON. Recommended for UI switches on large inbounds. Enabling a Tunnel with a nonempty source ACL rechecks its canonical owner and supported transport in the same transaction. A fixed outbound selection also rechecks the canonical owner and the available concrete outbound; missing selections remain saved but cannot be re-enabled.',
         params: [{ name: 'id', in: 'path', type: 'number', desc: 'Inbound ID.' }],
         body: '{\n  "enable": false\n}',
       },

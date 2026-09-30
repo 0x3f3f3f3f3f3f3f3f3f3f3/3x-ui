@@ -15,7 +15,7 @@ This is the initial source-audit matrix, not a support announcement. `E/U` = exi
 | Hysteria2 | E/U both | E/U | N | QUIC/mux/UDP and auth updates |
 | WireGuard | E/U both | E/U | N | per-peer identity, IP/payload accounting distinction |
 | TUN | E/U inbound | no account auth; resource identity required | N | packet semantics, route and owner mapping |
-| Tunnel/dokodemo-door | E/U inbound; NA outbound (listener adapter) | database, local stable-owner picker, raw TCP/UDP source ACL and scoped ordinary Runtime owner lifecycle I/V; complete forwarding UI/unowned-rule migration N | I/V for scoped Tunnel/local persistence/SQL settlement, automatic local activation and guarded handoff | all routing modes, remaining owner lifecycle, full shared-policy coverage |
+| Tunnel/dokodemo-door | E/U inbound; NA outbound (listener adapter) | database, local stable-owner picker, raw TCP/UDP source ACL, concrete outbound selector and scoped ordinary Runtime owner lifecycle I/V; complete forwarding UI/unowned-rule migration N | I/V for scoped Tunnel/local persistence/SQL settlement, automatic local activation and guarded handoff | remaining forwarding modes/owner lifecycle, full shared-policy coverage |
 | Snell v4 | N both | N | N | official Surge interoperability + independent outbound test |
 | Snell v5 | N both | N | N | v4-like paths separately, QUIC Proxy Mode mandatory |
 | Snell v6 beta | N both | N | N | fixed beta client/server, shaping modes, TCP/UDP/reuse |
@@ -24,7 +24,7 @@ This is the initial source-audit matrix, not a support announcement. `E/U` = exi
 | MTProto | E/U external mtg-multi; migration N | E/U secrets/ad-tags | N | preserve features, move execution into core |
 | TUIC v5 | E/U external tuic-server; migration N | E/U | N | preserve QUIC/UDP, remove panel relay after parity |
 | AmneziaWG | E/U panel-side runtime; migration N | E/U peers/forwarding | N | preserve obfuscation/IPv6/per-peer data, direct dispatcher |
-| Freedom/direct, block, DNS, loopback | E/U outbound | NA account service | finite local loopback TCP/UDP metering, sniffing, quota/disable and explicit cycle rejection I/V; full core and affected panel regressions pass | full DNS/balancer/chain correctness, selected-outbound UI and network-listener loop detection |
+| Freedom/direct, block, DNS, loopback | E/U outbound | NA account service | finite local loopback TCP/UDP metering, sniffing, quota/disable and explicit cycle rejection I/V; full core and affected panel regressions pass | full DNS/balancer/chain correctness and network-listener loop detection |
 
 ## Feature cross-product checklist
 
@@ -161,3 +161,44 @@ atomic validation and hot narrowing are I/V within this local scope. Full
 make verify/race and core unit/scoped race gates pass; results are in testing.md. This does not establish arbitrary
 transport ACLs, transparent interception, complete forwarding modes or global
 node policy.
+
+Local Tunnel fixed outbound increment: the existing form/API carry
+`settings.outboundTag`, with empty/null/omitted selecting ordinary routing and
+balancers. Concrete template/subscription selection, owner/enable validation,
+missing-selection retention, independent capability negotiation and listener-
+scoped replacement are I/V for local owners. Real TCP/UDP tests cover selected
+freedom, SOCKS, loopback, HTTP TCP and HTTP UDP refusal; missing/block selections
+cannot send payload through the direct default. A valid internal mux-frame
+payload reaches the selected echo target unchanged and is counted exactly once.
+Legacy unowned Tunnel without a fixed selection retains its internal mux gateway;
+a real New frame reaches its inner target without charging an unrelated owner.
+SQLite/PostgreSQL hot updates preserve the child boot, sibling flows, stable ID
+and exact lifetime ledger. The frontend query refreshes after background outbound
+subscription invalidation. This does not establish every forwarding/network
+mode, unowned-rule migration, remote policy, other requested protocol adapters
+or a fully single-core installation.
+
+### Tunnel outbound selector acceptance cells
+
+These cells describe this increment, rather than upgrading all Xray routing or
+all protocol rows from the narrower fixtures.
+
+| Direction / feature | Status | Evidence or remaining requirement |
+| --- | --- | --- |
+| Inbound: fixed selected freedom, TCP/UDP | I/V | Distinct selected/default echo targets; exact shared policy totals |
+| Inbound: select SOCKS, TCP/UDP | I/V | Real in-process Mixed proxy hop; no default-target payload |
+| Inbound: select HTTP, TCP | I/V | Real CONNECT proxy hop |
+| Inbound: select HTTP, UDP | NA for that outbound | HTTP adapter rejects UDP; test observes no silent direct fallback |
+| Inbound: select loopback, TCP/UDP | I/V | Forced first hop is consumed; subsequent virtual-inbound routing works; billing once |
+| Inbound: missing concrete tag or blackhole | I/V | Fixed/inherited refusal controls observe zero forbidden target bytes |
+| Inbound: owned/selected opaque TCP payload at internal mux address | I/V | Valid 14-byte frame remains payload, 14/14/42 usage for owned flows, inner target untouched; unowned fixed selection/block/missing also enforced |
+| Inbound: legacy unowned TCP internal mux gateway | I/V scoped | No fixed selection; real New/data frame reaches the inner echo target and returns a valid mux response; unrelated owner usage stays zero |
+| Inbound: normal routing / balancer mode | I/V scoped | Clearing returns to routing; preceding balancer failure/fallback tests; exhaustive routing remains open |
+| Inbound: local CRUD/enable and canonical ownership | I/V | SQLite/PostgreSQL atomic save, disabled/re-enable checks, retained removed-subscription selection |
+| Inbound: hot listener lifecycle and accounting | I/V | Real TCP/UDP replacement, child boot unchanged, surviving sibling, exact committed ledger |
+| Inbound: startup / handler API compatibility | I/V | Capability-omission executable and handler probe refuse before preparation/mutation |
+| Inbound: existing editor / saved settings / tag refresh | I/V | Real form/adapter/query tests, unavailable tag stays visible, actual WebSocket invalidation |
+| Inbound: remote fixed selection/global policy | N | Remote selection remains read-only; backend rejects unsupported local-owner scope |
+| Inbound: all remaining address/transport modes | I/U or E/U | Fixed-outbound tests here use IPv4 raw TCP/UDP; separate ACL IPv6/TLS evidence does not prove every fixed-outbound mode |
+| Outbound: Tunnel as a proxy protocol | NA | Tunnel is a forwarding listener, selects existing outbounds |
+| Distribution / whole-system single core | N | Original installers/sidecars and panel-side AmneziaWG remain; no process/deployment parity claim |

@@ -6,6 +6,7 @@ import { Button, Input, InputNumber, Select, Switch } from 'antd';
 
 import { HeaderMapEditor } from '@/components/form';
 import { keys } from '@/api/queryKeys';
+import { useOutboundTagGroups } from '@/api/queries/useOutboundTags';
 import { FormField } from '@/components/form/rhf';
 import { fetchClientPage } from '@/hooks/useClients';
 import type { InboundFormValues } from '@/schemas/forms/inbound-form';
@@ -16,7 +17,20 @@ export default function TunnelFields({ requireOwner = false }: { requireOwner?: 
   const nodeId = useWatch({ control, name: 'nodeId' });
   const ownerClientId = useWatch({ control, name: 'ownerClientId' });
   const clients = useWatch({ control, name: 'settings.clients' });
+  const outboundTag = useWatch({ control, name: 'settings.outboundTag' });
+  const outbounds = useOutboundTagGroups();
   const remote = nodeId != null;
+  const outboundChoices = new Map(
+    (remote ? [] : (outbounds.data?.outbounds ?? [])).map((tag) => [tag, tag]),
+  );
+  if (outboundTag && !outboundChoices.has(outboundTag)) {
+    outboundChoices.set(
+      outboundTag,
+      outbounds.isSuccess && !remote
+        ? t('pages.inbounds.form.tunnelOutboundUnavailable', { tag: outboundTag })
+        : outboundTag,
+    );
+  }
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<{ value: string; label: string }>();
@@ -92,6 +106,28 @@ export default function TunnelFields({ requireOwner = false }: { requireOwner?: 
               )}
             </>
           )}
+        />
+      </FormField>
+      <FormField
+        name={['settings', 'outboundTag']}
+        label={t('pages.inbounds.form.tunnelOutbound')}
+        transform={{ input: (value) => value || undefined }}
+        extra={t(
+          remote
+            ? 'pages.inbounds.form.tunnelOutboundLocalOnly'
+            : outbounds.isError
+              ? 'pages.inbounds.form.tunnelOutboundLoadError'
+              : 'pages.inbounds.form.tunnelOutboundHelp',
+        )}
+      >
+        <Select
+          id="tunnelOutboundTag"
+          disabled={remote}
+          allowClear
+          showSearch
+          loading={outbounds.isFetching}
+          placeholder={t('pages.inbounds.form.mtgRouteOutboundPlaceholder')}
+          options={[...outboundChoices].map(([value, label]) => ({ value, label }))}
         />
       </FormField>
       <FormField

@@ -87,7 +87,7 @@ func (s *ClientService) syncTunnelOwnerLink(tx *gorm.DB, inboundID int, owner *m
 	if err := s.reconcileInboundLinks(tx, inboundID, map[int]string{owner.Id: ""}, []int{owner.Id}, nil, true); err != nil {
 		return err
 	}
-	return validateStoredTunnelSourceACLOwner(tx, inboundID)
+	return validateStoredTunnelOwnerSettings(tx, inboundID)
 }
 
 func preserveDetachedTunnelOwnerTraffic(tx *gorm.DB, inboundID int, email string) (bool, error) {

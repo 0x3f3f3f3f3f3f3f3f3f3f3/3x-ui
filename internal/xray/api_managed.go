@@ -106,6 +106,9 @@ func managedIdentityCapabilities(message protoreflect.Message, required map[stri
 		}
 		return nil
 	case *dokodemo.Config:
+		if value.GetOutboundTag() != "" {
+			required["tunnel-fixed-outbound-v1"] = true
+		}
 		if len(value.GetAllowedSourceCidrs()) > 0 {
 			required["tunnel-source-acl-v1"] = true
 		}

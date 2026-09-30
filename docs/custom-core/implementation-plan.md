@@ -427,3 +427,37 @@ explicit balancer fallbacks remain supported. Real managed/unmanaged TCP and
 dynamic TCP/UDP removal tests observe distinct selected/default targets and exact
 shared accounting. Final gate results are recorded in testing.md. This remains
 a prerequisite for the unfinished Tunnel outbound selector.
+
+Task 3/6 fixed outbound increment (2026-09-30): local owned Tunnel rules now
+select a concrete template or active subscription outbound, or clear the field
+to inherit routing and balancers. The additive core field reaches Dispatcher;
+startup and hot mutations negotiate its capability independently. Missing
+handlers and unsupported networks fail without direct fallback. Transactional
+create/update/re-enable validate spelling, type, canonical ownership and concrete
+tag availability. Removed subscriptions retain the saved selection.
+
+Real TCP/UDP tests on SQLite and PostgreSQL establish listener-scoped replacement,
+old-flow termination, surviving sibling flows and exact shared lifetime billing
+without restarting the core. A real valid mux-frame regression first reproduced
+a panic and route bypass at the reserved internal address; Tunnel payload now
+remains opaque while ordinary authenticated mux retains its behavior. A read-only
+review identified stale subscription tags in the new picker. A real WebSocket
+message/query regression failed with the old tag and passes after outbound
+invalidations refresh the configuration cache, including beside unrelated local
+mutations. Focused frontend checks pass 16 tests. Final regression/build results
+are recorded in testing.md as each gate completes.
+
+This increment does not complete Tasks 3/6, migrate unowned legacy forwarding,
+add Snell/mieru/SSH, migrate the existing sidecars, coordinate global node policy,
+or deliver installation/restore fencing. Those original requirements stay open.
+
+Next Task 5 source-audit dependency: this selected core's Mixed/SOCKS and HTTP
+builders collapse credentials into `map[string]string`, without stable client
+identity metadata. The servers set legacy email to the authenticated username.
+These remaining adapters need server-owned account-to-ID mappings and lifecycle
+capabilities before the managed compiler can admit them. SOCKS in this version
+already allocates a temporary UDP association listener under its authenticated
+TCP context and closes it with that context; do not assume a shared unauthenticated
+UDP listener from older versions. Verify that boundary and HTTP's repeated
+request authentication with real traffic before extending the existing policy
+coverage. No Mixed/HTTP stable-ID support is claimed by the outbound-proxy tests.

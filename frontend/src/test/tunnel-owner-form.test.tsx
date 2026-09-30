@@ -85,6 +85,9 @@ describe('Tunnel owner form', () => {
         : [],
     }));
     vi.mocked(HttpUtil.post).mockImplementation(async (url) => {
+      if (url === '/panel/api/xray/') {
+        return { success: true, msg: '', obj: JSON.stringify({ xraySetting: { outbounds: [] } }) };
+      }
       if (url === '/panel/api/clients/add') created = true;
       return { success: true, msg: '', obj: {} };
     });
