@@ -161,3 +161,38 @@ Evaluate OpenSnell's GPLv3 implementation at a pinned commit, separately for eac
 ## Scope decisions
 
 Local budgets/rates are not global limits. Multi-node work must allocate disjoint budgets and rate shares with bounded leases; expired/lost control cannot turn a limited user unlimited. Snapshot restore must be fenced from outstanding node leases. A recoverable core store is execution state under panel-issued policy, not a second administrator/control plane.
+
+## Canonical password account ownership increment (planned)
+
+The original task authorizes routine engineering decisions. This increment
+uses the existing inbound settings and normalized `client_inbounds` membership
+rather than a second credential store: each password account accepts an explicit
+`ownerClientId` naming an existing stable client UUID. The command resolves that
+UUID against canonical records inside the same SQL transaction that saves the
+listener and reconciles distinct owner links. Wire usernames and passwords stay
+resource-specific; they never pass through `applyClientRecordMerge`.
+
+Do not infer owners from account names, supplied email or raw core `clientId`.
+Strip transport identity fields from saved account commands; generated runtime
+identity must be constructed from canonical records and verified memberships.
+Owned accounts require a local authenticated listener. A managed listener must
+bind every credential; mixing owned and unowned accounts is rejected. Multiple
+aliases for one owner produce one membership. Duplicate managed usernames,
+missing owners, noauth ownership and supplied client-stat mirrors are rejected
+before persistence. Legacy unowned account lists retain their prior semantics.
+
+Lock an existing listener and selected clients in deterministic order. Resolve
+all owners before saving; a late SQL failure rolls back settings, memberships
+and stat association together. Reassignment or credential rotation preserves
+stable client records, quota history, shared credentials and policy. Detaching
+the final account does not restore HTTP anonymous access; preserve an explicit
+required-auth marker. Move detached stat associations to a sibling membership
+or detached history instead of deleting shared usage.
+
+The first database increment keeps managed Mixed/HTTP compilation gated and
+adds authoritative write/read guards plus local/remote attachment restrictions.
+It does not claim owner selection UI, canonical runtime generation, generic
+client lifecycle fanout, credential hot diffs or legacy username-counter
+migration. Those follow with real-process regressions before activation is
+opened. API/import/export continue using existing settings JSON; restores must
+preserve canonical stable IDs and links rather than minting replacement owners.

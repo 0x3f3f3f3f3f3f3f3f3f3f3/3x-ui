@@ -529,7 +529,7 @@ compiler gate is unchanged. Ruling: Mixed noauth ignores unused accounts in both
 branches, matching the pinned upstream constructor; an initially contrary test
 expectation was corrected rather than changing legacy authentication behavior.
 
-### Task 5B: Canonical password account ownership (next, unimplemented)
+### Task 5B: Canonical password account ownership (in progress)
 
 The source audit found that Mixed/HTTP `settings.accounts` currently contains
 only user/pass, whereas normalized `clients` and `client_inbounds` carry the
@@ -567,3 +567,35 @@ Primary source anchors: `frontend/src/pages/inbounds/form/protocols/accounts-lis
 - [ ] Keep local/remote scope restrictions effective before fanout and import
   filtering. Anonymous ownership, policy-only pre-dispatch control registration,
   multi-node budget allocation and remaining protocol families stay open.
+
+### Task 5B1: Authoritative password-owner persistence
+
+Spec: architecture.md, "Canonical password account ownership increment".
+Ruling: reuse `settings.accounts[].ownerClientId` and `client_inbounds`; a second
+credential table would duplicate settings without adding a distinct authority.
+The cost of a mismatched mirror is rejected reads/configuration, not inferred
+identity. Keep the managed compiler gate until the rest of Task 5B is verified.
+
+Files: new `internal/web/service/password_proxy_owner.go` and
+`password_proxy_owner_test.go`; change `inbound.go`, `client_link.go`,
+`client_policy_scope.go`, `client_policy_activation.go` and existing read guards.
+
+Interfaces: `preparePasswordProxyOwnerCommand(*model.Inbound) error` validates
+wire commands; `resolvePasswordProxyOwners(*gorm.DB, *model.Inbound)
+([]model.ClientRecord, error)` locks/resolves; specialized owner reconciliation
+writes links only. Stored-binding validation compares distinct account owner
+UUIDs against joined canonical membership and refuses missing/mismatched rows.
+
+- [ ] Write `TestPasswordProxyOwnersPreserveCanonicalRecords` using two resource
+  aliases and two owners. Assert two normalized memberships, byte-preserved wire
+  credentials, unchanged canonical policy/credentials and original usage.
+- [ ] Observe RED through the actual AddInbound/UpdateInbound API service path.
+- [ ] Implement command validation, transactional owner resolution/reconciliation,
+  protected HTTP empty authentication and detached history retention. Add named
+  regressions for missing/noauth/remote owners, mixed ownership, duplicate user,
+  forged core identity, last removal, reassignment and late SQL rollback.
+- [ ] Reject generic settings-client sync/delta bypasses; add read-time canonical
+  membership guards and remote attachment guards before filtering/fanout.
+- [ ] Run the focused tests under race on SQLite and PostgreSQL and existing
+  Tunnel/client-link/scope/activation regressions. Then run panel checks, record
+  evidence, commit and push with an exact remote SHA check.
