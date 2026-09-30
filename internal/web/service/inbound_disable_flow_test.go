@@ -191,7 +191,9 @@ func TestUpdateInbound_DisableFlowPersistsStripsAndResistsRestore(t *testing.T) 
 		t.Errorf("target flow_override = %#v, want empty", list)
 	}
 
-	ibSvc.MigrationRestoreVisionFlow()
+	if err := ibSvc.MigrationRestoreVisionFlow(); err != nil {
+		t.Fatal(err)
+	}
 	reloaded2, err := ibSvc.GetInbound(target.Id)
 	if err != nil {
 		t.Fatalf("GetInbound after restore: %v", err)

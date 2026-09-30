@@ -547,17 +547,20 @@ func GetApiToken(getApiToken bool, tokenName string) {
 }
 
 // migrateDb performs database migration operations for the 3x-ui panel.
-func migrateDb() {
+func migrateDb() error {
 	inboundService := service.InboundService{}
 
 	logger.InitLogger(logging.INFO)
 	err := database.InitDB(config.GetDBPath())
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("initialize database: %w", err)
 	}
 	fmt.Println("Start migrating database...")
-	inboundService.MigrateDB()
+	if err := inboundService.MigrateDB(); err != nil {
+		return err
+	}
 	fmt.Println("Migration done!")
+	return nil
 }
 
 // loadServiceEnvFile loads the systemd EnvironmentFile so CLI subcommands like
@@ -669,7 +672,10 @@ func main() {
 		}
 		runWebServer()
 	case "migrate":
-		migrateDb()
+		if err := migrateDb(); err != nil {
+			fmt.Fprintln(os.Stderr, "Database migration failed:", err)
+			os.Exit(1)
+		}
 	case "encrypt-tokens":
 		encryptNodeTokens()
 	case "migrate-db":

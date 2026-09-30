@@ -1889,7 +1889,9 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		// XHTTP inbound), restore Vision for clients whose intended flow is Vision
 		// but was stripped while the inbound was ineligible.
 		if !inbound.DisableFlow {
-			if restored, changed := s.restoreVisionFlowForEligibleInbound(tx, inbound.Settings, inbound.StreamSettings, inbound.Protocol); changed {
+			if restored, changed, flowErr := s.restoreVisionFlowForEligibleInbound(tx, inbound.Settings, inbound.StreamSettings, inbound.Protocol); flowErr != nil {
+				return flowErr
+			} else if changed {
 				inbound.Settings = restored
 			}
 		} else {

@@ -331,7 +331,10 @@ release tags pass through the managed updater without shell evaluation.
 Native Linux independent core updates now verify complete fork bundles, reject
 stock cores, retain the running process during preparation and recover the old
 executable/configuration after activation errors. The release picker distinguishes
-package tags from actual core versions. Crash-durable activation/DB rollback,
+package tags from actual core versions. Migration failures now propagate through
+the CLI and import paths, and the updater migrates before starting the new service;
+malformed legacy client/domain data rolls back the requirements transaction.
+Crash-durable activation/DB rollback,
 real service-manager/container/platform execution and final acceptance remain
 open; the broader delivery checkboxes below are intentionally not complete.
 

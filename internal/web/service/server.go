@@ -1491,6 +1491,9 @@ func (s *ServerService) ImportDB(file multipart.File, keepHostSettings bool) err
 		return common.NewErrorf("This file cannot be imported: %v", err)
 	}
 
+	if err := s.StopXrayService(); err != nil && !errors.Is(err, errXrayNotRunning) {
+		return fmt.Errorf("stop Xray before DB import: %w", err)
+	}
 	xrayStopped := true
 	defer func() {
 		if xrayStopped {
@@ -1499,9 +1502,6 @@ func (s *ServerService) ImportDB(file multipart.File, keepHostSettings bool) err
 			}
 		}
 	}()
-	if errStop := s.StopXrayService(); errStop != nil {
-		logger.Warningf("Failed to stop Xray before DB import: %v", errStop)
-	}
 
 	var keptSettings hostBoundSnapshot
 	if keepHostSettings {
@@ -1509,7 +1509,7 @@ func (s *ServerService) ImportDB(file multipart.File, keepHostSettings bool) err
 	}
 
 	if errClose := database.CloseDB(); errClose != nil {
-		logger.Warningf("Failed to close existing DB before replacement: %v", errClose)
+		return fmt.Errorf("close existing DB before replacement: %w", errClose)
 	}
 
 	// Registered after the xray-restart defer so it runs first (LIFO): every
@@ -1565,7 +1565,12 @@ func (s *ServerService) ImportDB(file multipart.File, keepHostSettings bool) err
 
 	restoreHostBoundSettings(keptSettings)
 
-	s.inboundService.MigrateDB()
+	if err := s.inboundService.MigrateDB(); err != nil {
+		// The imported data has replaced the active database. Keep the fallback
+		// and leave Xray stopped until the failed migration is repaired.
+		xrayStopped = false
+		return fmt.Errorf("imported DB migration failed; Xray remains stopped and the previous database is at %s: %w", fallbackPath, err)
+	}
 
 	xrayStopped = false
 	if err = s.RestartXrayService(); err != nil {
@@ -1764,6 +1769,9 @@ func (s *ServerService) restorePostgresDump(file multipart.File, keepHostSetting
 		return err
 	}
 
+	if err := s.StopXrayService(); err != nil && !errors.Is(err, errXrayNotRunning) {
+		return fmt.Errorf("stop Xray before DB restore: %w", err)
+	}
 	xrayStopped := true
 	defer func() {
 		if xrayStopped {
@@ -1772,9 +1780,6 @@ func (s *ServerService) restorePostgresDump(file multipart.File, keepHostSetting
 			}
 		}
 	}()
-	if errStop := s.StopXrayService(); errStop != nil {
-		logger.Warningf("Failed to stop Xray before DB restore: %v", errStop)
-	}
 
 	var keptSettings hostBoundSnapshot
 	if keepHostSettings {
@@ -1782,7 +1787,7 @@ func (s *ServerService) restorePostgresDump(file multipart.File, keepHostSetting
 	}
 
 	if errClose := database.CloseDB(); errClose != nil {
-		logger.Warningf("Failed to close existing DB before restore: %v", errClose)
+		return fmt.Errorf("close existing DB before restore: %w", errClose)
 	}
 
 	cmd := exec.CommandContext(context.Background(), bin,
@@ -1795,14 +1800,16 @@ func (s *ServerService) restorePostgresDump(file multipart.File, keepHostSetting
 	runErr := cmd.Run()
 
 	if errInit := database.InitDB(config.GetDBPath()); errInit != nil {
+		xrayStopped = false
 		return common.NewErrorf("Restore finished but reopening the database failed: %v", errInit)
 	}
-	restoreHostBoundSettings(keptSettings)
-
-	s.inboundService.MigrateDB()
-
 	if runErr != nil {
 		return common.NewErrorf("pg_restore failed (database left unchanged): %v: %s", runErr, strings.TrimSpace(stderr.String()))
+	}
+	restoreHostBoundSettings(keptSettings)
+	if err := s.inboundService.MigrateDB(); err != nil {
+		xrayStopped = false
+		return fmt.Errorf("restored DB migration failed; Xray remains stopped: %w", err)
 	}
 
 	xrayStopped = false
@@ -1841,6 +1848,9 @@ func (s *ServerService) migrateSQLiteIntoPostgres(file multipart.File, isSQLDump
 		return common.NewErrorf("This file cannot be imported: %v", err)
 	}
 
+	if err := s.StopXrayService(); err != nil && !errors.Is(err, errXrayNotRunning) {
+		return fmt.Errorf("stop Xray before DB restore: %w", err)
+	}
 	xrayStopped := true
 	defer func() {
 		if xrayStopped {
@@ -1849,23 +1859,24 @@ func (s *ServerService) migrateSQLiteIntoPostgres(file multipart.File, isSQLDump
 			}
 		}
 	}()
-	if errStop := s.StopXrayService(); errStop != nil {
-		logger.Warningf("Failed to stop Xray before DB restore: %v", errStop)
-	}
 
 	if errClose := database.CloseDB(); errClose != nil {
-		logger.Warningf("Failed to close existing DB before restore: %v", errClose)
+		return fmt.Errorf("close existing DB before restore: %w", errClose)
 	}
 
 	migrateErr := database.MigrateData(dbPath, config.GetDBDSN())
 
 	if errInit := database.InitDB(config.GetDBPath()); errInit != nil {
+		xrayStopped = false
 		return common.NewErrorf("Restore finished but reopening the database failed: %v", errInit)
 	}
-	s.inboundService.MigrateDB()
 
 	if migrateErr != nil {
 		return common.NewErrorf("Importing the SQLite data into PostgreSQL failed: %v; the import runs in a single transaction, so the database was left unchanged", migrateErr)
+	}
+	if err := s.inboundService.MigrateDB(); err != nil {
+		xrayStopped = false
+		return fmt.Errorf("imported DB migration failed; Xray remains stopped: %w", err)
 	}
 
 	xrayStopped = false

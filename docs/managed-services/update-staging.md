@@ -438,3 +438,33 @@ and file rename alone do not establish those guarantees.
 真实核心能力，再切换二进制。运行中的更新必须确认核心 API 就绪；启动失败时
 恢复旧二进制与此前实际工作的配置，不恢复旧数据库或回退新产生的计费数据。
 容器应更新镜像。崩溃恢复日志、跨进程更新互斥和整套面板/数据库事务回滚仍未完成。
+
+## Migration failure propagation
+
+`x-ui migrate` returns a nonzero exit status when database initialization or any
+service migration phase fails; `Migration done!` is printed only on success.
+Requirements migration uses a transaction that rolls back on returned errors
+and panics. Malformed legacy client/domain objects produce errors identifying the
+inbound instead of panicking after partially committing client/traffic writes.
+Orphan cleanup and Vision flow repair now return query/write errors, and the
+migration stops at the first failed phase. SQLite compaction remains optional
+maintenance after a successful requirements transaction.
+
+The updater runs this CLI before starting the newly copied service. The installer
+already propagates its final migration command's status. A failed migration leaves
+the service stopped and reports failure; program replacement and migrations across
+all phases are **not** one transaction, and automatic program/database rollback
+is still pending.
+
+SQLite and PostgreSQL imports also propagate service-migration failures and do
+not attempt to restart Xray with the failed imported database. SQLite keeps its
+previous `.backup` file and reports its location. Imports stop on actual core-stop
+or database-close errors; an already stopped core is accepted. Failed PostgreSQL
+restore/copy operations are checked before subsequent service migrations. This
+is failure reporting and start suppression, not an import admission barrier or
+a complete recovery protocol; the panel can still have concurrent writers, and
+no automatic restoration of an older usage ledger is introduced here.
+
+中文说明：迁移失败会返回非零状态，安装、更新不会继续启动新服务；导入失败会
+保持核心停止，SQLite 旧库备份保留。程序文件与全部数据库迁移的整体回滚、并发
+写入隔离和崩溃恢复仍未完成，不能将本项修复视为完整升级事务。

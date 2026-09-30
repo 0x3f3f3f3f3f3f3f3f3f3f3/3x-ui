@@ -3,7 +3,8 @@
 
 Negative acceptance for bootstrap, archive, identity and runtime preflight.
 The final case uses a real managed candidate, then refuses the service stop.
-It does not claim successful activation, schema migration or rollback coverage.
+The migration-failure mode proves a failed migration prevents service start.
+It does not claim successful update activation or rollback coverage.
 """
 import argparse
 import codecs
@@ -143,6 +144,16 @@ if len(sys.argv) > 1 and sys.argv[1] == '--child':
     else:
         script = '/install.sh' if env.pop('FIXTURE_INSTALL', '') else '/update.sh'
         invocation = ['bash', script]
+    if env.pop('FIXTURE_MIGRATION_FAILURE', ''):
+        # Seed the actual schema before corrupting only the owned fixture row.
+        Path('/etc/x-ui/x-ui.db').unlink()
+        seeded = subprocess.run(['/fixture/source/x-ui', 'migrate'], env=env,
+                                text=True, capture_output=True, timeout=25)
+        assert seeded.returncode == 0, seeded.stderr[-1000:]
+        with sqlite3.connect('/etc/x-ui/x-ui.db') as db:
+            db.execute("INSERT INTO inbounds(protocol,settings,stream_settings,enable,listen,port,tag) "
+                       "VALUES('vless','{broken json','{}',0,'127.0.0.1',0,'migration-fixture')")
+            db.execute("INSERT INTO settings(key,value) VALUES('ownedMigrationSentinel','preserve')")
     if env.pop('FIXTURE_INSTALL_SUCCESS', ''):
         installed = subprocess.run(invocation, env=env, text=True, capture_output=True, timeout=90)
         Path('/fixture/install.log').write_text(installed.stdout + installed.stderr)
@@ -163,12 +174,14 @@ parser.add_argument('--web', action='store_true', help='exercise authenticated H
 parser.add_argument('--install', action='store_true', help='exercise the actual installer before activation')
 parser.add_argument('--fresh-install', action='store_true', help='installer fixture with no existing installation')
 parser.add_argument('--install-success', action='store_true', help='fresh SQLite installation and actual installed-panel HTTP startup')
+parser.add_argument('--migration-failure', action='store_true', help='actual malformed-database migration prevents service start')
 parser.add_argument('--dirty-source-rejection', action='store_true', help='web rejection probe with an actually modified-source build')
 args = parser.parse_args()
 assert sum([args.menu, args.web, args.install, args.menu_maintenance]) <= 1, 'choose menu, web or installer probe'
 assert not args.fresh_install or args.install, 'fresh installation requires --install'
 assert not args.install_success or args.fresh_install, 'success probe requires --fresh-install'
 assert not args.dirty_source_rejection or args.web, 'dirty-source probe requires --web'
+assert not args.migration_failure or not (args.menu or args.web or args.menu_maintenance or args.install_success), 'migration probe is for the installer or updater'
 repo = Path(__file__).resolve().parents[2]
 busybox = Path('/usr/bin/busybox')
 assert busybox.is_file(), 'requires a static BusyBox fixture'
@@ -231,6 +244,8 @@ if args.menu_maintenance:
     cases = ['menu-refresh', 'menu-refresh-changed', 'menu-refresh-missing', 'menu-legacy',
              'menu-legacy-invalid', 'menu-install-missing-checksum', 'menu-install-wrong-checksum',
              'menu-install-checksum-name', 'menu-install-oversized', 'menu-install-success']
+if args.migration_failure:
+    cases = ['migration-failure']
 if args.case:
     assert args.case in cases, 'case does not belong to the selected probe mode'
     cases = [args.case]
@@ -265,7 +280,7 @@ for mode in cases:
         for command in ['apt-get','systemctl','pkill']:
             write(root, '/bin/'+command,
                   '#!/bin/bash\nprintf "'+command+' %s\\n" "$*" >> /fixture/actions\n'
-                  + ('[[ "$1" == stop ]] && exit 75\n' if command == 'systemctl' else '')
+                  + ('[[ "$1" == stop && $(cat /fixture/mode) != migration-failure ]] && exit 75\n' if command == 'systemctl' else '')
                   + ('[[ $(cat /fixture/mode) == dependency-failure ]] && exit 73\n' if command == 'apt-get' else '')
                   + 'exit 0\n', True)
         write(root, '/usr/local/x-ui/x-ui', '#!/bin/bash\nprintf "fixture-old-panel\\n"\n', True)
@@ -282,7 +297,7 @@ for mode in cases:
                 entry.size, entry.mode = len(payload), 0o755
                 tar.addfile(entry, io.BytesIO(payload))
         commit = info['commit']
-        if args.menu or args.web or args.menu_maintenance or install_success or mode in ['missing-panel','missing-unit','wrong-source','stock-core','service-stop-failure','dependency-failure']:
+        if args.menu or args.web or args.menu_maintenance or args.migration_failure or install_success or mode in ['missing-panel','missing-unit','wrong-source','stock-core','service-stop-failure','dependency-failure']:
             source = root / 'fixture/source'
             (source/'bin').mkdir(parents=True)
             for name in ['update.sh','install.sh','x-ui.sh','x-ui.rc','x-ui.service.debian','x-ui.service.arch','x-ui.service.rhel']:
@@ -291,7 +306,7 @@ for mode in cases:
             shutil.copy2(args.helper, source/'update-stage')
             shutil.copy2(args.panel, source/'x-ui')
             shutil.copy2(args.stock_core if mode == 'stock-core' else args.managed_core, source/'bin'/core_name)
-            if install_success:
+            if install_success or args.migration_failure:
                 write(source, '/bin/tuic-server', '#!/bin/sh\nexit 97\n', True)
             if mode == 'missing-panel': (source/'x-ui').unlink()
             if mode == 'missing-unit': (source/'x-ui.service.debian').unlink()
@@ -330,6 +345,10 @@ for mode in cases:
             write(root, '/fixture/unrelated-file', 'preserved outside the installation')
             preserved_paths = ['fixture/unrelated-file']
             absent_paths = []
+        if args.migration_failure:
+            write(root, '/fixture/unrelated-file', 'preserved outside the installation')
+            preserved_paths = ['fixture/unrelated-file']
+            absent_paths = []
         if mode.startswith('menu-refresh'):
             with (root/'usr/bin/x-ui').open('a') as menu:
                 menu.write('\n# obsolete installed menu copy\n')
@@ -364,11 +383,15 @@ for mode in cases:
                         'XUI_UPDATE_HELPER_SHA256':helper_sha})
         if args.install:
             env['FIXTURE_INSTALL'] = 'true'
-        if install_success:
-            env.update({'FIXTURE_INSTALL_SUCCESS':'true', 'XUI_NONINTERACTIVE':'1', 'XUI_DB_TYPE':'sqlite',
+        if args.migration_failure:
+            env['FIXTURE_MIGRATION_FAILURE'] = 'true'
+        if install_success or args.migration_failure:
+            env.update({'XUI_NONINTERACTIVE':'1', 'XUI_DB_TYPE':'sqlite',
                         'XUI_DB_DSN':'', 'XUI_DB_FOLDER':'/etc/x-ui', 'XUI_USERNAME':'fixture-admin',
                         'XUI_PASSWORD':'owned-fixture-only', 'XUI_PANEL_PORT':'18080',
                         'XUI_WEB_BASE_PATH':'fixture', 'XUI_SSL_MODE':'none', 'XUI_SERVER_IP':'127.0.0.1'})
+        if install_success:
+            env['FIXTURE_INSTALL_SUCCESS'] = 'true'
         write(root, '/fixture/env.json', json.dumps(env))
         shutil.copy2(repo/'update.sh', root/'update.sh')
         shutil.copy2(repo/'install.sh', root/'install.sh')
@@ -384,11 +407,11 @@ for mode in cases:
         proc = subprocess.run(['unshare','--mount-proc','--net','--pid','--fork','--kill-child=SIGKILL',
             sys.executable,str(Path(__file__).resolve()),'--child',tmp,os.readlink('/proc/self/ns/net'),
             os.readlink('/proc/self/ns/mnt'),marker], input=input_text,
-            text=True,capture_output=True,timeout=8 if args.menu else 120 if install_success else 65 if args.web else 40)
+            text=True,capture_output=True,timeout=8 if args.menu else 120 if install_success or args.migration_failure else 65 if args.web else 40)
         actions = (root/'fixture/actions').read_text().splitlines()
         preserved = all((root/p).is_file() and sha(root/p)==digest for p,digest in sentinels.items())
         stopped = 'systemctl stop x-ui' in actions
-        case = {'case':mode,'exit_code':proc.returncode,'old_files_preserved':preserved,
+        case = {'case':mode,'exit_code':proc.returncode,'sentinel_files_preserved':preserved,
                 'unexpected_marker_created':(root/'fixture/injected').exists(),
                 'service_stop_attempted':stopped,'actions':actions,'stderr':proc.stderr[-1500:],
                 'output_tail':proc.stdout.splitlines()[-6:]}
@@ -396,6 +419,19 @@ for mode in cases:
         print(json.dumps(case), flush=True)
         assert (proc.returncode == 0 if args.web or install_success or mode == 'menu-refresh' else proc.returncode != 0) and preserved, case
         assert all(not (root/path).exists() for path in absent_paths), case
+        if args.migration_failure:
+            assert 'Database migration failed:' in proc.stdout + proc.stderr, case
+            assert 'Migration done!' not in proc.stdout, case
+            assert not any(x.startswith(('systemctl start', 'systemctl restart', 'systemctl enable', 'pkill')) for x in actions), case
+            assert stopped == (not args.fresh_install), case
+            with sqlite3.connect(root/'etc/x-ui/x-ui.db') as db:
+                assert db.execute("SELECT value FROM settings WHERE key='ownedMigrationSentinel'").fetchone() == ('preserve',)
+                assert db.execute("SELECT settings FROM inbounds WHERE tag='migration-fixture'").fetchone() == ('{broken json',)
+            assert not list((root/'usr/local').glob('.x-ui-update-*')), case
+            if not args.install:
+                status = json.loads((root/'etc/x-ui/update-status.json').read_text())
+                assert status['state'] == 'failed' and status['exitCode'] != 0, case
+            continue
         if install_success:
             assert 'installedPanelHTTP' in proc.stdout and not stopped, case
             assert (root/'etc/x-ui/install-result.env').stat().st_mode & 0o777 == 0o600

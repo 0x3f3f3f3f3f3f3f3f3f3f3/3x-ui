@@ -34,7 +34,7 @@ func TestMigrationRequirementsWithoutLegacyProxyInbounds(t *testing.T) {
 					}
 				}
 				for range 2 {
-					if err := (&InboundService{}).MigrationRequirements(); err != nil {
+					if err := (&InboundService{}).MigrateDB(); err != nil {
 						t.Fatalf("migration without legacy proxy inbounds: %v", err)
 					}
 				}
@@ -104,7 +104,9 @@ func TestMigrationRequirements_BackfillsClientTrafficsWithMultiDomainInbound(t *
 	}
 
 	svc := InboundService{}
-	svc.MigrationRequirements()
+	if err := svc.MigrationRequirements(); err != nil {
+		t.Fatal(err)
+	}
 
 	// The backfill must have committed: the settings-only client now owns a row.
 	// Before the fix this was rolled back whenever the externalProxy detection query
@@ -183,7 +185,9 @@ func TestMigrationRequirements_CleansLegacyZeroAddrTag(t *testing.T) {
 	}
 
 	svc := InboundService{}
-	svc.MigrationRequirements()
+	if err := svc.MigrationRequirements(); err != nil {
+		t.Fatal(err)
+	}
 
 	var got model.Inbound
 	if err := db.First(&got, legacy.Id).Error; err != nil {
@@ -280,7 +284,9 @@ func TestMigrationRemoveOrphanedTraffics(t *testing.T) {
 	const trulyOrphanedEmail = "deleted@example.com"
 	mkTraffic(t, attachedIb.Id, trulyOrphanedEmail, 0, 0, 0, 0, true)
 
-	inboundSvc.MigrationRemoveOrphanedTraffics()
+	if err := inboundSvc.MigrationRemoveOrphanedTraffics(); err != nil {
+		t.Fatal(err)
+	}
 
 	cases := []struct {
 		name  string
@@ -365,7 +371,9 @@ func TestMigrationRequirements_NormalizesShareAddressFields(t *testing.T) {
 	}
 
 	svc := InboundService{}
-	svc.MigrationRequirements()
+	if err := svc.MigrationRequirements(); err != nil {
+		t.Fatal(err)
+	}
 
 	var gotInvalid model.Inbound
 	if err := db.First(&gotInvalid, invalidStrategy.Id).Error; err != nil {

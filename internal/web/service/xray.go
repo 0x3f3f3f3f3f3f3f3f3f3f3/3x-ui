@@ -1679,6 +1679,8 @@ func addOutboundReconciling(api *xray.XrayAPI, outbound []byte) error {
 	return api.AddOutbound(outbound)
 }
 
+var errXrayNotRunning = errors.New("xray is not running")
+
 // StopXray stops the running Xray process.
 func (s *XrayService) StopXray() error {
 	lock.Lock()
@@ -1692,7 +1694,7 @@ func (s *XrayService) StopXray() error {
 	if process != nil && process.IsRunning() {
 		return process.Stop()
 	}
-	return errors.New("xray is not running")
+	return errXrayNotRunning
 }
 
 // SetToNeedRestart marks that Xray needs to be restarted.

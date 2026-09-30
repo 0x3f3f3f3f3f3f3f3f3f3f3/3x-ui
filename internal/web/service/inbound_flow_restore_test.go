@@ -62,7 +62,10 @@ func TestRestoreVisionFlowForEligibleInbound(t *testing.T) {
 		`{"id":"u2","email":"none@x","flow":"","subId":"s2","enable":true}` +
 		`]}`
 
-	out, changed := ibSvc.restoreVisionFlowForEligibleInbound(nil, target, xhttpEnc, model.VLESS)
+	out, changed, err := ibSvc.restoreVisionFlowForEligibleInbound(nil, target, xhttpEnc, model.VLESS)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !changed {
 		t.Fatal("expected changed=true")
 	}
@@ -84,11 +87,11 @@ func TestRestoreVisionFlowForEligibleInbound(t *testing.T) {
 
 	// Ineligible inbound (xhttp without encryption) must be a no-op.
 	noenc := `{"clients":[{"id":"u1","email":"keep@x","flow":"","subId":"s1","enable":true}]}`
-	if _, ch := ibSvc.restoreVisionFlowForEligibleInbound(nil, noenc, `{"network":"xhttp","security":"reality"}`, model.VLESS); ch {
+	if _, ch, err := ibSvc.restoreVisionFlowForEligibleInbound(nil, noenc, `{"network":"xhttp","security":"reality"}`, model.VLESS); ch || err != nil {
 		t.Error("ineligible xhttp (no vlessenc) must not change")
 	}
 	// Non-VLESS must be a no-op.
-	if _, ch := ibSvc.restoreVisionFlowForEligibleInbound(nil, target, xhttpEnc, model.VMESS); ch {
+	if _, ch, err := ibSvc.restoreVisionFlowForEligibleInbound(nil, target, xhttpEnc, model.VMESS); ch || err != nil {
 		t.Error("non-VLESS must not change")
 	}
 }

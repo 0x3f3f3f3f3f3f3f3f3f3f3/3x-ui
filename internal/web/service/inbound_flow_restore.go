@@ -26,20 +26,20 @@ const visionFlow = "xtls-rprx-vision"
 // is Vision. It never invents a flow for a client that has none anywhere, and it
 // never overwrites an explicit non-empty flow. Returns the rewritten settings
 // JSON and whether anything changed.
-func (s *InboundService) restoreVisionFlowForEligibleInbound(tx *gorm.DB, settings, streamSettings string, protocol model.Protocol) (string, bool) {
+func (s *InboundService) restoreVisionFlowForEligibleInbound(tx *gorm.DB, settings, streamSettings string, protocol model.Protocol) (string, bool, error) {
 	if protocol != model.VLESS {
-		return settings, false
+		return settings, false, nil
 	}
 	if !inboundCanEnableTlsFlow(string(protocol), streamSettings, settings) {
-		return settings, false
+		return settings, false, nil
 	}
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(settings), &parsed); err != nil {
-		return settings, false
+		return settings, false, err
 	}
 	clients, ok := parsed["clients"].([]any)
 	if !ok || len(clients) == 0 {
-		return settings, false
+		return settings, false, nil
 	}
 	// Collect empty-flow clients, then resolve their intended flow in one query.
 	emails := make([]string, 0, len(clients))
@@ -56,11 +56,11 @@ func (s *InboundService) restoreVisionFlowForEligibleInbound(tx *gorm.DB, settin
 		}
 	}
 	if len(emails) == 0 {
-		return settings, false
+		return settings, false, nil
 	}
 	intended, err := s.clientService.EffectiveFlowsByEmails(tx, emails)
 	if err != nil {
-		return settings, false
+		return settings, false, err
 	}
 	changed := false
 	for i := range clients {
@@ -80,13 +80,13 @@ func (s *InboundService) restoreVisionFlowForEligibleInbound(tx *gorm.DB, settin
 		changed = true
 	}
 	if !changed {
-		return settings, false
+		return settings, false, nil
 	}
 	out, err := json.MarshalIndent(parsed, "", "  ")
 	if err != nil {
-		return settings, false
+		return settings, false, err
 	}
-	return string(out), true
+	return string(out), true, nil
 }
 
 func stripClientFlows(settings string) (string, bool) {

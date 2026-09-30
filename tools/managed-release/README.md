@@ -125,3 +125,11 @@ an oversized script and first installation followed by authenticated panel HTTP.
 Use `--case NAME` to rerun a single case from the selected mode. Refresh must make
 no network request or service restart; a shell expression in the release tag must
 be rejected before a fixture command marker can be created.
+
+`--migration-failure` seeds a real SQLite schema and a malformed inbound in the
+owned chroot, runs the updater through candidate preflight and file replacement,
+and requires a failed migration with no service start/restart. Combine with
+`--install` (and optionally `--fresh-install`) to check the corresponding installer
+path. Service/package managers remain fixture substitutes, and the copied program
+files are not rolled back. This mode requires a clean panel built with migration
+error propagation; it does not prove an upgrade recovery transaction.

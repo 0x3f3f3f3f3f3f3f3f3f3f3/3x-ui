@@ -5299,3 +5299,57 @@ unit and database fixture bytes remained intact on rejection. The real managed
 core passed preflight before the fixture intentionally refused service stop.
 This shell probe does not test successful panel activation or database rollback
 (`managed-core-helper-process.jsonl`).
+
+## 2026-09-30 — migration errors stop activation
+
+Behavioral RED on clean `4a56934b`: an owned fresh SQLite database migrated
+successfully, then received a disabled VLESS inbound with malformed settings.
+A second actual `x-ui migrate` logged `MigrationRequirements failed`, printed
+`Migration done!`, and exited **0** (`migration-cli-propagation-red.json`). A second
+RED reproduced a non-string legacy TLS domain on **both SQLite and PostgreSQL**:
+the old code panicked and committed the already-created client traffic and changed
+inbound settings (`migration-domain-red.jsonl`).
+
+Requirements migration now uses GORM's transaction wrapper, rejects malformed
+legacy objects, and rolls back errors and panics. Cleanup and Vision repair return
+errors, including intended-flow lookup failures, and later phases do not run after
+a failed phase. The CLI returns nonzero and suppresses the success message. Vision
+repair lookup failures also propagate through the normal inbound-edit transaction.
+The updater migrates before starting the newly copied service. All three database
+import paths check service migration errors and leave the core stopped on failure;
+the SQLite import keeps and identifies its previous database backup.
+
+Executed checks (all completed, with no skipped cases):
+
+- SQLite/PostgreSQL migration error phases, malformed legacy-domain rollback,
+  injected panic after an actual traffic insert, healthy empty/SSH-only repeated
+  migrations, existing migration regressions and SQLite failed import backup:
+  `migration-errors-import-green.jsonl`, **13 top-level + 22 subtests**, race and
+  shuffled order, PASS.
+- Additional actual PostgreSQL restore/copy integration plus error-phase and
+  healthy migration checks: `migration-import-pg-green.jsonl`, **4 top-level + 17
+  subtests**, race, PASS. The dump fixture contains only its randomly named owned
+  schema; real PostgreSQL 16.15 `pg_dump`/`pg_restore` restore that schema. The
+  SQLite→PostgreSQL path uses the real copy routine. Both reach the intentionally
+  malformed stored inbound and report failure without calling deferred restart.
+- Actual built CLI: fresh migration succeeds; invalid JSON, null client and numeric
+  legacy domain each return failure without `Migration done!`, retaining original
+  inbound settings. Together with Vision edit/disable and core lifecycle regression:
+  `migration-cli-flow-lifecycle-green.jsonl`, **6 top-level + 3 subtests in two
+  packages**, race, PASS.
+- Shell syntax, Python probe parsing and `git diff --check` passed. An intermediate
+  compile failure from an updated callback return signature was corrected before
+  the successful runs above; `migration-errors-green1.jsonl` records that failure.
+
+These checks do not establish atomic migration across all phases. A failed import
+can leave the imported database active for panel requests, with the core stopped;
+there is no new writer-admission barrier. Program files copied by shell activation
+are not yet rolled back after migration failure. Full activation snapshots,
+concurrent update exclusion, health recovery, crash recovery and billing-safe
+rollback remain open. No current full-repository runtime suite is claimed here.
+
+Repository-wide `golangci-lint run --concurrency 1 ./...` completed with **0
+issues** (`migration-errors-lint-final.log`). Its initial run found two formatting
+issues in new test files; both were corrected, with no behavioral changes.
+The clean-source chroot migration-failure probe is an additional post-commit gate
+before publishing this increment.

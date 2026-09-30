@@ -820,7 +820,6 @@ config_after_update() {
 
     echo -e "${yellow}x-ui settings:${plain}"
     ${xui_folder}/x-ui setting -show true
-    ${xui_folder}/x-ui migrate
 
     # Properly detect empty cert by checking if cert: line exists and has content after it
     local existing_cert=$(${xui_folder}/x-ui setting -getCert true 2> /dev/null | grep 'cert:' | awk -F': ' '{print $2}' | tr -d '[:space:]')
@@ -1044,6 +1043,7 @@ update_x-ui() {
     if [[ -f "${xui_folder}/bin/config.json" ]]; then
         chmod 640 "${xui_folder}/bin/config.json" || _fail "ERROR: Cannot set configuration permissions."
     fi
+    "${xui_folder}/x-ui" migrate || _fail "ERROR: Database migration failed; the updated service has not been started."
     if [[ "$release" == alpine ]]; then
         local xui_rc_temp="/etc/init.d/x-ui.tmp.$$"
         if ! cp -- "${xui_folder}/x-ui.rc" "$xui_rc_temp" || ! chmod 755 "$xui_rc_temp" || ! chown root:root "$xui_rc_temp" || ! mv -f -- "$xui_rc_temp" /etc/init.d/x-ui; then

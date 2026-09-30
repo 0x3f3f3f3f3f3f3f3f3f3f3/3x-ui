@@ -1380,7 +1380,7 @@ EOF
         fi
     fi
 
-    ${xui_folder}/x-ui migrate
+    "${xui_folder}/x-ui" migrate
 }
 
 # setup_fail2ban auto-installs and configures fail2ban for the IP Limit feature
