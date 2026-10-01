@@ -990,5 +990,5 @@ as unknown, preventing later proof insertion from promoting their history.
   regressions; update required CI PASS names and shell/YAML checks.
 - [x] One read-only review/same-review corrections, frozen source, required
   gen/lint/vet/full Go/affected race and scoped capability/testing docs.
-- [ ] Logical commit/exact fork push, distinct clean builds and provenance.
+- [x] Logical commit/exact fork push, distinct clean builds and provenance.
   Future full mapping/consumption and password handoff remain unfinished.

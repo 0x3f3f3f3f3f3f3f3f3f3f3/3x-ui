@@ -16,6 +16,7 @@ Checked 2026-09-28 against GitHub API and checked-out source, not search snippet
 | Protocol API | planned additive custom capabilities/control API v1; upstream existing APIs retained |
 | mieru candidate | official stable `v3.38.0`, `b961978c3be9dd26b94158487c760858e19d1db2`; not yet integrated |
 | OpenSnell candidate | latest release `v1.0.4`; source audit main `3100984fd7c3a2bd7b41e292ad41f10d928bfb2d`; release/main feature differences must be resolved before integration |
+| sing-snell candidate | `v0.0.0-20260904135315-bc5a12ac736f`, `bc5a12ac736f235b2de2926ecd2791cc925e6b8c`; public v4/v5/v6 TCP/UDP framing; core integration and official interop pending |
 | SSH library | panel already pins `golang.org/x/crypto v0.57.0`; core currently `v0.55.0`; choose a single tested build list when adapter lands |
 
 Ruling: preserve fork main and its existing core types rather than downgrade to older stable releases. Record prerelease accurately. Do not merge newer upstream commits into protected branches during this task.
@@ -33,7 +34,7 @@ Panel is GPLv3. Imported Xray retains MPL-2.0 and file-specific notices. No seco
 
 ## Deeper dependency audit
 
-OpenSnell commit `3100984f` contains public v4/v5 code, but `SNELL_V6.md` explicitly says its v6 implementation is closed-source. Its installer downloads an official external server. Therefore this repository does **not** provide a usable embedded v6 implementation; its installer cannot satisfy this task. Independent lawful compatibility work/library evaluation remains required, not marked inapplicable.
+OpenSnell commit `3100984f` contains public v4/v5 code, but `SNELL_V6.md` explicitly says its v6 implementation is closed-source. Its installer downloads an official external server. Therefore this repository does **not** provide a usable embedded v6 implementation; its installer cannot satisfy this task. The 2026-10-01 audit identified a separate public sing-snell v6 candidate below. Core integration and interoperability remain required, not marked inapplicable.
 
 At mieru `b961978c`, `apis/server.Accept` returns a connection plus a parsed request and requires `UserContext`; server configuration rejects its own egress settings. This is an appropriate dispatcher integration boundary. `apis/server/interface.go` explicitly states Stop leaves established connections alive; the core adapter must track and terminate them itself. These are source findings, not interoperability results.
 
@@ -66,3 +67,26 @@ paired-device regression covers increasing, decreasing and clearing padding.
 A root-module `replace` makes normal builds and CI use the checked-in repairs.
 This preserves the current panel-side runtime; AmneziaWG's single-core migration
 remains a separate, unimplemented requirement.
+
+
+## Native protocol audit update, 2026-10-01
+
+[sing-snell pinned source](https://github.com/SagerNet/sing-snell/tree/bc5a12ac736f235b2de2926ecd2791cc925e6b8c)
+provides public v4/v5 and v6 service/client APIs with externally supplied handlers
+and dialers. Source archive SHA-256 is
+`353891a9f3f6e6cea714d8c815b7eefe5d1750bbf02d7d2373f69d1ab2bbf586`;
+license is GPL-3.0-or-later. This is a viable integration candidate, without a
+claim of official Surge interoperability. It requires a newer sing dependency,
+whose effects on existing adapters need tests. Use one PSK/exclusive listener per
+trusted canonical identity; shared-PSK wire user identifiers do not establish
+independent billing identities. v5 QUIC is absent here; OpenSnell has a separate
+codec candidate, whose stock target-dialing server cannot replace Dispatcher.
+v6 unsafe-raw mode does not establish normal PSK authentication.
+Evidence: /root/task-evidence/native-snell-source-audit.json.
+
+An independent Go SSH/OpenSSH probe passed local forwarding, dynamic forwarding,
+opt-in reverse forwarding, rejected exec/default reverse forwarding and outbound
+host-key pin success/failure. It used ephemeral business test keys and no system
+sshd. This is library/wire evidence only; native core Dispatcher, shared policy,
+lifecycle and panel acceptance remain open. The existing core x/crypto library
+provides the adapter boundary; no SSH sidecar or management Git key is involved.

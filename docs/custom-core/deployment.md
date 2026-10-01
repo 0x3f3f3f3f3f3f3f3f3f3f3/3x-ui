@@ -291,3 +291,30 @@ consumption and password live legacy handoff remain incomplete. Whole Task5B
 and the original single-core/protocol/install goal remain open. The prior
 default frontend timeout/split suite records remain in testing.md; this build
 does not claim a new full frontend or native-core test suite.
+
+
+### Clean-source native configuration provenance checkpoint
+
+Commit `da5d86f575133959e4ab9326a56042232a18e3c1` was rebuilt from clean
+clone `/tmp/legacy-traffic-config-proof-clean-source-gcv6vh8r` with Go 1.27.1,
+Node 26.10.0/npm 11.19.1 and shared verified caches. npm ci (18.80 s),
+frontend build (4.09 s), panel (18.70 s), core (10.20 s) and both version
+commands pass. Source status is clean; panel reports `dev+da5d86f5`, and core
+includes the full revision without `-dirty`. Fork push matches the exact SHA.
+No deployment, release, merge or business service startup occurred.
+
+Distinct artifacts preserve all ten preceding checkpoint binaries, rehashed
+unchanged after this build:
+
+- `build/x-ui-legacy-traffic-config-proof-checkpoint`: SHA-256
+  `da1867bb63142ea925fc660f8ebb141569fadcd558bb3601229b2975dfab0e6c`.
+- `build/custom-xray-legacy-traffic-config-proof-checkpoint`: SHA-256
+  `e64447158cc9cfbd9163a334f132de36187fcb38c6c6300c1c926184635d5e84`.
+
+Evidence: /root/task-evidence/legacy-traffic-config-proof-clean-build-results.json,
+clean-build-manifest.json, post-build-prior-preservation.json and per-revision
+push receipt. Startup proof and conservative saved-configuration drift retention
+are verified; historical API mutation proof, owner mapping and live legacy
+handoff remain open. Further password migration work is deferred: the execution
+priority is native Snell, mieru and SSH. This build does not claim a new full
+frontend or native protocol test suite.
