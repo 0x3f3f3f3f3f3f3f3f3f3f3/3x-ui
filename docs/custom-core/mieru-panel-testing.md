@@ -118,3 +118,22 @@ exits 0. Frontend source was unchanged by this correction; the preceding
 Parent integration, refreshed parent binaries and clean-source publication
 remain separate gates. SSH/Snell panel integration, coordinated remote budgets
 and packaged official-client/device acceptance are not asserted here.
+
+## Merged-parent gates
+
+Main feature candidate b1773bf1 uses the same native SSH/mieru/Snell QUIC core.
+A separately named integrated review binary has SHA256
+30ed11a877b4650379f4bdcd672b5e2dc47b5d5c0438b52be91cfa524884f0cf.
+The parent SQLite34 and corrected PostgreSQL36 required race gates pass.
+The initial PG external-link failures were duplicate rows caused by missing
+schema isolation in two new regression tests. They now use temporary schemas;
+count2 and the complete required rerun pass. Initial log remains preserved.
+
+Parent complete Go/AWG and175 core-package tests, generation, lint0/vet0,
+frontend typecheck/lint pass. The37 changed frontend files match the preceding
+reviewed290-test tree exactly. Parent core race requires27 native mieru,23 SSH
+and42 Snell PASS names. Optional official Snell fixtures are absent in that
+broad race run and their skips are not acceptance passes; the separate parent
+official-fixture command passes all four actual v1/v2 HTTP/3 paths and first13k
+with zero skips. All logs use native-mieru-panel-quic-parent-* or
+native-three-protocol-parent-* under /root/task-evidence.

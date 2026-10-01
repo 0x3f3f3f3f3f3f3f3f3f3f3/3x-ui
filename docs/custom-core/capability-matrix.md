@@ -17,9 +17,9 @@ This is the initial source-audit matrix, not a support announcement. `E/U` = exi
 | TUN | E/U inbound | no account auth; resource identity required | N | packet semantics, route and owner mapping |
 | Tunnel/dokodemo-door | E/U inbound; NA outbound (listener adapter) | database, local stable-owner picker, raw TCP/UDP source ACL, concrete outbound selector and scoped ordinary Runtime owner lifecycle I/V; complete forwarding UI/unowned-rule migration N | I/V for scoped Tunnel/local persistence/SQL settlement, automatic local activation and guarded handoff | remaining forwarding modes/owner lifecycle, full shared-policy coverage |
 | Snell v4 | native core TCP/UDP-over-TCP/reuse inbound/outbound I/V scoped | native immutable PSK owner, rotation/removal and idle cleanup I/V; panel/API/DB/forms/export N | native Dispatcher/CPE shared Tunnel directional rate/billing/quota/disable/expiry I/V scoped | official v4.1.1 server/native outbound verified; actual Surge-client inbound remains unverified |
-| Snell v5 | native core TCP/UDP-over-TCP/reuse inbound/outbound I/V scoped; QUIC Proxy Mode N | native immutable PSK owner and resource cleanup I/V; panel/API/DB/forms/export N | native shared directional policy and actual datagram boundaries I/V scoped | official v5.0.1 server scoped interop; official large first reply truncation recorded; mandatory native QUIC and actual Surge-client inbound remain open |
+| Snell v5 | native core TCP/UDP-over-TCP/reuse and v5 QUIC inbound/outbound I/V scoped | native immutable PSK owner and resource cleanup I/V; panel/API/DB/forms/export N | native shared directional policy and actual datagram boundaries I/V scoped | official v5.0.1 server, first13k and real v1/v2 HTTP/3 I/V scoped; ordinary TCP large first reply truncation remains; actual Surge-client inbound remains unverified |
 | Snell v6 beta | native core TCP/UDP-over-TCP/reuse/default shaping/unshaped I/V scoped | native immutable PSK owner and resource cleanup I/V; panel/API/DB/forms/export N | native shared policy/decoded payload/accounting/live close I/V scoped | fixed official v6.0.0rc2 server scoped interop; missing-reply assertion Minor recorded; actual official client and broader mode matrix remain open |
-| mieru | native core inbound/outbound I/V scoped; panel integration N | core typed users/removal/listener cleanup I/V; panel/API/DB/forms/export N | core decoded payload, shared Tunnel directional rate/billing/quota/disable/expiry I/V scoped | pinned official-library TCP/UDP/mux interop; full panel lifecycle and packaged reference validation remain open |
+| mieru | native core inbound/outbound and local panel I/V scoped | independent SQL credentials, canonical RPC users, CRUD/attach/bulk/forms/official export and listener cleanup I/V local | decoded payload/shared Tunnel policy, exact billing, live disable/expiry/quota/rotation and restart I/V scoped | official-library TCP/UDP/mux; SQLite34/PG36 actual-child panel acceptance; packaged official clients/devices and coordinated nodes remain open |
 | SSH | native core inbound/outbound I/V scoped; panel integration N | verified public key and opt-in password, credential revocation, bounded transports/channels/listeners I/V; panel/API/DB/forms/export/key provisioning N | direct Dispatcher and client-relative reverse CPE, shared Tunnel rate/billing/quota/disable/expiry/restart I/V scoped | real OpenSSH -L/-D/authorized -R and strict native outbound pin verified; full panel lifecycle remains open |
 | MTProto | E/U external mtg-multi; migration N | E/U secrets/ad-tags | N | preserve features, move execution into core |
 | TUIC v5 | E/U external tuic-server; migration N | E/U | N | preserve QUIC/UDP, remove panel relay after parity |
@@ -62,7 +62,7 @@ Lack of an upstream API, platform test machine or commercial client is **not** i
 - Selected SOCKS outbound and default block: exercised in one core instance with a separate internal SOCKS listener as the test upstream. Metering is once at the managed ingress. Missing managed policy rejects traffic.
 - Engine primitives: fixed-point multipliers, batch/fraction invariance, concurrent quota, reason composition, expiry, stale policy/revocation and shared directional token buckets pass race tests. These are not proof of all protocols, global limits or persistent accounting.
 - 100 MiB quota at multiplier 2: admitted 50 MiB bidirectional payload; exact figures and endpoint loss are in testing.md.
-- Panel UI/API/DB integration, durable panel settlement/restore fencing, Snell adapters and full mieru/SSH panel integration, ACL/listener ownership lifecycle and full single-core migration are still N.
+- Panel UI/API/DB integration, durable panel settlement/restore fencing, Snell/SSH panel integration and broader mieru packaged-client/node validation, ACL/listener ownership lifecycle and full single-core migration are still N.
 
 - Independent binary TCP Tunnel rates: two connections share each configured upload/download limit, 256 KiB/s and 1 MiB/s; six cases including unlimited controls pass. See testing.md and evidence/tunnel-rates.jsonl.
 
@@ -282,3 +282,21 @@ The following native mieru core increment is I/V in the scope of its matrix row;
 its panel integration and the Snell increment remain open; native SSH core is
 subsequently verified within its scoped matrix row, with SSH panel integration open. Protocol source
 audits and isolated wire probes alone do not establish native support.
+
+## Mieru panel / Snell QUIC local increment — 2026-10-01
+
+The merged native core passes27 mieru,23 SSH and42 Snell required race names.
+Official-server QUIC checks include all four HTTP/3 v1/v2 paths and strict
+first13k IPv4/IPv6; proprietary Surge inbound remains UNVERIFIED. The local
+mieru panel now passes34 SQLite and36 actual PostgreSQL required cases against
+that same core, including canonical authentication, native forms, official
+profile/JSON export, shared Tunnel usage and public runtime lifecycle.
+Review corrections preserve concurrent rotations, native profile names/full
+external links and stable subscription tags on duplicate endpoints.
+
+Full root/AWG and175 core-package regressions, generation/static checks pass.
+The reviewed290-test frontend tree is byte-identical after integration.
+SSH/Snell panel, packaged-client/device checks, remote coordinated budgets and
+whole-system sidecar/distribution migration remain separate incomplete work.
+See mieru-panel-testing.md and native-snell-quic-testing.md for exact evidence
+and limitations; this increment is not whole-project completion.

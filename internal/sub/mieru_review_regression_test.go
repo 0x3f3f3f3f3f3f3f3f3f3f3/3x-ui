@@ -9,10 +9,16 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
+	"github.com/mhsanaei/3x-ui/v3/internal/testpg"
 	"github.com/mhsanaei/3x-ui/v3/internal/util/link"
 )
 
 func TestMieruExternalRemarkRoundTrip(t *testing.T) {
+	cleanup, err := testpg.IsolatePackage("mieru_external_remark")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
 	seedSubDB(t)
 	client := model.ClientRecord{Email: "external", SubID: "native-remark", Enable: true}
 	if err := database.GetDB().Create(&client).Error; err != nil {
@@ -39,6 +45,11 @@ func TestMieruExternalRemarkRoundTrip(t *testing.T) {
 }
 
 func TestMieruExternalFullConfigDownload(t *testing.T) {
+	cleanup, err := testpg.IsolatePackage("mieru_external_full")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
 	seedSubDB(t)
 	profile, err := appctl.URLToClientProfile("mierus://user:secret@native.example.test?profile=full&port=8443&protocol=TCP")
 	if err != nil {

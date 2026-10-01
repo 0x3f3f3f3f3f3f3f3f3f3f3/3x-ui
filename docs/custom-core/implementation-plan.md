@@ -130,17 +130,18 @@ Files: core `proxy/ssh`, config/control and existing panel protocol forms/export
 
 Files: core `proxy/mieru`, source-pinned library adapter, panel protocol/config/export paths.
 
-- [ ] Audit embedded Accept/authentication context and all target dial paths at pinned version; prevent independent dialing.
-- [ ] Test official client TCP/UDP, mux and deletion of active users/listeners before completing adapter.
-- [ ] Use one unified quota source, trusted username mapping, route selection and policy wrappers; integrate full panel lifecycle.
+- [x] Audit embedded Accept/authentication context and all target dial paths at pinned version; prevent independent dialing.
+- [x] Test pinned official-library client TCP/UDP, mux and deletion of active users/listeners; packaged client/device acceptance remains open below.
+- [x] Use one unified local quota source, trusted username mapping, route selection and policy wrappers; integrate existing panel CRUD/forms/export and real child lifecycle.
+- [ ] Verify packaged official clients/devices and coordinated remote-node lifecycle; retain the explicit local scope.
 
 ## Task 9: Snell v4, v5 and v6 separately
 
 Files: core `proxy/snell`, necessary managed library adaptation, panel version-specific config/export.
 
-- [ ] Audit OpenSnell source/license and independently pin each compatibility target.
+- [x] Audit OpenSnell source/license and independently pin each compatibility target.
 - [x] Implement v4 native core inbound/outbound with TCP, UDP-over-TCP, reuse and trusted PSK/listener mapping; panel integration remains open.
-- [ ] Implement/test v5 independently including QUIC Proxy Mode; no substitute TCP/UDP-only claim.
+- [x] Implement/test v5 independently including native QUIC Proxy Mode, official server and real v1/v2 HTTP/3; actual proprietary Surge inbound acceptance remains unverified.
 - [ ] Implement/test v6 beta modes against fixed official client/server combination; no external-server runtime fallback.
 - [ ] Maintain separate self-test versus official Surge interoperability evidence; if commercial client unavailable supply exact external procedure and leave unverified.
 
@@ -1023,3 +1024,27 @@ Clean Snell TCP/UDP checkpoint sourced from d4b93bbb was built and exactly
 pushed to the fork feature branch; both named artifacts and27 preserved prior
 hashes are recorded in native-snell-testing.md. Native v5 QUIC and Snell panel
 integration continue; this is a core-only checkpoint, with no deployment.
+
+## Native mieru panel and Snell QUIC merged verification — 2026-10-01
+
+Reviewed Snell QUIC fee56ca3 integrates as7a822795. The mieru panel plan, backend,
+forms, export and single review correction integrate as1f523178,772f7dac,
+8d884f9a,994e27b7 andb1773bf1. All native SSH/mieru/Snell core code remains in the
+same managed core. CI preserves prior references and adds the combined42 Snell
+required guard plus34 SQLite/36 PostgreSQL mieru panel guards.
+
+Merged-source race verification passes27 mieru core,23 SSH and42 Snell named
+acceptances. A separate merged official-fixture run passes all four real QUIC
+v1/v2 HTTP/3 paths and strict first13k/native UDP TCP fallback with zero skips.
+SQLite34 and actualPG36 public panel required cases pass against the merged
+core. The initial PG run found two new tests lacked schema isolation; repeated
+failures are retained, isolated count2 and the complete36-name rerun pass.
+Product code was not weakened to resolve a setup failure.
+
+Complete root Go/AWG,175 core-package shuffled regression, generation, lint0,
+vet, frontend typecheck/lint pass. All37 changed frontend files exactly match
+the independently reviewed290-test candidate; no duplicate broad frontend run
+was needed. Distinct clean-source artifacts and fork publication follow this
+validation commit. New SSH panel design/plan are staged for inline execution;
+SSH/Snell panel, packaged clients, coordinated nodes, sidecar migration and the
+remaining whole-project matrix remain open.
