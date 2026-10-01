@@ -25,6 +25,14 @@ const (
 func inboundTransports(protocol model.Protocol, streamSettings, settings string) transportBits {
 	// protocols that ignore streamSettings entirely.
 	switch protocol {
+	case model.Mieru:
+		var native struct {
+			Transport string `json:"transport"`
+		}
+		if json.Unmarshal([]byte(settings), &native) == nil && native.Transport == "UDP" {
+			return transportUDP
+		}
+		return transportTCP
 	case model.Hysteria, model.WireGuard, model.AmneziaWG, model.TUIC:
 		return transportUDP
 	case model.MTProto:

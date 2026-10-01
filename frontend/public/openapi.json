@@ -1747,6 +1747,12 @@
             "description": "IP limit for this client",
             "type": "integer"
           },
+          "mieruPassword": {
+            "type": "string"
+          },
+          "mieruUsername": {
+            "type": "string"
+          },
           "password": {
             "description": "Client password",
             "type": "string"
@@ -2082,6 +2088,12 @@
           },
           "limitIp": {
             "type": "integer"
+          },
+          "mieruPassword": {
+            "type": "string"
+          },
+          "mieruUsername": {
+            "type": "string"
           },
           "password": {
             "type": "string"
@@ -3277,7 +3289,8 @@
               "tun",
               "mtproto",
               "amneziawg",
-              "tuic"
+              "tuic",
+              "mieru"
             ],
             "example": "vless",
             "type": "string"

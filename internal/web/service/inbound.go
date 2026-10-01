@@ -651,6 +651,7 @@ func (s *InboundService) emailSubIDsForClients(clients []model.Client) (map[stri
 // generation, port-conflict detection, flow eligibility) keys on.
 func (s *InboundService) normalizeStreamSettings(inbound *model.Inbound) {
 	protocolsWithStream := map[model.Protocol]bool{
+		model.Mieru:       true,
 		model.VMESS:       true,
 		model.VLESS:       true,
 		model.Trojan:      true,
@@ -1103,6 +1104,9 @@ func (s *InboundService) normalizeMtprotoXrayPort(inbound *model.Inbound, oldSet
 // Returns the created inbound, whether Xray needs restart, and any error.
 func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, bool, error) {
 	inbound.Id = 0
+	if err := prepareMieruInbound(inbound); err != nil {
+		return inbound, false, err
+	}
 	if err := prepareTunnelOwnerCommand(inbound); err != nil {
 		return inbound, false, err
 	}
@@ -1211,6 +1215,8 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	// Secure client ID
 	for _, client := range clients {
 		switch inbound.Protocol {
+		case model.Mieru:
+			// Native authentication uses its independent username/password pair.
 		case model.Tunnel:
 			// The listener owns the account; there is no protocol credential.
 		case "trojan":
@@ -1800,6 +1806,9 @@ func (s *InboundService) SetInboundEnable(id int, enable bool) (bool, error) {
 
 func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, bool, error) {
 	defer lockInbound(inbound.Id).Unlock()
+	if err := prepareMieruInbound(inbound); err != nil {
+		return inbound, false, err
+	}
 	legacyShareAddr := legacyMtprotoShareAddr(inbound)
 	inbound.TrafficResetDay = normalizeTrafficResetDay(inbound.TrafficResetDay)
 	// Normalize streamSettings based on protocol

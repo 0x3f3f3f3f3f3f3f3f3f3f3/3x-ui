@@ -225,11 +225,11 @@ func diffInbounds(oldCfg, newCfg *Config, diff *HotDiff, managedPassword bool) b
 // droppedClients lists the emails an inbound present in both configs stopped
 // serving, whatever its protocol: settings.clients is the shape they all share.
 func droppedClients(oldIb, newIb *InboundConfig) []UserOp {
-	oldClients, _, ok := splitSettingsClients(oldIb.Settings)
+	oldClients, _, ok := splitSettingsClients(oldIb.Settings, inboundAccountListField(oldIb.Protocol))
 	if !ok {
 		return nil
 	}
-	newClients, _, ok := splitSettingsClients(newIb.Settings)
+	newClients, _, ok := splitSettingsClients(newIb.Settings, inboundAccountListField(newIb.Protocol))
 	if !ok {
 		return nil
 	}
@@ -242,7 +242,7 @@ func droppedClients(oldIb, newIb *InboundConfig) []UserOp {
 	return dropped
 }
 
-var userDiffableProtocols = map[string]struct{}{"vless": {}, "vmess": {}, "trojan": {}, "hysteria": {}}
+var userDiffableProtocols = map[string]struct{}{"vless": {}, "vmess": {}, "trojan": {}, "hysteria": {}, "mieru": {}}
 
 // diffInboundUsers emits per-user AlterInbound ops when two same-tag inbounds
 // differ only in settings.clients, so the handler (and its listener) survives.
@@ -258,11 +258,11 @@ func diffInboundUsers(oldIb, newIb *InboundConfig, diff *HotDiff) bool {
 		!rawEqualNormalized(oldIb.Sniffing, newIb.Sniffing) {
 		return false
 	}
-	oldClients, oldRest, ok := splitSettingsClients(oldIb.Settings)
+	oldClients, oldRest, ok := splitSettingsClients(oldIb.Settings, inboundAccountListField(oldIb.Protocol))
 	if !ok {
 		return false
 	}
-	newClients, newRest, ok := splitSettingsClients(newIb.Settings)
+	newClients, newRest, ok := splitSettingsClients(newIb.Settings, inboundAccountListField(newIb.Protocol))
 	if !ok {
 		return false
 	}
@@ -294,7 +294,18 @@ type clientEntry struct {
 
 // splitSettingsClients indexes settings.clients by email and returns the rest of
 // the settings in canonical form; ok is false when a client has no unique email.
-func splitSettingsClients(raw json_util.RawMessage) (map[string]clientEntry, []byte, bool) {
+func inboundAccountListField(protocol string) string {
+	if protocol == "mieru" {
+		return "users"
+	}
+	return "clients"
+}
+
+func splitSettingsClients(raw json_util.RawMessage, fields ...string) (map[string]clientEntry, []byte, bool) {
+	field := "clients"
+	if len(fields) > 0 {
+		field = fields[0]
+	}
 	if len(raw) == 0 {
 		return nil, nil, false
 	}
@@ -304,7 +315,7 @@ func splitSettingsClients(raw json_util.RawMessage) (map[string]clientEntry, []b
 	if err := decoder.Decode(&settings); err != nil {
 		return nil, nil, false
 	}
-	clientsRaw, hasClients := settings["clients"].([]any)
+	clientsRaw, hasClients := settings[field].([]any)
 	if !hasClients {
 		return nil, nil, false
 	}
@@ -327,7 +338,7 @@ func splitSettingsClients(raw json_util.RawMessage) (map[string]clientEntry, []b
 		}
 		clients[email] = clientEntry{user: obj, norm: norm}
 	}
-	delete(settings, "clients")
+	delete(settings, field)
 	rest, err := json.Marshal(settings)
 	if err != nil {
 		return nil, nil, false

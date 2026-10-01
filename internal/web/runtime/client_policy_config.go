@@ -175,6 +175,7 @@ func managedUserIdentity(config *xray.Config, user xray.UserOp) (string, error) 
 		var accounts struct {
 			Clients  []identity `json:"clients"`
 			Accounts []identity `json:"accounts"`
+			Users    []identity `json:"users"`
 		}
 		if err := json.Unmarshal(inbound.Settings, &accounts); err != nil {
 			return "", err
@@ -182,6 +183,9 @@ func managedUserIdentity(config *xray.Config, user xray.UserOp) (string, error) 
 		entries := accounts.Clients
 		if inbound.Protocol == "mixed" || inbound.Protocol == "http" {
 			entries = accounts.Accounts
+		}
+		if inbound.Protocol == "mieru" {
+			entries = accounts.Users
 		}
 		var id string
 		for _, account := range entries {

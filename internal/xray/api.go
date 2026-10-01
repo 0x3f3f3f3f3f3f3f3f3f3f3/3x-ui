@@ -29,6 +29,7 @@ import (
 	"github.com/xtls/xray-core/infra/conf"
 	corehttp "github.com/xtls/xray-core/proxy/http"
 	hysteriaAccount "github.com/xtls/xray-core/proxy/hysteria/account"
+	"github.com/xtls/xray-core/proxy/mieru"
 	"github.com/xtls/xray-core/proxy/shadowsocks"
 	"github.com/xtls/xray-core/proxy/shadowsocks_2022"
 	"github.com/xtls/xray-core/proxy/socks"
@@ -577,6 +578,19 @@ func isShadowsocks2022Cipher(cipher string) bool {
 // that would panic the core and kill every connection on the server.
 func buildUserAccount(protocolName string, user map[string]any) (*serial.TypedMessage, error) {
 	switch protocolName {
+	case "mieru":
+		username, err := getRequiredUserString(user, "username")
+		if err != nil {
+			return nil, err
+		}
+		password, err := getRequiredUserString(user, "password")
+		if err != nil {
+			return nil, err
+		}
+		if err := mieru.ValidateCredentials(username, password); err != nil {
+			return nil, err
+		}
+		return serial.ToTypedMessage(&mieru.Account{Username: username, Password: password}), nil
 	case "socks", "mixed", "http":
 		username, err := getRequiredUserString(user, "user")
 		if err != nil {

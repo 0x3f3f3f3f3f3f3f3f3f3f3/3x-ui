@@ -1721,6 +1721,12 @@ export const SCHEMAS: Record<string, unknown> = {
         "description": "IP limit for this client",
         "type": "integer"
       },
+      "mieruPassword": {
+        "type": "string"
+      },
+      "mieruUsername": {
+        "type": "string"
+      },
       "password": {
         "description": "Client password",
         "type": "string"
@@ -2056,6 +2062,12 @@ export const SCHEMAS: Record<string, unknown> = {
       },
       "limitIp": {
         "type": "integer"
+      },
+      "mieruPassword": {
+        "type": "string"
+      },
+      "mieruUsername": {
+        "type": "string"
       },
       "password": {
         "type": "string"
@@ -3251,7 +3263,8 @@ export const SCHEMAS: Record<string, unknown> = {
           "tun",
           "mtproto",
           "amneziawg",
-          "tuic"
+          "tuic",
+          "mieru"
         ],
         "example": "vless",
         "type": "string"

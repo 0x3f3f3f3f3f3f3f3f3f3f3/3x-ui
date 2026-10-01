@@ -31,7 +31,7 @@ Existing React forms and official library serializers serve UI/export.
 - Missing native capability must reject before SQL preparation/handler writes.
 - Exact UDP transport, profile and Unicode/IPv6 export must survive round trips.
 
-## Task8B1: Persisted credentials and canonical runtime binding
+### Task 1: Task8B1 — Persisted credentials and canonical runtime binding
 
 Files: model/model.go; service/{client_crud.go,client_link.go,xray.go,
 client_policy_config.go,inbound.go}; create service/mieru_accounts.go;
@@ -46,22 +46,24 @@ GetManagedXrayConfig; new internal validation/projection helpers accept the
 existing model.Client/ClientRecord and xray.InboundConfig types. No new public
 CRUD endpoint is needed.
 
-- [ ] JSON credential persistence/record round-trip, omitted update, duplicate
+- [x] JSON credential persistence/record round-trip, omitted update, duplicate
   listener username, independent protocol passwords and saved SQL binding tests
   first fail behaviorally on the current source.
-- [ ] Add two SQL/client fields, conversions/merge/defaults and UTF-8 byte-limit
+- [x] Add two SQL/client fields, conversions/merge/defaults and UTF-8 byte-limit
   validation; preserve old fields/backup defaults and pass credential tests.
-- [ ] Native users generation and concurrent-rotation tests first fail; add
+- [x] Native users generation and concurrent-rotation tests first fail; add
   immutable SQL identity binding, credential equality and empty users arrays.
-- [ ] Missing native capability and account mutations first fail; add typed
+- [x] Missing native capability and account mutations first fail; add typed
   account, negotiated native marker and users-array hot diff, passing real
   private-control tests against current and preceding checkpoint binaries.
-- [ ] Verify SQLite/actualPG migration/export/reopen and public CRUD lifecycle
-  against the actual native binary. Add required exact test names to CI.
-- [ ] Affected race, generation/lint/vet/root Go checks and one read-only review;
-  correct findings, logical commit/exact fork push and distinct build provenance.
+- [x] Verify SQLite/actualPG migration/export/reopen and public CRUD lifecycle
+  against the actual native binary. Exact CI names are finalized in Task3.
+- [x] Affected race and generation/lint/vet/root Go checks; stage logical backend
+  commit.
 
-## Task8B2: Existing forms and attach/bulk flows
+Final whole-branch review, fork push and build follow Task3.
+
+### Task 2: Task8B2 — Existing forms and attach/bulk flows
 
 Files: frontend/src/schemas/{client.ts,primitives/protocol.ts,
 primitives/outbound-protocol.ts,protocols/inbound/index.ts,
@@ -79,10 +81,10 @@ internal/web/translation/{en-US.json,zh-CN.json}; generated API schema outputs.
   unsupported transport/security options are absent or explicitly rejected.
 - [ ] Save/reopen/clone/bulk controls preserve complete protocol settings and
   existing unrelated protocol forms. Run affected component/unit tests,
-  typecheck/lint/generation/frontend build and one scoped review.
-- [ ] Commit/exact fork push after gates; full export acceptance remains open.
+  typecheck/lint/generation/frontend build; final review follows Task3.
+- [ ] Stage logical UI commit after gates; final fork push follows Task3.
 
-## Task8B3: Official export and combined public lifecycle acceptance
+### Task 3: Task8B3 — Official export and combined public lifecycle acceptance
 
 Files: service/inbound_sublink.go and relevant existing subscription serializers;
 create service/mieru_export.go and official-parser tests; existing client
@@ -96,6 +98,6 @@ dispatch files from source before editing, documenting them in this plan.
   test fails before wiring; verify exact usage/shared Tunnel rate/quota,
   credential rotation/sibling survival, disable/delete/expiry/restart/listener
   removal, export/reimport and backup/restore.
-- [ ] Complete combined frontend/backend/core gates and one scoped review;
+- [ ] Complete combined frontend/backend/core gates and one whole-panel-branch review;
   publish logical commit and clean-source artifacts. Update capability matrix
   only for actually verified behaviors; other protocols/tasks remain open.

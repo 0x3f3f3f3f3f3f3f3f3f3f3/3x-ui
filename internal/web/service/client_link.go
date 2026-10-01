@@ -30,6 +30,12 @@ func applyClientRecordMerge(row *model.ClientRecord, incoming *model.ClientRecor
 	if incoming.Password != "" {
 		row.Password = incoming.Password
 	}
+	if incoming.MieruUsername != "" {
+		row.MieruUsername = incoming.MieruUsername
+	}
+	if incoming.MieruPassword != "" {
+		row.MieruPassword = incoming.MieruPassword
+	}
 	if incoming.Auth != "" {
 		row.Auth = incoming.Auth
 	}
@@ -149,6 +155,14 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 
 	if err := guardRemoteClientPolicyAttachments(tx, inboundId, existing, clients); err != nil {
 		return err
+	}
+	if err := validateLinkedMieruCredentialChanges(tx, inboundId, clients, existing); err != nil {
+		return err
+	}
+	if target.Protocol == model.Mieru {
+		if err := validateMieruBindingChanges(tx, inboundId, clients, existing, detachEmails, prune); err != nil {
+			return err
+		}
 	}
 
 	idByEmail := make(map[string]int, len(emails))

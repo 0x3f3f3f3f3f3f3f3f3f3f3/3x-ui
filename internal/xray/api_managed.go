@@ -13,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/proxy/dokodemo"
 	corehttp "github.com/xtls/xray-core/proxy/http"
+	"github.com/xtls/xray-core/proxy/mieru"
 	"github.com/xtls/xray-core/proxy/socks"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -27,6 +28,8 @@ func ManagedHotDiffCapabilities(diff *HotDiff) ([]string, error) {
 	for _, user := range diff.RemovedUsers {
 		var accountType string
 		switch user.Protocol {
+		case "mieru":
+			accountType = "xray.proxy.mieru.Account"
 		case "socks", "mixed":
 			accountType = "xray.proxy.socks.Account"
 		case "http":
@@ -98,6 +101,8 @@ func (x *XrayAPI) requireManagedControl(ctx context.Context, required []string) 
 func managedUserCapabilities(accountType string) ([]string, error) {
 	var capability string
 	switch accountType {
+	case "xray.proxy.mieru.Account":
+		capability = "trusted-mieru-client-id-v1"
 	case "xray.proxy.vless.Account":
 		capability = "trusted-vless-client-id-v1"
 	case "xray.proxy.vmess.Account":
@@ -119,6 +124,11 @@ func managedUserCapabilities(accountType string) ([]string, error) {
 
 func managedIdentityCapabilities(message protoreflect.Message, required map[string]bool) error {
 	switch value := message.Interface().(type) {
+	case *mieru.ServerConfig:
+		required["trusted-mieru-client-id-v1"] = true
+		required["authenticated-credential-revocation-v1"] = true
+		required["inbound-scoped-session-close-v1"] = true
+		return nil
 	case *socks.ServerConfig:
 		for _, id := range value.ClientIds {
 			if id != "" {

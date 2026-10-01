@@ -83,6 +83,9 @@ func validateClientResetMax(resetMax int) error {
 }
 
 func validateClientSettings(client model.Client) error {
+	if err := validateProvidedMieruCredentials(client); err != nil {
+		return err
+	}
 	if err := client.Policy.Validate(); err != nil {
 		return err
 	}
@@ -177,6 +180,12 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 		}
 		if client.Password == "" {
 			client.Password = existing.Password
+		}
+		if client.MieruUsername == "" {
+			client.MieruUsername = existing.MieruUsername
+		}
+		if client.MieruPassword == "" {
+			client.MieruPassword = existing.MieruPassword
 		}
 		if client.Auth == "" {
 			client.Auth = existing.Auth
@@ -416,6 +425,8 @@ func markInboundNodesDirty(inboundIds []int) error {
 
 func (s *ClientService) fillProtocolDefaults(c *model.Client, ib *model.Inbound) error {
 	switch ib.Protocol {
+	case model.Mieru:
+		return fillMieruCredentials(c)
 	case model.VMESS, model.VLESS:
 		if c.ID == "" {
 			c.ID = uuid.NewString()
@@ -674,6 +685,12 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 	if updated.Password == "" {
 		updated.Password = existing.Password
 	}
+	if updated.MieruUsername == "" {
+		updated.MieruUsername = existing.MieruUsername
+	}
+	if updated.MieruPassword == "" {
+		updated.MieruPassword = existing.MieruPassword
+	}
 	if updated.Auth == "" {
 		updated.Auth = existing.Auth
 	}
@@ -864,6 +881,8 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 			"sub_id":            merged.SubID,
 			"uuid":              merged.UUID,
 			"password":          merged.Password,
+			"mieru_username":    merged.MieruUsername,
+			"mieru_password":    merged.MieruPassword,
 			"auth":              merged.Auth,
 			"secret":            merged.Secret,
 			"flow":              merged.Flow,

@@ -64,6 +64,7 @@ func (s *service) GetCapabilities(ctx context.Context, _ *Empty) (*Capabilities,
 	features = append(features, "tunnel-source-acl-v1")
 	features = append(features, "tunnel-fixed-outbound-v1")
 	features = append(features, "trusted-socks-client-id-v1", "trusted-http-client-id-v1")
+	features = append(features, "trusted-mieru-client-id-v1")
 	if c.Persistent {
 		features = append(features, "local-durable-reservations-v1", "committed-cumulative-ledger-v1", "create-only-usage-seed-v1", "durable-first-use-expiry-v1")
 	}

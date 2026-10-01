@@ -50,7 +50,7 @@ func prepareClientPolicies(clientIDs []string, compiled map[string]model.ClientR
 			return err
 		}
 		for _, client := range clients {
-			if prior, exists := compiled[client.StableID]; exists && (client.UUID != prior.UUID || client.Password != prior.Password || client.Email != prior.Email) {
+			if prior, exists := compiled[client.StableID]; exists && (client.UUID != prior.UUID || client.Password != prior.Password || client.Email != prior.Email || client.MieruUsername != prior.MieruUsername || client.MieruPassword != prior.MieruPassword) {
 				return ErrManagedConfigStale
 			}
 			policy, err := prepareClientPolicyRecord(tx, client, resets[client.StableID])

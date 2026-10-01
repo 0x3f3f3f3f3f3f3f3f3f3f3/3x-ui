@@ -274,6 +274,8 @@ func (s *XrayService) getXrayConfigFromDB(managed bool, db *gorm.DB) (*xray.Conf
 			}
 			entry := map[string]any{"email": c.Email}
 			switch inbound.Protocol {
+			case model.Mieru:
+				entry["username"], entry["password"] = c.MieruUsername, c.MieruPassword
 			case model.VLESS:
 				if c.ID != "" {
 					entry["id"] = c.ID
@@ -318,7 +320,11 @@ func (s *XrayService) getXrayConfigFromDB(managed bool, db *gorm.DB) (*xray.Conf
 		}
 
 		var mutated bool
-		if inbound.Protocol == model.WireGuard {
+		if inbound.Protocol == model.Mieru {
+			delete(settings, "clients")
+			settings["users"] = finalClients
+			mutated = true
+		} else if inbound.Protocol == model.WireGuard {
 			delete(settings, "clients")
 			if wgPeers == nil {
 				wgPeers = []any{}

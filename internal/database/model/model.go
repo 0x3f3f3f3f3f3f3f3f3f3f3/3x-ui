@@ -34,6 +34,7 @@ const (
 	MTProto     Protocol = "mtproto"
 	AmneziaWG   Protocol = "amneziawg"
 	TUIC        Protocol = "tuic"
+	Mieru       Protocol = "mieru"
 )
 
 // User represents a user account in the 3x-ui panel.
@@ -64,7 +65,7 @@ type Inbound struct {
 	// Xray configuration fields
 	Listen            string   `json:"listen" form:"listen"`
 	Port              int      `json:"port" form:"port" validate:"gte=0,lte=65535" example:"443"`
-	Protocol          Protocol `json:"protocol" form:"protocol" validate:"required,oneof=vmess vless trojan shadowsocks wireguard hysteria http mixed tunnel tun mtproto amneziawg tuic" example:"vless"`
+	Protocol          Protocol `json:"protocol" form:"protocol" validate:"required,oneof=vmess vless trojan shadowsocks wireguard hysteria http mixed tunnel tun mtproto amneziawg tuic mieru" example:"vless"`
 	Settings          string   `json:"settings" form:"settings"`
 	StreamSettings    string   `json:"streamSettings" form:"streamSettings"`
 	Tag               string   `json:"tag" form:"tag" gorm:"unique" example:"in-443-tcp"`
@@ -877,15 +878,17 @@ type ClientReverse struct {
 type Client struct {
 	Policy *ClientPolicyOptions `json:"policy,omitempty"`
 
-	ID         string         `json:"id,omitempty"`       // Unique client identifier
-	Security   string         `json:"security"`           // Security method (e.g., "auto", "aes-128-gcm")
-	Password   string         `json:"password,omitempty"` // Client password
-	Flow       string         `json:"flow,omitempty"`     // Flow control (XTLS)
-	Reverse    *ClientReverse `json:"reverse,omitempty"`  // VLESS simple reverse proxy settings
-	Auth       string         `json:"auth,omitempty"`     // Auth password (Hysteria)
-	PrivateKey string         `json:"privateKey,omitempty"`
-	PublicKey  string         `json:"publicKey,omitempty"`
-	AllowedIPs []string       `json:"allowedIPs,omitempty"`
+	ID            string         `json:"id,omitempty"`       // Unique client identifier
+	Security      string         `json:"security"`           // Security method (e.g., "auto", "aes-128-gcm")
+	Password      string         `json:"password,omitempty"` // Client password
+	MieruUsername string         `json:"mieruUsername,omitempty"`
+	MieruPassword string         `json:"mieruPassword,omitempty"`
+	Flow          string         `json:"flow,omitempty"`    // Flow control (XTLS)
+	Reverse       *ClientReverse `json:"reverse,omitempty"` // VLESS simple reverse proxy settings
+	Auth          string         `json:"auth,omitempty"`    // Auth password (Hysteria)
+	PrivateKey    string         `json:"privateKey,omitempty"`
+	PublicKey     string         `json:"publicKey,omitempty"`
+	AllowedIPs    []string       `json:"allowedIPs,omitempty"`
 	// AllowedIPsByInbound optionally overrides AllowedIPs on a per-inbound
 	// basis, keyed by inbound id. Lets one identity attached to both
 	// WireGuard and AmneziaWG carry two genuinely different addresses in a
@@ -930,6 +933,8 @@ type ClientRecord struct {
 	SubID           string `json:"subId" gorm:"index;column:sub_id"`
 	UUID            string `json:"uuid" gorm:"column:uuid"`
 	Password        string `json:"password"`
+	MieruUsername   string `json:"mieruUsername,omitempty" gorm:"column:mieru_username;default:''"`
+	MieruPassword   string `json:"mieruPassword,omitempty" gorm:"column:mieru_password;default:''"`
 	Auth            string `json:"auth"`
 	Flow            string `json:"flow"`
 	Security        string `json:"security"`
@@ -1154,6 +1159,8 @@ func (c *Client) ToRecord() *ClientRecord {
 		SubID:           c.SubID,
 		UUID:            c.ID,
 		Password:        c.Password,
+		MieruUsername:   c.MieruUsername,
+		MieruPassword:   c.MieruPassword,
 		Auth:            c.Auth,
 		Flow:            c.Flow,
 		Security:        c.Security,
@@ -1214,6 +1221,8 @@ func (r *ClientRecord) ToClient() *Client {
 		Email:           r.Email,
 		SubID:           r.SubID,
 		Password:        r.Password,
+		MieruUsername:   r.MieruUsername,
+		MieruPassword:   r.MieruPassword,
 		Auth:            r.Auth,
 		Flow:            r.Flow,
 		Security:        r.Security,
@@ -1320,6 +1329,18 @@ func MergeClientRecord(existing *ClientRecord, incoming *ClientRecord) []ClientM
 		if incomingNewer || existing.Password == "" {
 			existing.Password = incoming.Password
 			keepSecret("password")
+		}
+	}
+	if existing.MieruUsername != incoming.MieruUsername && incoming.MieruUsername != "" {
+		if incomingNewer || existing.MieruUsername == "" {
+			existing.MieruUsername = incoming.MieruUsername
+			keepSecret("mieruUsername")
+		}
+	}
+	if existing.MieruPassword != incoming.MieruPassword && incoming.MieruPassword != "" {
+		if incomingNewer || existing.MieruPassword == "" {
+			existing.MieruPassword = incoming.MieruPassword
+			keepSecret("mieruPassword")
 		}
 	}
 	if existing.Auth != incoming.Auth && incoming.Auth != "" {

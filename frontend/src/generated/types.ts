@@ -418,6 +418,8 @@ export interface Client {
   id?: string;
   keepAlive?: number | null;
   limitIp: number;
+  mieruPassword?: string;
+  mieruUsername?: string;
   password?: string;
   policy?: ClientPolicyOptions | null;
   preSharedKey?: string;
@@ -498,6 +500,8 @@ export interface ClientRecord {
   keepAlive: number;
   limitHwid: number;
   limitIp: number;
+  mieruPassword?: string;
+  mieruUsername?: string;
   password: string;
   policy?: ClientPolicyOptions | null;
   preSharedKey: string;

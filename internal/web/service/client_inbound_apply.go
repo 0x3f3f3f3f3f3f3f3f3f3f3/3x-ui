@@ -456,6 +456,8 @@ func (s *ClientService) AddInboundClient(inboundSvc *InboundService, data *model
 			return false, common.NewError("client email is required")
 		}
 		switch oldInbound.Protocol {
+		case model.Mieru:
+			// Native authentication does not use a UUID from another protocol.
 		case model.Tunnel:
 			// The listener owns the account; there is no protocol credential.
 		case "trojan":
@@ -711,6 +713,8 @@ func (s *ClientService) updateInboundClient(inboundSvc *InboundService, data *mo
 
 	newClientId := ""
 	switch oldInbound.Protocol {
+	case model.Mieru:
+		newClientId = clients[0].Email
 	case model.Tunnel:
 		newClientId = clients[0].Email
 	case "trojan":
