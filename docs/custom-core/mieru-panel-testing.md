@@ -137,3 +137,24 @@ broad race run and their skips are not acceptance passes; the separate parent
 official-fixture command passes all four actual v1/v2 HTTP/3 paths and first13k
 with zero skips. All logs use native-mieru-panel-quic-parent-* or
 native-three-protocol-parent-* under /root/task-evidence.
+
+## Clean-source checkpoint publication
+
+Source ab997b391add08fab3d10d79c0837d5cd6fad3a6 was built from clean clone
+/tmp/native-mieru-panel-snell-quic-clean-source-iwnxpbvl with Go1.27.1,
+Node26.10.0 and npm11.19.1, using verified shared dependency caches. Panel
+version dev+ab997b39 and Custom Xray26.9.9-custom.1 report this source revision.
+Both panel/core builds, frontend npm-ci/build, source cleanliness and version/
+build metadata checks pass. This is not a cold-cache/environment-independent
+claim or a deployment/whole-system single-data-plane claim.
+
+- build/x-ui-native-mieru-panel-snell-quic-checkpoint:
+  SHA2561d1aeb2d6e7461044367be7adb645508d6a971d2b25daa1d4f779a9a069e0e79.
+- build/custom-xray-native-mieru-panel-snell-quic-checkpoint:
+  SHA2561cb3e98f326f05d2e5c27808701c947a14b72e05218765b4dc2c4776831cf9be.
+
+All30 preceding checkpoint/review binaries were rehashed unchanged. Source
+ab997b39 was pushed to the specified fork's feature/custom-xray-unified-policy;
+remote HEAD exactly matches. Build/results/preservation/push JSON receipts
+use native-mieru-panel-snell-quic-* under /root/task-evidence. SSH panel starts
+from this checkpoint; Snell panel and broader project completion remain open.

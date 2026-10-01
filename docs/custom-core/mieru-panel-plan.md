@@ -101,6 +101,6 @@ custom-core CI and native capability fixture/required-PASS tools.
   test fails before wiring; verify exact usage/shared Tunnel rate/quota,
   credential rotation/sibling survival, disable/delete/expiry/restart/listener
   removal, export/reimport and backup/restore.
-- [ ] Complete combined frontend/backend/core gates and one whole-panel-branch review;
+- [x] Complete combined frontend/backend/core gates and one whole-panel-branch review;
   publish logical commit and clean-source artifacts. Update capability matrix
   only for actually verified behaviors; other protocols/tasks remain open.

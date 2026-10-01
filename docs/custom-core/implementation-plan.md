@@ -1048,3 +1048,10 @@ was needed. Distinct clean-source artifacts and fork publication follow this
 validation commit. New SSH panel design/plan are staged for inline execution;
 SSH/Snell panel, packaged clients, coordinated nodes, sidecar migration and the
 remaining whole-project matrix remain open.
+
+The native mieru panel/Snell QUIC checkpoint is published at ab997b39 with
+matching remote SHA. Clean-clone panel/core and frontend builds pass; distinct
+checksums and30 unchanged prior artifacts are recorded in mieru-panel-testing.
+The local mieru panel plan is complete within its explicit scope. SSH panel
+Task1 now executes inline from ab997b39 in /tmp/3x-ui-native-ssh-panel; native
+Snell panel and the remaining original full-project requirements stay open.

@@ -300,3 +300,7 @@ SSH/Snell panel, packaged-client/device checks, remote coordinated budgets and
 whole-system sidecar/distribution migration remain separate incomplete work.
 See mieru-panel-testing.md and native-snell-quic-testing.md for exact evidence
 and limitations; this increment is not whole-project completion.
+
+Distinct clean-source panel/core artifacts for this scoped increment are built
+and sourceab997b39 is exactly pushed to the fork feature branch. This supplies
+checkpoint provenance, not full installer/sidecar/multinode distribution parity.

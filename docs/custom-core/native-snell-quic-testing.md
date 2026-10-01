@@ -163,3 +163,11 @@ names with the official ARM64 fixture enabled and zero skips. Corrected vet
 and a separately named build both exited 0; logs are
 native-snell-quic-review-corrected-{ci-race,vet,build}.log. Parent-module combined
 regression and clean-source distribution remain subsequent gates.
+
+## Parent clean checkpoint
+
+Merged Snell QUIC commit7a822795 is included in clean sourceab997b39 alongside
+the verified mieru panel and existing SSH core. The distinct panel/core artifact
+paths, hashes, clone/toolchain details,30-artifact preservation and exact fork
+push receipt are recorded in mieru-panel-testing.md. Proprietary Surge inbound,
+SSH/Snell panel and broader whole-system migration remain incomplete.
