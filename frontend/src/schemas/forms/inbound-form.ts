@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isMieruNativeStream } from '@/schemas/protocols/shared/mieru';
 
 import { InboundPortSchema, SniffingSchema } from '@/schemas/primitives';
 import { InboundSettingsSchema } from '@/schemas/protocols/inbound';
@@ -109,8 +110,17 @@ export type InboundFormBase = z.infer<typeof InboundFormBaseSchema>;
 
 // Full form values = base + db fields + protocol-discriminated settings.
 // Consumers narrow on `.protocol` to access the matching settings branch.
-export const InboundFormSchema =
-  InboundFormBaseSchema.and(InboundDbFieldsSchema).and(InboundSettingsSchema);
+export const InboundFormSchema = InboundFormBaseSchema.and(InboundDbFieldsSchema)
+  .and(InboundSettingsSchema)
+  .superRefine((value, ctx) => {
+    if (value.protocol === 'mieru' && !isMieruNativeStream(value.streamSettings)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['streamSettings'],
+        message: 'pages.inbounds.form.mieru.nativeTransportOnly',
+      });
+    }
+  });
 export type InboundFormValues = z.infer<typeof InboundFormSchema>;
 
 export const FallbackRowSchema = z.object({

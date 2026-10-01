@@ -19,6 +19,7 @@ export const OutboundProtocols = Object.freeze({
   Wireguard: 'wireguard',
   AmneziaWG: 'amneziawg',
   Hysteria: 'hysteria',
+  Mieru: 'mieru',
   Socks: 'socks',
   HTTP: 'http',
   Loopback: 'loopback',

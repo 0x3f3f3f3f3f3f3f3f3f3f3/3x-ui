@@ -39,6 +39,7 @@ const MULTI_CLIENT_PROTOCOLS = new Set([
   'wireguard',
   'amneziawg',
   'tuic',
+  'mieru',
 ]);
 
 const EMPTY: ClientBulkAddFormValues = {
@@ -212,6 +213,8 @@ export default function ClientBulkAddModal({
             ? RandomUtil.randomShadowsocksPassword(ss2022Method)
             : RandomUtil.randomLowerAndNum(16),
           auth: RandomUtil.randomLowerAndNum(16),
+          mieruUsername: '',
+          mieruPassword: '',
           flow: showFlow ? current.flow || '' : '',
           totalGB: Math.round((current.totalGB || 0) * SizeFormatter.ONE_GB),
           expiryTime: current.expiryTime,

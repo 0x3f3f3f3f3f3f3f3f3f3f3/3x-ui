@@ -149,6 +149,8 @@ const EMPTY: Values = {
   subId: '',
   uuid: '',
   password: '',
+  mieruUsername: '',
+  mieruPassword: '',
   auth: '',
   flow: '',
   security: 'auto',
@@ -281,6 +283,8 @@ export default function ClientFormModal({
   const uuid = useWatch({ control: methods.control, name: 'uuid' });
   const trafficReset = useWatch({ control: methods.control, name: 'trafficReset' });
   const password = useWatch({ control: methods.control, name: 'password' });
+  const mieruUsername = useWatch({ control: methods.control, name: 'mieruUsername' });
+  const mieruPassword = useWatch({ control: methods.control, name: 'mieruPassword' });
   const subId = useWatch({ control: methods.control, name: 'subId' });
   const limitHwid = useWatch({ control: methods.control, name: 'limitHwid' });
   const auth = useWatch({ control: methods.control, name: 'auth' });
@@ -369,6 +373,8 @@ export default function ClientFormModal({
         subId: client.subId || '',
         uuid: client.uuid || '',
         password: client.password || '',
+        mieruUsername: client.mieruUsername || '',
+        mieruPassword: client.mieruPassword || '',
         auth: client.auth || '',
         flow: client.flow || '',
         security:
@@ -689,6 +695,8 @@ export default function ClientFormModal({
       subId: values.subId,
       uuid: values.uuid,
       password: values.password,
+      mieruUsername: values.mieruUsername,
+      mieruPassword: values.mieruPassword,
       auth: values.auth,
       flow: values.flow,
       security: values.security,
@@ -725,6 +733,8 @@ export default function ClientFormModal({
       id: values.uuid,
       uuid: values.uuid,
       password: values.password,
+      mieruUsername: values.mieruUsername,
+      mieruPassword: values.mieruPassword,
       auth: values.auth,
       flow: showFlow ? values.flow || '' : '',
       security: showSecurity ? values.security || 'auto' : 'auto',
@@ -1248,6 +1258,50 @@ export default function ClientFormModal({
                             aria-label={t('regenerate')}
                             icon={<ReloadOutlined />}
                             onClick={regeneratePassword}
+                          />
+                        </Space.Compact>
+                      </Form.Item>
+
+                      <Form.Item
+                        label={t('pages.clients.mieruUsername')}
+                        tooltip={t('pages.clients.mieruCredentialsDesc')}
+                      >
+                        <Space.Compact style={{ display: 'flex' }}>
+                          <Input
+                            value={mieruUsername}
+                            style={{ flex: 1 }}
+                            placeholder={t('pages.clients.mieruGenerated')}
+                            onChange={(e) => methods.setValue('mieruUsername', e.target.value)}
+                          />
+                          <Button
+                            aria-label={t('regenerate')}
+                            icon={<ReloadOutlined />}
+                            onClick={() =>
+                              methods.setValue('mieruUsername', `mieru-${RandomUtil.randomUUID()}`)
+                            }
+                          />
+                        </Space.Compact>
+                      </Form.Item>
+                      <Form.Item
+                        label={t('pages.clients.mieruPassword')}
+                        tooltip={t('pages.clients.mieruCredentialsDesc')}
+                      >
+                        <Space.Compact style={{ display: 'flex' }}>
+                          <Input.Password
+                            value={mieruPassword}
+                            style={{ flex: 1 }}
+                            placeholder={t('pages.clients.mieruGenerated')}
+                            onChange={(e) => methods.setValue('mieruPassword', e.target.value)}
+                          />
+                          <Button
+                            aria-label={t('regenerate')}
+                            icon={<ReloadOutlined />}
+                            onClick={() =>
+                              methods.setValue(
+                                'mieruPassword',
+                                RandomUtil.randomUUID().replaceAll('-', ''),
+                              )
+                            }
                           />
                         </Space.Compact>
                       </Form.Item>

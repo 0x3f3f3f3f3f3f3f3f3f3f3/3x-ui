@@ -5,6 +5,7 @@ import { normalizeStreamSettingsForWire } from '@/lib/xray/stream-wire-normalize
 import { Wireguard } from '@/utils';
 import type { Sniffing, SniffingDest } from '@/schemas/primitives';
 import type { OutboundDomainStrategy } from '@/schemas/protocols/outbound';
+import type { MieruOutboundSettings } from '@/schemas/protocols/outbound/mieru';
 
 import type {
   AmneziaWGOutboundFormSettings,
@@ -558,6 +559,21 @@ export function rawOutboundToFormValues(raw: RawOutboundRow): OutboundFormValues
 
   let typed: OutboundFormSettings;
   switch (protocol) {
+    case 'mieru':
+      typed = {
+        protocol: 'mieru',
+        settings: {
+          address: '',
+          port: 443,
+          username: '',
+          password: '',
+          transport: 'TCP',
+          mtu: 1400,
+          multiplexing: 'MULTIPLEXING_LOW',
+          ...settings,
+        } as MieruOutboundSettings,
+      };
+      break;
     case 'vmess':
       typed = { protocol: 'vmess', settings: vmessFromWire(settings) };
       break;
@@ -862,6 +878,9 @@ export type WireOutboundPayload = Raw;
 export function formValuesToWirePayload(values: OutboundFormValues): WireOutboundPayload {
   let settings: Raw;
   switch (values.protocol) {
+    case 'mieru':
+      settings = { ...values.settings };
+      break;
     case 'vmess':
       settings = vmessToWire(values.settings);
       break;

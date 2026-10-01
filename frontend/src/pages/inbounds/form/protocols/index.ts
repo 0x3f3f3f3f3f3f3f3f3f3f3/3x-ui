@@ -5,6 +5,7 @@ export { default as WireguardFields } from './wireguard';
 export { default as HysteriaFields } from './hysteria';
 export { default as HttpFields } from './http';
 export { default as MixedFields } from './mixed';
+export { default as MieruFields } from './mieru';
 export { default as MtprotoFields } from './mtproto';
 export { default as VlessFields } from './vless';
 export { default as AmneziawgFields } from './amneziawg';

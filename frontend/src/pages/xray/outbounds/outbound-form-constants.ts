@@ -55,6 +55,7 @@ export const HYSTERIA_NETWORK_OPTION = { value: 'hysteria', label: 'Hysteria' };
 // protocol section. Wireguard has an address but no port. DNS/freedom/
 // blackhole/loopback have no connect target.
 export const SERVER_PROTOCOLS = new Set<string>([
+  'mieru',
   'vmess',
   'vless',
   'trojan',

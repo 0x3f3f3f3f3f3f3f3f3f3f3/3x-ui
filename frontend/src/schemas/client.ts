@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MieruCredentialSchema } from '@/schemas/protocols/shared/mieru';
 
 const nullableStringArray = z
   .array(z.string())
@@ -91,6 +92,8 @@ export const ClientRecordSchema = z
     subId: z.string().optional(),
     uuid: z.string().optional(),
     password: z.string().optional(),
+    mieruUsername: MieruCredentialSchema.optional(),
+    mieruPassword: MieruCredentialSchema.optional(),
     auth: z.string().optional(),
     flow: z.string().optional(),
     security: z.string().optional(),
@@ -391,6 +394,8 @@ export const ClientFormSchema = z.object({
   subId: z.string().refine((v) => !hasForbiddenClientChars(v), 'pages.clients.subIdInvalidChars'),
   uuid: z.string(),
   password: z.string(),
+  mieruUsername: MieruCredentialSchema.default(''),
+  mieruPassword: MieruCredentialSchema.default(''),
   auth: z.string(),
   flow: z.string(),
   security: z.string(),

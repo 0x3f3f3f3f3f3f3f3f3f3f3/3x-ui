@@ -6,6 +6,7 @@ import type { FreedomOutboundSettings } from '@/schemas/protocols/outbound/freed
 import type { HttpOutboundSettings } from '@/schemas/protocols/outbound/http';
 import type { HysteriaOutboundSettings } from '@/schemas/protocols/outbound/hysteria';
 import type { LoopbackOutboundSettings } from '@/schemas/protocols/outbound/loopback';
+import type { MieruOutboundSettings } from '@/schemas/protocols/outbound/mieru';
 import type { ShadowsocksOutboundSettings } from '@/schemas/protocols/outbound/shadowsocks';
 import type { SocksOutboundSettings } from '@/schemas/protocols/outbound/socks';
 import type { TrojanOutboundSettings } from '@/schemas/protocols/outbound/trojan';
@@ -131,6 +132,7 @@ export function createDefaultHysteriaOutboundSettings(): HysteriaOutboundSetting
 }
 
 export type AnyOutboundSettings =
+  | MieruOutboundSettings
   | BlackholeOutboundSettings
   | DNSOutboundSettings
   | FreedomOutboundSettings
@@ -155,6 +157,16 @@ export type AnyOutboundSettings =
 export function createDefaultOutboundSettings(protocol: string): AnyOutboundSettings | null {
   void RandomUtil;
   switch (protocol) {
+    case 'mieru':
+      return {
+        address: '',
+        port: 443,
+        username: '',
+        password: '',
+        transport: 'TCP',
+        mtu: 1400,
+        multiplexing: 'MULTIPLEXING_LOW',
+      };
     case 'freedom':
       return createDefaultFreedomOutboundSettings();
     case 'blackhole':

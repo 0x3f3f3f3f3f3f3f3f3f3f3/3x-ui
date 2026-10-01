@@ -4,6 +4,7 @@ export { default as VlessFields } from './vless';
 export { default as TrojanFields } from './trojan';
 export { default as ShadowsocksFields } from './shadowsocks';
 export { default as HttpFields } from './http';
+export { default as MieruFields } from './mieru';
 export { default as SocksFields } from './socks';
 export { default as WireguardFields } from './wireguard';
 export { default as AmneziawgFields } from './amneziawg';

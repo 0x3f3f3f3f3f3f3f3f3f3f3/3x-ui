@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isMieruNativeStream } from '@/schemas/protocols/shared/mieru';
 
 import { PortSchema, SniffingSchema, type Sniffing } from '@/schemas/primitives';
 import { SSMethodSchema } from '@/schemas/protocols/shared/shadowsocks';
@@ -12,6 +13,7 @@ import {
   FreedomFinalRuleActionSchema,
   FreedomFragmentSchema,
   FreedomNoiseSchema,
+  MieruOutboundSettingsSchema,
   OutboundDomainStrategySchema,
   WireguardDomainStrategySchema,
 } from '@/schemas/protocols/outbound';
@@ -193,6 +195,7 @@ export type LoopbackOutboundFormSettings = z.infer<typeof LoopbackOutboundFormSe
 // Discriminated union on `protocol`. Same tagged-wrapper pattern as the
 // inbound side: each branch is { protocol: literal, settings: <flat> }.
 export const OutboundFormSettingsSchema = z.discriminatedUnion('protocol', [
+  z.object({ protocol: z.literal('mieru'), settings: MieruOutboundSettingsSchema }),
   z.object({ protocol: z.literal('vmess'), settings: VmessOutboundFormSettingsSchema }),
   z.object({ protocol: z.literal('vless'), settings: VlessOutboundFormSettingsSchema }),
   z.object({ protocol: z.literal('trojan'), settings: TrojanOutboundFormSettingsSchema }),
@@ -246,5 +249,18 @@ export type OutboundFormBase = z.infer<typeof OutboundFormBaseSchema>;
 
 // Full form values = base + protocol-discriminated settings. Consumers
 // narrow on `.protocol` to access the matching settings branch.
-export const OutboundFormSchema = OutboundFormBaseSchema.and(OutboundFormSettingsSchema);
+export const OutboundFormSchema = OutboundFormBaseSchema.and(
+  OutboundFormSettingsSchema,
+).superRefine((value, ctx) => {
+  if (
+    value.protocol === 'mieru' &&
+    (!isMieruNativeStream(value.streamSettings) || value.mux.enabled)
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['streamSettings'],
+      message: 'pages.inbounds.form.mieru.nativeTransportOnly',
+    });
+  }
+});
 export type OutboundFormValues = z.infer<typeof OutboundFormSchema>;

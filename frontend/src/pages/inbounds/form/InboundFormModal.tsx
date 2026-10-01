@@ -61,6 +61,7 @@ import {
   HttpFields,
   HysteriaFields,
   MixedFields,
+  MieruFields,
   MtprotoFields,
   ShadowsocksFields,
   TuicFields,
@@ -279,6 +280,7 @@ export default function InboundFormModal({
     protocol !== Protocols.HYSTERIA &&
     protocol !== Protocols.WIREGUARD &&
     protocol !== Protocols.TUNNEL &&
+    protocol !== Protocols.MIERU &&
     protocol !== Protocols.TUIC;
 
   const wPort = useWatch({ control, name: 'port' });
@@ -542,7 +544,11 @@ export default function InboundFormModal({
             ],
           },
         });
-      } else if (next === Protocols.WIREGUARD || next === Protocols.TUNNEL) {
+      } else if (
+        next === Protocols.WIREGUARD ||
+        next === Protocols.TUNNEL ||
+        next === Protocols.MIERU
+      ) {
         setV('streamSettings', { security: 'none' });
       } else {
         const current = getV('streamSettings') as { network?: string } | undefined;
@@ -819,6 +825,7 @@ export default function InboundFormModal({
       )}
 
       {protocol === Protocols.HTTP && <HttpFields />}
+      {protocol === Protocols.MIERU && <MieruFields />}
       {protocol === Protocols.MIXED && <MixedFields mixedUdpOn={mixedUdpOn} />}
 
       {protocol === Protocols.MTPROTO && <MtprotoFields />}
@@ -1153,6 +1160,7 @@ export default function InboundFormModal({
                     Protocols.MTPROTO,
                     Protocols.AMNEZIAWG,
                     Protocols.TUIC,
+                    Protocols.MIERU,
                   ] as string[]
                 ).includes(protocol) || isFallbackHost
                   ? [

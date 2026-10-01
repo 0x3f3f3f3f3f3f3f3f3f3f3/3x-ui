@@ -711,7 +711,15 @@
         "tunnelOutboundHelp": "留空时使用路由规则。选择后仅使用该具体出站；若出站消失或不支持请求的网络类型，转发将失败。启用的固定出站规则必须绑定本地用户。",
         "tunnelOutboundUnavailable": "{tag}（不可用）",
         "tunnelOutboundLoadError": "无法加载可用出站，已保留原有选择。",
-        "tunnelOutboundLocalOnly": "固定出站选择仅适用于本地 Tunnel 监听。"
+        "tunnelOutboundLocalOnly": "固定出站选择仅适用于本地 Tunnel 监听。",
+        "mieru": {
+          "transport": "传输协议",
+          "maxConnections": "最大连接数",
+          "handshakeTimeout": "握手超时（秒）",
+          "userHint": "要求用户提示",
+          "multiplexing": "多路复用",
+          "nativeTransportOnly": "mieru 使用自身的 TCP/UDP 传输和多路复用，不支持 Xray 传输封装或全局 mux。"
+        }
       },
       "info": {
         "mode": "模式",
@@ -1005,7 +1013,12 @@
         "multiplierInvalid": "请输入大于 0 且不超过 1000 的倍率，最多支持 6 位小数。",
         "localOnly": "流量策略目前仅支持本地入站。包含远端或未知绑定时只读；跨节点限速和计费尚未支持。请先解绑远端入站并保存，再编辑策略。"
       },
-      "attachedInboundsHelp": "可选。可以先创建客户，稍后再为其分配 Tunnel 或绑定其他入站。"
+      "attachedInboundsHelp": "可选。可以先创建客户，稍后再为其分配 Tunnel 或绑定其他入站。",
+      "mieruUsername": "mieru 用户名",
+      "mieruPassword": "mieru 密码",
+      "mieruCredentialInvalid": "mieru 凭据必须是有效 Unicode，且不超过 64 个 UTF-8 字节。",
+      "mieruCredentialsDesc": "仅用于 mieru 的独立凭据。修改客户端名称不会改变认证信息。",
+      "mieruGenerated": "留空则在首次附加时生成"
     },
     "groups": {
       "name": "名称",

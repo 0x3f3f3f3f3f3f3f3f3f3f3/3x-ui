@@ -9,7 +9,11 @@ import { Wireguard } from '@/utils';
 import { formValuesToWirePayload, rawOutboundToFormValues } from '@/lib/xray/outbound-form-adapter';
 import { parseOutboundLink } from '@/lib/xray/outbound-link-parser';
 import { XMUX_FRESH_DEFAULTS } from '@/schemas/protocols/stream/xhttp';
-import { OutboundFormBaseSchema, type OutboundFormValues } from '@/schemas/forms/outbound-form';
+import {
+  OutboundFormBaseSchema,
+  OutboundFormSchema,
+  type OutboundFormValues,
+} from '@/schemas/forms/outbound-form';
 import {
   canEnableReality,
   canEnableStream,
@@ -36,6 +40,7 @@ import {
   DnsFields,
   FreedomFields,
   HttpFields,
+  MieruFields,
   LoopbackFields,
   ServerTarget,
   ShadowsocksFields,
@@ -195,6 +200,14 @@ export default function OutboundFormModal({
       methods.setValue('settings', next.settings);
       if (nextProtocol === 'hysteria') {
         methods.setValue('streamSettings', hysteriaStreamSlice() as StreamValue);
+      } else if (nextProtocol === 'mieru') {
+        const sockopt = methods.getValues('streamSettings.sockopt');
+        methods.setValue('streamSettings', {
+          network: 'tcp',
+          security: 'none',
+          sockopt,
+        } as StreamValue);
+        methods.setValue('mux.enabled', false);
       } else if ((methods.getValues('streamSettings.network') ?? '') === 'hysteria') {
         methods.setValue('streamSettings', {
           ...newStreamSlice('tcp'),
@@ -320,6 +333,14 @@ export default function OutboundFormModal({
       if (!(await methods.trigger())) return;
       values = methods.getValues();
     }
+    if (values.protocol === 'mieru') {
+      const native = OutboundFormSchema.safeParse(values);
+      if (!native.success) {
+        messageApi.error(t(native.error.issues[0]?.message ?? 'somethingWentWrong'));
+        return;
+      }
+      values = native.data;
+    }
     const tagValue = (values.tag ?? '').trim();
     if (!tagValue) {
       messageApi.error(t('pages.xray.outboundForm.tagRequired'));
@@ -435,6 +456,7 @@ export default function OutboundFormModal({
                       {protocol === 'trojan' && <TrojanFields />}
                       {protocol === 'shadowsocks' && <ShadowsocksFields />}
                       {protocol === 'http' && <HttpFields />}
+                      {protocol === 'mieru' && <MieruFields />}
                       {protocol === 'socks' && <SocksFields />}
 
                       {protocol === 'loopback' && <LoopbackFields />}

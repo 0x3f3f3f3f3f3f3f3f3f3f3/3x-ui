@@ -75,14 +75,14 @@ protocols/mieru.tsx; pages/xray/outbounds/{OutboundFormModal.tsx,
 protocols/index.ts}; create outbound protocols/mieru.tsx;
 internal/web/translation/{en-US.json,zh-CN.json}; generated API schema outputs.
 
-- [ ] Real forms create/edit/save, separate credentials, attached shared client,
+- [x] Real forms create/edit/save, separate credentials, attached shared client,
   transport/mux values and byte-limit errors fail before adding protocol choices.
-- [ ] Implement existing-form fields/defaults/projections and EN/ZH copy;
+- [x] Implement existing-form fields/defaults/projections and EN/ZH copy;
   unsupported transport/security options are absent or explicitly rejected.
-- [ ] Save/reopen/clone/bulk controls preserve complete protocol settings and
+- [x] Save/reopen/clone/bulk controls preserve complete protocol settings and
   existing unrelated protocol forms. Run affected component/unit tests,
   typecheck/lint/generation/frontend build; final review follows Task3.
-- [ ] Stage logical UI commit after gates; final fork push follows Task3.
+- [x] Stage logical UI commit after gates; final fork push follows Task3.
 
 ### Task 3: Task8B3 — Official export and combined public lifecycle acceptance
 

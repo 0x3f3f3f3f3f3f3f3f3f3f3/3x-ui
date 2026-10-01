@@ -712,7 +712,15 @@
         "tunnelOutboundHelp": "Leave empty to use routing rules. A fixed selection uses this concrete outbound only; if it disappears or does not support the requested network, forwarding fails. An enabled fixed rule requires a local owner.",
         "tunnelOutboundUnavailable": "{tag} (unavailable)",
         "tunnelOutboundLoadError": "Could not load available outbounds. Your saved selection is preserved.",
-        "tunnelOutboundLocalOnly": "Fixed outbound selection is available for local Tunnel listeners only."
+        "tunnelOutboundLocalOnly": "Fixed outbound selection is available for local Tunnel listeners only.",
+        "mieru": {
+          "transport": "Transport",
+          "maxConnections": "Maximum connections",
+          "handshakeTimeout": "Handshake timeout (seconds)",
+          "userHint": "Require user hint",
+          "multiplexing": "Multiplexing",
+          "nativeTransportOnly": "mieru uses its own TCP/UDP transport and multiplexing. Xray stream wrappers and global mux are unsupported."
+        }
       },
       "info": {
         "mode": "Mode",
@@ -1005,7 +1013,12 @@
         "multiplierInvalid": "Enter a multiplier greater than 0 and no more than 1000, with up to 6 decimal places.",
         "localOnly": "Traffic policy currently requires local listeners. Remote or unknown bindings are read-only; cross-node limits and billing are not yet supported. Detach remote listeners and save before editing policy."
       },
-      "attachedInboundsHelp": "Optional. You can create the client first, then assign a Tunnel or attach other inbounds later."
+      "attachedInboundsHelp": "Optional. You can create the client first, then assign a Tunnel or attach other inbounds later.",
+      "mieruUsername": "mieru username",
+      "mieruPassword": "mieru password",
+      "mieruCredentialInvalid": "mieru credentials must be valid Unicode and no more than 64 UTF-8 bytes.",
+      "mieruCredentialsDesc": "Independent credentials used only by mieru. Changing the client label does not change authentication.",
+      "mieruGenerated": "Generated when first attached if left empty"
     },
     "groups": {
       "name": "Name",

@@ -7,6 +7,7 @@ import { FreedomOutboundSettingsSchema } from './freedom';
 import { HttpOutboundSettingsSchema } from './http';
 import { HysteriaOutboundSettingsSchema } from './hysteria';
 import { LoopbackOutboundSettingsSchema } from './loopback';
+import { MieruOutboundSettingsSchema } from './mieru';
 import { ShadowsocksOutboundSettingsSchema } from './shadowsocks';
 import { SocksOutboundSettingsSchema } from './socks';
 import { TrojanOutboundSettingsSchema } from './trojan';
@@ -21,6 +22,7 @@ export * from './freedom';
 export * from './http';
 export * from './hysteria';
 export * from './loopback';
+export * from './mieru';
 export * from './shadowsocks';
 export * from './socks';
 export * from './trojan';
@@ -29,6 +31,7 @@ export * from './vmess';
 export * from './wireguard';
 
 export const OutboundSettingsSchema = z.discriminatedUnion('protocol', [
+  z.object({ protocol: z.literal('mieru'), settings: MieruOutboundSettingsSchema }),
   z.object({ protocol: z.literal('vmess'), settings: VmessOutboundSettingsSchema }),
   z.object({ protocol: z.literal('vless'), settings: VlessOutboundSettingsSchema }),
   z.object({ protocol: z.literal('trojan'), settings: TrojanOutboundSettingsSchema }),

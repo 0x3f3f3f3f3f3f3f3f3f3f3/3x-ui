@@ -5,6 +5,10 @@ import type { AmneziawgInboundSettings } from '@/schemas/protocols/inbound/amnez
 import type { HttpInboundSettings } from '@/schemas/protocols/inbound/http';
 import type { HysteriaClient, HysteriaInboundSettings } from '@/schemas/protocols/inbound/hysteria';
 import type { MixedInboundSettings } from '@/schemas/protocols/inbound/mixed';
+import {
+  MieruInboundSettingsSchema,
+  type MieruInboundSettings,
+} from '@/schemas/protocols/inbound/mieru';
 import type { MtprotoClient, MtprotoInboundSettings } from '@/schemas/protocols/inbound/mtproto';
 import type {
   ShadowsocksClient,
@@ -363,6 +367,7 @@ export function createDefaultTuicInboundSettings(): TuicInboundSettings {
 // Callers swapping off the class hierarchy use this in place of
 // `getSettings(p)` + `.toJson()`.
 export type AnyInboundSettings =
+  | MieruInboundSettings
   | VlessInboundSettings
   | VmessInboundSettings
   | TrojanInboundSettings
@@ -379,6 +384,8 @@ export type AnyInboundSettings =
 
 export function createDefaultInboundSettings(protocol: string): AnyInboundSettings | null {
   switch (protocol) {
+    case 'mieru':
+      return MieruInboundSettingsSchema.parse({});
     case 'vless':
       return createDefaultVlessInboundSettings();
     case 'vmess':
