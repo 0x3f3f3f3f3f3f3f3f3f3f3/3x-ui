@@ -150,6 +150,9 @@ func (s *SubJsonService) GetJson(subId string, host string, alwaysReturnArray bo
 		if inbound.Protocol == model.Mieru {
 			return "", "", errMieruClientFormat
 		}
+		if inbound.Protocol == model.SSH {
+			return "", "", errSSHClientFormat
+		}
 		subReq.projectThroughFallbackMaster(inbound)
 		if hostEps := subReq.hostEndpoints(inbound, "json"); len(hostEps) > 0 {
 			injectExternalProxy(inbound, hostEps)

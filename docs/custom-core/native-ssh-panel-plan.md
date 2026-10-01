@@ -87,11 +87,11 @@ lifecycle tests; tools/verify-native-ssh-panel.py and custom-core CI; testing do
 Consumes persisted service public host key and canonical account, producing
 OpenSSH config/instructions and known_hosts text through existing downloads.
 
-- [ ] RED tests for host/IPv6/Unicode-safe quoting, strict host pin, user-owned
+- [x] RED tests for host/IPv6/Unicode-safe quoting, strict host pin, user-owned
   private-key instructions, enabled reverse controls and explicit format errors.
-- [ ] Implement exports; verify existing download/copy controls and reimport
+- [x] Implement exports; verify existing download/copy controls and reimport
   only where a native representation exists; no invented share protocol.
-- [ ] RED combined API → real core/OpenSSH -L/-D/controlled -R plus Tunnel
+- [x] RED combined API → real core/OpenSSH -L/-D/controlled -R plus Tunnel
   lifecycle tests; implement missing glue and verify exact shared usage,
   policy restrictions, rotation, port release, restart and restored host key.
 - [ ] Complete required SQLite/PG/core/frontend gates, one whole-panel review

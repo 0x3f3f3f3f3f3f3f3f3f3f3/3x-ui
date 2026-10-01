@@ -108,12 +108,71 @@ Final Task 2 evidence under /root/task-evidence/native-ssh-panel-task2-*:
   retained as environment/test-harness evidence, separate from behavioral RED
   failures and their corrections.
 
+## Native OpenSSH export and public acceptance increment — 2026-10-01
+
+Existing subscription downloads provide three native text formats:
+`format=ssh` (x-ui-ssh.conf), `format=ssh-known-hosts`
+(x-ui-ssh-known_hosts) and `format=ssh-instructions`
+(x-ui-ssh-instructions.txt). Client info exposes download and copy controls
+from actual SSH memberships without requiring an invented share URI.
+Raw clients and generic Xray/Clash exports receive an explicit OpenSSH-format
+error. Mixed panel link listings omit SSH share links and retain canonical
+usage. Native files bypass browser HTML negotiation and enforce the existing
+subscription device gate.
+
+The config uses canonical independent username/authentication and the SQL
+business host public key/fingerprint. Host aliases use SQL stable UUID,
+listener ID and endpoint ordinal. StrictHostKeyChecking, IdentitiesOnly,
+IdentityAgent none, a dedicated known_hosts file and forwarding-only operation
+are explicit. Users supply their own matching business private key; no client
+private key is generated, opened or downloaded. Passwords never appear in
+exported files or command argv; allowed password authentication remains
+interactive. Enabled/unexpired canonical bindings are exported. Runtime
+policy remains authoritative for live quota/rate access.
+
+IPv4/IPv6 and IDN addresses are validated before OpenSSH quoting. Actual
+OpenSSH parser and connection tests preserve Unicode, percent, backslash and
+quote characters in the wire username. known_hosts accepts the SQL public key
+and rejects another key. Managed address/port overrides fan out distinct host
+aliases; incompatible TLS, transport, mux and other unsupported host options
+fail instead of being discarded. Missing SQL trust fails. Disabled/excluded
+services and disabled/expired accounts produce no native files. Reverse
+examples appear only for authorized settings, include the real bind/range/
+source constraints and state that the client chooses the final target.
+
+Actual public HTTP handlers drive SQL and the native core child. Real OpenSSH
+-L/-D plus Tunnel produce exactly16 upload/16 download/64 billed bytes for
+one owner at multiplier2, while a sibling remains independent. Public key
+rotation invalidates the old key without closing the owner's Tunnel or
+sibling. Both live directional rate updates exhaust the same SSH/Tunnel
+64KiB burst; queued Tunnel traffic resumes when the public rate is cleared.
+The exact ledger reaches131120/131120 with524480 billed bytes without
+repricing history. Public portable export/reimport, expiry, disable, quota
+exhaustion/renewal, delete, restart and SSH listener port release are checked.
+
+Authorized real OpenSSH -R produces7/7 raw bytes and28 billed bytes on the
+canonical owner; an out-of-range request is refused. The public template API
+saves a native SSH outbound using a dedicated0700 directory/0600 business key,
+then a public Tunnel routes actual target traffic through it. A wrong host pin
+closes the flow; restoring the SQL public pin restores forwarding.
+
+Evidence remains under /root/task-evidence/native-ssh-panel-task3-*.
+The export/wrapper behavioral RED logs and their GREEN corrections, real
+OpenSSH lifecycle/rate runs and initial harness/static-check failures are
+preserved. Final required SQLite40/actualPG42 named cases passed without missing or
+inapplicable required SKIPs. Final five export/public OpenSSH cases were
+repeated in both databases after the equivalent DNS static-check correction
+and stronger wrong-pin closure assertion. The affected subscription/controller
+race regression passed; final Go lint reports0 issues and vet passed.
+Frontend35 files/606 cases passed, including18 native SSH cases, native mieru,
+client info/copy/download, QR and Tunnel workflows. Generated contracts remain
+byte-identical; typecheck, frontend lint/format, Vite build and workflow/script
+syntax checks passed. This stage still uses the verified backend3525f678 core
+with unchanged core/dependency bytes; final clean artifacts follow review.
+
 ## Remaining acceptance
 
-Existing client/inbound/outbound forms and EN/ZH validation passed Task 2. OpenSSH
-config/known_hosts downloads and public HTTP -> real OpenSSH-L/-D/authorized-R
-acceptance are Task 3; the current Go SSH service test does not substitute for
-those checks. Whole-panel review, final clean artifacts and fork push follow
-all three tasks. Remote key provisioning, coordinated remote budgets, Snell
-panel integration and the broader original project remain open. No deployment
-or default-branch merge is implied by these local backend checks.
+One whole-panel review, clean-source artifacts and fork verification remain
+pending for this increment. Remote key provisioning, coordinated remote budgets, Snell panel
+integration and the broader original project remain open. No deployment or
+default-branch merge is implied by these local checks.

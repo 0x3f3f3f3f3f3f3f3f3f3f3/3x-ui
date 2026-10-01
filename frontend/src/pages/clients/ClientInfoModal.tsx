@@ -46,6 +46,7 @@ const INBOUND_PROTOCOL_COLORS: Record<string, string> = {
   tunnel: 'orange',
   tuic: 'orange',
   mieru: 'cyan',
+  ssh: 'cyan',
 };
 
 const INBOUND_CHIP_LIMIT = 1;
@@ -90,6 +91,9 @@ const SUBSCRIPTION_DOWNLOAD_NAMES = {
   json: 'subscription-json.json',
   clash: 'subscription-clash.yaml',
   mieru: 'mieru-client.json',
+  ssh: 'x-ui-ssh.conf',
+  'ssh-known-hosts': 'x-ui-ssh-known_hosts',
+  'ssh-instructions': 'x-ui-ssh-instructions.txt',
 } as const;
 
 export default function ClientInfoModal({
@@ -189,6 +193,29 @@ export default function ClientInfoModal({
     url.searchParams.set('format', 'mieru');
     return url.toString();
   }, [links, subLink]);
+  const sshDownloads = useMemo(() => {
+    if (!subLink || !client?.inboundIds?.some((id) => inboundsById[id]?.protocol === 'ssh')) {
+      return [];
+    }
+    return (['ssh', 'ssh-known-hosts', 'ssh-instructions'] as const).map((format) => {
+      const url = new URL(subLink, window.location.href);
+      url.searchParams.set('format', format);
+      return {
+        format,
+        url: url.toString(),
+        label: {
+          ssh: 'pages.clients.sshConfiguration',
+          'ssh-known-hosts': 'pages.clients.sshKnownHosts',
+          'ssh-instructions': 'pages.clients.sshInstructions',
+        }[format],
+        downloadLabel: {
+          ssh: 'pages.clients.downloadSSHConfiguration',
+          'ssh-known-hosts': 'pages.clients.downloadSSHKnownHosts',
+          'ssh-instructions': 'pages.clients.downloadSSHInstructions',
+        }[format],
+      };
+    });
+  }, [client?.inboundIds, inboundsById, subLink]);
   const wgInbounds = useMemo(
     () => findWireguardInbounds(client, inboundsById),
     [client, inboundsById],
@@ -658,6 +685,32 @@ export default function ClientInfoModal({
                     </div>
                   </div>
                 )}
+                {sshDownloads.map(({ format, url, label, downloadLabel }) => (
+                  <div className="link-row" key={format}>
+                    <Tag color="cyan" className="link-row-tag">
+                      SSH
+                    </Tag>
+                    <a href={url} className="link-row-title link-row-title-anchor">
+                      {t(label)}
+                    </a>
+                    <div className="link-row-actions">
+                      <Button
+                        size="small"
+                        icon={<CopyOutlined />}
+                        aria-label={t('copy')}
+                        onClick={() => copyValue(url)}
+                      />
+                      <Button
+                        size="small"
+                        icon={<DownloadOutlined />}
+                        aria-label={t(downloadLabel)}
+                        loading={downloadingFormat === format}
+                        disabled={downloadingFormat !== null}
+                        onClick={() => void downloadSubscription(url, format)}
+                      />
+                    </div>
+                  </div>
+                ))}
                 {subJsonLink && (
                   <div className="link-row">
                     <Tag color="purple" className="link-row-tag">
