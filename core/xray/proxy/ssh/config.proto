@@ -1,0 +1,47 @@
+syntax = "proto3";
+package xray.proxy.ssh;
+option go_package = "github.com/xtls/xray-core/proxy/ssh";
+
+import "common/protocol/user.proto";
+
+message Account {
+  string username = 1;
+  repeated string public_keys = 2;
+  string password = 3;
+}
+
+message ServerConfig {
+  string host_key_file = 1;
+  repeated xray.common.protocol.User users = 2;
+  bool allow_password = 3;
+  uint32 handshake_timeout_seconds = 4;
+  uint32 idle_timeout_seconds = 5;
+  uint32 channel_open_timeout_seconds = 6;
+  uint32 max_auth_tries = 7;
+  uint32 max_connections = 8;
+  uint32 max_connections_per_user = 9;
+  uint32 max_channels_per_connection = 10;
+  uint32 max_channels = 11;
+  ReverseConfig reverse = 12;
+}
+
+message ReverseConfig {
+  bool enabled = 1;
+  repeated string bind_addresses = 2;
+  uint32 port_from = 3;
+  uint32 port_to = 4;
+  repeated string source_cidrs = 5;
+  uint32 max_listeners = 6;
+  bool allow_port_zero = 7;
+}
+
+message ClientConfig {
+  string address = 1;
+  uint32 port = 2;
+  string username = 3;
+  string private_key_file = 4;
+  string password = 5;
+  string host_key = 6;
+  uint32 handshake_timeout_seconds = 7;
+  uint32 idle_timeout_seconds = 8;
+}

@@ -37,22 +37,22 @@ core/xray/testing/policy/ssh_test.go.
 Consumes: proxy.Inbound.Process, User.TrackSession, CPE.Manager.Open, Dispatcher.DispatchLink.
 Produces: NewServer(context.Context,*ServerConfig)(*Server,error), native "ssh" inbound.
 
-- [ ] Write real JSON-loaded core test for OpenSSH -L/-D, shared Tunnel exact ledger,
+- [x] Write real JSON-loaded core test for OpenSSH -L/-D, shared Tunnel exact ledger,
   session rejection, disabled/unknown user, credential removal and sibling channel.
-- [ ] Run `go test ./testing/policy -run '^TestSSH' -count=1` and observe missing SSH loader RED.
-- [ ] Add typed config/users/host-key parser and direct-tcpip channel/transport lifetime.
-- [ ] Run the named tests; expected PASS. Record evidence; keep implementation uncommitted.
+- [x] Run `go test ./testing/policy -run '^TestSSH' -count=1` and observe missing SSH loader RED.
+- [x] Add typed config/users/host-key parser and direct-tcpip channel/transport lifetime.
+- [x] Run the named tests; expected PASS. Record evidence; keep implementation uncommitted.
 
 ### Task 2: Controlled reverse forwarding and bounds
 
 Files: core/xray/proxy/ssh/reverse.go, config fields; testing/policy/ssh_test.go.
 Consumes Task 1 authenticated transport and CPE. Produces opt-in managed -R.
 
-- [ ] Add failing tests for authorized -R, default denial, port-zero/cancel cleanup,
+- [x] Add failing tests for authorized -R, default denial, port-zero/cancel cleanup,
   source/port/bind denial, quota direction, idle policy disconnect and channel bounds.
-- [ ] Run new tests, expected protocol denial before implementation.
-- [ ] Implement bounded listener registry and directional admission/copy; reject unsupported requests.
-- [ ] Run `go test ./testing/policy -run '^TestSSH' -count=1`; expected PASS.
+- [x] Run new tests, expected protocol denial before implementation.
+- [x] Implement bounded listener registry and directional admission/copy; reject unsupported requests.
+- [x] Run `go test ./testing/policy -run '^TestSSH' -count=1`; expected PASS.
 
 ### Task 3: Strict outbound, shared rates and final verification
 
@@ -61,10 +61,13 @@ testing/policy/ssh_test.go; docs/custom-core/native-ssh-testing.md.
 Consumes supplied internet.Dialer and existing originating policy link.
 Produces Client.Process(context.Context,*transport.Link,internet.Dialer) error.
 
-- [ ] Write failing native routed SSH outbound test: right pin echo, wrong pin typed
+- [x] Write failing native routed SSH outbound test: right pin echo, wrong pin typed
   host-key rejection, TCP only, same-client shared rate/live disable.
-- [ ] Run new tests and observe missing native outbound RED.
-- [ ] Implement one owned SSH transport per Process with bounded handshake/open/copy cancellation.
-- [ ] Run scoped race tests, affected conf/dispatcher/CPE regressions, vet and core build.
+- [x] Run new tests and observe missing native outbound RED.
+- [x] Implement one owned SSH transport per Process with bounded handshake/open/copy cancellation.
+- [x] Run scoped race tests, affected conf/dispatcher/CPE regressions, vet and core build.
   Expected PASS; report exact command/results and unverified remaining panel scope.
-- [ ] Provide diff and evidence to root for its single independent review; no production commit.
+- [x] Root completes its single independent review before integration; both Important
+  lifecycle findings and the bounded acknowledgment follow-up are corrected and
+  independently verified before the logical production commit.
+  Source and evidence handed off in [native-ssh-testing.md](native-ssh-testing.md).
