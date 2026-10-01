@@ -345,3 +345,23 @@ This validates the compiled native mieru core increment and a compatible panel
 build. Mieru panel/API/DB/forms/export/runtime integration remains open; Snell
 and SSH remain the other active core priorities. No deployment, release or
 default-branch merge occurred. The build adds no new full frontend test claim.
+
+### Clean-source native SSH core checkpoint
+
+Source `c282cc6b7b7c62f644cb88014d9c35a5c38ff129` was built from clean clone
+`/tmp/native-ssh-clean-source-5qeovxsn` using Go1.27.1, Node26.10.0/npm11.19.1.
+Clean npm install, frontend, panel, core and version/build-info checks exited0.
+Panel version is `dev+c282cc6b`; core26.9.9-custom.1 reports the full source SHA
+without a dirty suffix. Previously verified compiled mieru v3.38.0 is retained.
+
+- `build/x-ui-native-ssh-core-checkpoint`: SHA256
+  `47df25ecac2cdd41f137ddd9bd06396fa9169fa549d55fb1fc89fcc493488b23`.
+- `build/custom-xray-native-ssh-core-checkpoint`: SHA256
+  `f7d796e47c10e6f75378033aeeaac4549e4e417d55595c0ab0ddd55f09294557`.
+
+All24 preceding checkpoint/review artifacts covered by the preservation manifest
+rehash unchanged. Evidence: `/root/task-evidence/native-ssh-clean-build-manifest.json`,
+`native-ssh-clean-build-results.json`, `native-ssh-post-build-prior-preservation.json`
+and exact fork receipt `native-ssh-push-c282cc6b7b7c62f644cb88014d9c35a5c38ff129.json`.
+This closes the native core checkpoint provenance, not SSH panel/forms/export or
+full Task7. Snell native QUIC and three-protocol panel integration remain open.
