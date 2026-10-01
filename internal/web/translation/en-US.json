@@ -1018,7 +1018,9 @@
       "mieruPassword": "mieru password",
       "mieruCredentialInvalid": "mieru credentials must be valid Unicode and no more than 64 UTF-8 bytes.",
       "mieruCredentialsDesc": "Independent credentials used only by mieru. Changing the client label does not change authentication.",
-      "mieruGenerated": "Generated when first attached if left empty"
+      "mieruGenerated": "Generated when first attached if left empty",
+      "mieruConfiguration": "mieru client configuration",
+      "downloadMieruConfiguration": "Download mieru configuration"
     },
     "groups": {
       "name": "Name",
@@ -2102,7 +2104,8 @@
         "interface": "Interface",
         "proxyProtocol": "Proxy protocol",
         "tcpUserTimeoutMs": "TCP user timeout (ms)",
-        "tcpKeepAliveIdleS": "TCP keep-alive idle (s)"
+        "tcpKeepAliveIdleS": "TCP keep-alive idle (s)",
+        "mieruImportUnsupported": "A native mieru outbound requires one profile, one server and one TCP or UDP port. Unsupported profile options must be removed explicitly."
       },
       "outbound": {
         "tag": "Tag",

@@ -1,4 +1,6 @@
 import { Base64 } from '@/utils';
+import { MieruOutboundSettingsSchema } from '@/schemas/protocols/outbound/mieru';
+import { z } from 'zod';
 
 // Focused share-link parser for the OutboundFormModal's link-import
 // helper. Each parser returns a wire-shape outbound record (the same
@@ -840,6 +842,8 @@ export function parseOutboundLink(link: string): Raw | null {
   const trimmed = link.trim();
   if (!trimmed) return null;
   return (
+    parseMieruConfigJson(trimmed) ??
+    parseMieruLink(trimmed) ??
     parseVmessLink(trimmed) ??
     parseVlessLink(trimmed) ??
     parseTrojanLink(trimmed) ??
@@ -847,4 +851,95 @@ export function parseOutboundLink(link: string): Raw | null {
     parseHysteria2Link(trimmed) ??
     parseWireguardLink(trimmed)
   );
+}
+
+const MieruProfileImportSchema = z.strictObject({
+  profileName: z.string().min(1),
+  user: z.strictObject({ name: z.string(), password: z.string() }),
+  servers: z
+    .array(
+      z.strictObject({
+        ipAddress: z.string().optional(),
+        domainName: z.string().optional(),
+        portBindings: z
+          .array(z.strictObject({ port: z.number(), protocol: z.enum(['TCP', 'UDP']) }))
+          .length(1),
+      }),
+    )
+    .length(1),
+  mtu: z.number().optional(),
+  multiplexing: z.strictObject({ level: z.string() }).optional(),
+});
+
+function parseMieruConfigJson(raw: string): Raw | null {
+  if (!raw.startsWith('{')) return null;
+  try {
+    const config = z
+      .strictObject({
+        profiles: z.array(MieruProfileImportSchema).length(1),
+        activeProfile: z.string(),
+        socks5Port: z.number().optional(),
+        rpcPort: z.number().optional(),
+        httpProxyPort: z.number().optional(),
+      })
+      .safeParse(JSON.parse(raw));
+    if (!config.success) return null;
+    const profile = config.data.profiles[0]!;
+    if (config.data.activeProfile !== profile.profileName) return null;
+    const server = profile.servers[0]!;
+    if (!!server.ipAddress === !!server.domainName) return null;
+    const binding = server.portBindings[0]!;
+    const native = MieruOutboundSettingsSchema.safeParse({
+      address: server.ipAddress || server.domainName,
+      port: binding.port,
+      username: profile.user.name,
+      password: profile.user.password,
+      transport: binding.protocol,
+      mtu: profile.mtu ?? 1400,
+      multiplexing: profile.multiplexing?.level ?? 'MULTIPLEXING_LOW',
+    });
+    return native.success
+      ? { protocol: 'mieru', tag: profile.profileName, settings: native.data }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseMieruLink(link: string): Raw | null {
+  if (!link.startsWith('mierus://')) return null;
+  try {
+    const url = new URL(link);
+    const query = url.searchParams;
+    const allowed = new Set(['profile', 'port', 'protocol', 'mtu', 'multiplexing']);
+    if (
+      url.port ||
+      url.pathname ||
+      url.hash ||
+      Array.from(query.keys()).some((key) => !allowed.has(key) || query.getAll(key).length !== 1)
+    )
+      return null;
+    if (
+      query.getAll('port').length !== 1 ||
+      query.getAll('protocol').length !== 1 ||
+      !query.get('profile') ||
+      query.has('traffic-pattern') ||
+      query.has('handshake-mode')
+    )
+      return null;
+    const native = MieruOutboundSettingsSchema.safeParse({
+      address: url.hostname.replace(/^\[|\]$/g, ''),
+      port: Number(query.get('port')),
+      username: decodeURIComponent(url.username),
+      password: decodeURIComponent(url.password),
+      transport: query.get('protocol'),
+      mtu: query.has('mtu') ? Number(query.get('mtu')) : 1400,
+      multiplexing: query.get('multiplexing') || 'MULTIPLEXING_LOW',
+    });
+    return native.success
+      ? { protocol: 'mieru', tag: query.get('profile'), settings: native.data }
+      : null;
+  } catch {
+    return null;
+  }
 }

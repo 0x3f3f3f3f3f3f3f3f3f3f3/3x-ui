@@ -45,6 +45,7 @@ const INBOUND_PROTOCOL_COLORS: Record<string, string> = {
   mixed: 'lime',
   tunnel: 'orange',
   tuic: 'orange',
+  mieru: 'cyan',
 };
 
 const INBOUND_CHIP_LIMIT = 1;
@@ -88,6 +89,7 @@ const SUBSCRIPTION_DOWNLOAD_NAMES = {
   standard: 'subscription-standard.txt',
   json: 'subscription-json.json',
   clash: 'subscription-clash.yaml',
+  mieru: 'mieru-client.json',
 } as const;
 
 export default function ClientInfoModal({
@@ -181,6 +183,12 @@ export default function ClientInfoModal({
       : '';
 
   const showSubscription = !!(subSettings?.enable && client?.subId);
+  const mieruSubLink = useMemo(() => {
+    if (!subLink || !links.some((link) => link.startsWith('mierus://'))) return '';
+    const url = new URL(subLink, window.location.href);
+    url.searchParams.set('format', 'mieru');
+    return url.toString();
+  }, [links, subLink]);
   const wgInbounds = useMemo(
     () => findWireguardInbounds(client, inboundsById),
     [client, inboundsById],
@@ -624,6 +632,32 @@ export default function ClientInfoModal({
                     </Popover>
                   </div>
                 </div>
+                {mieruSubLink && (
+                  <div className="link-row">
+                    <Tag color="cyan" className="link-row-tag">
+                      MIERU
+                    </Tag>
+                    <a href={mieruSubLink} className="link-row-title link-row-title-anchor">
+                      {t('pages.clients.mieruConfiguration')}
+                    </a>
+                    <div className="link-row-actions">
+                      <Button
+                        size="small"
+                        icon={<CopyOutlined />}
+                        aria-label={t('copy')}
+                        onClick={() => copyValue(mieruSubLink)}
+                      />
+                      <Button
+                        size="small"
+                        icon={<DownloadOutlined />}
+                        aria-label={t('pages.clients.downloadMieruConfiguration')}
+                        loading={downloadingFormat === 'mieru'}
+                        disabled={downloadingFormat !== null}
+                        onClick={() => void downloadSubscription(mieruSubLink, 'mieru')}
+                      />
+                    </div>
+                  </div>
+                )}
                 {subJsonLink && (
                   <div className="link-row">
                     <Tag color="purple" className="link-row-tag">

@@ -69,6 +69,9 @@ func (s *SubClashService) getClash(subId string, host string, legacy bool) (stri
 			}
 			continue
 		}
+		if inbound.Protocol == model.Mieru {
+			return "", "", errMieruClientFormat
+		}
 		subReq.projectThroughFallbackMaster(inbound)
 		if hostEps := subReq.hostEndpoints(inbound, "clash"); len(hostEps) > 0 {
 			injectExternalProxy(inbound, hostEps)
@@ -93,6 +96,9 @@ func (s *SubClashService) getClash(subId string, host string, legacy bool) (stri
 			continue
 		}
 		for _, el := range expandEntry(ext) {
+			if isMieruShareLink(el.Link) {
+				return "", "", errMieruClientFormat
+			}
 			name := el.Name
 			if name == "" {
 				name = ext.Email

@@ -147,6 +147,9 @@ func (s *SubJsonService) GetJson(subId string, host string, alwaysReturnArray bo
 			}
 			continue
 		}
+		if inbound.Protocol == model.Mieru {
+			return "", "", errMieruClientFormat
+		}
 		subReq.projectThroughFallbackMaster(inbound)
 		if hostEps := subReq.hostEndpoints(inbound, "json"); len(hostEps) > 0 {
 			injectExternalProxy(inbound, hostEps)
@@ -195,6 +198,9 @@ func (s *SubJsonService) GetJson(subId string, host string, alwaysReturnArray bo
 			continue
 		}
 		for _, el := range expandEntry(ext) {
+			if isMieruShareLink(el.Link) {
+				return "", "", errMieruClientFormat
+			}
 			outbound := parsedExternalOutbound(el.Link)
 			if outbound == nil {
 				continue

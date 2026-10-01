@@ -287,6 +287,14 @@ export default function OutboundFormModal({
       messageApi.error(`JSON: ${(e as Error).message}`);
       return false;
     }
+    if ('profiles' in parsed) {
+      const native = parseOutboundLink(raw);
+      if (!native) {
+        messageApi.error(t('pages.xray.outboundForm.mieruImportUnsupported'));
+        return false;
+      }
+      parsed = native;
+    }
     const next = rawOutboundToFormValues(parsed);
     methods.reset(next);
     setJsonDirty(false);
@@ -325,6 +333,14 @@ export default function OutboundFormModal({
       } catch (e) {
         messageApi.error(`JSON: ${(e as Error).message}`);
         return;
+      }
+      if ('profiles' in parsed) {
+        const native = parseOutboundLink(raw);
+        if (!native) {
+          messageApi.error(t('pages.xray.outboundForm.mieruImportUnsupported'));
+          return;
+        }
+        parsed = native;
       }
       values = rawOutboundToFormValues(parsed);
       methods.reset(values);
@@ -602,7 +618,7 @@ export default function OutboundFormModal({
                     >
                       <Input.Search
                         value={linkInput}
-                        placeholder="vmess:// vless:// trojan:// ss:// hysteria2:// wireguard://"
+                        placeholder="vmess:// vless:// trojan:// ss:// hysteria2:// wireguard:// mierus://"
                         enterButton="Import"
                         onChange={(e) => setLinkInput(e.target.value)}
                         onSearch={importLink}

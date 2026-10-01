@@ -39,6 +39,12 @@ func ParseSubscriptionBody(body []byte) ([]Outbound, []string, error) {
 	if text == "" {
 		return nil, nil, nil
 	}
+	if strings.HasPrefix(text, "{") {
+		var object map[string]json.RawMessage
+		if json.Unmarshal([]byte(text), &object) == nil && object["profiles"] != nil {
+			return parseMieruSubscriptionConfig(text)
+		}
+	}
 
 	// Try base64 decode first (standard and URL-safe variants).
 	if decoded, ok := tryBase64(text); ok {
@@ -57,6 +63,9 @@ func ParseSubscriptionBody(body []byte) ([]Outbound, []string, error) {
 		}
 		res, err := ParseLink(ln)
 		if err != nil || res == nil {
+			if strings.HasPrefix(ln, "mieru://") || strings.HasPrefix(ln, "mierus://") {
+				return nil, nil, fmt.Errorf("mieru subscription: %w", err)
+			}
 			// Ignore unparseable lines (comments, unsupported protocols, etc.)
 			continue
 		}
@@ -118,6 +127,8 @@ func splitLines(s string) []string {
 func ParseLink(link string) (*ParseResult, error) {
 	link = strings.TrimSpace(link)
 	switch {
+	case strings.HasPrefix(link, "mierus://"), strings.HasPrefix(link, "mieru://"):
+		return parseMieru(link)
 	case strings.HasPrefix(link, "vmess://"):
 		return parseVmess(link)
 	case strings.HasPrefix(link, "vless://"):

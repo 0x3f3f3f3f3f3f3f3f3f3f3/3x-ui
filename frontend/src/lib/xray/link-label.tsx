@@ -28,6 +28,7 @@ const PROTOCOL_LABELS: Record<string, string> = {
   tg: 'MTProto',
   vpn: 'AmneziaWG',
   tuic: 'TUIC',
+  mierus: 'Mieru',
 };
 
 const PROTOCOL_COLORS: Record<string, string> = {
@@ -41,6 +42,7 @@ const PROTOCOL_COLORS: Record<string, string> = {
   MTProto: 'blue',
   AmneziaWG: 'yellow',
   TUIC: 'orange',
+  Mieru: 'cyan',
 };
 
 const SECURITY_COLORS: Record<string, string> = {
@@ -118,12 +120,17 @@ export function parseLinkParts(link: string): LinkParts | null {
       const url = new URL(trimmed);
       network = url.searchParams.get('type') ?? '';
       security = url.searchParams.get('security') ?? '';
+      if (scheme === 'mierus') {
+        network = url.searchParams.get('protocol') ?? '';
+        security = '';
+        remark = url.searchParams.get('profile') ?? '';
+      }
       /* tg://proxy links (mtproto) carry the port in a `port` query param, not
          the URL authority, so fall back to it when there is no authority port. */
       port = url.port || (url.searchParams.get('port') ?? '');
       const hash = url.hash.replace(/^#/, '');
       try {
-        remark = decodeURIComponent(hash);
+        if (scheme !== 'mierus') remark = decodeURIComponent(hash);
       } catch {
         remark = hash;
       }

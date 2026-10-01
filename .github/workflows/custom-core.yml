@@ -2,9 +2,9 @@ name: Custom core
 on:
   push:
     branches: [feature/custom-xray-unified-policy]
-    paths: ["core/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
+    paths: ["core/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
   pull_request:
-    paths: ["core/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
+    paths: ["core/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
 permissions:
   contents: read
 jobs:
@@ -82,6 +82,16 @@ jobs:
           PYCODE
       - name: Build custom core
         run: bash tools/build-custom-core.sh
+      - name: Build missing native mieru identity capability fixture
+        run: bash tools/build-mieru-capability-fixture.sh
+      - name: Native mieru panel public lifecycle and official export
+        run: |
+          set -euo pipefail
+          make dist-stub
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" XRAY_PRE_MIERU_MARKER_E2E_BINARY="$PWD/build/pre-mieru-marker-xray" \
+            go test -race -count=1 -v ./internal/database/model ./internal/database ./internal/web/service ./internal/xray ./internal/sub ./internal/util/link github.com/xtls/xray-core/app/clientpolicy/command \
+            -run '^TestMieru|^TestCapabilitiesAdvertiseVerifiedNativeMieru' | tee /tmp/native-mieru-panel-sqlite.log
+          python3 tools/verify-native-mieru-panel.py sqlite /tmp/native-mieru-panel-sqlite.log
       - name: Password proxy identity and credential lifecycle
         working-directory: core/xray
         run: |
@@ -300,6 +310,16 @@ jobs:
       - run: make dist-stub
       - name: Build custom core for database bootstrap
         run: bash tools/build-custom-core.sh
+      - name: Build missing native mieru identity capability fixture
+        run: bash tools/build-mieru-capability-fixture.sh
+      - name: Native mieru panel public lifecycle and official export
+        run: |
+          set -euo pipefail
+          make dist-stub
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" XRAY_PRE_MIERU_MARKER_E2E_BINARY="$PWD/build/pre-mieru-marker-xray" \
+            go test -race -count=1 -v ./internal/database/model ./internal/database ./internal/web/service ./internal/xray ./internal/sub ./internal/util/link github.com/xtls/xray-core/app/clientpolicy/command \
+            -run '^TestMieru|^TestCapabilitiesAdvertiseVerifiedNativeMieru' | tee /tmp/native-mieru-panel-postgres.log
+          python3 tools/verify-native-mieru-panel.py postgres /tmp/native-mieru-panel-postgres.log
       - name: Build pinned unmodified core for handoff rejection
         run: |
           upstream_core_dir="$(go mod download -json github.com/xtls/xray-core@v1.260327.1-0.20260908222543-52a412d9e2f5 | jq -er .Dir)"

@@ -1374,6 +1374,8 @@ type ClientShape = {
   security?: VmessSecurity;
   flow?: VlessClient['flow'];
   password?: string;
+  mieruUsername?: string;
+  mieruPassword?: string;
   auth?: string;
   secret?: string;
   email?: string;
@@ -1388,6 +1390,8 @@ function clientSubKey(client: ClientShape): string {
 
 export function getInboundClients(inbound: Inbound): ClientShape[] | null {
   switch (inbound.protocol) {
+    case 'mieru':
+      return inbound.settings.clients ?? [];
     case 'vmess':
       return (inbound.settings.clients ?? []) as ClientShape[];
     case 'vless':
@@ -1434,6 +1438,23 @@ export function genLink(input: GenLinkInput): string {
     externalProxy = null,
   } = input;
   switch (inbound.protocol) {
+    case 'mieru': {
+      const username = client.mieruUsername;
+      const password = client.mieruPassword;
+      if (!username || !password) return '';
+      const target = externalProxy?.dest || address;
+      const url = new URL(
+        `mierus://${target.includes(':') && !target.startsWith('[') ? `[${target}]` : target}`,
+      );
+      url.username = encodeURIComponent(username);
+      url.password = encodeURIComponent(password);
+      url.searchParams.set('profile', remark || client.email || 'mieru');
+      url.searchParams.set('mtu', String(inbound.settings.mtu || 1400));
+      url.searchParams.set('multiplexing', 'MULTIPLEXING_LOW');
+      url.searchParams.set('port', String(externalProxy?.port || port));
+      url.searchParams.set('protocol', inbound.settings.transport);
+      return url.toString();
+    }
     case 'vmess':
       return genVmessLink({
         inbound,

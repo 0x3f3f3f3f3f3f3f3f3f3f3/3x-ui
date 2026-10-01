@@ -35,6 +35,10 @@ const (
 // client, never-existed id) and becomes 404. A real error becomes 500. No
 // body — VPN clients only look at the status.
 func writeSubError(c *gin.Context, err error) {
+	if errors.Is(err, errMieruClientFormat) {
+		c.String(http.StatusNotAcceptable, "%s", errMieruClientFormat.Error())
+		return
+	}
 	if err == nil {
 		c.Status(http.StatusNotFound)
 		return
@@ -463,6 +467,12 @@ func dedupeEmails(emails []string) []string {
 // subs handles HTTP requests for subscription links, returning either HTML page or base64-encoded subscription data.
 func (a *SUBController) subs(c *gin.Context) {
 	userAgent := c.GetHeader("User-Agent")
+	if strings.EqualFold(c.Query("format"), "mieru") {
+		if a.enforceHwid(c) {
+			a.serveMieruBody(c)
+		}
+		return
+	}
 	if a.maybeServeSubInfo(c) {
 		logSubscriptionRoute(userAgent, "info")
 		return
@@ -519,6 +529,22 @@ func (a *SUBController) subs(c *gin.Context) {
 		}
 		a.recordSubscriptionFetch(c)
 	}
+}
+
+func (a *SUBController) serveMieruBody(c *gin.Context) {
+	scheme, host, hostWithPort, _ := a.subService.ResolveRequest(c)
+	body, header, err := a.subService.GetMieruConfig(c.Param("subid"), host)
+	if err != nil || body == "" {
+		writeSubError(c, err)
+		return
+	}
+	request := a.subService.ForRequest(host)
+	metadata := a.metadataForSubRequest(func() *SubService { return request }, c.Param("subid"), builtinProfileURL(c, scheme, hostWithPort))
+	a.ApplyCommonHeaders(c, header, a.updateInterval, metadata.Title, metadata.SupportURL, metadata.ProfileURL, metadata.Announce, a.subEnableRouting, a.subRoutingRules, a.subHideSettings)
+	c.Header("Content-Disposition", `attachment; filename="mieru-client.json"`)
+	c.Data(http.StatusOK, "application/json; charset=utf-8", []byte(body))
+	a.recordSubscriptionFetch(c)
+	logSubscriptionRoute(c.GetHeader("User-Agent"), "mieru")
 }
 
 func (a *SUBController) recordSubscriptionFetch(c *gin.Context) {

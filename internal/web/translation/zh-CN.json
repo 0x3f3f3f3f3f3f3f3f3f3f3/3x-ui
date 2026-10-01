@@ -1018,7 +1018,9 @@
       "mieruPassword": "mieru 密码",
       "mieruCredentialInvalid": "mieru 凭据必须是有效 Unicode，且不超过 64 个 UTF-8 字节。",
       "mieruCredentialsDesc": "仅用于 mieru 的独立凭据。修改客户端名称不会改变认证信息。",
-      "mieruGenerated": "留空则在首次附加时生成"
+      "mieruGenerated": "留空则在首次附加时生成",
+      "mieruConfiguration": "mieru 客户端配置",
+      "downloadMieruConfiguration": "下载 mieru 配置"
     },
     "groups": {
       "name": "名称",
@@ -1984,7 +1986,8 @@
         "interface": "接口",
         "proxyProtocol": "Proxy protocol",
         "tcpUserTimeoutMs": "TCP user timeout (ms)",
-        "tcpKeepAliveIdleS": "TCP keep-alive idle (s)"
+        "tcpKeepAliveIdleS": "TCP keep-alive idle (s)",
+        "mieruImportUnsupported": "原生 mieru 出站需要单个配置、单个服务器和单个 TCP 或 UDP 端口。请明确移除不支持的配置选项。"
       },
       "outbound": {
         "tag": "标签",

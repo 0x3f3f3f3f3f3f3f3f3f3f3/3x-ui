@@ -86,15 +86,18 @@ internal/web/translation/{en-US.json,zh-CN.json}; generated API schema outputs.
 
 ### Task 3: Task8B3 — Official export and combined public lifecycle acceptance
 
-Files: service/inbound_sublink.go and relevant existing subscription serializers;
-create service/mieru_export.go and official-parser tests; existing client
-QR/download/link modules and new mieru export tests. Derive exact serializer
-dispatch files from source before editing, documenting them in this plan.
+Files: internal/sub/{service.go,controller.go,json_service.go,clash_service.go};
+create internal/sub/{mieru.go,mieru_export_test.go,mieru_http_runtime_test.go};
+create internal/web/service/mieru_export.go; internal/util/link/outbound.go and
+new mieru.go/mieru_test.go; frontend/src/lib/xray/{inbound-link.ts,
+outbound-link-parser.ts,link-label.tsx}; existing ClientInfoModal and
+OutboundFormModal; new mieru links/download/JSON-form tests; EN/ZH translations;
+custom-core CI and native capability fixture/required-PASS tools.
 
-- [ ] Official ClientProfile/ClientConfig URL parser round-trip tests first fail
+- [x] Official ClientProfile/ClientConfig URL parser round-trip tests first fail
   for TCP/UDP, domain/IPv6 and escaped Unicode credentials; implement public
   appctl serializers, explicit supported-format dispatch and profile mapping.
-- [ ] Combined existing HTTP API/form payload→SQL→core→official client→target
+- [x] Combined existing HTTP API/form payload→SQL→core→official client→target
   test fails before wiring; verify exact usage/shared Tunnel rate/quota,
   credential rotation/sibling survival, disable/delete/expiry/restart/listener
   removal, export/reimport and backup/restore.
