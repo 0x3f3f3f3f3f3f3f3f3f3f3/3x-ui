@@ -251,7 +251,7 @@ func (mb MultiBuffer) Len() int32 {
 // IsEmpty returns true if the MultiBuffer has no content.
 func (mb MultiBuffer) IsEmpty() bool {
 	for _, b := range mb {
-		if !b.IsEmpty() {
+		if b != nil && (!b.IsEmpty() || b.UDP != nil) {
 			return false
 		}
 	}

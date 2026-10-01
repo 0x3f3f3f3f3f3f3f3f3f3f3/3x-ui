@@ -11,6 +11,8 @@ import (
 const (
 	// Size of a regular buffer.
 	Size = 8192
+	// UDP messages must fit in one buffer to preserve the datagram boundary.
+	MaxDatagramSize = 65535
 )
 
 var ErrBufferFull = errors.New("buffer is full")

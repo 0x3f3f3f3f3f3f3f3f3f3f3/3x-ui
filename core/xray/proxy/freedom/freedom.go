@@ -438,7 +438,11 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if destination.Network == net.Network_TCP {
 			reader = buf.NewReader(conn)
 		} else {
-			reader = NewPacketReader(conn, h, defaultRule, UDPOverride, destination)
+			preserveSource := false
+			if content := session.ContentFromContext(ctx); content != nil {
+				preserveSource = content.PreserveUDPPacketSource
+			}
+			reader = NewPacketReader(conn, h, defaultRule, UDPOverride, destination, preserveSource)
 		}
 		if err := buf.Copy(reader, output, buf.UpdateActivity(timer)); err != nil {
 			return errors.New("failed to process response").Base(err)
@@ -457,7 +461,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	return nil
 }
 
-func NewPacketReader(conn net.Conn, h *Handler, defaultRule *FinalRule, UDPOverride net.Destination, DialDest net.Destination) buf.Reader {
+func NewPacketReader(conn net.Conn, h *Handler, defaultRule *FinalRule, UDPOverride net.Destination, DialDest net.Destination, preserveSource ...bool) buf.Reader {
 	iConn := conn
 	statConn, ok := iConn.(*stat.CounterConnection)
 	if ok {
@@ -474,6 +478,7 @@ func NewPacketReader(conn net.Conn, h *Handler, defaultRule *FinalRule, UDPOverr
 		}
 
 		return &PacketReader{
+			PreserveSource:    len(preserveSource) > 0 && preserveSource[0],
 			PacketConnWrapper: c,
 			Counter:           counter,
 			Handler:           h,
@@ -487,6 +492,7 @@ func NewPacketReader(conn net.Conn, h *Handler, defaultRule *FinalRule, UDPOverr
 }
 
 type PacketReader struct {
+	PreserveSource bool
 	*internet.PacketConnWrapper
 	stats.Counter
 	Handler           *Handler
@@ -502,8 +508,8 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		return nil, err
 	}
 	defer stats.EndIO(lease)
-	b := buf.New()
-	b.Resize(0, buf.Size)
+	b := buf.NewWithSize(buf.MaxDatagramSize)
+	b.Resize(0, buf.MaxDatagramSize)
 	for {
 		n, d, err := r.PacketConnWrapper.ReadFrom(b.Bytes())
 		if err != nil {
@@ -519,8 +525,8 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 
 		// if udp dest addr is changed, we are unable to get the correct src addr
 		// so we don't attach src info to udp packet, break cone behavior, assuming the dial dest is the expected scr addr
-		if !r.IsOverridden {
-			if r.InitChangedAddr == sourceAddr {
+		if !r.IsOverridden || r.PreserveSource {
+			if !r.PreserveSource && r.InitChangedAddr == sourceAddr {
 				sourceAddr = r.InitUnchangedAddr
 			}
 			b.UDP = &net.Destination{
