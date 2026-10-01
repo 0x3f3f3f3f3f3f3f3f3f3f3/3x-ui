@@ -87,6 +87,9 @@ type SniffingRequest struct {
 
 // Content is the metadata of the connection content. Mainly used for routing.
 type Content struct {
+	// PreserveTCPHalfClose lets native reusable protocols propagate logical
+	// upload EOF to a direct TCP socket without ending its download direction.
+	PreserveTCPHalfClose bool
 	// PreserveUDPPacketSource retains the actual reply IP for protocols whose
 	// UDP wire clients require packet sources rather than original domain labels.
 	PreserveUDPPacketSource bool

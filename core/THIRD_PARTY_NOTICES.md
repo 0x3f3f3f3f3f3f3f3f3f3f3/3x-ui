@@ -38,7 +38,6 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
 ## mieru v3.38.0
 
 Copyright (C) 2024–2026 mieru authors. GPL-3.0-or-later.
@@ -51,3 +50,14 @@ process or local proxy bridge is used. Native adapter source and its pinned
 wire/header dependencies are in core/xray/proxy/mieru. Build metadata retains
 Custom Xray naming and the source revision. Release licensing review remains
 part of the existing packaging gate.
+
+## sing-snell native Snell protocol library
+
+GPL-3.0-or-later, Copyright (C) 2022 nekohasekai. Complete source and
+original license are retained in [deps/sing-snell](deps/sing-snell/LICENSE).
+Pinned module `v0.0.0-20260904135315-bc5a12ac736f`, commit
+`bc5a12ac736f235b2de2926ecd2791cc925e6b8c`; immutable origin and archive checksum
+and the narrow UDP datagram/empty-response changes are in
+[the manifest](deps/sing-snell.UPSTREAM.json). The larger GPL distribution
+must supply complete corresponding source and preserve Xray's MPL notices.
+This library does not implement v5 QUIC Proxy Mode.

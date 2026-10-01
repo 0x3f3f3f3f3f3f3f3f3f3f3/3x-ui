@@ -1,0 +1,27 @@
+syntax = "proto3";
+package xray.proxy.snell;
+option go_package = "github.com/xtls/xray-core/proxy/snell";
+
+import "common/protocol/user.proto";
+import "common/net/address.proto";
+
+message Account { string psk = 1; }
+message ServerConfig {
+  uint32 version = 1;
+  xray.common.protocol.User user = 2;
+  string obfs = 3;
+  string mode = 4;
+  bool quic = 5;
+}
+message ClientConfig {
+  uint32 version = 1;
+  string psk = 2;
+  xray.common.net.IPOrDomain address = 3;
+  uint32 port = 4;
+  string obfs = 5;
+  string obfs_host = 6;
+  string obfs_uri = 7;
+  string mode = 8;
+  bool reuse = 9;
+  bool quic = 10;
+}

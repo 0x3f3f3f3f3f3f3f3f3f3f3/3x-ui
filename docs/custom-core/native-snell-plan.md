@@ -27,26 +27,26 @@
 
 ### Task 1: Typed configuration and dependency boundary
 
-**Files:** `core/xray/proxy/snell/{config.proto,config.pb.go,account.go,config.go}`, `core/xray/infra/conf/{snell.go,snell_test.go,xray.go}`, `core/xray/main/distro/all/all.go`, module manifests, `core/THIRD_PARTY_NOTICES.md`, source provenance.
+**Files:** `core/xray/proxy/snell/{config.proto,config.pb.go,account.go,config_test.go}`, `core/xray/infra/conf/{snell.go,snell_test.go,xray.go}`, `core/xray/main/distro/all/all.go`, module manifests, `core/THIRD_PARTY_NOTICES.md`, source provenance.
 
 **Interfaces:** Produce `ServerConfig`, `ClientConfig`, typed `Account`, validated `NewServer`/`NewClient`; consume the audited source constructors and native config registration.
 
-- [ ] Write JSON/native validation tests for each version, authenticated UUID mapping and unsupported versions/modes/QUIC/transports.
-- [ ] Run focused tests. Expected: RED because protocol is unknown.
-- [ ] Pin dependencies, generate additive protobuf config, implement validation and native registration with source/license manifest.
-- [ ] Run focused tests. Expected: GREEN; existing sing callers compile.
+- [x] Write JSON/native validation tests for each version, authenticated UUID mapping and unsupported versions/modes/QUIC/transports.
+- [x] Run focused tests. Actual RED: unknown Snell protocol in each version.
+- [x] Pin dependencies, generate additive protobuf config, implement validation and native registration with source/license manifest.
+- [x] Run focused tests. Actual GREEN; existing sing callers compile.
 
 ### Task 2: Real decoded inbound/outbound and policy lifecycle
 
-**Files:** `core/xray/proxy/snell/{inbound.go,outbound.go,udp.go,native_test.go}`.
+**Files:** `core/xray/proxy/snell/{inbound.go,outbound.go,packet.go,stream.go,outbound_test.go}`, `core/xray/testing/policy/snell_test.go`.
 
 **Interfaces:** Consume Task 1 configs and native `proxy.Inbound.Process`/`proxy.Outbound.Process`. Produce TCP and packet handler callbacks, physical credential tracking and bounded destination links.
 
-- [ ] Write real socket tests for explicit versions 4/5/6 in both directions, TCP half-close/reuse and UDP domains/IPv6/empty/large payloads. Assert independently observed target bytes and quota totals.
-- [ ] Run focused tests. Expected: RED because handlers do not transfer decoded payload.
-- [ ] Implement native callbacks, full datagram bridge, Xray dialer injection, immutable owner mapping and resource cleanup.
-- [ ] Add RED tests for wrong PSK, blocked route, shared quota/rate, disable/expiry/removal/sibling/idle cleanup before each missing behavior is implemented.
-- [ ] Run race tests. Expected: GREEN with exact byte totals and zero active resources after cleanup.
+- [x] Write real socket tests for explicit versions 4/5/6 in both directions, TCP half-close/reuse and UDP domains/IPv6/empty/large payloads. Assert independently observed target bytes and quota totals.
+- [x] Run focused tests. Actual RED: missing handlers, packet headroom, reuse scope and timeout defects recorded separately.
+- [x] Implement native callbacks, full datagram bridge, Xray dialer injection, immutable owner mapping and resource cleanup.
+- [x] Add tests for wrong PSK, blocked route, shared quota/rate, disable/expiry/removal/sibling/idle cleanup; record actual missing-behavior RED/GREEN evidence.
+- [x] Run race tests. Actual GREEN with exact byte totals, credential fences, pending dial capacity and zero active resources after cleanup.
 
 ### Task 3: Interoperability and regression evidence
 
@@ -54,7 +54,12 @@
 
 **Interfaces:** Consume Task 2 and official test-only ARM64 v4.1.1/v5.0.1/v6.0.0rc2 reference fixtures.
 
-- [ ] Run separately labeled library-client/native inbound and native outbound/official-reference tests, including v6 distinct PSKs and UDP boundary probes. Expected: real observed transfers or an explicit reproducible external-client gap.
-- [ ] Run affected native core packages, existing sing callers and broader core build/tests; report every failure or skip without weakening APIs.
-- [ ] Record exact commands/logs, compatibility pair, remaining v5 QUIC and official Surge-client gaps. Expected: evidence supports only delivered paths.
-- [ ] Send root the uncommitted diff for its one independent review; do not push or commit implementation.
+- [x] Run separately labeled library-client/native inbound and native outbound/official-reference tests, including v6 distinct PSKs and UDP boundary probes. Actual official server interoperability passes; official Surge-client/native inbound remains unverified.
+- [x] Run affected native core packages, existing sing callers and broader core build/tests; all chosen checks pass, including real Shadowsocks/Shadowsocks2022/WireGuard scenarios and root-module MVS callers. Full official-client inbound acceptance remains unverified.
+- [x] Record exact commands/logs, compatibility pair, remaining v5 QUIC, official Surge-client and official v5 large-reply gaps in native-snell-testing.md. Evidence supports only delivered paths.
+- [x] Send root the uncommitted diff for its one independent review; complete the single accepted three-finding timeout correction pass with actual RED/GREEN and fresh full race/shared build checks. Implementation remains uncommitted and unpushed.
+
+The corrected 71-file manifest and evidence are under `/root/task-evidence`.
+Original full Snell acceptance remains open for native v5 QUIC and actual Surge
+client inbound tests. The official-v6 missing-reply assertion is a documented
+deferred Minor, and the official-v5 large-first-reply truncation remains visible.

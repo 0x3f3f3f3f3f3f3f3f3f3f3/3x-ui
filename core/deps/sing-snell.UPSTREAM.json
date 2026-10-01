@@ -1,0 +1,33 @@
+{
+  "module": "github.com/sagernet/sing-snell",
+  "version": "v0.0.0-20260904135315-bc5a12ac736f",
+  "commit": "bc5a12ac736f235b2de2926ecd2791cc925e6b8c",
+  "source": "https://github.com/SagerNet/sing-snell",
+  "archive_sha256": "353891a9f3f6e6cea714d8c815b7eefe5d1750bbf02d7d2373f69d1ab2bbf586",
+  "license": "GPL-3.0-or-later",
+  "modified_files": [
+    {
+      "path": "snellv4/record.go",
+      "upstream_sha256": "9b3fdcda036a12ff4d0368c42d059af4e14deae818673766e570201dacaf9617",
+      "managed_sha256": "85ef1b948a6b124e5b650bb4b75306a558d63dc81f1835a53515d3a564ecbc35",
+      "change": "Keep UDP datagrams in one authenticated record up to the absolute 16383-byte wire payload limit, independently of the TCP growth window; TCP unchanged."
+    },
+    {
+      "path": "snellv5/record.go",
+      "upstream_sha256": "cce14e0dd7e9181fb7857fe31fbdc8453af180113f551f352b9344d430b54154",
+      "managed_sha256": "9e7a449aa711a510a93844f5a799075d046f741918afb7bfa0131385c6b9948d",
+      "change": "Keep UDP datagrams in one authenticated record up to the absolute 16383-byte wire payload limit, independently of the TCP growth window; TCP unchanged."
+    },
+    {
+      "path": "snellv4/packet.go",
+      "upstream_sha256": "0064fc573c1ce87d9c58953bde4d9af94bc27d47ac0cea1fd6b7da4fec8abcdf",
+      "managed_sha256": "1906d88ec52bb6ff6b1ecc9ddf2cfb741204d88e7354a94e12180e81986b5f48",
+      "change": "Accept empty IPv4 response payloads after the seven-byte address header."
+    }
+  ],
+  "verified_official_fixtures": {
+    "v4": "4.1.1 linux-aarch64",
+    "v5": "5.0.1 linux-aarch64",
+    "v6": "6.0.0rc2 linux-aarch64"
+  }
+}
