@@ -61,6 +61,16 @@ propagated to the direct target, losing its post-FIN reply. Fixes are scoped to
 regressions in `core/xray/testing/policy/{tunnel_datagram_test.go,tunnel_target_test.go}`.
 The bulk HTTP acceptance is `internal/sub/client_policy_bulk_http_runtime_test.go`.
 
+The one independent review additionally reproduced missing FIN propagation in
+selected SOCKS/HTTP adapters and both large-packet legs of the SOCKS outbound.
+The single correction batch extends adapter-level half-close (including HTTP/2
+request-body EOF), propagates the flag through TCP SOCKS/HTTP CONNECT inbounds,
+and preserves full SOCKS UDP payloads within their wire-header limit. Real
+regressions cover independent reference proxies, this core as upstream, pinned
+TLS HTTP/2, large upload/reply, empty packets and encoded IPv4/IPv6/domain limits.
+Explicit CI gates require the bulk public HTTP acceptance on actual SQLite and
+PostgreSQL; failures, races, missing backend markers and skips are rejected.
+
 ## Task 3: Verify and publish the vertical
 
 Update accounting/testing/deployment documentation and a requirement-to-evidence

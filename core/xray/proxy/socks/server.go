@@ -184,6 +184,12 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 		if inbound.CanSpliceCopy == 2 {
 			inbound.CanSpliceCopy = 1
 		}
+		content := new(session.Content)
+		if previous := session.ContentFromContext(ctx); previous != nil {
+			*content = *previous
+		}
+		content.PreserveTCPHalfClose = true
+		ctx = session.ContextWithContent(ctx, content)
 		if err := dispatcher.DispatchLink(
 			ctx, dest, &transport.Link{
 				Reader: reader,

@@ -13,7 +13,7 @@ import (
 )
 
 func TestNativeSnellOutboundSniffingIdleCancellation(t *testing.T) {
-	for _, source := range []string{"socks", "http"} {
+	for _, source := range []string{"socks", "http", "tunnel"} {
 		for _, version := range []int{4, 5, 6} {
 			for _, reuse := range []bool{false, true} {
 				for _, sniffing := range []bool{false, true} {
@@ -38,11 +38,18 @@ func TestNativeSnellOutboundSniffingIdleCancellation(t *testing.T) {
 							_, _ = io.Copy(io.Discard, conn)
 						}()
 						serverPort, socksPort := port(t), port(t)
+						for socksPort == serverPort {
+							socksPort = port(t)
+						}
 						start(t, loopbackJSON(t, snellNativeConfig(version, serverPort)))
+						settings := map[string]any{"auth": "noauth"}
+						if source == "tunnel" {
+							settings = map[string]any{"allowedNetwork": "tcp", "rewriteAddress": "127.0.0.1", "rewritePort": target.Addr().(*net.TCPAddr).Port}
+						}
 						client := map[string]any{
 							"log":    map[string]any{"loglevel": "error"},
 							"policy": map[string]any{"levels": map[string]any{"0": map[string]any{"connIdle": 1, "uplinkOnly": 1, "downlinkOnly": 1}}},
-							"inbounds": []any{map[string]any{"listen": "127.0.0.1", "port": socksPort, "protocol": source, "settings": map[string]any{"auth": "noauth"},
+							"inbounds": []any{map[string]any{"listen": "127.0.0.1", "port": socksPort, "protocol": source, "settings": settings,
 								"sniffing": map[string]any{"enabled": sniffing, "metadataOnly": true}}},
 							"outbounds": []any{map[string]any{"protocol": "snell", "settings": map[string]any{"version": version, "address": "127.0.0.1", "port": serverPort, "psk": snellPSK, "reuse": reuse}}},
 						}
@@ -54,7 +61,7 @@ func TestNativeSnellOutboundSniffingIdleCancellation(t *testing.T) {
 								t.Fatal(err)
 							}
 							conn, err = dialer.Dial("tcp", target.Addr().String())
-						} else {
+						} else if source == "http" {
 							conn, err = net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", socksPort), time.Second)
 							if err == nil {
 								_, err = fmt.Fprintf(conn, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", target.Addr(), target.Addr())
@@ -66,6 +73,8 @@ func TestNativeSnellOutboundSniffingIdleCancellation(t *testing.T) {
 									}
 								}
 							}
+						} else {
+							conn, err = net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", socksPort), time.Second)
 						}
 						if err != nil {
 							if conn != nil {

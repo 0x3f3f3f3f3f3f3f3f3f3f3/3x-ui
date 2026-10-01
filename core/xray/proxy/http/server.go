@@ -260,6 +260,12 @@ func (s *Server) handleConnect(ctx context.Context, _ *http.Request, buffer *buf
 	if inbound.CanSpliceCopy == 2 {
 		inbound.CanSpliceCopy = 1
 	}
+	content := new(session.Content)
+	if previous := session.ContentFromContext(ctx); previous != nil {
+		*content = *previous
+	}
+	content.PreserveTCPHalfClose = true
+	ctx = session.ContextWithContent(ctx, content)
 	if err := dispatcher.DispatchLink(
 		ctx, dest, &transport.Link{
 			Reader: reader,

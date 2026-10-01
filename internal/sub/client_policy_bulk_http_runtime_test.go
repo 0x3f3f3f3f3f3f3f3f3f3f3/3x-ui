@@ -27,6 +27,7 @@ func bulkPolicyDecimal(micros int64) string {
 // native Snell/Tunnel traffic, exact fractional billing and durable reset state.
 func TestClientPolicyBulkHTTPNativeBindingsAndTunnelAccounting(t *testing.T) {
 	h := newNativeHTTPHarness(t, "bulk_policy_http")
+	t.Logf("bulk traffic policy backend: %s", database.GetDB().Dialector.Name())
 	mieru := h.add(t, "mieru", "bulk-mieru", `{"transport":"TCP","mtu":1400,"clients":[]}`)
 	ssh := h.add(t, "ssh", "bulk-ssh", `{"allowPassword":true,"clients":[]}`)
 	a := model.Client{Email: "bulk-policy-a", SubID: "bulk-policy-a-sub", Enable: true, TotalGB: 1000000, SSHPassword: "independent-business-password-a", Policy: &model.ClientPolicyOptions{UploadBytesPerSecond: 262144, DownloadBytesPerSecond: 1048576, Multiplier: "1.234567"}}

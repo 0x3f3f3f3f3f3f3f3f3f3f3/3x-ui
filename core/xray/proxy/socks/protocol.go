@@ -392,6 +392,12 @@ func encodeUDPPacket(request *protocol.RequestHeader, data []byte, fullDatagrams
 		b.Release()
 		return nil, err
 	}
+	// Include the SOCKS header in the portable IPv4 UDP wire limit. Larger
+	// payloads cannot be forwarded without fragmentation support in SOCKS.
+	if fullDatagrams && int64(b.Len())+int64(len(data)) > 65507 {
+		b.Release()
+		return nil, errors.New("SOCKS UDP datagram exceeds wire payload limit")
+	}
 	// if data is too large, return an empty buffer (drop too big data)
 	if b.Available() < int32(len(data)) {
 		b.Clear()
@@ -406,7 +412,7 @@ type UDPReader struct {
 }
 
 func (r *UDPReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	buffer := buf.New()
+	buffer := buf.NewWithSize(buf.MaxDatagramSize)
 	_, err := buffer.ReadFrom(r.Reader)
 	if err != nil {
 		buffer.Release()
@@ -441,7 +447,7 @@ func (w *UDPWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				Port:    b.UDP.Port,
 			}
 		}
-		packet, err := EncodeUDPPacket(request, b.Bytes())
+		packet, err := encodeUDPPacket(request, b.Bytes(), true)
 		b.Release()
 		if err != nil {
 			buf.ReleaseMulti(mb)

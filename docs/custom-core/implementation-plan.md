@@ -12,15 +12,13 @@
 
 ## Current execution priority — 2026-10-01
 
-The user reiterates that Snell, mieru and SSH support is the central deliverable.
-Tasks 7–9 now take execution priority over further Task5B legacy/password
-refinements. Close verification of already-written Task5B8B changes, then build
-real native protocol adapters, with protocol-specific configuration,
-authenticated identity, Dispatcher routing, shared policy and real client tests.
-Develop each adapter in an isolated local worktree while prior checks finish.
-Panel/API/UI/export integration follows the native protocol paths; historical
-password alias adoption remains deferred. The three protocols are currently N,
-and neither source availability nor a standalone wire probe is acceptance.
+Native Snell v4/v5/v6 (including v5 QUIC), mieru and SSH now have scoped
+local core/panel/API/UI/export checkpoints backed by real client tests. The
+user's next priority is shared multiplier billing, directional rates and Tunnel
+forwarding. This stage completes bulk policy controls and reproduced direct and
+selected-proxy forwarding gaps, then records fresh SQLite/PostgreSQL, native
+client, rate and clean-build evidence. Commercial-device, other-platform and
+coordinated-node acceptance remain separate open requirements.
 
 ## Global constraints
 
@@ -50,12 +48,11 @@ per-client upload/download rate enforcement and TCP/UDP forwarding through Xray
 Tunnel/dokodemo-door. Those features share canonical identity, routing, quotas,
 expiry and statistics, with full DB/API/UI/config/data-path acceptance.
 
-The local three-protocol panels now have scoped verified checkpoints. Finish the
-bounded official-core replacement guard already in progress, then return directly
-to the billing/rate/Tunnel vertical and its remaining acceptance gaps. Broader
-installation/distribution remains an original requirement, with its ordering
-subject to this explicit user priority. Existing partial tests do not close a
-whole feature; completion requires the agreed observable acceptance.
+The official-core replacement guard is complete and published. Continue the
+billing/rate/Tunnel vertical through final verified artifacts and publication;
+then address remaining original distribution, restore and multi-node work.
+Existing partial tests do not close a whole feature; completion requires the
+agreed observable acceptance.
 
 ## Task 1: Audit and reproducible source baseline (in progress)
 

@@ -143,7 +143,15 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 
 	requestFunc := func() error {
 		defer timer.SetTimeout(p.Timeouts.DownlinkOnly)
-		return buf.Copy(link.Reader, buf.NewWriter(conn), buf.UpdateActivity(timer))
+		if err := buf.Copy(link.Reader, buf.NewWriter(conn), buf.UpdateActivity(timer)); err != nil {
+			return err
+		}
+		if content := session.ContentFromContext(ctx); content != nil && content.PreserveTCPHalfClose {
+			if writer, ok := stat.TryUnwrapStatsConn(conn).(interface{ CloseWrite() error }); ok {
+				return writer.CloseWrite()
+			}
+		}
+		return nil
 	}
 	responseFunc := func() error {
 		ob.CanSpliceCopy = 1
@@ -368,6 +376,12 @@ func (h *http2Conn) Read(p []byte) (n int, err error) {
 
 func (h *http2Conn) Write(p []byte) (n int, err error) {
 	return h.in.Write(p)
+}
+
+// End only this CONNECT request body; its response and shared HTTP/2
+// connection remain readable until the tunnel finishes.
+func (h *http2Conn) CloseWrite() error {
+	return h.in.Close()
 }
 
 func (h *http2Conn) Close() error {

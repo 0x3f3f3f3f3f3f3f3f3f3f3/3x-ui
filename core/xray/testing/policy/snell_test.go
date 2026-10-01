@@ -635,6 +635,12 @@ func TestNativeSnellOutboundVersions(t *testing.T) {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			target := tcpEcho(t).Addr().(*net.TCPAddr).Port
 			serverPort, tunnelPort := port(t), port(t)
+			// Released ephemeral reservations may select the same port twice.
+			// That sends the Snell upstream back into its own forwarding listener.
+			for tunnelPort == serverPort {
+				tunnelPort = port(t)
+			}
+			t.Logf("Snell fixture ports: server=%d tunnel=%d target=%d", serverPort, tunnelPort, target)
 			config := snellNativeConfig(version, serverPort)
 			config["inbounds"] = append(config["inbounds"].([]any), map[string]any{"tag": "tunnel", "listen": "127.0.0.1", "port": tunnelPort, "protocol": "tunnel", "settings": map[string]any{"allowedNetwork": "tcp", "rewriteAddress": "127.0.0.1", "rewritePort": target}})
 			config["outbounds"] = append(config["outbounds"].([]any), map[string]any{"tag": "snell-out", "protocol": "snell", "settings": map[string]any{"version": version, "psk": snellPSK, "address": "127.0.0.1", "port": serverPort, "reuse": true}})

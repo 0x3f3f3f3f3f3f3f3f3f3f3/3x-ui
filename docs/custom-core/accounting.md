@@ -524,7 +524,10 @@ Explicitly entering defaults can select managed activation through the ordinary
 mutation path; runtime capability and ownership failures retain their existing
 saved-but-not-applied response. The form uses the existing client create/update
 API. English and Simplified Chinese copy is supplied, with English fallback text
-for the other locale keys. Bulk forms and full Tunnel ownership UI remain open.
+for the other locale keys. Bulk creation now accepts the same exact multiplier
+and directional rate controls, with explicit local-scope checks. Tunnel ownership
+is available through its existing form; see `policy-tunnel-testing.md` for the
+shared native-protocol/forwarding acceptance and remaining distributed scope.
 
 Policy editing currently requires local-only bindings. The form checks both the
 original and selected listeners; remote or unresolved bindings make the controls

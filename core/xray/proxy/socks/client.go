@@ -136,7 +136,15 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	if request.Command == protocol.RequestCommandTCP {
 		requestFunc = func() error {
 			defer timer.SetTimeout(p.Timeouts.DownlinkOnly)
-			return buf.Copy(link.Reader, buf.NewWriter(conn), buf.UpdateActivity(timer))
+			if err := buf.Copy(link.Reader, buf.NewWriter(conn), buf.UpdateActivity(timer)); err != nil {
+				return err
+			}
+			if content := session.ContentFromContext(ctx); content != nil && content.PreserveTCPHalfClose {
+				if writer, ok := stat.TryUnwrapStatsConn(conn).(interface{ CloseWrite() error }); ok {
+					return writer.CloseWrite()
+				}
+			}
+			return nil
 		}
 		responseFunc = func() error {
 			ob.CanSpliceCopy = 1

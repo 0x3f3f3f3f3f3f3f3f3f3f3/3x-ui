@@ -135,16 +135,17 @@ func copyStream(ctx context.Context, link *transport.Link, c, physical net.Conn,
 	// SOCKS and HTTP DispatchLink readers consume their inbound socket directly.
 	// Sniffing can wrap that reader with an Interrupt method which only interrupts
 	// pipes, so the method alone does not establish socket cancellation ownership.
-	// Reusable inbound streams and readers which preserve half-close retain their
-	// own lifetime.
+	// TCP SOCKS/HTTP/Tunnel sources own one physical connection per request.
+	// Half-close controls EOF semantics, not that cancellation ownership.
+	// Reusable native inbound streams retain their independent lifetime.
 	var directSource net.Conn
 	if !inbound {
 		_, interruptible := link.Reader.(common.Interruptible)
 		_, closable := link.Reader.(common.Closable)
 		content := session.ContentFromContext(ctx)
-		if content == nil || !content.PreserveTCPHalfClose {
-			if source := session.InboundFromContext(ctx); source != nil &&
-				(source.Name == "socks" || source.Name == "http" || !interruptible && !closable) {
+		if source := session.InboundFromContext(ctx); source != nil {
+			socketSource := source.Name == "socks" || source.Name == "http" || source.Name == "dokodemo-door"
+			if socketSource || (content == nil || !content.PreserveTCPHalfClose) && !interruptible && !closable {
 				directSource = source.Conn
 			}
 		}
