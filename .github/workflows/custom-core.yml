@@ -24,7 +24,7 @@ jobs:
       - name: Core race checks
         working-directory: core/xray
         run: |
-          go test -race -count=1 ./app/clientpolicy/... ./app/commander ./app/dispatcher ./app/proxyman/inbound ./app/proxyman/outbound ./app/reverse ./app/router ./app/stats ./app/trafficcontrol ./infra/conf ./proxy ./proxy/dokodemo ./proxy/loopback ./proxy/socks ./proxy/http ./proxy/mieru ./proxy/ssh ./proxy/vless/inbound ./proxy/vless/outbound ./proxy/wireguard ./common/buf ./common/mux ./common/protocol ./common/signal ./transport/internet/udp ./transport/internet/websocket ./transport/internet/splithttp ./transport/internet/httpupgrade ./transport/internet/finalmask/realm ./testing/policy
+          go test -race -count=1 ./app/clientpolicy/... ./app/commander ./app/dispatcher ./app/proxyman/inbound ./app/proxyman/outbound ./app/reverse ./app/router ./app/stats ./app/trafficcontrol ./infra/conf ./proxy ./proxy/dokodemo ./proxy/loopback ./proxy/socks ./proxy/http ./proxy/mieru ./proxy/snell ./proxy/ssh ./proxy/vless/inbound ./proxy/vless/outbound ./proxy/wireguard ./common/buf ./common/mux ./common/protocol ./common/signal ./transport/internet/udp ./transport/internet/websocket ./transport/internet/splithttp ./transport/internet/httpupgrade ./transport/internet/finalmask/realm ./testing/policy
           go test -race -count=1 ./core -run '^(TestRejectedHandlerConstructionClosesProxy|TestTrafficDrain)'
       - name: Tunnel mux routing and legacy compatibility
         working-directory: core/xray
@@ -50,6 +50,14 @@ jobs:
           go test -race -count=1 -v -timeout=90s ./proxy/ssh ./testing/policy -run '^(TestOutbound|TestSSH|TestChannel)' | tee /tmp/native-ssh.log
           for test in TestSSHOpenSSHDirectSharesTunnelLedgerAndDisable TestSSHOpenSSHReverseMetersClientRelativeDirection TestSSHNativeOutboundStrictPinAndRoutedPayload TestSSHMissingPolicyAndBlockedRouteCannotReachTarget TestSSHChannelEOFAndCredentialRemovalPreserveTunnelSibling TestSSHAndTunnelShareLiveDirectionalRates TestSSHQuotaAndExpiryCloseIdleTransportAndTunnelSibling TestSSHRestartRetainsBusinessHostKeyAndSharedUsage TestSSHPasswordDefaultOffRejectsCorrectPassword TestSSHPasswordOptInRotationAndRemovalPreserveCanonicalSiblings TestSSHReversePortZeroCancellationAndDisableReleaseOwnedResources TestSSHReverseAuthorizationChecksBindPortAndRealSource TestSSHConnectionChannelHandshakeAndIdleBounds TestSSHCancelledPendingReverseOpenCannotLeakAcceptedChannel TestSSHVerifiedAuthenticationCannotTransferRevokedOfferToReplacement TestSSHStalledControlWriteClosesWithinChannelBound TestChannelCapacityRetainsDelayedPeerCloseAndOwnedDrains TestChannelRetirementTimeoutClosesTransportAndJoinsOwnedDrains TestOutboundUDPReturnsExplicitUnsupportedNetwork TestOutboundHostMismatchReturnsTypedError TestOutboundHandshakeCancellationClosesSuppliedTransport TestOutboundHandshakeUsesAbsoluteDeadline TestOutboundIdleClosesBothCopyDirectionsAtConfiguredDeadline; do
             grep -q -- "^--- PASS: $test " /tmp/native-ssh.log
+          done
+      - name: Native Snell versioned stream and datagram lifecycle
+        working-directory: core/xray
+        run: |
+          set -euo pipefail
+          go test -race -count=1 -v -timeout=120s ./proxy/snell ./infra/conf ./testing/policy -run '^(TestOutbound|TestNativeSnell|TestNativeCanonical|TestNativeMalformed|TestNativeRejects)' | tee /tmp/native-snell.log
+          for test in TestNativeRejectsWrappedTransports TestNativeCanonicalUUID TestNativeMalformedAddressRejectsWithoutPanic TestOutboundUDPIdleCleanupUsesPolicy TestOutboundCloseFencesLateDials TestOutboundCapacityIncludesPendingDials TestOutboundReuseScopeAndCredentialFence TestOutboundNonreuseHandshakeWriteUsesPolicy TestNativeSnellConfigVersions TestNativeSnellConfigRejectsUnsupportedModes TestNativeSnellInboundHTTPAndV6UnshapedTCPUDP TestNativeSnellCredentialRemovalRotationAndSibling TestNativeSnellQuotaExpiryAndMissingPolicy TestNativeSnellOutboundUDPFirst13kEmptyExactLedger TestNativeSnellWireIDsShareCanonicalRateAndLedger TestNativeSnellUDPDisableExpiryQuotaAndCredentialCleanup TestNativeSnellUDPWireBoundary TestNativeSnellUDPVersions TestNativeSnellRespectsHandshakeTimeout TestNativeSnellUDPFirst13kEmptyDomainIPv6SourceAndRoutePolicy TestNativeSnellTCPVersionsPolicyAndRouteDeny TestNativeSnellOutboundVersions TestNativeSnellTCPReuseIdleStartsAfterLogicalCompletion TestNativeSnellUDPDownlinkRefreshesIdle; do
+            grep -q -- "^--- PASS: $test " /tmp/native-snell.log
           done
       - name: Build custom core
         run: bash tools/build-custom-core.sh

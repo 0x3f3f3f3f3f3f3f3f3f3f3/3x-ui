@@ -204,3 +204,16 @@ This scoped core increment has one independent review and one accepted correctio
 pass. The next QUIC increment remains separate; its official salt-classifier and
 repeated-envelope probes must be recorded independently. Panel integration and
 actual official Surge inbound acceptance remain open.
+
+## Merged branch gates
+
+Root4ad99e8d integrates this reviewed increment with native mieru and SSH. The
+merged native/shared race and root MVS sing-dependent handlers passed. Root
+`make gen-check`, `make lint-go` (zero issues), `go vet ./...`, `make test-go`
+including AWG, and the entire core `go test -shuffle=on -count=1 ./...` passed
+(175 package results, including real existing protocol scenarios). Exact
+commands and receipts: `/root/task-evidence/native-snell-integrated-validation-progress.json`.
+All 24 required Snell CI test names have explicit PASS lines; YAML and every
+workflow bash snippet passed syntax validation. Official server fixtures were
+exercised locally; the CI required-name gate covers native self-tests and does
+not count missing official fixtures as interoperability PASS.

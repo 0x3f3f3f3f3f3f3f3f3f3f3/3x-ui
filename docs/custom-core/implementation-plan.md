@@ -139,7 +139,7 @@ Files: core `proxy/mieru`, source-pinned library adapter, panel protocol/config/
 Files: core `proxy/snell`, necessary managed library adaptation, panel version-specific config/export.
 
 - [ ] Audit OpenSnell source/license and independently pin each compatibility target.
-- [ ] Implement v4 inbound/outbound with TCP, UDP, reuse and trusted PSK/listener mapping.
+- [x] Implement v4 native core inbound/outbound with TCP, UDP-over-TCP, reuse and trusted PSK/listener mapping; panel integration remains open.
 - [ ] Implement/test v5 independently including QUIC Proxy Mode; no substitute TCP/UDP-only claim.
 - [ ] Implement/test v6 beta modes against fixed official client/server combination; no external-server runtime fallback.
 - [ ] Maintain separate self-test versus official Surge interoperability evidence; if commercial client unavailable supply exact external procedure and leave unverified.
@@ -1003,3 +1003,18 @@ Task 7 remains open for panel/API/DB/forms/export, dedicated business host-key
 provisioning/rotation, negotiated capability and full lifecycle acceptance.
 Snell remains a core priority and mieru panel integration is in progress; no
 new password/legacy migration feature scope is introduced by this checkpoint.
+
+## Native Snell TCP/datagram integration — 2026-10-01
+
+The reviewed v4/v5/v6 increment is integrated locally, with additive dependency
+notices retaining mieru and SSH modules. Parent corrected-file hashes and native
+race validation passed, as did merged Dispatcher/CPE/buffer/pipe and root-module
+MVS callers. Full merged core/root generation, lint, vet and Go gates passed, including
+all 175 core package results and real existing protocol scenarios.
+Single-review three Important corrections are included; the official-v6
+missing-first-reply assertion Minor is deferred and visible.
+
+This covers authenticated TCP and UDP-over-TCP paths. Native v5 QUIC is being
+implemented separately from official codec probes; full panel lifecycle, actual
+Surge-client inbound and the official-v5 large-reply gap remain open. No deployment
+or release is authorized. See [native-snell-testing.md](native-snell-testing.md).
