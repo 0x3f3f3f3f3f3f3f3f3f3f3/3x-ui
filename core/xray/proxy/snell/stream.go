@@ -132,7 +132,28 @@ func validateTransport(ctx context.Context) error {
 func copyStream(ctx context.Context, link *transport.Link, c, physical net.Conn, inbound bool) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	stop := context.AfterFunc(ctx, func() { physical.Close(); common.Interrupt(link.Reader); common.Interrupt(link.Writer) })
+	// DispatchLink can supply a socket-backed SOCKS reader with no interruption
+	// interface. Its source socket must be closed when the copy is cancelled.
+	// Pipe readers and reusable inbound logical streams retain their own lifetime.
+	var directSource net.Conn
+	if !inbound {
+		_, interruptible := link.Reader.(common.Interruptible)
+		_, closable := link.Reader.(common.Closable)
+		content := session.ContentFromContext(ctx)
+		if !interruptible && !closable && (content == nil || !content.PreserveTCPHalfClose) {
+			if source := session.InboundFromContext(ctx); source != nil {
+				directSource = source.Conn
+			}
+		}
+	}
+	stop := context.AfterFunc(ctx, func() {
+		physical.Close()
+		common.Interrupt(link.Reader)
+		common.Interrupt(link.Writer)
+		if directSource != nil {
+			directSource.Close()
+		}
+	})
 	defer stop()
 	done := make(chan copyResult, 2)
 	updates := make(activity, 1)

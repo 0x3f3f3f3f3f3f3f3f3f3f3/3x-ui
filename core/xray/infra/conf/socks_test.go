@@ -47,6 +47,16 @@ func TestSocksInboundConfig(t *testing.T) {
 	})
 }
 
+func TestNativeSnellDownloadedSOCKSConfigRequiresUDP(t *testing.T) {
+	config, err := (&SocksServerConfig{UDP: true, UDPFullDatagrams: true}).Build()
+	if err != nil || !config.(*socks.ServerConfig).UdpFullDatagrams {
+		t.Fatalf("explicit full UDP datagram option was lost: %v", err)
+	}
+	if _, err := (&SocksServerConfig{UDPFullDatagrams: true}).Build(); err == nil {
+		t.Fatal("full UDP datagram option accepted without UDP support")
+	}
+}
+
 func TestSocksOutboundConfig(t *testing.T) {
 	creator := func() Buildable {
 		return new(SocksClientConfig)

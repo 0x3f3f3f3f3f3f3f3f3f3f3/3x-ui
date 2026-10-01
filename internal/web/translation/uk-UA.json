@@ -1091,7 +1091,12 @@
       "snellPskInvalid": "Snell PSK must be valid UTF-8 and no more than 255 bytes.",
       "snellPskV6Required": "Snell v6 requires a PSK of at least 12 UTF-8 bytes.",
       "snellOccupied": "This Snell service is already bound to another account, including disabled accounts.",
-      "snellSingleOwner": "A Snell service accepts exactly one owner account. Create or attach one account at a time."
+      "snellSingleOwner": "A Snell service accepts exactly one owner account. Create or attach one account at a time.",
+      "snellSurgeConfiguration": "Snell Surge configuration",
+      "snellJSONConfiguration": "Snell Custom Xray JSON",
+      "downloadSnellSurge": "Download Snell Surge configuration",
+      "downloadSnellJSON": "Download Snell Custom Xray JSON",
+      "snellDownloadsHelp": "Quoted values require Surge iOS 5.21.0+ / Mac 6.8.0+. Use native JSON for multiline or control characters. Snell v5 QUIC Proxy Mode is automatic in Surge."
     },
     "groups": {
       "name": "Назва",

@@ -3295,7 +3295,8 @@ export const SCHEMAS: Record<string, unknown> = {
           "amneziawg",
           "tuic",
           "mieru",
-          "ssh"
+          "ssh",
+          "snell"
         ],
         "example": "vless",
         "type": "string"

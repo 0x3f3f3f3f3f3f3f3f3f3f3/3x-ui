@@ -378,7 +378,15 @@ func DecodeUDPPacket(packet *buf.Buffer) (*protocol.RequestHeader, error) {
 }
 
 func EncodeUDPPacket(request *protocol.RequestHeader, data []byte) (*buf.Buffer, error) {
+	return encodeUDPPacket(request, data, false)
+}
+
+func encodeUDPPacket(request *protocol.RequestHeader, data []byte, fullDatagrams bool) (*buf.Buffer, error) {
 	b := buf.New()
+	if fullDatagrams {
+		b.Release()
+		b = buf.NewWithSize(buf.MaxDatagramSize)
+	}
 	common.Must2(b.Write([]byte{0, 0, 0 /* Fragment */}))
 	if err := addrParser.WriteAddressPort(b, request.Address, request.Port); err != nil {
 		b.Release()

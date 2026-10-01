@@ -16,9 +16,9 @@ This is the initial source-audit matrix, not a support announcement. `E/U` = exi
 | WireGuard | E/U both | E/U | N | per-peer identity, IP/payload accounting distinction |
 | TUN | E/U inbound | no account auth; resource identity required | N | packet semantics, route and owner mapping |
 | Tunnel/dokodemo-door | E/U inbound; NA outbound (listener adapter) | database, local stable-owner picker, raw TCP/UDP source ACL, concrete outbound selector and scoped ordinary Runtime owner lifecycle I/V; complete forwarding UI/unowned-rule migration N | I/V for scoped Tunnel/local persistence/SQL settlement, automatic local activation and guarded handoff | remaining forwarding modes/owner lifecycle, full shared-policy coverage |
-| Snell v4 | native core TCP/UDP-over-TCP/reuse inbound/outbound I/V scoped | native immutable PSK owner, rotation/removal and idle cleanup I/V; panel/API/DB/forms/export N | native Dispatcher/CPE shared Tunnel directional rate/billing/quota/disable/expiry I/V scoped | official v4.1.1 server/native outbound verified; actual Surge-client inbound remains unverified |
-| Snell v5 | native core TCP/UDP-over-TCP/reuse and v5 QUIC inbound/outbound I/V scoped | native immutable PSK owner and resource cleanup I/V; panel/API/DB/forms/export N | native shared directional policy and actual datagram boundaries I/V scoped | official v5.0.1 server, first13k and real v1/v2 HTTP/3 I/V scoped; ordinary TCP large first reply truncation remains; actual Surge-client inbound remains unverified |
-| Snell v6 beta | native core TCP/UDP-over-TCP/reuse/default shaping/unshaped I/V scoped | native immutable PSK owner and resource cleanup I/V; panel/API/DB/forms/export N | native shared policy/decoded payload/accounting/live close I/V scoped | fixed official v6.0.0rc2 server scoped interop; missing-reply assertion Minor recorded; actual official client and broader mode matrix remain open |
+| Snell v4 | native core TCP/UDP-over-TCP/reuse inbound/outbound I/V scoped | native independent SQL PSK, exclusive local owner, CRUD/attach/forms and Surge/Custom Xray downloads I/V local | native Dispatcher/CPE shared Tunnel directional rate/billing/quota/disable/expiry I/V scoped | official v4.1.1 server/native outbound verified; actual Surge-client inbound remains unverified |
+| Snell v5 | native core TCP/UDP-over-TCP/reuse and v5 QUIC inbound/outbound I/V scoped | native independent SQL PSK, exclusive local owner, CRUD/attach/forms and Surge/Custom Xray downloads I/V local | native shared directional policy and actual datagram boundaries I/V scoped | official v5.0.1 server, native first13k and real v1/v2 HTTP/3 I/V scoped; official fixture first large TCP reply truncation remains; actual Surge-client inbound remains unverified |
+| Snell v6 beta | native core TCP/UDP-over-TCP/reuse/default shaping/unshaped I/V scoped | native independent SQL PSK, exclusive local owner, CRUD/attach/forms and Surge/Custom Xray downloads I/V local | native shared policy/decoded payload/accounting/live close I/V scoped | fixed official v6.0.0rc2 server scoped interop and mandatory complete first13k reply; actual official client and broader mode matrix remain open |
 | mieru | native core inbound/outbound and local panel I/V scoped | independent SQL credentials, canonical RPC users, CRUD/attach/bulk/forms/official export and listener cleanup I/V local | decoded payload/shared Tunnel policy, exact billing, live disable/expiry/quota/rotation and restart I/V scoped | official-library TCP/UDP/mux; SQLite35/PG37 actual-child panel acceptance; packaged official clients/devices and coordinated nodes remain open |
 | SSH | native core inbound/outbound and local panel I/V scoped | independent SQL authentication, canonical CRUD/attach/bulk/forms, database-owned business host trust and pinned OpenSSH exports I/V local; remote key provisioning N | direct Dispatcher/client-relative reverse CPE and shared Tunnel rates/billing/quota/disable/expiry/rotation/restart I/V local | SQLite47/PG49 exact-clean-core acceptance, real OpenSSH -L/-D/authorized -R and strict outbound pin; coordinated remote nodes/devices remain open |
 | MTProto | E/U external mtg-multi; migration N | E/U secrets/ad-tags | N | preserve features, move execution into core |
@@ -319,3 +319,27 @@ that described SSH panel as open are superseded within this local scope.
 Remote key provisioning/coordinated budgets, Snell panel, packaged-client/device
 validation and the broader original migration/distribution work remain open.
 See native-ssh-panel-testing.md for source, artifact and fork provenance.
+
+
+## Native Snell local panel increment — 2026-10-01
+
+Snell v4/v5/v6 now use independent canonical SQL PSKs and exclusive local
+listener ownership in the existing accounts, service forms, outbound forms and
+download modal. Public HTTP acceptance runs the downloaded native JSON through
+real TCP, UDP and v5 QUIC with exact shared Tunnel bytes/billing, both directional
+rates, rotation, disable, expiry/quota renewal, sibling survival, last detach,
+released TCP/UDP ports and restart. Native Surge export preserves literal UTF-8
+quoted values; generic URI/Clash formats and unsupported wrappers fail explicitly.
+
+The required SQLite gate has37 top-level PASS names plus10 mandatory startup/HTTP
+subcases; actual PostgreSQL has40 plus10. The retained native SSH49 and mieru37
+required check assertions pass with the same new core. The scoped Snell core race
+gate has55 top-level PASS names, including pinned official references, full UDP
+SOCKS opt-in/default guards and native reuse/half-close guards. The v6 official
+first large reply is now mandatory rather than logging a missing response.
+
+This updates only the local native Snell panel scope. Actual proprietary Surge
+devices, packaged clients, remote coordinated budgets, broader protocol and
+legacy migration coverage, distribution and performance work remain open.
+PostgreSQL text cannot store NUL; NUL credential preservation has separate
+SQLite evidence. See native-snell-panel-testing.md for the commands and boundaries.

@@ -3321,7 +3321,8 @@
               "amneziawg",
               "tuic",
               "mieru",
-              "ssh"
+              "ssh",
+              "snell"
             ],
             "example": "vless",
             "type": "string"

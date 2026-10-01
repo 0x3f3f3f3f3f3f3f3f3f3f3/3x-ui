@@ -33,6 +33,8 @@ message ServerConfig {
   // Custom trusted identity metadata keyed by authenticated username.
   map<string, string> client_ids = 7;
   map<string, string> account_emails = 8;
+  // Preserve large and empty UDP replies for explicitly opted-in native clients.
+  bool udp_full_datagrams = 9;
 }
 
 // ClientConfig is the protobuf config for Socks client.

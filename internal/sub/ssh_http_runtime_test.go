@@ -55,20 +55,31 @@ func sshHTTPPort(t *testing.T) int {
 
 func newSSHHTTPHarness(t *testing.T) *sshHTTPHarness {
 	t.Helper()
+	if _, err := exec.LookPath("ssh"); err != nil {
+		t.Fatal("real OpenSSH is required", err)
+	}
+	return newNativeHTTPHarness(t, "ssh_http")
+}
+
+func newNativeHTTPHarness(t *testing.T, namespace string) *sshHTTPHarness {
+	t.Helper()
 	binary := os.Getenv("XRAY_E2E_BINARY")
 	if binary == "" {
 		t.Skip("set XRAY_E2E_BINARY to the built native core; required acceptance verifies PASS")
 	}
-	if _, err := exec.LookPath("ssh"); err != nil {
-		t.Fatal("real OpenSSH is required", err)
-	}
-	cleanup, err := testpg.IsolatePackage("ssh_http")
+	cleanup, err := testpg.IsolatePackage(namespace)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(cleanup)
 	seedSubDB(t)
-	dir := t.TempDir()
+	// Keep managed Unix control sockets below the platform's pathname limit.
+	dir, err := os.MkdirTemp("", "native-http-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	t.Setenv("XUI_DB_FOLDER", dir)
 	t.Setenv("XUI_BIN_FOLDER", dir)
 	t.Setenv("XUI_LOG_FOLDER", dir)
 	if err := os.Symlink(binary, filepath.Join(dir, xray.GetBinaryName())); err != nil {

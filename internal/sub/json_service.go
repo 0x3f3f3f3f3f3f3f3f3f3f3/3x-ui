@@ -150,6 +150,9 @@ func (s *SubJsonService) GetJson(subId string, host string, alwaysReturnArray bo
 		if inbound.Protocol == model.Mieru {
 			return "", "", errMieruClientFormat
 		}
+		if inbound.Protocol == model.Snell {
+			return "", "", errSnellClientFormat
+		}
 		if inbound.Protocol == model.SSH {
 			return "", "", errSSHClientFormat
 		}

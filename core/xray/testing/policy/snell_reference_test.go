@@ -217,6 +217,9 @@ func TestNativeSnellOfficialFirstLargeDatagramUpload(t *testing.T) {
 				}
 				buf.ReleaseMulti(reply)
 			case <-time.After(time.Second):
+				if version == 6 {
+					t.Fatal("official v6 did not return the complete first large datagram reply")
+				}
 				t.Log("official fixture returned no complete first large reply; upload acceptance is verified separately")
 			}
 		})

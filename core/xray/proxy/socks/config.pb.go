@@ -136,8 +136,10 @@ type ServerConfig struct {
 	// Custom trusted identity metadata keyed by authenticated username.
 	ClientIds     map[string]string `protobuf:"bytes,7,rep,name=client_ids,json=clientIds,proto3" json:"client_ids,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	AccountEmails map[string]string `protobuf:"bytes,8,rep,name=account_emails,json=accountEmails,proto3" json:"account_emails,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Preserve large and empty UDP replies for explicitly opted-in native clients.
+	UdpFullDatagrams bool `protobuf:"varint,9,opt,name=udp_full_datagrams,json=udpFullDatagrams,proto3" json:"udp_full_datagrams,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ServerConfig) Reset() {
@@ -219,6 +221,13 @@ func (x *ServerConfig) GetAccountEmails() map[string]string {
 	return nil
 }
 
+func (x *ServerConfig) GetUdpFullDatagrams() bool {
+	if x != nil {
+		return x.UdpFullDatagrams
+	}
+	return false
+}
+
 // ClientConfig is the protobuf config for Socks client.
 type ClientConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -272,7 +281,7 @@ const file_proxy_socks_config_proto_rawDesc = "" +
 	"\x18proxy/socks/config.proto\x12\x10xray.proxy.socks\x1a\x18common/net/address.proto\x1a!common/protocol/server_spec.proto\"A\n" +
 	"\aAccount\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
-	"\bpassword\x18\x02 \x01(\tR\bpassword\"\xed\x04\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\"\x9b\x05\n" +
 	"\fServerConfig\x127\n" +
 	"\tauth_type\x18\x01 \x01(\x0e2\x1a.xray.proxy.socks.AuthTypeR\bauthType\x12H\n" +
 	"\baccounts\x18\x02 \x03(\v2,.xray.proxy.socks.ServerConfig.AccountsEntryR\baccounts\x125\n" +
@@ -283,7 +292,8 @@ const file_proxy_socks_config_proto_rawDesc = "" +
 	"user_level\x18\x06 \x01(\rR\tuserLevel\x12L\n" +
 	"\n" +
 	"client_ids\x18\a \x03(\v2-.xray.proxy.socks.ServerConfig.ClientIdsEntryR\tclientIds\x12X\n" +
-	"\x0eaccount_emails\x18\b \x03(\v21.xray.proxy.socks.ServerConfig.AccountEmailsEntryR\raccountEmails\x1a;\n" +
+	"\x0eaccount_emails\x18\b \x03(\v21.xray.proxy.socks.ServerConfig.AccountEmailsEntryR\raccountEmails\x12,\n" +
+	"\x12udp_full_datagrams\x18\t \x01(\bR\x10udpFullDatagrams\x1a;\n" +
 	"\rAccountsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a<\n" +

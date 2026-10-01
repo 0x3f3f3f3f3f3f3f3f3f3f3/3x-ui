@@ -233,7 +233,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 			}
 		}
 
-		udpMessage, err := EncodeUDPPacket(request, payload.Bytes())
+		udpMessage, err := encodeUDPPacket(request, payload.Bytes(), s.config.UdpFullDatagrams)
 		payload.Release()
 
 		if err != nil {
@@ -277,7 +277,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 				continue
 			}
 
-			if payload.IsEmpty() {
+			if payload.IsEmpty() && !s.config.UdpFullDatagrams {
 				payload.Release()
 				continue
 			}

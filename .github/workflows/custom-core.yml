@@ -2,9 +2,9 @@ name: Custom core
 on:
   push:
     branches: [feature/custom-xray-unified-policy]
-    paths: ["core/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "tools/build-ssh-capability-fixture.sh", "tools/verify-native-ssh-panel.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
+    paths: ["core/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "tools/build-ssh-capability-fixture.sh", "tools/verify-native-ssh-panel.py", "tools/build-snell-capability-fixture.sh", "tools/verify-native-snell-panel.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
   pull_request:
-    paths: ["core/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "tools/build-ssh-capability-fixture.sh", "tools/verify-native-ssh-panel.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
+    paths: ["core/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "tools/build-ssh-capability-fixture.sh", "tools/verify-native-ssh-panel.py", "tools/build-snell-capability-fixture.sh", "tools/verify-native-snell-panel.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
 permissions:
   contents: read
 jobs:
@@ -55,8 +55,8 @@ jobs:
         working-directory: core/xray
         run: |
           set -euo pipefail
-          go test -race -shuffle=on -count=1 -v ./proxy/snell ./infra/conf ./testing/policy ./transport/internet/udp ./app/proxyman/inbound -run '^TestNativeSnell|^TestOutbound|^TestHubFullDatagrams|^TestUDPWorkerNativeTimeout|^TestNativeCanonical|^TestNativeMalformed|^TestNativeRejects' | tee /tmp/native-snell-core.log
-          for test in TestNativeRejectsWrappedTransports TestNativeCanonicalUUID TestNativeMalformedAddressRejectsWithoutPanic TestOutboundUDPIdleCleanupUsesPolicy TestOutboundCloseFencesLateDials TestOutboundCapacityIncludesPendingDials TestOutboundReuseScopeAndCredentialFence TestOutboundNonreuseHandshakeWriteUsesPolicy TestNativeSnellConfigVersions TestNativeSnellConfigRejectsUnsupportedModes TestNativeSnellInboundHTTPAndV6UnshapedTCPUDP TestNativeSnellCredentialRemovalRotationAndSibling TestNativeSnellQuotaExpiryAndMissingPolicy TestNativeSnellOutboundUDPFirst13kEmptyExactLedger TestNativeSnellWireIDsShareCanonicalRateAndLedger TestNativeSnellUDPDisableExpiryQuotaAndCredentialCleanup TestNativeSnellUDPWireBoundary TestNativeSnellUDPVersions TestNativeSnellRespectsHandshakeTimeout TestNativeSnellUDPFirst13kEmptyDomainIPv6SourceAndRoutePolicy TestNativeSnellTCPVersionsPolicyAndRouteDeny TestNativeSnellOutboundVersions TestNativeSnellTCPReuseIdleStartsAfterLogicalCompletion TestNativeSnellUDPDownlinkRefreshesIdle TestNativeSnellV5QUICInboundEnvelopeRawRepeatedCanonicalLedger TestNativeSnellV5QUICFirst13kDomainIPv6SourceIsolationAndRouteDeny TestNativeSnellV5QUICDisableExpiryQuotaRemovalAndHandlerCleanup TestNativeSnellV5QUICMissingDisabledExpiredPolicyRejectsFreshSource TestNativeSnellV5QUICWireIDsShareDirectionalRates TestNativeSnellV5QUICDownlinkIdleRefreshAndAssociationReclaim TestNativeSnellV5QUICCredentialRotationPreservesSiblingAndLedger TestNativeSnellV5QUICRealV1V2HTTP3BothDirections TestNativeSnellQUICUnauthenticatedHandshakeBound TestNativeSnellQUICPhysicalCapacityAndCloseJoin TestNativeSnellQUICLateDialFencesHandlerCredentialAndRequest TestNativeSnellQUICFirstWriteObeysHandshakeBound TestNativeSnellQUICCloseBeforeFirstDatagram TestNativeSnellQUICConcurrentPendingBoundAndJoin TestNativeSnellQUICHandshakePrecedesConnectionIdle TestNativeSnellQUICRejectsEmbeddedHostWhitespace TestHubFullDatagramsOptInPreservesLargeAndEmpty TestUDPWorkerNativeTimeoutOwnershipPreservesLegacyReaper; do
+          go test -race -shuffle=on -count=1 -v ./proxy/snell ./proxy/socks ./infra/conf ./testing/policy ./transport/internet/udp ./app/proxyman/inbound -run '^TestNativeSnell|^TestOutbound|^TestHubFullDatagrams|^TestUDPWorkerNativeTimeout|^TestNativeCanonical|^TestNativeMalformed|^TestNativeRejects' | tee /tmp/native-snell-core.log
+          for test in TestNativeSnellDownloadedSOCKSDatagramsPreserveLegacyDefault TestNativeSnellDownloadedSOCKSConfigRequiresUDP TestNativeRejectsWrappedTransports TestNativeCanonicalUUID TestNativeMalformedAddressRejectsWithoutPanic TestOutboundUDPIdleCleanupUsesPolicy TestOutboundCloseFencesLateDials TestOutboundCapacityIncludesPendingDials TestOutboundReuseScopeAndCredentialFence TestOutboundNonreuseHandshakeWriteUsesPolicy TestNativeSnellConfigVersions TestNativeSnellConfigRejectsUnsupportedModes TestNativeSnellInboundHTTPAndV6UnshapedTCPUDP TestNativeSnellCredentialRemovalRotationAndSibling TestNativeSnellQuotaExpiryAndMissingPolicy TestNativeSnellOutboundUDPFirst13kEmptyExactLedger TestNativeSnellWireIDsShareCanonicalRateAndLedger TestNativeSnellUDPDisableExpiryQuotaAndCredentialCleanup TestNativeSnellUDPWireBoundary TestNativeSnellUDPVersions TestNativeSnellRespectsHandshakeTimeout TestNativeSnellUDPFirst13kEmptyDomainIPv6SourceAndRoutePolicy TestNativeSnellTCPVersionsPolicyAndRouteDeny TestNativeSnellOutboundVersions TestNativeSnellTCPReuseIdleStartsAfterLogicalCompletion TestNativeSnellUDPDownlinkRefreshesIdle TestNativeSnellV5QUICInboundEnvelopeRawRepeatedCanonicalLedger TestNativeSnellV5QUICFirst13kDomainIPv6SourceIsolationAndRouteDeny TestNativeSnellV5QUICDisableExpiryQuotaRemovalAndHandlerCleanup TestNativeSnellV5QUICMissingDisabledExpiredPolicyRejectsFreshSource TestNativeSnellV5QUICWireIDsShareDirectionalRates TestNativeSnellV5QUICDownlinkIdleRefreshAndAssociationReclaim TestNativeSnellV5QUICCredentialRotationPreservesSiblingAndLedger TestNativeSnellV5QUICRealV1V2HTTP3BothDirections TestNativeSnellQUICUnauthenticatedHandshakeBound TestNativeSnellQUICPhysicalCapacityAndCloseJoin TestNativeSnellQUICLateDialFencesHandlerCredentialAndRequest TestNativeSnellQUICFirstWriteObeysHandshakeBound TestNativeSnellQUICCloseBeforeFirstDatagram TestNativeSnellQUICConcurrentPendingBoundAndJoin TestNativeSnellQUICHandshakePrecedesConnectionIdle TestNativeSnellQUICRejectsEmbeddedHostWhitespace TestHubFullDatagramsOptInPreservesLargeAndEmpty TestUDPWorkerNativeTimeoutOwnershipPreservesLegacyReaper; do
             grep -q -- "^--- PASS: $test " /tmp/native-snell-core.log
           done
           for version in v1 v2; do
@@ -102,6 +102,16 @@ jobs:
             go test -race -count=1 -v ./internal/database/model ./internal/database ./internal/web/service ./internal/xray ./internal/sub github.com/xtls/xray-core/app/clientpolicy/command \
             -run '^TestSSH|^TestCapabilitiesAdvertiseVerifiedNativeSSH$|^TestMigrationModelsMatchPanelModels$' | tee /tmp/native-ssh-panel-sqlite.log
           python3 tools/verify-native-ssh-panel.py sqlite /tmp/native-ssh-panel-sqlite.log
+      - name: Build missing native Snell identity capability fixture
+        run: bash tools/build-snell-capability-fixture.sh
+      - name: Native Snell panel public exports and TCP UDP QUIC lifecycle
+        run: |
+          set -euo pipefail
+          make dist-stub
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" XRAY_PRE_SNELL_MARKER_E2E_BINARY="$PWD/build/pre-snell-marker-xray" \
+            go test -race -count=1 -v ./internal/database/model ./internal/database ./internal/web/service ./internal/xray ./internal/sub github.com/xtls/xray-core/app/clientpolicy/command \
+            -run '^TestSnell|^TestCapabilitiesAdvertiseVerifiedNativeSnell$|^TestMigrationModelsMatchPanelModels$' | tee /tmp/native-snell-panel-sqlite.log
+          python3 tools/verify-native-snell-panel.py sqlite /tmp/native-snell-panel-sqlite.log
       - name: Password proxy identity and credential lifecycle
         working-directory: core/xray
         run: |
@@ -340,6 +350,16 @@ jobs:
             go test -race -count=1 -v ./internal/database/model ./internal/database ./internal/web/service ./internal/xray ./internal/sub github.com/xtls/xray-core/app/clientpolicy/command \
             -run '^TestSSH|^TestCapabilitiesAdvertiseVerifiedNativeSSH$|^TestMigrationModelsMatchPanelModels$' | tee /tmp/native-ssh-panel-postgres.log
           python3 tools/verify-native-ssh-panel.py postgres /tmp/native-ssh-panel-postgres.log
+      - name: Build missing native Snell identity capability fixture
+        run: bash tools/build-snell-capability-fixture.sh
+      - name: Native Snell panel public exports and TCP UDP QUIC lifecycle
+        run: |
+          set -euo pipefail
+          make dist-stub
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" XRAY_PRE_SNELL_MARKER_E2E_BINARY="$PWD/build/pre-snell-marker-xray" \
+            go test -race -count=1 -v ./internal/database/model ./internal/database ./internal/web/service ./internal/xray ./internal/sub github.com/xtls/xray-core/app/clientpolicy/command \
+            -run '^TestSnell|^TestCapabilitiesAdvertiseVerifiedNativeSnell$|^TestMigrationModelsMatchPanelModels$' | tee /tmp/native-snell-panel-postgres.log
+          python3 tools/verify-native-snell-panel.py postgres /tmp/native-snell-panel-postgres.log
       - name: Build pinned unmodified core for handoff rejection
         run: |
           upstream_core_dir="$(go mod download -json github.com/xtls/xray-core@v1.260327.1-0.20260908222543-52a412d9e2f5 | jq -er .Dir)"

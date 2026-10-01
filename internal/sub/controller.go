@@ -35,6 +35,10 @@ const (
 // client, never-existed id) and becomes 404. A real error becomes 500. No
 // body — VPN clients only look at the status.
 func writeSubError(c *gin.Context, err error) {
+	if errors.Is(err, errSnellClientFormat) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	if errors.Is(err, errSSHClientFormat) {
 		c.String(http.StatusNotAcceptable, "%s", errSSHClientFormat.Error())
 		return
@@ -472,6 +476,11 @@ func dedupeEmails(emails []string) []string {
 func (a *SUBController) subs(c *gin.Context) {
 	userAgent := c.GetHeader("User-Agent")
 	switch format := strings.ToLower(c.Query("format")); format {
+	case "snell-surge", "snell-json":
+		if a.enforceHwid(c) {
+			a.serveSnellBody(c, format)
+		}
+		return
 	case "ssh", "ssh-known-hosts", "ssh-instructions":
 		if a.enforceHwid(c) {
 			a.serveSSHBody(c, format)
@@ -557,6 +566,30 @@ func (a *SUBController) serveMieruBody(c *gin.Context) {
 	c.Data(http.StatusOK, "application/json; charset=utf-8", []byte(body))
 	a.recordSubscriptionFetch(c)
 	logSubscriptionRoute(c.GetHeader("User-Agent"), "mieru")
+}
+
+func (a *SUBController) serveSnellBody(c *gin.Context, format string) {
+	scheme, host, hostWithPort, _ := a.subService.ResolveRequest(c)
+	body, header, err := a.subService.GetSnellExport(c.Param("subid"), host, format)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if body == "" {
+		writeSubError(c, nil)
+		return
+	}
+	request := a.subService.ForRequest(host)
+	metadata := a.metadataForSubRequest(func() *SubService { return request }, c.Param("subid"), builtinProfileURL(c, scheme, hostWithPort))
+	a.ApplyCommonHeaders(c, header, a.updateInterval, metadata.Title, metadata.SupportURL, metadata.ProfileURL, metadata.Announce, a.subEnableRouting, a.subRoutingRules, a.subHideSettings)
+	filename, contentType := "snell-surge.conf", "text/plain; charset=utf-8"
+	if format == "snell-json" {
+		filename, contentType = "snell-client.json", "application/json; charset=utf-8"
+	}
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	c.Data(http.StatusOK, contentType, []byte(body))
+	a.recordSubscriptionFetch(c)
+	logSubscriptionRoute(c.GetHeader("User-Agent"), format)
 }
 
 func (a *SUBController) serveSSHBody(c *gin.Context, format string) {

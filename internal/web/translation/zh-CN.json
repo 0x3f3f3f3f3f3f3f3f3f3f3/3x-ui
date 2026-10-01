@@ -1091,7 +1091,12 @@
       "snellPskInvalid": "Snell PSK 必须是有效 UTF-8，且不超过 255 字节。",
       "snellPskV6Required": "Snell v6 的 PSK 至少需要 12 个 UTF-8 字节。",
       "snellOccupied": "此 Snell 服务已绑定其他账户，停用账户也会保留绑定。",
-      "snellSingleOwner": "一个 Snell 服务只能绑定一个账户。请逐个创建或绑定账户。"
+      "snellSingleOwner": "一个 Snell 服务只能绑定一个账户。请逐个创建或绑定账户。",
+      "snellSurgeConfiguration": "Snell Surge 配置",
+      "snellJSONConfiguration": "Snell Custom Xray JSON",
+      "downloadSnellSurge": "下载 Snell Surge 配置",
+      "downloadSnellJSON": "下载 Snell Custom Xray JSON",
+      "snellDownloadsHelp": "带引号的值需要 Surge iOS 5.21.0+ / Mac 6.8.0+。多行或控制字符请使用原生 JSON。Surge 会自动启用 Snell v5 的 QUIC 转换。"
     },
     "groups": {
       "name": "名称",

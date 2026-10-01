@@ -30,12 +30,13 @@ const (
 )
 
 type SocksServerConfig struct {
-	AuthMethod string          `json:"auth"`
-	Users      []*SocksAccount `json:"users"`
-	Accounts   []*SocksAccount `json:"accounts"`
-	UDP        bool            `json:"udp"`
-	Host       *Address        `json:"ip"`
-	UserLevel  uint32          `json:"userLevel"`
+	AuthMethod       string          `json:"auth"`
+	Users            []*SocksAccount `json:"users"`
+	Accounts         []*SocksAccount `json:"accounts"`
+	UDP              bool            `json:"udp"`
+	UDPFullDatagrams bool            `json:"udpFullDatagrams"`
+	Host             *Address        `json:"ip"`
+	UserLevel        uint32          `json:"userLevel"`
 }
 
 func (v *SocksServerConfig) Build() (proto.Message, error) {
@@ -70,6 +71,10 @@ func (v *SocksServerConfig) Build() (proto.Message, error) {
 	}
 
 	config.UdpEnabled = v.UDP
+	if v.UDPFullDatagrams && !v.UDP {
+		return nil, errors.New("udpFullDatagrams requires SOCKS UDP support")
+	}
+	config.UdpFullDatagrams = v.UDPFullDatagrams
 	if v.Host != nil {
 		config.Address = v.Host.Build()
 	}
