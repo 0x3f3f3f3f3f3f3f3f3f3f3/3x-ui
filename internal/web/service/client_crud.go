@@ -83,6 +83,9 @@ func validateClientResetMax(resetMax int) error {
 }
 
 func validateClientSettings(client model.Client) error {
+	if err := validateProvidedSnellCredentials(client); err != nil {
+		return err
+	}
 	if err := normalizeSSHCredentials(&client); err != nil {
 		return err
 	}
@@ -431,6 +434,8 @@ func markInboundNodesDirty(inboundIds []int) error {
 
 func (s *ClientService) fillProtocolDefaults(c *model.Client, ib *model.Inbound) error {
 	switch ib.Protocol {
+	case model.Snell:
+		return validateProvidedSnellCredentials(*c)
 	case model.SSH:
 		// Resolve omissions and generate the native username inside SQL's writer.
 		return normalizeSSHCredentials(c)
@@ -838,7 +843,7 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 		}
 		data := &model.Inbound{Id: ibId, Settings: string(settingsPayload)}
 		applies = append(applies, inboundApply{id: ibId, run: func() (bool, error) {
-			if passwordBindings > 0 || inbound.Protocol == model.SSH || inbound.Protocol == model.Mieru {
+			if passwordBindings > 0 || existing.SnellPSK != "" || updated.SnellPSK != "" || inbound.Protocol == model.SSH || inbound.Protocol == model.Mieru || inbound.Protocol == model.Snell {
 				return s.updateInboundClient(inboundSvc, data, existing.Email, existing, !selected[ibId])
 			}
 			return s.UpdateInboundClient(inboundSvc, data, existing.Email)
@@ -892,6 +897,7 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 			"sub_id":              merged.SubID,
 			"uuid":                merged.UUID,
 			"password":            merged.Password,
+			"snell_psk":           merged.SnellPSK,
 			"mieru_username":      merged.MieruUsername,
 			"mieru_password":      merged.MieruPassword,
 			"ssh_username":        merged.SSHUsername,
@@ -934,6 +940,7 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 			}
 			fields["ssh_username"], fields["ssh_authorized_keys"], fields["ssh_password"] = nativeUpdate.SSHUsername, nativeUpdate.SSHAuthorizedKeys, nativeUpdate.SSHPassword
 			fields["mieru_username"], fields["mieru_password"] = nativeUpdate.MieruUsername, nativeUpdate.MieruPassword
+			fields["snell_psk"] = nativeUpdate.SnellPSK
 			if updated.Policy != nil {
 				if err := guardClientPolicyTargets(tx, &current, updated.Policy, nil, false); err != nil {
 					return err
@@ -1209,6 +1216,7 @@ func (s *ClientService) Attach(inboundSvc *InboundService, id int, inboundIds []
 	// Attachment is a membership command, not an authentication update. Resolve
 	// native SSH credentials from the current SQL row in the serialized writer.
 	clientWire.SSHUsername, clientWire.SSHAuthorizedKeys, clientWire.SSHPassword = "", "", ""
+	clientWire.SnellPSK = ""
 	flow, ffErr := s.EffectiveFlow(nil, id)
 	if ffErr != nil {
 		return false, ffErr

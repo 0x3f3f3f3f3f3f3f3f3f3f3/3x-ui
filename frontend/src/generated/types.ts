@@ -434,6 +434,7 @@ export interface Client {
   reverse?: ClientReverse | null;
   secret?: string;
   security: string;
+  snellPsk?: string;
   sshAuthorizedKeys?: string;
   sshPassword?: string;
   sshUsername?: string;
@@ -519,6 +520,7 @@ export interface ClientRecord {
   reverse: unknown;
   secret: string;
   security: string;
+  snellPsk?: string;
   sshAuthorizedKeys?: string;
   sshPassword?: string;
   sshUsername?: string;

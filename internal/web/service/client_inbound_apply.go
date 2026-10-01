@@ -215,7 +215,7 @@ func (s *ClientService) delInboundClients(inboundSvc *InboundService, inboundId 
 		return err != nil, err
 	}
 
-	if oldInbound.Protocol == model.Tunnel && oldInbound.NodeID == nil {
+	if (oldInbound.Protocol == model.Tunnel || oldInbound.Protocol == model.Snell) && oldInbound.NodeID == nil {
 		return stopOwnedTunnelListener(inboundSvc, oldInbound)
 	}
 
@@ -381,6 +381,11 @@ func (s *ClientService) AddInboundClient(inboundSvc *InboundService, data *model
 	if err != nil {
 		return false, err
 	}
+	if oldInbound.Protocol == model.Snell {
+		if err := rejectSnellRuntimeOwnerIDs(data.Settings); err != nil {
+			return false, err
+		}
+	}
 	if oldInbound.Protocol == model.SSH {
 		if err := rejectSSHRuntimeOwnerIDs(data.Settings); err != nil {
 			return false, err
@@ -461,7 +466,7 @@ func (s *ClientService) AddInboundClient(inboundSvc *InboundService, data *model
 			return false, common.NewError("client email is required")
 		}
 		switch oldInbound.Protocol {
-		case model.Mieru, model.SSH:
+		case model.Mieru, model.SSH, model.Snell:
 			// Native authentication does not use a UUID from another protocol.
 		case model.Tunnel:
 			// The listener owns the account; there is no protocol credential.
@@ -710,6 +715,11 @@ func (s *ClientService) updateInboundClient(inboundSvc *InboundService, data *mo
 	if err != nil {
 		return false, err
 	}
+	if oldInbound.Protocol == model.Snell {
+		if err := rejectSnellRuntimeOwnerIDs(data.Settings); err != nil {
+			return false, err
+		}
+	}
 	if oldInbound.Protocol == model.SSH {
 		if err := rejectSSHRuntimeOwnerIDs(data.Settings); err != nil {
 			return false, err
@@ -723,7 +733,7 @@ func (s *ClientService) updateInboundClient(inboundSvc *InboundService, data *mo
 
 	newClientId := ""
 	switch oldInbound.Protocol {
-	case model.Mieru, model.SSH:
+	case model.Mieru, model.SSH, model.Snell:
 		newClientId = clients[0].Email
 	case model.Tunnel:
 		newClientId = clients[0].Email
@@ -1370,7 +1380,7 @@ func (s *ClientService) delInboundClient(inboundSvc *InboundService, inboundId i
 	// inbound's runtime even when the same email survives in another inbound.
 	if len(email) > 0 {
 		if oldInbound.NodeID == nil {
-			if oldInbound.Protocol == model.Tunnel {
+			if oldInbound.Protocol == model.Tunnel || oldInbound.Protocol == model.Snell {
 				var err error
 				needRestart, err = stopOwnedTunnelListener(inboundSvc, oldInbound)
 				if err != nil {

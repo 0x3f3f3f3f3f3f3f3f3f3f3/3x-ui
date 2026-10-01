@@ -30,6 +30,9 @@ func applyClientRecordMerge(row *model.ClientRecord, incoming *model.ClientRecor
 	if incoming.Password != "" {
 		row.Password = incoming.Password
 	}
+	if incoming.SnellPSK != "" {
+		row.SnellPSK = incoming.SnellPSK
+	}
 	if incoming.MieruUsername != "" {
 		row.MieruUsername = incoming.MieruUsername
 	}
@@ -140,6 +143,13 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 		return err
 	}
 
+	removedSnellOwner := false
+	if target.Protocol == model.Snell {
+		removedSnellOwner, err = validateSnellOwnerLinks(tx, inboundId, clients, detachEmails, prune)
+		if err != nil {
+			return err
+		}
+	}
 	emails := make([]string, 0, len(clients))
 	seen := make(map[string]struct{}, len(clients))
 	for i := range clients {
@@ -187,9 +197,20 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 		return err
 	}
 	for i := range clients {
+		if err := resolveSnellClientCredentials(&clients[i], existing[strings.TrimSpace(clients[i].Email)], target.Protocol == model.Snell); err != nil {
+			return err
+		}
+		if target.Protocol == model.Snell {
+			if err := validateSnellListenerPSK(&target, clients[i].SnellPSK); err != nil {
+				return err
+			}
+		}
 		if err := resolveSSHClientCredentials(&clients[i], existing[strings.TrimSpace(clients[i].Email)], target.Protocol == model.SSH); err != nil {
 			return err
 		}
+	}
+	if err := validateLinkedSnellCredentialChanges(tx, inboundId, clients, existing); err != nil {
+		return err
 	}
 	if err := validateLinkedSSHCredentialChanges(tx, inboundId, clients, existing); err != nil {
 		return err
@@ -296,7 +317,7 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 	if err := s.reconcileInboundLinks(tx, inboundId, wantedFlow, wantedIds, detachEmails, prune); err != nil {
 		return err
 	}
-	if removedTunnelOwner {
+	if removedTunnelOwner || removedSnellOwner {
 		if err := tx.Model(&model.Inbound{}).Where("id = ?", inboundId).Update("enable", false).Error; err != nil {
 			return err
 		}
@@ -307,6 +328,15 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 	}
 	if refreshSSH {
 		if err := refreshSSHCredentialMirrors(tx, inboundId, wantedIds); err != nil {
+			return err
+		}
+	}
+	refreshSnell := target.Protocol == model.Snell
+	for _, client := range clients {
+		refreshSnell = refreshSnell || client.SnellPSK != ""
+	}
+	if refreshSnell {
+		if err := refreshSnellCredentialMirrors(tx, inboundId, wantedIds); err != nil {
 			return err
 		}
 	}

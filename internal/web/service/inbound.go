@@ -671,6 +671,7 @@ func (s *InboundService) emailSubIDsForClients(clients []model.Client) (map[stri
 // generation, port-conflict detection, flow eligibility) keys on.
 func (s *InboundService) normalizeStreamSettings(inbound *model.Inbound) {
 	protocolsWithStream := map[model.Protocol]bool{
+		model.Snell:       true,
 		model.Mieru:       true,
 		model.VMESS:       true,
 		model.VLESS:       true,
@@ -1127,6 +1128,9 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	if err := prepareSSHInbound(inbound); err != nil {
 		return inbound, false, err
 	}
+	if err := prepareSnellInbound(inbound); err != nil {
+		return inbound, false, err
+	}
 	if err := prepareMieruInbound(inbound); err != nil {
 		return inbound, false, err
 	}
@@ -1238,7 +1242,7 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	// Secure client ID
 	for _, client := range clients {
 		switch inbound.Protocol {
-		case model.Mieru, model.SSH:
+		case model.Mieru, model.SSH, model.Snell:
 			// Native authentication uses its independent username/password pair.
 		case model.Tunnel:
 			// The listener owns the account; there is no protocol credential.
@@ -1288,13 +1292,16 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		if err := resolveSSHInboundCredentials(tx, inbound); err != nil {
 			return err
 		}
+		if err := resolveSnellInboundCredentials(tx, inbound); err != nil {
+			return err
+		}
 		if err := resolveMieruInboundCredentials(tx, inbound); err != nil {
 			return err
 		}
 		if err := resolveSSHHostKey(tx, inbound, nil); err != nil {
 			return err
 		}
-		if inbound.Protocol == model.Mieru || inbound.Protocol == model.SSH {
+		if inbound.Protocol == model.Mieru || inbound.Protocol == model.SSH || inbound.Protocol == model.Snell {
 			var err error
 			clients, err = s.GetClients(inbound)
 			if err != nil {
@@ -1394,7 +1401,7 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		} else if err := s.clientService.SyncInbound(tx, inbound.Id, clients); err != nil {
 			return err
 		}
-		if inbound.Protocol == model.SSH {
+		if inbound.Protocol == model.SSH || inbound.Protocol == model.Snell {
 			if err := tx.Select("settings").First(inbound, inbound.Id).Error; err != nil {
 				return err
 			}
@@ -1853,6 +1860,9 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	if err := prepareSSHInbound(inbound); err != nil {
 		return inbound, false, err
 	}
+	if err := prepareSnellInbound(inbound); err != nil {
+		return inbound, false, err
+	}
 	if err := prepareMieruInbound(inbound); err != nil {
 		return inbound, false, err
 	}
@@ -1954,6 +1964,9 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 			return err
 		}
 		if err := resolveSSHHostKey(tx, inbound, oldInbound); err != nil {
+			return err
+		}
+		if err := resolveSnellInboundCredentials(tx, inbound); err != nil {
 			return err
 		}
 		if err := resolveMieruInboundCredentials(tx, inbound); err != nil {
@@ -2134,7 +2147,7 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		} else if err := s.clientService.SyncInbound(tx, oldInbound.Id, newClients); err != nil {
 			return err
 		}
-		if oldInbound.Protocol == model.SSH {
+		if oldInbound.Protocol == model.SSH || oldInbound.Protocol == model.Snell {
 			if err := tx.Select("settings").First(oldInbound, oldInbound.Id).Error; err != nil {
 				return err
 			}

@@ -13,6 +13,9 @@ import (
 // Resolve native omissions only while holding the canonical SQL writer. These
 // credentials are shared by all their listeners, including excluded filters.
 func resolveNativeClientUpdate(tx *gorm.DB, current *model.ClientRecord, updated *model.Client) error {
+	if err := resolveSnellClientCredentials(updated, current, false); err != nil {
+		return err
+	}
 	if err := resolveSSHClientCredentials(updated, current, false); err != nil {
 		return err
 	}
@@ -26,6 +29,9 @@ func resolveNativeClientUpdate(tx *gorm.DB, current *model.ClientRecord, updated
 		updated.MieruPassword = current.MieruPassword
 	}
 	existing := map[string]*model.ClientRecord{strings.TrimSpace(updated.Email): current}
+	if err := validateLinkedSnellCredentialChanges(tx, 0, []model.Client{*updated}, existing); err != nil {
+		return err
+	}
 	if err := validateLinkedSSHCredentialChanges(tx, 0, []model.Client{*updated}, existing); err != nil {
 		return err
 	}
@@ -108,6 +114,9 @@ func updateCanonicalMirrorMetadata(tx *gorm.DB, current *model.ClientRecord, upd
 	if err := model.SaveClientRecord(tx, &merged); err != nil {
 		return err
 	}
+	if err := refreshSnellCredentialMirrors(tx, inboundID, []int{current.Id}); err != nil {
+		return err
+	}
 	return refreshSSHCredentialMirrors(tx, inboundID, []int{current.Id})
 }
 
@@ -177,6 +186,7 @@ func (s *ClientService) updatePasswordProxyOwner(inbounds *InboundService, expec
 			"email": updated.Email, "sub_id": merged.SubID,
 			"uuid": merged.UUID, "password": merged.Password, "auth": merged.Auth, "secret": merged.Secret,
 			"ssh_username": merged.SSHUsername, "ssh_authorized_keys": merged.SSHAuthorizedKeys, "ssh_password": merged.SSHPassword,
+			"snell_psk":      merged.SnellPSK,
 			"mieru_username": merged.MieruUsername, "mieru_password": merged.MieruPassword,
 			"flow": merged.Flow, "security": merged.Security, "reverse": updated.ToRecord().Reverse,
 			"wg_private_key": merged.PrivateKey, "wg_public_key": merged.PublicKey, "wg_allowed_ips": merged.AllowedIPs,
@@ -208,6 +218,9 @@ func (s *ClientService) updatePasswordProxyOwner(inbounds *InboundService, expec
 			}
 		}
 		if err := tx.Model(&model.ClientRecord{}).Where("id = ?", current.Id).Updates(fields).Error; err != nil {
+			return err
+		}
+		if err := refreshSnellCredentialMirrors(tx, 0, []int{current.Id}); err != nil {
 			return err
 		}
 		if err := refreshSSHCredentialMirrors(tx, 0, []int{current.Id}); err != nil {

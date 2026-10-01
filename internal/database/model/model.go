@@ -36,6 +36,7 @@ const (
 	TUIC        Protocol = "tuic"
 	Mieru       Protocol = "mieru"
 	SSH         Protocol = "ssh"
+	Snell       Protocol = "snell"
 )
 
 // User represents a user account in the 3x-ui panel.
@@ -883,6 +884,7 @@ type Client struct {
 	ID                     string         `json:"id,omitempty"`       // Unique client identifier
 	Security               string         `json:"security"`           // Security method (e.g., "auto", "aes-128-gcm")
 	Password               string         `json:"password,omitempty"` // Client password
+	SnellPSK               string         `json:"snellPsk,omitempty"`
 	MieruUsername          string         `json:"mieruUsername,omitempty"`
 	MieruPassword          string         `json:"mieruPassword,omitempty"`
 	SSHUsername            string         `json:"sshUsername,omitempty"`
@@ -940,6 +942,7 @@ type ClientRecord struct {
 	SubID                  string `json:"subId" gorm:"index;column:sub_id"`
 	UUID                   string `json:"uuid" gorm:"column:uuid"`
 	Password               string `json:"password"`
+	SnellPSK               string `json:"snellPsk,omitempty" gorm:"column:snell_psk;default:''"`
 	MieruUsername          string `json:"mieruUsername,omitempty" gorm:"column:mieru_username;default:''"`
 	MieruPassword          string `json:"mieruPassword,omitempty" gorm:"column:mieru_password;default:''"`
 	SSHUsername            string `json:"sshUsername,omitempty" gorm:"column:ssh_username;default:''"`
@@ -1171,6 +1174,7 @@ func (c *Client) ToRecord() *ClientRecord {
 		SubID:                  c.SubID,
 		UUID:                   c.ID,
 		Password:               c.Password,
+		SnellPSK:               c.SnellPSK,
 		MieruUsername:          c.MieruUsername,
 		MieruPassword:          c.MieruPassword,
 		SSHUsername:            c.SSHUsername,
@@ -1238,6 +1242,7 @@ func (r *ClientRecord) ToClient() *Client {
 		Email:             r.Email,
 		SubID:             r.SubID,
 		Password:          r.Password,
+		SnellPSK:          r.SnellPSK,
 		MieruUsername:     r.MieruUsername,
 		MieruPassword:     r.MieruPassword,
 		SSHUsername:       r.SSHUsername,
@@ -1368,6 +1373,7 @@ func MergeClientRecord(existing *ClientRecord, incoming *ClientRecord) []ClientM
 		current  *string
 		incoming string
 	}{
+		{"snellPsk", &existing.SnellPSK, incoming.SnellPSK},
 		{"sshUsername", &existing.SSHUsername, incoming.SSHUsername},
 		{"sshAuthorizedKeys", &existing.SSHAuthorizedKeys, incoming.SSHAuthorizedKeys},
 		{"sshPassword", &existing.SSHPassword, incoming.SSHPassword},

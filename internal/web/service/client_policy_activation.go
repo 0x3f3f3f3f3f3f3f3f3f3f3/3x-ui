@@ -56,7 +56,7 @@ func (s *XrayService) managedPolicyRequested() (bool, error) {
 	}
 	var count int64
 	db := database.GetDB()
-	if err := db.Model(&model.Inbound{}).Where("node_id IS NULL AND enable = ? AND protocol IN ?", true, []model.Protocol{model.Mieru, model.SSH}).Count(&count).Error; err != nil || count > 0 {
+	if err := db.Model(&model.Inbound{}).Where("node_id IS NULL AND enable = ? AND protocol IN ?", true, []model.Protocol{model.Mieru, model.SSH, model.Snell}).Count(&count).Error; err != nil || count > 0 {
 		return count > 0, err
 	}
 	err = db.Model(&model.ClientPolicySource{}).Where("node_key = ? AND (epoch > 0 OR handoff_boot_id <> '')", "local").Count(&count).Error
@@ -68,7 +68,7 @@ func (s *XrayService) managedPolicyRequested() (bool, error) {
 		Joins("JOIN client_inbounds ci ON ci.client_id = c.id").
 		Joins("JOIN inbounds i ON i.id = ci.inbound_id").
 		Where("i.node_id IS NULL AND i.enable = ?", true).
-		Where("i.protocol IN ? OR c.policy_upload_bytes_per_second IS NOT NULL OR c.policy_download_bytes_per_second IS NOT NULL OR c.policy_multiplier IS NOT NULL", []model.Protocol{model.Tunnel, model.Mixed, model.HTTP, model.Mieru, model.SSH}).
+		Where("i.protocol IN ? OR c.policy_upload_bytes_per_second IS NOT NULL OR c.policy_download_bytes_per_second IS NOT NULL OR c.policy_multiplier IS NOT NULL", []model.Protocol{model.Tunnel, model.Mixed, model.HTTP, model.Mieru, model.SSH, model.Snell}).
 		Limit(1).Scan(&clientID).Error
 	return clientID != 0, err
 }

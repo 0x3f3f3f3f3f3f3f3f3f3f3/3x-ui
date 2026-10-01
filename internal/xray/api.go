@@ -32,6 +32,7 @@ import (
 	"github.com/xtls/xray-core/proxy/mieru"
 	"github.com/xtls/xray-core/proxy/shadowsocks"
 	"github.com/xtls/xray-core/proxy/shadowsocks_2022"
+	"github.com/xtls/xray-core/proxy/snell"
 	"github.com/xtls/xray-core/proxy/socks"
 	"github.com/xtls/xray-core/proxy/trojan"
 	"github.com/xtls/xray-core/proxy/vless"
@@ -584,6 +585,15 @@ func isShadowsocks2022Cipher(cipher string) bool {
 // that would panic the core and kill every connection on the server.
 func buildUserAccount(protocolName string, user map[string]any) (*serial.TypedMessage, error) {
 	switch protocolName {
+	case "snell":
+		psk, err := getRequiredUserString(user, "psk")
+		if err != nil {
+			return nil, err
+		}
+		if psk == "" || len(psk) > 255 {
+			return nil, fmt.Errorf("Snell PSK must contain 1 to 255 bytes")
+		}
+		return serial.ToTypedMessage(&snell.Account{Psk: psk}), nil
 	case "ssh":
 		return buildSSHUserAccount(user)
 	case "mieru":

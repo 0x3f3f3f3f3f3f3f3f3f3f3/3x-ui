@@ -25,6 +25,14 @@ const (
 func inboundTransports(protocol model.Protocol, streamSettings, settings string) transportBits {
 	// protocols that ignore streamSettings entirely.
 	switch protocol {
+	case model.Snell:
+		var native struct {
+			Version int `json:"version"`
+		}
+		if json.Unmarshal([]byte(settings), &native) == nil && native.Version == 5 {
+			return transportTCP | transportUDP
+		}
+		return transportTCP
 	case model.Mieru:
 		var native struct {
 			Transport string `json:"transport"`

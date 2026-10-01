@@ -26,7 +26,7 @@ func guardRemoteClientPolicyAttachments(tx *gorm.DB, inboundID int, existing map
 	for _, record := range existing {
 		hasPolicy = hasPolicy || record.Policy != nil || record.DesiredPolicyVersion != 0
 	}
-	localOwnedResource := inbound.NodeID == nil && (inbound.Protocol == model.Tunnel || inbound.Protocol == model.Mieru || inbound.Protocol == model.SSH || isPasswordProxy(inbound.Protocol))
+	localOwnedResource := inbound.NodeID == nil && (inbound.Protocol == model.Tunnel || inbound.Protocol == model.Mieru || inbound.Protocol == model.SSH || inbound.Protocol == model.Snell || isPasswordProxy(inbound.Protocol))
 	if inbound.NodeID == nil && !hasPolicy && !localOwnedResource {
 		return nil
 	}
@@ -70,7 +70,7 @@ func guardRemoteClientPolicyAttachments(tx *gorm.DB, inboundID int, existing map
 		if inbound.NodeID != nil {
 			var localOwners int64
 			if err := tx.Model(&model.ClientInbound{}).Joins("JOIN inbounds ON inbounds.id = client_inbounds.inbound_id").
-				Where("client_inbounds.client_id IN ? AND inbounds.node_id IS NULL AND inbounds.protocol IN ?", batch, []model.Protocol{model.Tunnel, model.Mixed, model.HTTP, model.Mieru, model.SSH}).Count(&localOwners).Error; err != nil {
+				Where("client_inbounds.client_id IN ? AND inbounds.node_id IS NULL AND inbounds.protocol IN ?", batch, []model.Protocol{model.Tunnel, model.Mixed, model.HTTP, model.Mieru, model.SSH, model.Snell}).Count(&localOwners).Error; err != nil {
 				return err
 			}
 			if localOwners != 0 {
@@ -126,7 +126,7 @@ func guardClientPolicyTargets(tx *gorm.DB, record *model.ClientRecord, policy *m
 	localOwnedResource := false
 	for _, batch := range chunkInts(inboundIDs, 400) {
 		var count int64
-		if err := tx.Model(&model.Inbound{}).Where("id IN ? AND node_id IS NULL AND protocol IN ?", batch, []model.Protocol{model.Tunnel, model.Mixed, model.HTTP, model.Mieru}).Count(&count).Error; err != nil {
+		if err := tx.Model(&model.Inbound{}).Where("id IN ? AND node_id IS NULL AND protocol IN ?", batch, []model.Protocol{model.Tunnel, model.Mixed, model.HTTP, model.Mieru, model.SSH, model.Snell}).Count(&count).Error; err != nil {
 			return err
 		}
 		localOwnedResource = localOwnedResource || count != 0
@@ -134,7 +134,7 @@ func guardClientPolicyTargets(tx *gorm.DB, record *model.ClientRecord, policy *m
 	if record != nil && !localOwnedResource {
 		var count int64
 		if err := tx.Model(&model.ClientInbound{}).Joins("JOIN inbounds ON inbounds.id = client_inbounds.inbound_id").
-			Where("client_inbounds.client_id = ? AND inbounds.node_id IS NULL AND inbounds.protocol IN ?", record.Id, []model.Protocol{model.Tunnel, model.Mixed, model.HTTP, model.Mieru}).Count(&count).Error; err != nil {
+			Where("client_inbounds.client_id = ? AND inbounds.node_id IS NULL AND inbounds.protocol IN ?", record.Id, []model.Protocol{model.Tunnel, model.Mixed, model.HTTP, model.Mieru, model.SSH, model.Snell}).Count(&count).Error; err != nil {
 			return err
 		}
 		localOwnedResource = count != 0

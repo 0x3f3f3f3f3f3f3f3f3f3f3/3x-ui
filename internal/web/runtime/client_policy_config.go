@@ -181,6 +181,13 @@ func managedUserIdentity(config *xray.Config, user xray.UserOp) (string, error) 
 			return "", err
 		}
 		entries := accounts.Clients
+		if inbound.Protocol == "snell" {
+			var owner identity
+			if err := json.Unmarshal(inbound.Settings, &owner); err != nil {
+				return "", err
+			}
+			entries = []identity{owner}
+		}
 		if inbound.Protocol == "mixed" || inbound.Protocol == "http" {
 			entries = accounts.Accounts
 		}

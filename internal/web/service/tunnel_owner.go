@@ -19,6 +19,9 @@ import (
 var ErrTunnelOwnerConflict = errors.New("Tunnel listener can belong to only one client")
 
 func prepareTunnelOwnerCommand(inbound *model.Inbound) error {
+	if inbound.Protocol == model.Snell {
+		return prepareSnellOwnerCommand(inbound)
+	}
 	if inbound.OwnerClientID == nil {
 		return nil
 	}
@@ -59,6 +62,9 @@ func setTunnelOwnerClients(inbound *model.Inbound, owner *model.ClientRecord) er
 }
 
 func resolveTunnelOwnerCommand(tx *gorm.DB, inbound *model.Inbound) (*model.ClientRecord, error) {
+	if inbound.Protocol == model.Snell {
+		return nil, nil
+	}
 	if inbound.OwnerClientID == nil {
 		return nil, nil
 	}
@@ -117,7 +123,7 @@ func deleteClientLinksAndDisableTunnels(tx *gorm.DB, clientIDs []int) (bool, err
 	for _, batch := range chunkInts(clientIDs, sqlInChunk) {
 		var ids []int
 		if err := tx.Table("inbounds i").Select("i.id").Joins("JOIN client_inbounds ci ON ci.inbound_id = i.id").
-			Where("i.protocol = ? AND ci.client_id IN ?", model.Tunnel, batch).Pluck("i.id", &ids).Error; err != nil {
+			Where("i.protocol IN ? AND ci.client_id IN ?", []model.Protocol{model.Tunnel, model.Snell}, batch).Pluck("i.id", &ids).Error; err != nil {
 			return false, err
 		}
 		for _, id := range ids {
@@ -133,7 +139,7 @@ func deleteClientLinksAndDisableTunnels(tx *gorm.DB, clientIDs []int) (bool, err
 	for _, batch := range chunkInts(ids, sqlInChunk) {
 		var rows []model.Inbound
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id", "enable", "node_id").
-			Where("id IN ? AND protocol = ?", batch, model.Tunnel).Order("id").Find(&rows).Error; err != nil {
+			Where("id IN ? AND protocol IN ?", batch, []model.Protocol{model.Tunnel, model.Snell}).Order("id").Find(&rows).Error; err != nil {
 			return false, err
 		}
 		tunnels = append(tunnels, rows...)

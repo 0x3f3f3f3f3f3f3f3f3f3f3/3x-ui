@@ -326,7 +326,24 @@ func (s *XrayService) getXrayConfigFromDB(managed bool, db *gorm.DB) (*xray.Conf
 		}
 
 		var mutated bool
-		if inbound.Protocol == model.Mieru || inbound.Protocol == model.SSH {
+		if inbound.Protocol == model.Snell {
+			if !managed {
+				return nil, fmt.Errorf("%w: native Snell requires managed activation", xray.ErrClientPolicyCapability)
+			}
+			if len(dbClients) != 1 {
+				return nil, fmt.Errorf("%w: Snell requires one canonical owner", ErrManagedConfigStale)
+			}
+			owner := dbClients[0]
+			if err := validateSnellListenerPSK(inbound, owner.SnellPSK); err != nil {
+				return nil, err
+			}
+			delete(settings, "clients")
+			delete(settings, "users")
+			delete(settings, "client_id")
+			delete(settings, "clientId")
+			settings["psk"], settings["email"] = owner.SnellPSK, owner.Email
+			mutated = true
+		} else if inbound.Protocol == model.Mieru || inbound.Protocol == model.SSH {
 			if inbound.Protocol == model.SSH {
 				if !managed {
 					return nil, fmt.Errorf("%w: native SSH requires managed activation", xray.ErrClientPolicyCapability)

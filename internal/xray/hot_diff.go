@@ -232,11 +232,11 @@ func diffInbounds(oldCfg, newCfg *Config, diff *HotDiff, managedPassword bool) b
 // droppedClients lists the emails an inbound present in both configs stopped
 // serving, whatever its protocol: settings.clients is the shape they all share.
 func droppedClients(oldIb, newIb *InboundConfig) []UserOp {
-	oldClients, _, ok := splitSettingsClients(oldIb.Settings, inboundAccountListField(oldIb.Protocol))
+	oldClients, _, ok := splitInboundAccounts(oldIb.Protocol, oldIb.Settings)
 	if !ok {
 		return nil
 	}
-	newClients, _, ok := splitSettingsClients(newIb.Settings, inboundAccountListField(newIb.Protocol))
+	newClients, _, ok := splitInboundAccounts(newIb.Protocol, newIb.Settings)
 	if !ok {
 		return nil
 	}
@@ -249,7 +249,7 @@ func droppedClients(oldIb, newIb *InboundConfig) []UserOp {
 	return dropped
 }
 
-var userDiffableProtocols = map[string]struct{}{"vless": {}, "vmess": {}, "trojan": {}, "hysteria": {}, "mieru": {}, "ssh": {}}
+var userDiffableProtocols = map[string]struct{}{"vless": {}, "vmess": {}, "trojan": {}, "hysteria": {}, "mieru": {}, "ssh": {}, "snell": {}}
 
 // diffInboundUsers emits per-user AlterInbound ops when two same-tag inbounds
 // differ only in settings.clients, so the handler (and its listener) survives.
@@ -265,11 +265,11 @@ func diffInboundUsers(oldIb, newIb *InboundConfig, diff *HotDiff) bool {
 		!rawEqualNormalized(oldIb.Sniffing, newIb.Sniffing) {
 		return false
 	}
-	oldClients, oldRest, ok := splitSettingsClients(oldIb.Settings, inboundAccountListField(oldIb.Protocol))
+	oldClients, oldRest, ok := splitInboundAccounts(oldIb.Protocol, oldIb.Settings)
 	if !ok {
 		return false
 	}
-	newClients, newRest, ok := splitSettingsClients(newIb.Settings, inboundAccountListField(newIb.Protocol))
+	newClients, newRest, ok := splitInboundAccounts(newIb.Protocol, newIb.Settings)
 	if !ok {
 		return false
 	}
@@ -301,6 +301,47 @@ type clientEntry struct {
 
 // splitSettingsClients indexes settings.clients by email and returns the rest of
 // the settings in canonical form; ok is false when a client has no unique email.
+// Snell uses a single flat typed owner rather than a users/clients array.
+func splitInboundAccounts(protocol string, raw json_util.RawMessage) (map[string]clientEntry, []byte, bool) {
+	if protocol != "snell" {
+		return splitSettingsClients(raw, inboundAccountListField(protocol))
+	}
+	var settings map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&settings); err != nil || settings == nil {
+		return nil, nil, false
+	}
+	email, ok := settings["email"].(string)
+	if !ok || email == "" {
+		return nil, nil, false
+	}
+	id, ok := settings["clientId"].(string)
+	if !ok || id == "" {
+		return nil, nil, false
+	}
+	psk, ok := settings["psk"].(string)
+	if !ok || psk == "" {
+		return nil, nil, false
+	}
+	user := map[string]any{"email": email, "clientId": id, "psk": psk}
+	if level, exists := settings["level"]; exists {
+		user["level"] = level
+	}
+	for _, key := range []string{"email", "clientId", "psk", "level"} {
+		delete(settings, key)
+	}
+	norm, err := json.Marshal(user)
+	if err != nil {
+		return nil, nil, false
+	}
+	rest, err := json.Marshal(settings)
+	if err != nil {
+		return nil, nil, false
+	}
+	return map[string]clientEntry{email: {user: user, norm: norm}}, rest, true
+}
+
 func inboundAccountListField(protocol string) string {
 	if protocol == "mieru" || protocol == "ssh" {
 		return "users"

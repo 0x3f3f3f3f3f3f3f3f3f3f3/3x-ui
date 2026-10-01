@@ -1787,6 +1787,9 @@ export const SCHEMAS: Record<string, unknown> = {
         "description": "Security method (e.g., \"auto\", \"aes-128-gcm\")",
         "type": "string"
       },
+      "snellPsk": {
+        "type": "string"
+      },
       "sshAuthorizedKeys": {
         "type": "string"
       },
@@ -2121,6 +2124,9 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "string"
       },
       "security": {
+        "type": "string"
+      },
+      "snellPsk": {
         "type": "string"
       },
       "sshAuthorizedKeys": {

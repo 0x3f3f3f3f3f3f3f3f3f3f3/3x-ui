@@ -41,6 +41,7 @@ Files: model/model.go and client_persistence.go; database/db.go and migrate_data
 web/service/{inbound.go,client_crud.go,client_link.go,client_inbound_apply.go,
 client_bulk.go,client_policy_config.go,password_proxy_owner_update.go,port_conflict.go,
 tunnel_owner.go}; new service/snell_accounts.go and snell_runtime_test.go;
+web/runtime/client_policy_config.go and new runtime/snell_identity_test.go;
 xray/{hot_diff.go,api_managed.go,api.go}; new xray/snell_managed_test.go;
 core/xray/app/clientpolicy/command/command.go and new snell_capability_test.go.
 New model/model_snell_test.go, database/snell_credentials_migrate_test.go and
@@ -51,7 +52,10 @@ prepareSnellInbound(*model.Inbound) error; resolveSnellInboundCredentials(*gorm.
 *model.Inbound) error; resolveSnellClientCredentials(*model.Client,*model.ClientRecord,
 bool) error; validateLinkedSnellCredentialChanges(*gorm.DB,int,[]model.Client,
 map[string]*model.ClientRecord) error; bindManagedSnellIdentity(*xray.InboundConfig,
-[]model.ClientRecord) error. Native snell userDiff/buildUserAccount consumes flat
+[]model.ClientRecord) error. Existing outer ownerClientId can select a canonical
+local Snell owner via prepareSnellOwnerCommand(*model.Inbound) error and
+resolveSnellOwnerCommand(*gorm.DB,*model.Inbound) (*model.ClientRecord,error);
+raw settings clientId remains forbidden. Native snell userDiff/buildUserAccount consumes flat
 psk/clientId/email/level; capability trusted-snell-client-id-v1 is mandatory for
 add/change/removal and startup, including disabled/empty removal paths.
 
@@ -91,6 +95,10 @@ snell-bulk-form.test.tsx alongside existing SSH/mieru/i18n/shared workflow suite
 Consumes Task1 snellPsk, protocol/options metadata and owner rules. Produces
 SnellInboundSettingsSchema and SnellOutboundSettingsSchema native wire values
 through the existing form adapters; defaults explicitly version4/native stream.
+Existing InboundOption metadata must expose Snell version and canonical owner
+occupancy (including disabled owners) for the account/bulk/attach forms. Add
+these non-secret fields in service/inbound.go with a public options regression;
+regenerate the same5 API contracts. SQL remains authoritative for ownership.
 
 - [ ] Write actual component/adapter RED: independent PSK, omitted preservation,
   version4/5/6 options, strict wrapper/mux rejection, explicit source endpoint,
