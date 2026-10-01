@@ -2382,8 +2382,13 @@ passed full root `make test-go` (service148.171s; explicit AmneziaWG1.937s),
 lint0issues, vet and generation check. Protobuf regeneration matches exactly.
 Existing managed current-core binary regressions passed15.821s; older-core
 fixture cases without their required separate binaries were explicitly skipped
-and are not new passing evidence. Distinct clean-source final checkpoint builds
-and fork publication remain pending. Initial full suite3m timed out after total package budget while
+and are not new passing evidence. Clean-source final checkpoint builds and
+exact fork publication passed for `6c475f5003e94b7307395a2fd6b30862ce163bd2`;
+versions, hashes and preserved earlier artifacts are in deployment.md.
+The final clean checkpoint binary also passed the existing current-core
+managed/control regression under race in15.241s; absent older fixture cases
+remain explicit skips rather than claimed passes.
+Initial full suite3m timed out after total package budget while
 its active TLS/WebSocket case had only run6s; this is not passing evidence.
 The subsequent full suite found an admission-close ordering race: immediate
 UDP retry could see peer EOF before the connection registry was released.
@@ -2393,5 +2398,5 @@ before peer-visible close: root100/100 passed2.029s and independent same-review
 post-correction gates. The shared UDP changes form local commit8a31d5bf; actual
 original-buffer overlay failed both new behavioral tests (.232s), corrected
 race passed1.076s and independent race1.074s; full buf/pipe race passed1.914/3.156s.
-Only the pending publication/build record closes this core increment; full
-protocol panel integration remains open.
+The publication/build record closes this core increment; full protocol panel
+integration remains open.

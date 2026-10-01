@@ -54,8 +54,12 @@ proxy.Outbound and common.Closable. Mieru Account implements protocol.Account.
   Observe failures before fixing lifecycle and policy boundaries.
 - [x] Run focused core race/config/control, core suite, root type compatibility
   and generation/lint checks; one read-only review and corrections.
-- [ ] Finish documentation, logical commit/fork push and distinct clean-source
+- [x] Finish documentation, logical commit/fork push and distinct clean-source
   core/panel build provenance.
+
+Native core publication is `6c475f5003e94b7307395a2fd6b30862ce163bd2`;
+clean-source artifact versions and SHA-256 are recorded in deployment.md.
+This closes Task8A's mieru core scope only.
 
 Next vertical task: panel/API/DB/forms/export/runtime binding for mieru. Snell
 and SSH native adapter work remains the same central protocol priority; no

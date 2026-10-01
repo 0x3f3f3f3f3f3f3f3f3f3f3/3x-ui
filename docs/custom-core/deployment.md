@@ -318,3 +318,30 @@ are verified; historical API mutation proof, owner mapping and live legacy
 handoff remain open. Further password migration work is deferred: the execution
 priority is native Snell, mieru and SSH. This build does not claim a new full
 frontend or native protocol test suite.
+
+### Clean-source native mieru core checkpoint
+
+Commit `6c475f5003e94b7307395a2fd6b30862ce163bd2` was rebuilt from clean
+clone `/tmp/native-mieru-clean-source-z4w0_h3e` with Go 1.27.1,
+Node 26.10.0/npm 11.19.1 and shared verified caches. npm ci (22.43 s),
+frontend build (6.88 s), panel (73.50 s), core (5.13 s), both version commands
+and core module build-info checks pass. Panel reports `dev+6c475f50`; core
+reports Custom Xray-core 26.9.9-custom.1 with the full revision and no `-dirty`.
+The compiled official mieru dependency is v3.38.0. Source status is clean and
+the authorized fork feature branch matches the exact implementation SHA.
+
+Distinct local artifacts preserve all 21 preceding checkpoint binaries and
+the separate review binary, with all 22 rehashed unchanged after this build:
+
+- `build/x-ui-native-mieru-core-checkpoint`: SHA-256
+  `6e973687326352a284e3f60b1e33ed0be0e92be501325d72e2d5a6e0ac139d4f`.
+- `build/custom-xray-native-mieru-core-checkpoint`: SHA-256
+  `9f77bf94df2e21054d0c4f37a8d4d895af92c63ce5be04e6591c1c47c9d9b2e2`.
+
+Evidence: /root/task-evidence/native-mieru-clean-build-results.json,
+native-mieru-clean-build-manifest.json, native-mieru-post-build-prior-preservation.json
+and native-mieru-push-6c475f5003e94b7307395a2fd6b30862ce163bd2.json.
+This validates the compiled native mieru core increment and a compatible panel
+build. Mieru panel/API/DB/forms/export/runtime integration remains open; Snell
+and SSH remain the other active core priorities. No deployment, release or
+default-branch merge occurred. The build adds no new full frontend test claim.

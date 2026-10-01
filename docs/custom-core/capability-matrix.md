@@ -277,5 +277,7 @@ fences, rollback, migration/export and actual Mixed/HTTP retry/growth pass.
 One Important review finding was reproduced and resolved; final named contracts,
 generation/lint/vet/full Go/affected race pass. Broader runtime API lineage,
 historical source eligibility and owner adoption remain N. No new password
-handoff gate opens. Snell, mieru and SSH remain N and now have execution priority;
-protocol source audits and isolated wire probes alone do not change that status.
+handoff gate opens. At that preceding checkpoint, Snell, mieru and SSH were N.
+The following native mieru core increment is I/V in the scope of its matrix row;
+its panel integration and the Snell/SSH increments remain open. Protocol source
+audits and isolated wire probes alone do not establish native support.
