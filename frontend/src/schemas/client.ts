@@ -474,6 +474,9 @@ export const ClientBulkAdjustFormSchema = z
   );
 
 export const ClientBulkAddFormSchema = z.object({
+  policyUploadBytesPerSecond: ClientFormSchema.shape.policyUploadBytesPerSecond,
+  policyDownloadBytesPerSecond: ClientFormSchema.shape.policyDownloadBytesPerSecond,
+  policyMultiplier: ClientFormSchema.shape.policyMultiplier,
   sshAuthorizedKeys: SSHAuthorizedKeysSchema.default(''),
   generateSshPasswords: z.boolean().default(false),
   emailMethod: z.number().int().min(0).max(4),

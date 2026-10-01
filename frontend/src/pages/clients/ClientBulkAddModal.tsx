@@ -11,6 +11,7 @@ import {
   Space,
   Switch,
   Tooltip,
+  Typography,
   message,
 } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
@@ -45,6 +46,9 @@ const MULTI_CLIENT_PROTOCOLS = new Set([
 ]);
 
 const EMPTY: ClientBulkAddFormValues = {
+  policyUploadBytesPerSecond: null,
+  policyDownloadBytesPerSecond: null,
+  policyMultiplier: '',
   emailMethod: 0,
   sshAuthorizedKeys: '',
   generateSshPasswords: false,
@@ -91,6 +95,13 @@ export default function ClientBulkAddModal({
 
   const methods = useForm<ClientBulkAddFormValues>({ defaultValues: EMPTY });
   const inboundIds = useWatch({ control: methods.control, name: 'inboundIds' });
+  const policyUnsupported = useMemo(() => {
+    const byId = new Map(inbounds.map((inbound) => [inbound.id, inbound]));
+    return (inboundIds || []).some((id) => {
+      const inbound = byId.get(id);
+      return !inbound || inbound.nodeId != null;
+    });
+  }, [inboundIds, inbounds]);
   const selectedSnell = inbounds.filter(
     (row) => row.protocol === 'snell' && (inboundIds || []).includes(row.id),
   );
@@ -219,6 +230,14 @@ export default function ClientBulkAddModal({
       messageApi.error(t(validated.error.issues[0]?.message ?? 'somethingWentWrong'));
       return;
     }
+    const policyRequested =
+      current.policyUploadBytesPerSecond != null ||
+      current.policyDownloadBytesPerSecond != null ||
+      current.policyMultiplier !== '';
+    if (policyRequested && policyUnsupported) {
+      messageApi.error(t('pages.clients.policy.localOnly'));
+      return;
+    }
     if (
       selectedSSH.length &&
       !current.sshAuthorizedKeys.trim() &&
@@ -241,6 +260,15 @@ export default function ClientBulkAddModal({
     try {
       const payloads = emails.map((email) => ({
         client: {
+          ...(policyRequested
+            ? {
+                policy: {
+                  uploadBytesPerSecond: current.policyUploadBytesPerSecond ?? 0,
+                  downloadBytesPerSecond: current.policyDownloadBytesPerSecond ?? 0,
+                  multiplier: current.policyMultiplier,
+                },
+              }
+            : {}),
           email,
           subId: current.subId || RandomUtil.randomLowerAndNum(16),
           id: RandomUtil.randomUUID(),
@@ -478,6 +506,47 @@ export default function ClientBulkAddModal({
               transform={{ output: (v) => Number(v) || 0 }}
             >
               <InputNumber min={0} step={1} />
+            </FormField>
+
+            {policyUnsupported && (
+              <Typography.Paragraph type="secondary">
+                {t('pages.clients.policy.localOnly')}
+              </Typography.Paragraph>
+            )}
+            <FormField
+              name="policyUploadBytesPerSecond"
+              label={t('pages.clients.policy.upload')}
+              tooltip={t('pages.clients.policy.rateHint')}
+            >
+              <InputNumber
+                disabled={policyUnsupported}
+                min={0}
+                max={2 ** 40}
+                precision={0}
+                placeholder="0"
+                style={{ width: '100%' }}
+              />
+            </FormField>
+            <FormField
+              name="policyDownloadBytesPerSecond"
+              label={t('pages.clients.policy.download')}
+              tooltip={t('pages.clients.policy.rateHint')}
+            >
+              <InputNumber
+                disabled={policyUnsupported}
+                min={0}
+                max={2 ** 40}
+                precision={0}
+                placeholder="0"
+                style={{ width: '100%' }}
+              />
+            </FormField>
+            <FormField
+              name="policyMultiplier"
+              label={t('pages.clients.policy.multiplier')}
+              tooltip={t('pages.clients.policy.multiplierHint')}
+            >
+              <Input disabled={policyUnsupported} placeholder="1" inputMode="decimal" />
             </FormField>
 
             <Form.Item label={t('pages.clients.delayedStart')}>
