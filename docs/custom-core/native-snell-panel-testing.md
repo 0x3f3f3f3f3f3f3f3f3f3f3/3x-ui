@@ -37,9 +37,10 @@ The downloaded JSON binds a no-auth SOCKS listener to `127.0.0.1:1080`.
 It explicitly enables `udpFullDatagrams` so the local SOCKS relay preserves large
 and empty native UDP replies. Older SOCKS configurations retain their default
 size and empty-payload behavior. The native Snell outbound also interrupts a
-direct socket-backed source when cancellation would otherwise leave its reader
-blocked. Interruptible pipe readers and reusable inbound half-close semantics
-retain their own lifetime.
+direct SOCKS or HTTP socket source even when sniffing wraps it with a pipe-only
+interrupt method. The real-socket idle-cancellation gate covers all 24 combinations
+of SOCKS/HTTP, versions 4/5/6, reuse on/off and sniffing on/off. Pipe readers and
+reusable inbound half-close semantics retain their own lifetime.
 
 Primary format references:
 [Snell policy parameters](https://manual.nssurge.com/policies/snell.html) and

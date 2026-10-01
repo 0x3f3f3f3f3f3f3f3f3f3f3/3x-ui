@@ -132,16 +132,19 @@ func validateTransport(ctx context.Context) error {
 func copyStream(ctx context.Context, link *transport.Link, c, physical net.Conn, inbound bool) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	// DispatchLink can supply a socket-backed SOCKS reader with no interruption
-	// interface. Its source socket must be closed when the copy is cancelled.
-	// Pipe readers and reusable inbound logical streams retain their own lifetime.
+	// SOCKS and HTTP DispatchLink readers consume their inbound socket directly.
+	// Sniffing can wrap that reader with an Interrupt method which only interrupts
+	// pipes, so the method alone does not establish socket cancellation ownership.
+	// Reusable inbound streams and readers which preserve half-close retain their
+	// own lifetime.
 	var directSource net.Conn
 	if !inbound {
 		_, interruptible := link.Reader.(common.Interruptible)
 		_, closable := link.Reader.(common.Closable)
 		content := session.ContentFromContext(ctx)
-		if !interruptible && !closable && (content == nil || !content.PreserveTCPHalfClose) {
-			if source := session.InboundFromContext(ctx); source != nil {
+		if content == nil || !content.PreserveTCPHalfClose {
+			if source := session.InboundFromContext(ctx); source != nil &&
+				(source.Name == "socks" || source.Name == "http" || !interruptible && !closable) {
 				directSource = source.Conn
 			}
 		}

@@ -334,7 +334,7 @@ quoted values; generic URI/Clash formats and unsupported wrappers fail explicitl
 The required SQLite gate has37 top-level PASS names plus10 mandatory startup/HTTP
 subcases; actual PostgreSQL has40 plus10. The retained native SSH49 and mieru37
 required check assertions pass with the same new core. The scoped Snell core race
-gate has55 top-level PASS names, including pinned official references, full UDP
+gate has56 top-level PASS names, including pinned official references, full UDP
 SOCKS opt-in/default guards and native reuse/half-close guards. The v6 official
 first large reply is now mandatory rather than logging a missing response.
 
