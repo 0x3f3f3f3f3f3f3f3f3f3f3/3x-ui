@@ -722,7 +722,7 @@
           "nativeTransportOnly": "mieru uses its own TCP/UDP transport and multiplexing. Xray stream wrappers and global mux are unsupported."
         },
         "ssh": {
-          "description": "Native SSH TCP forwarding. Accounts are managed through Clients. The service has its own persistent host key. Shell, command execution and UDP forwarding are unavailable. Zero resource values use the native defaults.",
+          "forwardingDescription": "Native SSH TCP forwarding. Accounts are managed through Clients. The service has its own persistent host key. Shell, command execution and UDP forwarding are unavailable. Zero resource values use the native defaults.",
           "allowPassword": "Allow password authentication",
           "handshakeTimeout": "Handshake timeout (seconds)",
           "channelOpenTimeout": "Channel open timeout (seconds)",

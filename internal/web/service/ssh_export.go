@@ -22,6 +22,12 @@ type SSHClientExportResult struct {
 	Instructions string
 }
 
+// OpenSSH does not decode Go Unicode escapes. Preserve validated UTF-8 and
+// escape only the quoted-string delimiters understood by its config parser.
+func quoteOpenSSH(value string) string {
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(value) + `"`
+}
+
 // SSHClientExport emits native OpenSSH files using canonical business identity
 // and public host trust. It never opens a client private-key file.
 func SSHClientExport(inbound *model.Inbound, email, address string, port, endpoint int) (*SSHClientExportResult, error) {
@@ -83,12 +89,12 @@ func SSHClientExport(inbound *model.Inbound, email, address string, port, endpoi
 	alias := fmt.Sprintf("x-ui-ssh-%s-%d-%d", record.StableID, inbound.Id, endpoint)
 	privatePath := "~/.ssh/x-ui-business-" + record.StableID + ".key"
 	var config strings.Builder
-	fmt.Fprintf(&config, "# Native SSH business service; host fingerprint %s\nHost %s\n  HostName %s\n  Port %d\n  User %s\n", key.Fingerprint, alias, strconv.Quote(address), port, strconv.Quote(client.SSHUsername))
+	fmt.Fprintf(&config, "# Native SSH business service; host fingerprint %s\nHost %s\n  HostName %s\n  Port %d\n  User %s\n", key.Fingerprint, alias, quoteOpenSSH(address), port, quoteOpenSSH(client.SSHUsername))
 	config.WriteString("  StrictHostKeyChecking yes\n  UserKnownHostsFile \"~/.ssh/x-ui-ssh-known_hosts\"\n  GlobalKnownHostsFile /dev/null\n  UpdateHostKeys no\n  CheckHostIP no\n  IdentitiesOnly yes\n  IdentityAgent none\n  SessionType none\n  RequestTTY no\n  ExitOnForwardFailure yes\n")
 	var methods []string
 	if keys {
 		methods = append(methods, "publickey")
-		fmt.Fprintf(&config, "  IdentityFile %s\n  PubkeyAuthentication yes\n", strconv.Quote(privatePath))
+		fmt.Fprintf(&config, "  IdentityFile %s\n  PubkeyAuthentication yes\n", quoteOpenSSH(privatePath))
 	} else {
 		config.WriteString("  PubkeyAuthentication no\n")
 	}

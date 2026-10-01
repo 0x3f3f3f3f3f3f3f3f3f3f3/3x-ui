@@ -250,3 +250,39 @@ func TestSSHOpenSSHExportNativeBoundaries(t *testing.T) {
 		t.Fatalf("missing SQL host trust silently exported: %d", response.Code)
 	}
 }
+
+func TestSSHOpenSSHExportRetainsAllAllowedUnicodeUsernames(t *testing.T) {
+	inbound, client, _ := seedNativeSSHExport(t)
+	username := "business-\u200b-user"
+	if err := database.GetDB().Model(client).Update("ssh_username", username).Error; err != nil {
+		t.Fatal(err)
+	}
+	profile, err := service.SSHClientExport(inbound, client.Email, "127.0.0.1", 2222, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var alias string
+	for _, line := range strings.Split(profile.Config, "\n") {
+		f := strings.Fields(line)
+		if len(f) == 2 && f[0] == "Host" {
+			alias = f[1]
+			break
+		}
+	}
+	path := filepath.Join(t.TempDir(), "business-ssh.conf")
+	if err := os.WriteFile(path, []byte(profile.Config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := exec.Command("ssh", "-G", "-F", path, alias).CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(parsed), "user "+username+"\n") {
+		for _, line := range strings.Split(string(parsed), "\n") {
+			if strings.HasPrefix(line, "user ") {
+				t.Fatalf("accepted Unicode SSH username changed by actual OpenSSH export parser: wanted=%q actual=%q", username, line)
+			}
+		}
+		t.Fatal("no user parsed")
+	}
+}

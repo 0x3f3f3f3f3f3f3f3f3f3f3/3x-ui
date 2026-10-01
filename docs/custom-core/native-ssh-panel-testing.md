@@ -172,7 +172,63 @@ with unchanged core/dependency bytes; final clean artifacts follow review.
 
 ## Remaining acceptance
 
-One whole-panel review, clean-source artifacts and fork verification remain
-pending for this increment. Remote key provisioning, coordinated remote budgets, Snell panel
+The single whole-panel review and correction are complete. Clean-source
+artifacts, integration and fork verification remain pending. Remote key
+provisioning, coordinated remote budgets, Snell panel
 integration and the broader original project remain open. No deployment or
 default-branch merge is implied by these local checks.
+
+## Single final panel review and correction — 2026-10-01
+
+The one whole-panel review covered ab997b39..676ddcc3 and found two Important
+and two Minor issues. Persisted public-service regressions reproduced all four:
+HTTP/Mixed owners silently dropped SSH authentication updates; a public
+rename/filter/create interleaving redirected a selected SSH update to a new
+owner reusing its old label; U+200B was rewritten by Go quoting in actual
+OpenSSH parsing; single-client add accepted reserved runtime owner fields.
+The latter still used SQL-generated identity and did not forge an owner.
+
+The single correction resolves SSH/mieru omissions from the current row inside
+the serialized writer, validates every linked native listener, persists native
+columns in the shared password-owner path and refreshes SSH mirrors. Native
+client updates retain the selected immutable canonical identity and check its
+membership before writes. Reserved clientId/client_id input is rejected by both
+SSH add/update entrances. OpenSSH quoting preserves validated UTF-8, including
+U+200B, while escaping its actual quote/backslash delimiters.
+
+The new HTTP/Mixed filter cases cover disabled username reservations, last key
+removal, independent mieru rotation, unchanged ordinary secrets/stable identity,
+and fresh SSH mirrors without clear-command replay. Omitted shared-native
+credentials retain a concurrent rotation. The same public label-reuse race is
+also covered for mieru. The SSH and mieru required-name verifiers include the
+new regressions. These scoped GREEN results do not yet prove final integration,
+clean artifacts or fork publication; those steps follow the ongoing gates.
+
+Final broad verification also caught a startup blocker in the new translation
+object: go-i18n reserves `description` for message metadata and refuses a map
+mixing it with normal nested keys. Both languages and the real SSH form now use
+`forwardingDescription`; the existing route-registry test and Discord locale
+initialization are the behavioral startup regressions. A further filtered
+HTTP-owner rename regression caught clearSshPassword surviving in an excluded
+VLESS mirror; the same transaction now consumes commands in that target mirror
+as well as refreshing linked SSH mirrors.
+
+The combined race PostgreSQL command exhausted Go's default cumulative10m
+package limit at the start of another schema migration. All completed parent
+results and the raw timeout were retained, and remaining cases were separately
+run. That recovery exposed PostgreSQL's 63-byte identifier truncation discarding
+random schema suffixes for long test names. The shared test helper now truncates
+only its descriptive prefix, retaining process/random identity. An actual-PG
+nested long-name regression and all12 affected removal subcases pass; earlier
+schemas are preserved. Fresh final native gates are run separately from the
+broad shared-owner group to avoid conflating a package budget with acceptance.
+
+Final correction validation:47 SQLite/49 actualPG required SSH parents and
+35 SQLite/37 actualPG mieru parents PASS with no applicable native SKIP. Fresh
+whole-root Go tests, lint(0issues), vet and generation checks PASS. The complete
+Task3 frontend35files606case baseline is retained; the changed SSH paragraph
+key and all13 language key sets pass8 targeted form/i18n cases, actual panel/bot
+startup, typecheck, lint, format and Vite build. English/Chinese are translated;
+the other11 languages receive explicit English fallback for63 new native keys.
+Final source/log hashes: /root/task-evidence/native-ssh-panel-review-final-receipt.json.
+No second reviewer was used. Clean integration/publication remains the final step.

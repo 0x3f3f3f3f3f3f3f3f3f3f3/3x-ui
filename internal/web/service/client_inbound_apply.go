@@ -381,6 +381,11 @@ func (s *ClientService) AddInboundClient(inboundSvc *InboundService, data *model
 	if err != nil {
 		return false, err
 	}
+	if oldInbound.Protocol == model.SSH {
+		if err := rejectSSHRuntimeOwnerIDs(data.Settings); err != nil {
+			return false, err
+		}
+	}
 
 	existingClients, err := inboundSvc.GetClients(oldInbound)
 	if err != nil {
@@ -705,6 +710,11 @@ func (s *ClientService) updateInboundClient(inboundSvc *InboundService, data *mo
 	if err != nil {
 		return false, err
 	}
+	if oldInbound.Protocol == model.SSH {
+		if err := rejectSSHRuntimeOwnerIDs(data.Settings); err != nil {
+			return false, err
+		}
+	}
 
 	oldClients, err := inboundSvc.GetClients(oldInbound)
 	if err != nil {
@@ -968,6 +978,13 @@ func (s *ClientService) updateInboundClient(inboundSvc *InboundService, data *mo
 			canonical, err = guardClientUpdateIdentity(tx, expected, clients[0])
 			if err != nil {
 				return err
+			}
+			var membership int64
+			if err := tx.Model(&model.ClientInbound{}).Where("client_id = ? AND inbound_id = ?", canonical.Id, oldInbound.Id).Count(&membership).Error; err != nil {
+				return err
+			}
+			if membership != 1 {
+				return fmt.Errorf("%w: canonical client membership changed during update", ErrManagedConfigStale)
 			}
 			if err := guardPasswordProxyOwnerUpdate(tx, canonical, clients[0].Policy); err != nil {
 				return err

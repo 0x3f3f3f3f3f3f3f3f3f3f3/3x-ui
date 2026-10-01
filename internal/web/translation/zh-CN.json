@@ -721,7 +721,7 @@
           "nativeTransportOnly": "mieru 使用自身的 TCP/UDP 传输和多路复用，不支持 Xray 传输封装或全局 mux。"
         },
         "ssh": {
-          "description": "原生 SSH TCP 转发。账号在客户端页面管理，每个服务具有持久保存的独立主机密钥。不提供 shell、命令执行或 UDP 转发。资源参数为零时使用原生默认值。",
+          "forwardingDescription": "原生 SSH TCP 转发。账号在客户端页面管理，每个服务具有持久保存的独立主机密钥。不提供 shell、命令执行或 UDP 转发。资源参数为零时使用原生默认值。",
           "allowPassword": "允许密码认证",
           "handshakeTimeout": "握手超时（秒）",
           "channelOpenTimeout": "通道打开超时（秒）",

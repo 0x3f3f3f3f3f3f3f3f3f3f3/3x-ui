@@ -8,6 +8,7 @@ mode, log_path = sys.argv[1:]
 if mode not in ("sqlite", "postgres"):
     raise SystemExit("expected sqlite or postgres")
 required = {
+    "TestMieruClientUpdateRefusesReusedCanonicalLabel",
     'TestMieruCredentialsRoundTripSeparatelyFromOtherProtocols',
     'TestMieruCredentialRecordMergePreservesOmittedAndRedactsConflicts',
     'TestMieruSQLiteOldSchemaUpgradePreservesIdentityAndReopen',

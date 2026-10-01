@@ -227,18 +227,8 @@ func prepareSSHInbound(inbound *model.Inbound) error {
 	if _, err := native.Build(); err != nil {
 		return err
 	}
-	var entries []map[string]json.RawMessage
-	if raw, ok := settings["clients"]; ok {
-		if err := json.Unmarshal(raw, &entries); err != nil {
-			return err
-		}
-	}
-	for _, entry := range entries {
-		for _, name := range []string{"clientId", "client_id"} {
-			if _, ok := entry[name]; ok {
-				return fmt.Errorf("SSH runtime owner IDs are assigned by SQL")
-			}
-		}
+	if err := rejectSSHRuntimeOwnerIDs(inbound.Settings); err != nil {
+		return err
 	}
 	clients, err := ParseInboundSettingsClients(inbound.Settings)
 	if err != nil {
@@ -250,6 +240,24 @@ func prepareSSHInbound(inbound *model.Inbound) error {
 		}
 		if err := normalizeSSHCredentials(&clients[i]); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// Inspect the original wire entries before DTO decoding discards unknown IDs.
+func rejectSSHRuntimeOwnerIDs(raw string) error {
+	var settings struct {
+		Clients []map[string]json.RawMessage `json:"clients"`
+	}
+	if err := json.Unmarshal([]byte(raw), &settings); err != nil {
+		return err
+	}
+	for _, entry := range settings.Clients {
+		for _, name := range []string{"clientId", "client_id"} {
+			if _, ok := entry[name]; ok {
+				return fmt.Errorf("SSH runtime owner IDs are assigned by SQL")
+			}
 		}
 	}
 	return nil
@@ -375,7 +383,10 @@ func validateLinkedSSHCredentialChanges(tx *gorm.DB, targetID int, clients []mod
 // Mirrors contain current authentication only. Explicit clear commands are
 // consumed by this transaction and cannot be replayed by a later ordinary edit.
 func refreshSSHCredentialMirrors(tx *gorm.DB, targetID int, clientIDs []int) error {
-	listenerIDs := []int{targetID}
+	var listenerIDs []int
+	if targetID > 0 {
+		listenerIDs = append(listenerIDs, targetID)
+	}
 	if len(clientIDs) > 0 {
 		var linked []int
 		if err := tx.Table("client_inbounds ci").Joins("JOIN inbounds i ON i.id = ci.inbound_id").Where("ci.client_id IN ? AND i.protocol = ?", clientIDs, model.SSH).Distinct().Pluck("ci.inbound_id", &linked).Error; err != nil {

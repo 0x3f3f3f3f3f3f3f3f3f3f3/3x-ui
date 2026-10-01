@@ -694,12 +694,6 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 	if updated.Password == "" {
 		updated.Password = existing.Password
 	}
-	if updated.MieruUsername == "" {
-		updated.MieruUsername = existing.MieruUsername
-	}
-	if updated.MieruPassword == "" {
-		updated.MieruPassword = existing.MieruPassword
-	}
 	if updated.Auth == "" {
 		updated.Auth = existing.Auth
 	}
@@ -783,7 +777,15 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 			}
 		}
 		if selected[ibId] {
-			if err := s.fillProtocolDefaults(&updated, inbound); err != nil {
+			// Native credentials are resolved from the current canonical row
+			// inside the writer, preserving concurrent rotations on omissions.
+			var err error
+			if inbound.Protocol == model.Mieru {
+				err = validateProvidedMieruCredentials(updated)
+			} else {
+				err = s.fillProtocolDefaults(&updated, inbound)
+			}
+			if err != nil {
 				return false, err
 			}
 		}
@@ -836,7 +838,7 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 		}
 		data := &model.Inbound{Id: ibId, Settings: string(settingsPayload)}
 		applies = append(applies, inboundApply{id: ibId, run: func() (bool, error) {
-			if passwordBindings > 0 {
+			if passwordBindings > 0 || inbound.Protocol == model.SSH || inbound.Protocol == model.Mieru {
 				return s.updateInboundClient(inboundSvc, data, existing.Email, existing, !selected[ibId])
 			}
 			return s.UpdateInboundClient(inboundSvc, data, existing.Email)
@@ -926,14 +928,12 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("stable_id = ?", existing.StableID).First(&current).Error; err != nil {
 				return err
 			}
-			sshUpdate := updated
-			if err := resolveSSHClientCredentials(&sshUpdate, &current, false); err != nil {
+			nativeUpdate := updated
+			if err := resolveNativeClientUpdate(tx, &current, &nativeUpdate); err != nil {
 				return err
 			}
-			if err := validateLinkedSSHCredentialChanges(tx, 0, []model.Client{sshUpdate}, map[string]*model.ClientRecord{sshUpdate.Email: &current}); err != nil {
-				return err
-			}
-			fields["ssh_username"], fields["ssh_authorized_keys"], fields["ssh_password"] = sshUpdate.SSHUsername, sshUpdate.SSHAuthorizedKeys, sshUpdate.SSHPassword
+			fields["ssh_username"], fields["ssh_authorized_keys"], fields["ssh_password"] = nativeUpdate.SSHUsername, nativeUpdate.SSHAuthorizedKeys, nativeUpdate.SSHPassword
+			fields["mieru_username"], fields["mieru_password"] = nativeUpdate.MieruUsername, nativeUpdate.MieruPassword
 			if updated.Policy != nil {
 				if err := guardClientPolicyTargets(tx, &current, updated.Policy, nil, false); err != nil {
 					return err

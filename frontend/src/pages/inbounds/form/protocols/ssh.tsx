@@ -25,7 +25,7 @@ export default function SSHFields() {
   return (
     <>
       <Typography.Paragraph type="secondary">
-        {t('pages.inbounds.form.ssh.description')}
+        {t('pages.inbounds.form.ssh.forwardingDescription')}
       </Typography.Paragraph>
       <FormField
         name={['settings', 'allowPassword']}
