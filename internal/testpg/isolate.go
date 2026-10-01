@@ -34,7 +34,12 @@ func IsolatePackage(packageName string) (func(), error) {
 	if _, err := rand.Read(suffix); err != nil {
 		return nil, fmt.Errorf("generate PostgreSQL test schema suffix: %w", err)
 	}
-	schema := fmt.Sprintf("xui_%s_%d_%s", sanitize(packageName), os.Getpid(), hex.EncodeToString(suffix))
+	// PostgreSQL truncates identifiers at 63 bytes. Keep the unique suffix
+	// inside that limit even for long test/subtest names.
+	schemaSuffix := fmt.Sprintf("_%d_%s", os.Getpid(), hex.EncodeToString(suffix))
+	prefix := sanitize(packageName)
+	prefix = prefix[:min(len(prefix), 63-len("xui_")-len(schemaSuffix))]
+	schema := "xui_" + prefix + schemaSuffix
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
