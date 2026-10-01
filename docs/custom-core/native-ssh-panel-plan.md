@@ -48,15 +48,15 @@ prepareSSHInbound(*model.Inbound) error, resolveSSHInboundCredentials(*gorm.DB,
 dedicated host-key records/files through current Runtime preparation after
 capability checks. No public standalone user-management endpoint is needed.
 
-- [ ] Write behavioral RED tests for independent SQL credentials, canonical
+- [x] Write behavioral RED tests for independent SQL credentials, canonical
   ownership, omitted/explicit-clear updates, duplicates and invalid public keys.
-- [ ] Persist/validate native fields inside existing CRUD/attach/bulk transactions;
+- [x] Persist/validate native fields inside existing CRUD/attach/bulk transactions;
   pass the named account tests without changing other protocol credentials.
-- [ ] Write host-key first-use/restart/file-loss/backup/missing-reference and
+- [x] Write host-key first-use/restart/file-loss/backup/missing-reference and
   private-path RED tests; implement SQL authority and guarded materialization.
-- [ ] Write native user/hot-diff/missing-marker RED tests; add typed accounts,
+- [x] Write native user/hot-diff/missing-marker RED tests; add typed accounts,
   capabilities and preparation fences; verify current/markerless actual cores.
-- [ ] Run SQLite/actualPG migration/restore and real public service lifecycle;
+- [x] Run SQLite/actualPG migration/restore and real public service lifecycle;
   affected race, generation/lint/vet and logical backend commit.
 
 ### Task 2: Existing native SSH forms and options

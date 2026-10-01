@@ -56,7 +56,7 @@ func (s *XrayService) managedPolicyRequested() (bool, error) {
 	}
 	var count int64
 	db := database.GetDB()
-	if err := db.Model(&model.Inbound{}).Where("node_id IS NULL AND enable = ? AND protocol = ?", true, model.Mieru).Count(&count).Error; err != nil || count > 0 {
+	if err := db.Model(&model.Inbound{}).Where("node_id IS NULL AND enable = ? AND protocol IN ?", true, []model.Protocol{model.Mieru, model.SSH}).Count(&count).Error; err != nil || count > 0 {
 		return count > 0, err
 	}
 	err = db.Model(&model.ClientPolicySource{}).Where("node_key = ? AND (epoch > 0 OR handoff_boot_id <> '')", "local").Count(&count).Error
@@ -68,7 +68,7 @@ func (s *XrayService) managedPolicyRequested() (bool, error) {
 		Joins("JOIN client_inbounds ci ON ci.client_id = c.id").
 		Joins("JOIN inbounds i ON i.id = ci.inbound_id").
 		Where("i.node_id IS NULL AND i.enable = ?", true).
-		Where("i.protocol IN ? OR c.policy_upload_bytes_per_second IS NOT NULL OR c.policy_download_bytes_per_second IS NOT NULL OR c.policy_multiplier IS NOT NULL", []model.Protocol{model.Tunnel, model.Mixed, model.HTTP, model.Mieru}).
+		Where("i.protocol IN ? OR c.policy_upload_bytes_per_second IS NOT NULL OR c.policy_download_bytes_per_second IS NOT NULL OR c.policy_multiplier IS NOT NULL", []model.Protocol{model.Tunnel, model.Mixed, model.HTTP, model.Mieru, model.SSH}).
 		Limit(1).Scan(&clientID).Error
 	return clientID != 0, err
 }
@@ -164,7 +164,12 @@ func (s *XrayService) restartManagedXrayLocked(isForce bool) error {
 		if !isForce {
 			if rt, ok := managed.(panelruntime.ManagedConfigRuntime); ok {
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				applied, applyErr := rt.ApplyManagedConfig(ctx, process, candidate, PrepareLocalClientPolicyBootstrap)
+				applied, applyErr := rt.ApplyManagedConfig(ctx, process, candidate, func(caps *command.Capabilities, policy *conf.ClientPolicyConfig) (*panelruntime.ManagedPolicyBootstrap, error) {
+					if err := prepareSSHManagedResources(caps, candidate); err != nil {
+						return nil, err
+					}
+					return PrepareLocalClientPolicyBootstrap(caps, policy)
+				})
 				if applyErr != nil && (errors.Is(applyErr, panelruntime.ErrManagedConfigPartial) || managedAccessChanged(process.GetConfig(), candidate)) {
 					applyErr = errors.Join(applyErr, process.Stop())
 					s.SetToNeedRestart()
@@ -210,6 +215,9 @@ func (s *XrayService) restartManagedXrayLocked(isForce bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	return managed.StartManagedProcess(ctx, process, func(_ context.Context, caps *command.Capabilities) (*panelruntime.ManagedPolicyBootstrap, error) {
+		if err := prepareSSHManagedResources(caps, candidate); err != nil {
+			return nil, err
+		}
 		return PrepareLocalClientPolicyBootstrap(caps, &policy)
 	})
 }

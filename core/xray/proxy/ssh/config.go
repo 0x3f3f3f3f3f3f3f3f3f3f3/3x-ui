@@ -32,6 +32,19 @@ type limits struct {
 	authTries, connections, userConnections, channels, totalChannels int
 }
 
+// ValidateServerOptions checks listener bounds and reverse permissions without
+// opening a host key or creating a listener, for panel candidate validation.
+func ValidateServerOptions(c *ServerConfig) error {
+	if c == nil {
+		return ErrConfiguration
+	}
+	if _, err := serverLimits(c); err != nil {
+		return err
+	}
+	_, err := buildReversePolicy(c.Reverse)
+	return err
+}
+
 func bounded(value, fallback, ceiling uint32) (int, error) {
 	if value == 0 {
 		value = fallback

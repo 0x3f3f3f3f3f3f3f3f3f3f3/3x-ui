@@ -1674,6 +1674,12 @@ export const SCHEMAS: Record<string, unknown> = {
         "description": "Auth password (Hysteria)",
         "type": "string"
       },
+      "clearSshAuthorizedKeys": {
+        "type": "boolean"
+      },
+      "clearSshPassword": {
+        "type": "boolean"
+      },
       "comment": {
         "description": "Client comment",
         "type": "string"
@@ -1779,6 +1785,15 @@ export const SCHEMAS: Record<string, unknown> = {
       },
       "security": {
         "description": "Security method (e.g., \"auto\", \"aes-128-gcm\")",
+        "type": "string"
+      },
+      "sshAuthorizedKeys": {
+        "type": "string"
+      },
+      "sshPassword": {
+        "type": "string"
+      },
+      "sshUsername": {
         "type": "string"
       },
       "subId": {
@@ -2106,6 +2121,15 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "string"
       },
       "security": {
+        "type": "string"
+      },
+      "sshAuthorizedKeys": {
+        "type": "string"
+      },
+      "sshPassword": {
+        "type": "string"
+      },
+      "sshUsername": {
         "type": "string"
       },
       "subId": {
@@ -3264,7 +3288,8 @@ export const SCHEMAS: Record<string, unknown> = {
           "mtproto",
           "amneziawg",
           "tuic",
-          "mieru"
+          "mieru",
+          "ssh"
         ],
         "example": "vless",
         "type": "string"
@@ -3287,6 +3312,9 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "string"
       },
       "sniffing": {},
+      "sshHostKeyId": {
+        "type": "string"
+      },
       "streamSettings": {},
       "subSortIndex": {
         "description": "Sort order of this inbound's links in subscription output only (lower first; negatives allowed; 0/omitted → 1; ties by id)",
@@ -3473,6 +3501,12 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "string"
       },
       "ssMethod": {
+        "type": "string"
+      },
+      "sshHostFingerprint": {
+        "type": "string"
+      },
+      "sshHostPublicKey": {
         "type": "string"
       },
       "tag": {

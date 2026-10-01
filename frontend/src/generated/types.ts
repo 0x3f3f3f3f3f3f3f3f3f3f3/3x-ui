@@ -407,6 +407,8 @@ export interface Client {
   allowedIPs?: string[];
   allowedIPsByInbound?: Record<number, string[]>;
   auth?: string;
+  clearSshAuthorizedKeys?: boolean;
+  clearSshPassword?: boolean;
   comment: string;
   created_at?: number;
   email: string;
@@ -432,6 +434,9 @@ export interface Client {
   reverse?: ClientReverse | null;
   secret?: string;
   security: string;
+  sshAuthorizedKeys?: string;
+  sshPassword?: string;
+  sshUsername?: string;
   subId: string;
   tgId: number;
   totalGB: number;
@@ -514,6 +519,9 @@ export interface ClientRecord {
   reverse: unknown;
   secret: string;
   security: string;
+  sshAuthorizedKeys?: string;
+  sshPassword?: string;
+  sshUsername?: string;
   subId: string;
   tgId: number;
   totalGB: number;
@@ -765,6 +773,7 @@ export interface Inbound {
   shareAddr: string;
   shareAddrStrategy: string;
   sniffing: unknown;
+  sshHostKeyId?: string;
   streamSettings: unknown;
   subSortIndex: number;
   tag: string;
@@ -808,6 +817,8 @@ export interface InboundOption {
   shareAddr?: string;
   shareAddrStrategy?: string;
   ssMethod: string;
+  sshHostFingerprint?: string;
+  sshHostPublicKey?: string;
   tag: string;
   tlsFlowCapable: boolean;
   tuicServer?: TuicServerSettings | null;

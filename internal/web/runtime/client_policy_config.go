@@ -184,7 +184,7 @@ func managedUserIdentity(config *xray.Config, user xray.UserOp) (string, error) 
 		if inbound.Protocol == "mixed" || inbound.Protocol == "http" {
 			entries = accounts.Accounts
 		}
-		if inbound.Protocol == "mieru" {
+		if inbound.Protocol == "mieru" || inbound.Protocol == "ssh" {
 			entries = accounts.Users
 		}
 		var id string

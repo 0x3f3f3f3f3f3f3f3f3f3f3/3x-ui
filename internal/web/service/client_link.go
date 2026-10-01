@@ -36,6 +36,21 @@ func applyClientRecordMerge(row *model.ClientRecord, incoming *model.ClientRecor
 	if incoming.MieruPassword != "" {
 		row.MieruPassword = incoming.MieruPassword
 	}
+	if incoming.SSHUsername != "" {
+		row.SSHUsername = incoming.SSHUsername
+	}
+	if incoming.SSHAuthorizedKeys != "" {
+		row.SSHAuthorizedKeys = incoming.SSHAuthorizedKeys
+	}
+	if incoming.ClearSSHAuthorizedKeys {
+		row.SSHAuthorizedKeys = ""
+	}
+	if incoming.SSHPassword != "" {
+		row.SSHPassword = incoming.SSHPassword
+	}
+	if incoming.ClearSSHPassword {
+		row.SSHPassword = ""
+	}
 	if incoming.Auth != "" {
 		row.Auth = incoming.Auth
 	}
@@ -114,7 +129,7 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 		})
 	}
 	var target model.Inbound
-	if err := tx.Select("protocol").First(&target, inboundId).Error; err != nil {
+	if err := tx.First(&target, inboundId).Error; err != nil {
 		return err
 	}
 	if isPasswordProxy(target.Protocol) {
@@ -170,6 +185,19 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 	}
 	if err := guardRemoteClientPolicyAttachments(tx, inboundId, existing, clients); err != nil {
 		return err
+	}
+	for i := range clients {
+		if err := resolveSSHClientCredentials(&clients[i], existing[strings.TrimSpace(clients[i].Email)], target.Protocol == model.SSH); err != nil {
+			return err
+		}
+	}
+	if err := validateLinkedSSHCredentialChanges(tx, inboundId, clients, existing); err != nil {
+		return err
+	}
+	if target.Protocol == model.SSH {
+		if err := validateSSHBindingChanges(tx, &target, clients, detachEmails, prune); err != nil {
+			return err
+		}
 	}
 	if err := validateLinkedMieruCredentialChanges(tx, inboundId, clients, existing); err != nil {
 		return err
@@ -270,6 +298,15 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 	}
 	if removedTunnelOwner {
 		if err := tx.Model(&model.Inbound{}).Where("id = ?", inboundId).Update("enable", false).Error; err != nil {
+			return err
+		}
+	}
+	refreshSSH := target.Protocol == model.SSH
+	for _, client := range clients {
+		refreshSSH = refreshSSH || client.SSHUsername != "" || client.SSHAuthorizedKeys != "" || client.SSHPassword != "" || client.ClearSSHPassword || client.ClearSSHAuthorizedKeys
+	}
+	if refreshSSH {
+		if err := refreshSSHCredentialMirrors(tx, inboundId, wantedIds); err != nil {
 			return err
 		}
 	}

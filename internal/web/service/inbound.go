@@ -342,20 +342,22 @@ func (s *InboundService) annotateFallbackParents(db *gorm.DB, inbounds []*model.
 }
 
 type InboundOption struct {
-	Id             int    `json:"id" example:"1"`
-	Remark         string `json:"remark" example:"VLESS-443"`
-	Tag            string `json:"tag" example:"in-443-tcp"`
-	Protocol       string `json:"protocol" example:"vless"`
-	Port           int    `json:"port" example:"443"`
-	Enable         bool   `json:"enable" example:"true"`
-	Network        string `json:"network,omitempty"`
-	Security       string `json:"security,omitempty"`
-	TlsFlowCapable bool   `json:"tlsFlowCapable" example:"true"`
-	SsMethod       string `json:"ssMethod"`
-	WgPublicKey    string `json:"wgPublicKey,omitempty"`
-	WgMtu          int    `json:"wgMtu,omitempty"`
-	WgDns          string `json:"wgDns,omitempty"`
-	MtprotoDomain  string `json:"mtprotoDomain,omitempty"`
+	Id                 int    `json:"id" example:"1"`
+	Remark             string `json:"remark" example:"VLESS-443"`
+	Tag                string `json:"tag" example:"in-443-tcp"`
+	Protocol           string `json:"protocol" example:"vless"`
+	Port               int    `json:"port" example:"443"`
+	Enable             bool   `json:"enable" example:"true"`
+	Network            string `json:"network,omitempty"`
+	Security           string `json:"security,omitempty"`
+	TlsFlowCapable     bool   `json:"tlsFlowCapable" example:"true"`
+	SsMethod           string `json:"ssMethod"`
+	WgPublicKey        string `json:"wgPublicKey,omitempty"`
+	WgMtu              int    `json:"wgMtu,omitempty"`
+	WgDns              string `json:"wgDns,omitempty"`
+	MtprotoDomain      string `json:"mtprotoDomain,omitempty"`
+	SSHHostPublicKey   string `json:"sshHostPublicKey,omitempty"`
+	SSHHostFingerprint string `json:"sshHostFingerprint,omitempty"`
 	// AwgServer carries the full AmneziaWG server block (keys, subnet,
 	// obfuscation params) so the clients page can render a downloadable
 	// per-client .conf without a second round trip.
@@ -393,9 +395,10 @@ func (s *InboundService) GetInboundOptions(userId int) ([]InboundOption, error) 
 		NodeId            *int   `gorm:"column:node_id"`
 		NodeAddress       string `gorm:"column:node_address"`
 		DisableFlow       bool   `gorm:"column:disable_flow"`
+		SSHHostKeyID      string `gorm:"column:ssh_host_key_id"`
 	}
 	err := db.Table("inbounds").
-		Select("inbounds.id, inbounds.remark, inbounds.tag, inbounds.protocol, inbounds.port, inbounds.enable, inbounds.stream_settings, inbounds.settings, inbounds.listen, inbounds.share_addr, inbounds.share_addr_strategy, inbounds.node_id, COALESCE(nodes.address, '') AS node_address, inbounds.disable_flow").
+		Select("inbounds.id, inbounds.remark, inbounds.tag, inbounds.protocol, inbounds.port, inbounds.enable, inbounds.stream_settings, inbounds.settings, inbounds.listen, inbounds.share_addr, inbounds.share_addr_strategy, inbounds.node_id, COALESCE(nodes.address, '') AS node_address, inbounds.disable_flow, inbounds.ssh_host_key_id").
 		Joins("LEFT JOIN nodes ON nodes.id = inbounds.node_id").
 		Where("inbounds.user_id = ?", userId).
 		Order("inbounds.id ASC").
@@ -405,6 +408,14 @@ func (s *InboundService) GetInboundOptions(userId int) ([]InboundOption, error) 
 	}
 	out := make([]InboundOption, 0, len(rows))
 	for _, r := range rows {
+		var sshPublicKey, sshFingerprint string
+		if model.Protocol(r.Protocol) == model.SSH {
+			key, err := loadSSHHostKey(db, r.SSHHostKeyID)
+			if err != nil {
+				return nil, err
+			}
+			sshPublicKey, sshFingerprint = key.PublicKey, key.Fingerprint
+		}
 		wgPublicKey, wgMtu, wgDns := inboundWireguardHints(r.Protocol, r.Settings)
 		netHint, secHint := inboundStreamHints(r.Protocol, r.StreamSettings, r.Settings)
 		shareAddrStrategy := r.ShareAddrStrategy
@@ -412,27 +423,29 @@ func (s *InboundService) GetInboundOptions(userId int) ([]InboundOption, error) 
 			shareAddrStrategy = ""
 		}
 		out = append(out, InboundOption{
-			Id:                r.Id,
-			Remark:            r.Remark,
-			Tag:               r.Tag,
-			Protocol:          r.Protocol,
-			Port:              r.Port,
-			Enable:            r.Enable,
-			Network:           netHint,
-			Security:          secHint,
-			TlsFlowCapable:    !r.DisableFlow && inboundCanEnableTlsFlow(r.Protocol, r.StreamSettings, r.Settings),
-			SsMethod:          inboundShadowsocksMethod(r.Protocol, r.Settings),
-			WgPublicKey:       wgPublicKey,
-			WgMtu:             wgMtu,
-			WgDns:             wgDns,
-			MtprotoDomain:     inboundMtprotoDomain(r.Protocol, r.Settings),
-			AwgServer:         inboundAmneziaWGServer(r.Protocol, r.Settings),
-			TuicServer:        inboundTuicServer(r.Protocol, r.Settings),
-			NodeId:            r.NodeId,
-			NodeAddress:       r.NodeAddress,
-			Listen:            r.Listen,
-			ShareAddr:         r.ShareAddr,
-			ShareAddrStrategy: shareAddrStrategy,
+			Id:                 r.Id,
+			Remark:             r.Remark,
+			Tag:                r.Tag,
+			Protocol:           r.Protocol,
+			Port:               r.Port,
+			Enable:             r.Enable,
+			Network:            netHint,
+			Security:           secHint,
+			TlsFlowCapable:     !r.DisableFlow && inboundCanEnableTlsFlow(r.Protocol, r.StreamSettings, r.Settings),
+			SsMethod:           inboundShadowsocksMethod(r.Protocol, r.Settings),
+			WgPublicKey:        wgPublicKey,
+			WgMtu:              wgMtu,
+			WgDns:              wgDns,
+			MtprotoDomain:      inboundMtprotoDomain(r.Protocol, r.Settings),
+			SSHHostPublicKey:   sshPublicKey,
+			SSHHostFingerprint: sshFingerprint,
+			AwgServer:          inboundAmneziaWGServer(r.Protocol, r.Settings),
+			TuicServer:         inboundTuicServer(r.Protocol, r.Settings),
+			NodeId:             r.NodeId,
+			NodeAddress:        r.NodeAddress,
+			Listen:             r.Listen,
+			ShareAddr:          r.ShareAddr,
+			ShareAddrStrategy:  shareAddrStrategy,
 		})
 	}
 	return out, nil
@@ -1104,6 +1117,9 @@ func (s *InboundService) normalizeMtprotoXrayPort(inbound *model.Inbound, oldSet
 // Returns the created inbound, whether Xray needs restart, and any error.
 func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, bool, error) {
 	inbound.Id = 0
+	if err := prepareSSHInbound(inbound); err != nil {
+		return inbound, false, err
+	}
 	if err := prepareMieruInbound(inbound); err != nil {
 		return inbound, false, err
 	}
@@ -1215,7 +1231,7 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	// Secure client ID
 	for _, client := range clients {
 		switch inbound.Protocol {
-		case model.Mieru:
+		case model.Mieru, model.SSH:
 			// Native authentication uses its independent username/password pair.
 		case model.Tunnel:
 			// The listener owns the account; there is no protocol credential.
@@ -1262,10 +1278,16 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	needRestart := false
 	var postCommitApply func()
 	err = runSerializedTx(func(tx *gorm.DB) error {
+		if err := resolveSSHInboundCredentials(tx, inbound); err != nil {
+			return err
+		}
 		if err := resolveMieruInboundCredentials(tx, inbound); err != nil {
 			return err
 		}
-		if inbound.Protocol == model.Mieru {
+		if err := resolveSSHHostKey(tx, inbound, nil); err != nil {
+			return err
+		}
+		if inbound.Protocol == model.Mieru || inbound.Protocol == model.SSH {
 			var err error
 			clients, err = s.GetClients(inbound)
 			if err != nil {
@@ -1364,6 +1386,11 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 			}
 		} else if err := s.clientService.SyncInbound(tx, inbound.Id, clients); err != nil {
 			return err
+		}
+		if inbound.Protocol == model.SSH {
+			if err := tx.Select("settings").First(inbound, inbound.Id).Error; err != nil {
+				return err
+			}
 		}
 		if _, err := database.CreateHostsFromExternalProxy(tx, inbound.Id, inbound.StreamSettings); err != nil {
 			return err
@@ -1816,6 +1843,9 @@ func (s *InboundService) SetInboundEnable(id int, enable bool) (bool, error) {
 
 func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, bool, error) {
 	defer lockInbound(inbound.Id).Unlock()
+	if err := prepareSSHInbound(inbound); err != nil {
+		return inbound, false, err
+	}
 	if err := prepareMieruInbound(inbound); err != nil {
 		return inbound, false, err
 	}
@@ -1913,6 +1943,12 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	var postCommitApply func()
 
 	txErr := runSerializedTx(func(tx *gorm.DB) error {
+		if err := resolveSSHInboundCredentials(tx, inbound); err != nil {
+			return err
+		}
+		if err := resolveSSHHostKey(tx, inbound, oldInbound); err != nil {
+			return err
+		}
 		if err := resolveMieruInboundCredentials(tx, inbound); err != nil {
 			return err
 		}
@@ -2044,6 +2080,7 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 		oldInbound.Listen = inbound.Listen
 		oldInbound.Port = inbound.Port
 		oldInbound.Protocol = inbound.Protocol
+		oldInbound.SSHHostKeyID = inbound.SSHHostKeyID
 		oldInbound.DisableFlow = inbound.DisableFlow
 		oldInbound.Settings = inbound.Settings
 		oldInbound.StreamSettings = inbound.StreamSettings
@@ -2089,6 +2126,12 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 			}
 		} else if err := s.clientService.SyncInbound(tx, oldInbound.Id, newClients); err != nil {
 			return err
+		}
+		if oldInbound.Protocol == model.SSH {
+			if err := tx.Select("settings").First(oldInbound, oldInbound.Id).Error; err != nil {
+				return err
+			}
+			inbound.Settings = oldInbound.Settings
 		}
 		if err := preserveRemovedPasswordProxyHistory(tx, oldInbound.Id, priorPasswordOwners); err != nil {
 			return err

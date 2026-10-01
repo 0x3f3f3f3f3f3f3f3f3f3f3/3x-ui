@@ -186,6 +186,9 @@ func (s *XrayService) getXrayConfigFromDB(managed bool, db *gorm.DB) (*xray.Conf
 		return nil, err
 	}
 	xrayConfig.LogConfig = resolveXrayLogPaths(xrayConfig.LogConfig)
+	if err := xray.ValidateNativeSSHOutbounds(xrayConfig.OutboundConfigs); err != nil {
+		return nil, err
+	}
 	xrayConfig.API = ensureAPIServices(xrayConfig.API)
 	xrayConfig.Policy = ensureStatsPolicy(xrayConfig.Policy)
 	xrayConfig.RouterConfig = stripDisabledRules(xrayConfig.RouterConfig)
@@ -274,6 +277,9 @@ func (s *XrayService) getXrayConfigFromDB(managed bool, db *gorm.DB) (*xray.Conf
 			}
 			entry := map[string]any{"email": c.Email}
 			switch inbound.Protocol {
+			case model.SSH:
+				entry["username"], entry["password"] = c.SSHUsername, c.SSHPassword
+				entry["publicKeys"] = sshPublicKeyLines(c.SSHAuthorizedKeys)
 			case model.Mieru:
 				entry["username"], entry["password"] = c.MieruUsername, c.MieruPassword
 			case model.VLESS:
@@ -320,7 +326,20 @@ func (s *XrayService) getXrayConfigFromDB(managed bool, db *gorm.DB) (*xray.Conf
 		}
 
 		var mutated bool
-		if inbound.Protocol == model.Mieru {
+		if inbound.Protocol == model.Mieru || inbound.Protocol == model.SSH {
+			if inbound.Protocol == model.SSH {
+				if !managed {
+					return nil, fmt.Errorf("%w: native SSH requires managed activation", xray.ErrClientPolicyCapability)
+				}
+				if _, err := loadSSHHostKey(db, inbound.SSHHostKeyID); err != nil {
+					return nil, err
+				}
+				path, err := sshManagedHostKeyPath(inbound.SSHHostKeyID)
+				if err != nil {
+					return nil, err
+				}
+				settings["hostKeyFile"] = path
+			}
 			delete(settings, "clients")
 			settings["users"] = finalClients
 			mutated = true

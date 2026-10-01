@@ -35,6 +35,7 @@ const (
 	AmneziaWG   Protocol = "amneziawg"
 	TUIC        Protocol = "tuic"
 	Mieru       Protocol = "mieru"
+	SSH         Protocol = "ssh"
 )
 
 // User represents a user account in the 3x-ui panel.
@@ -65,13 +66,14 @@ type Inbound struct {
 	// Xray configuration fields
 	Listen            string   `json:"listen" form:"listen"`
 	Port              int      `json:"port" form:"port" validate:"gte=0,lte=65535" example:"443"`
-	Protocol          Protocol `json:"protocol" form:"protocol" validate:"required,oneof=vmess vless trojan shadowsocks wireguard hysteria http mixed tunnel tun mtproto amneziawg tuic mieru" example:"vless"`
+	Protocol          Protocol `json:"protocol" form:"protocol" validate:"required,oneof=vmess vless trojan shadowsocks wireguard hysteria http mixed tunnel tun mtproto amneziawg tuic mieru ssh" example:"vless"`
 	Settings          string   `json:"settings" form:"settings"`
 	StreamSettings    string   `json:"streamSettings" form:"streamSettings"`
 	Tag               string   `json:"tag" form:"tag" gorm:"unique" example:"in-443-tcp"`
 	Sniffing          string   `json:"sniffing" form:"sniffing"`
 	NodeID            *int     `json:"nodeId,omitempty" form:"nodeId" gorm:"index"`
 	OwnerClientID     *string  `json:"ownerClientId,omitempty" form:"ownerClientId" gorm:"-"`
+	SSHHostKeyID      string   `json:"sshHostKeyId,omitempty" gorm:"column:ssh_host_key_id;default:''"`
 	ShareAddrStrategy string   `json:"shareAddrStrategy" form:"shareAddrStrategy" gorm:"column:share_addr_strategy;default:node" validate:"omitempty,oneof=node listen custom"`
 	ShareAddr         string   `json:"shareAddr" form:"shareAddr" gorm:"column:share_addr"`
 
@@ -878,17 +880,22 @@ type ClientReverse struct {
 type Client struct {
 	Policy *ClientPolicyOptions `json:"policy,omitempty"`
 
-	ID            string         `json:"id,omitempty"`       // Unique client identifier
-	Security      string         `json:"security"`           // Security method (e.g., "auto", "aes-128-gcm")
-	Password      string         `json:"password,omitempty"` // Client password
-	MieruUsername string         `json:"mieruUsername,omitempty"`
-	MieruPassword string         `json:"mieruPassword,omitempty"`
-	Flow          string         `json:"flow,omitempty"`    // Flow control (XTLS)
-	Reverse       *ClientReverse `json:"reverse,omitempty"` // VLESS simple reverse proxy settings
-	Auth          string         `json:"auth,omitempty"`    // Auth password (Hysteria)
-	PrivateKey    string         `json:"privateKey,omitempty"`
-	PublicKey     string         `json:"publicKey,omitempty"`
-	AllowedIPs    []string       `json:"allowedIPs,omitempty"`
+	ID                     string         `json:"id,omitempty"`       // Unique client identifier
+	Security               string         `json:"security"`           // Security method (e.g., "auto", "aes-128-gcm")
+	Password               string         `json:"password,omitempty"` // Client password
+	MieruUsername          string         `json:"mieruUsername,omitempty"`
+	MieruPassword          string         `json:"mieruPassword,omitempty"`
+	SSHUsername            string         `json:"sshUsername,omitempty"`
+	SSHAuthorizedKeys      string         `json:"sshAuthorizedKeys,omitempty"`
+	SSHPassword            string         `json:"sshPassword,omitempty"`
+	ClearSSHPassword       bool           `json:"clearSshPassword,omitempty"`
+	ClearSSHAuthorizedKeys bool           `json:"clearSshAuthorizedKeys,omitempty"`
+	Flow                   string         `json:"flow,omitempty"`    // Flow control (XTLS)
+	Reverse                *ClientReverse `json:"reverse,omitempty"` // VLESS simple reverse proxy settings
+	Auth                   string         `json:"auth,omitempty"`    // Auth password (Hysteria)
+	PrivateKey             string         `json:"privateKey,omitempty"`
+	PublicKey              string         `json:"publicKey,omitempty"`
+	AllowedIPs             []string       `json:"allowedIPs,omitempty"`
 	// AllowedIPsByInbound optionally overrides AllowedIPs on a per-inbound
 	// basis, keyed by inbound id. Lets one identity attached to both
 	// WireGuard and AmneziaWG carry two genuinely different addresses in a
@@ -927,42 +934,47 @@ type ClientRecord struct {
 	PolicyFingerprint    string               `json:"-" gorm:"default:'';<-:create"`
 	Policy               *ClientPolicyOptions `json:"policy,omitempty" gorm:"embedded;embeddedPrefix:policy_"`
 
-	Id              int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	StableID        string `json:"clientId" gorm:"column:stable_id;uniqueIndex;<-:create"`
-	Email           string `json:"email" gorm:"uniqueIndex;not null"`
-	SubID           string `json:"subId" gorm:"index;column:sub_id"`
-	UUID            string `json:"uuid" gorm:"column:uuid"`
-	Password        string `json:"password"`
-	MieruUsername   string `json:"mieruUsername,omitempty" gorm:"column:mieru_username;default:''"`
-	MieruPassword   string `json:"mieruPassword,omitempty" gorm:"column:mieru_password;default:''"`
-	Auth            string `json:"auth"`
-	Flow            string `json:"flow"`
-	Security        string `json:"security"`
-	Reverse         string `json:"reverse" gorm:"column:reverse"`
-	PrivateKey      string `json:"privateKey" gorm:"column:wg_private_key"`
-	PublicKey       string `json:"publicKey" gorm:"column:wg_public_key"`
-	AllowedIPs      string `json:"allowedIPs" gorm:"column:wg_allowed_ips"`
-	PreSharedKey    string `json:"preSharedKey" gorm:"column:wg_pre_shared_key"`
-	KeepAlive       int    `json:"keepAlive" gorm:"column:wg_keep_alive;default:0"`
-	ForwardedPorts  string `json:"forwardedPorts" gorm:"column:wg_forwarded_ports"`
-	Secret          string `json:"secret" gorm:"column:secret"`
-	AdTag           string `json:"adTag" gorm:"column:ad_tag;default:''"`
-	LimitIP         int    `json:"limitIp" gorm:"column:limit_ip"`
-	LimitHwid       int    `json:"limitHwid" gorm:"column:limit_hwid;default:0"`
-	TotalGB         int64  `json:"totalGB" gorm:"column:total_gb"`
-	ExpiryTime      int64  `json:"expiryTime" gorm:"column:expiry_time"`
-	Enable          bool   `json:"enable" gorm:"default:true"`
-	TgID            int64  `json:"tgId" gorm:"column:tg_id;index:idx_clients_tg_id"`
-	Group           string `json:"group" gorm:"column:group_name;default:'';index:idx_client_record_group"`
-	Comment         string `json:"comment"`
-	Reset           int    `json:"reset" gorm:"default:0"`
-	ResetDay        int    `json:"resetDay" gorm:"column:reset_day;default:0"`
-	ResetWeekday    int    `json:"resetWeekday" gorm:"column:reset_weekday;default:0"`
-	ResetMax        int    `json:"resetMax" gorm:"column:reset_max;default:0"`
-	TrafficReset    string `json:"trafficReset" gorm:"column:traffic_reset;default:never;index:idx_clients_traffic_reset"`
-	TrafficResetDay int    `json:"trafficResetDay" gorm:"column:traffic_reset_day;default:1"`
-	CreatedAt       int64  `json:"createdAt" gorm:"autoCreateTime:milli"`
-	UpdatedAt       int64  `json:"updatedAt" gorm:"autoUpdateTime:milli"`
+	Id                     int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	StableID               string `json:"clientId" gorm:"column:stable_id;uniqueIndex;<-:create"`
+	Email                  string `json:"email" gorm:"uniqueIndex;not null"`
+	SubID                  string `json:"subId" gorm:"index;column:sub_id"`
+	UUID                   string `json:"uuid" gorm:"column:uuid"`
+	Password               string `json:"password"`
+	MieruUsername          string `json:"mieruUsername,omitempty" gorm:"column:mieru_username;default:''"`
+	MieruPassword          string `json:"mieruPassword,omitempty" gorm:"column:mieru_password;default:''"`
+	SSHUsername            string `json:"sshUsername,omitempty" gorm:"column:ssh_username;default:''"`
+	SSHAuthorizedKeys      string `json:"sshAuthorizedKeys,omitempty" gorm:"column:ssh_authorized_keys;default:''"`
+	SSHPassword            string `json:"sshPassword,omitempty" gorm:"column:ssh_password;default:''"`
+	ClearSSHPassword       bool   `json:"-" gorm:"-"`
+	ClearSSHAuthorizedKeys bool   `json:"-" gorm:"-"`
+	Auth                   string `json:"auth"`
+	Flow                   string `json:"flow"`
+	Security               string `json:"security"`
+	Reverse                string `json:"reverse" gorm:"column:reverse"`
+	PrivateKey             string `json:"privateKey" gorm:"column:wg_private_key"`
+	PublicKey              string `json:"publicKey" gorm:"column:wg_public_key"`
+	AllowedIPs             string `json:"allowedIPs" gorm:"column:wg_allowed_ips"`
+	PreSharedKey           string `json:"preSharedKey" gorm:"column:wg_pre_shared_key"`
+	KeepAlive              int    `json:"keepAlive" gorm:"column:wg_keep_alive;default:0"`
+	ForwardedPorts         string `json:"forwardedPorts" gorm:"column:wg_forwarded_ports"`
+	Secret                 string `json:"secret" gorm:"column:secret"`
+	AdTag                  string `json:"adTag" gorm:"column:ad_tag;default:''"`
+	LimitIP                int    `json:"limitIp" gorm:"column:limit_ip"`
+	LimitHwid              int    `json:"limitHwid" gorm:"column:limit_hwid;default:0"`
+	TotalGB                int64  `json:"totalGB" gorm:"column:total_gb"`
+	ExpiryTime             int64  `json:"expiryTime" gorm:"column:expiry_time"`
+	Enable                 bool   `json:"enable" gorm:"default:true"`
+	TgID                   int64  `json:"tgId" gorm:"column:tg_id;index:idx_clients_tg_id"`
+	Group                  string `json:"group" gorm:"column:group_name;default:'';index:idx_client_record_group"`
+	Comment                string `json:"comment"`
+	Reset                  int    `json:"reset" gorm:"default:0"`
+	ResetDay               int    `json:"resetDay" gorm:"column:reset_day;default:0"`
+	ResetWeekday           int    `json:"resetWeekday" gorm:"column:reset_weekday;default:0"`
+	ResetMax               int    `json:"resetMax" gorm:"column:reset_max;default:0"`
+	TrafficReset           string `json:"trafficReset" gorm:"column:traffic_reset;default:never;index:idx_clients_traffic_reset"`
+	TrafficResetDay        int    `json:"trafficResetDay" gorm:"column:traffic_reset_day;default:1"`
+	CreatedAt              int64  `json:"createdAt" gorm:"autoCreateTime:milli"`
+	UpdatedAt              int64  `json:"updatedAt" gorm:"autoUpdateTime:milli"`
 	// Owned solely by the node-snapshot sweep, which soft-orphans instead of
 	// deleting; orphans from any other cause stay at zero and are never reaped.
 	SyncOrphanedAt int64 `json:"-" gorm:"column:sync_orphaned_at;default:0"`
@@ -1154,31 +1166,36 @@ func nonZeroKeepAlive(seconds int) *int {
 
 func (c *Client) ToRecord() *ClientRecord {
 	rec := &ClientRecord{
-		Policy:          c.Policy.Clone(),
-		Email:           c.Email,
-		SubID:           c.SubID,
-		UUID:            c.ID,
-		Password:        c.Password,
-		MieruUsername:   c.MieruUsername,
-		MieruPassword:   c.MieruPassword,
-		Auth:            c.Auth,
-		Flow:            c.Flow,
-		Security:        c.Security,
-		LimitIP:         c.LimitIP,
-		TotalGB:         c.TotalGB,
-		ExpiryTime:      c.ExpiryTime,
-		Enable:          c.Enable,
-		TgID:            c.TgID,
-		Group:           c.Group,
-		Comment:         c.Comment,
-		Reset:           c.Reset,
-		ResetDay:        c.ResetDay,
-		ResetWeekday:    c.ResetWeekday,
-		ResetMax:        c.ResetMax,
-		TrafficReset:    c.TrafficReset,
-		TrafficResetDay: c.TrafficResetDay,
-		CreatedAt:       c.CreatedAt,
-		UpdatedAt:       c.UpdatedAt,
+		Policy:                 c.Policy.Clone(),
+		Email:                  c.Email,
+		SubID:                  c.SubID,
+		UUID:                   c.ID,
+		Password:               c.Password,
+		MieruUsername:          c.MieruUsername,
+		MieruPassword:          c.MieruPassword,
+		SSHUsername:            c.SSHUsername,
+		SSHAuthorizedKeys:      c.SSHAuthorizedKeys,
+		SSHPassword:            c.SSHPassword,
+		ClearSSHPassword:       c.ClearSSHPassword,
+		ClearSSHAuthorizedKeys: c.ClearSSHAuthorizedKeys,
+		Auth:                   c.Auth,
+		Flow:                   c.Flow,
+		Security:               c.Security,
+		LimitIP:                c.LimitIP,
+		TotalGB:                c.TotalGB,
+		ExpiryTime:             c.ExpiryTime,
+		Enable:                 c.Enable,
+		TgID:                   c.TgID,
+		Group:                  c.Group,
+		Comment:                c.Comment,
+		Reset:                  c.Reset,
+		ResetDay:               c.ResetDay,
+		ResetWeekday:           c.ResetWeekday,
+		ResetMax:               c.ResetMax,
+		TrafficReset:           c.TrafficReset,
+		TrafficResetDay:        c.TrafficResetDay,
+		CreatedAt:              c.CreatedAt,
+		UpdatedAt:              c.UpdatedAt,
 
 		PrivateKey:     c.PrivateKey,
 		PublicKey:      c.PublicKey,
@@ -1216,31 +1233,34 @@ func splitWireguardAllowedIPs(csv string) []string {
 
 func (r *ClientRecord) ToClient() *Client {
 	c := &Client{
-		Policy:          r.Policy.Clone(),
-		ID:              r.UUID,
-		Email:           r.Email,
-		SubID:           r.SubID,
-		Password:        r.Password,
-		MieruUsername:   r.MieruUsername,
-		MieruPassword:   r.MieruPassword,
-		Auth:            r.Auth,
-		Flow:            r.Flow,
-		Security:        r.Security,
-		LimitIP:         r.LimitIP,
-		TotalGB:         r.TotalGB,
-		ExpiryTime:      r.ExpiryTime,
-		Enable:          r.Enable,
-		TgID:            r.TgID,
-		Group:           r.Group,
-		Comment:         r.Comment,
-		Reset:           r.Reset,
-		ResetDay:        r.ResetDay,
-		ResetWeekday:    r.ResetWeekday,
-		ResetMax:        r.ResetMax,
-		TrafficReset:    r.TrafficReset,
-		TrafficResetDay: r.TrafficResetDay,
-		CreatedAt:       r.CreatedAt,
-		UpdatedAt:       r.UpdatedAt,
+		Policy:            r.Policy.Clone(),
+		ID:                r.UUID,
+		Email:             r.Email,
+		SubID:             r.SubID,
+		Password:          r.Password,
+		MieruUsername:     r.MieruUsername,
+		MieruPassword:     r.MieruPassword,
+		SSHUsername:       r.SSHUsername,
+		SSHAuthorizedKeys: r.SSHAuthorizedKeys,
+		SSHPassword:       r.SSHPassword,
+		Auth:              r.Auth,
+		Flow:              r.Flow,
+		Security:          r.Security,
+		LimitIP:           r.LimitIP,
+		TotalGB:           r.TotalGB,
+		ExpiryTime:        r.ExpiryTime,
+		Enable:            r.Enable,
+		TgID:              r.TgID,
+		Group:             r.Group,
+		Comment:           r.Comment,
+		Reset:             r.Reset,
+		ResetDay:          r.ResetDay,
+		ResetWeekday:      r.ResetWeekday,
+		ResetMax:          r.ResetMax,
+		TrafficReset:      r.TrafficReset,
+		TrafficResetDay:   r.TrafficResetDay,
+		CreatedAt:         r.CreatedAt,
+		UpdatedAt:         r.UpdatedAt,
 
 		PrivateKey:     r.PrivateKey,
 		PublicKey:      r.PublicKey,
@@ -1341,6 +1361,20 @@ func MergeClientRecord(existing *ClientRecord, incoming *ClientRecord) []ClientM
 		if incomingNewer || existing.MieruPassword == "" {
 			existing.MieruPassword = incoming.MieruPassword
 			keepSecret("mieruPassword")
+		}
+	}
+	for _, field := range []struct {
+		name     string
+		current  *string
+		incoming string
+	}{
+		{"sshUsername", &existing.SSHUsername, incoming.SSHUsername},
+		{"sshAuthorizedKeys", &existing.SSHAuthorizedKeys, incoming.SSHAuthorizedKeys},
+		{"sshPassword", &existing.SSHPassword, incoming.SSHPassword},
+	} {
+		if *field.current != field.incoming && field.incoming != "" && (incomingNewer || *field.current == "") {
+			*field.current = field.incoming
+			keepSecret(field.name)
 		}
 	}
 	if existing.Auth != incoming.Auth && incoming.Auth != "" {
