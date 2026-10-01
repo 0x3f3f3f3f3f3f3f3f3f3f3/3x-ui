@@ -53,6 +53,14 @@ nonzero rate tiers and an unlimited control, plus the 100 MiB quota at multiplie
 2 boundary. State admission versus delivered-byte semantics and uncertainty
 explicitly. Fix any reproduced product defect with a regression first.
 
+Confirmed gaps during actual acceptance: the UDP listener truncated the first
+13,000-byte datagram to 8,192 bytes and dropped empty packets; its empty source
+marker also needed conversion to the forwarding target. TCP FIN was not
+propagated to the direct target, losing its post-FIN reply. Fixes are scoped to
+`core/xray/proxy/dokodemo/{dokodemo.go,udp_reader.go}` and actual target/ledger
+regressions in `core/xray/testing/policy/{tunnel_datagram_test.go,tunnel_target_test.go}`.
+The bulk HTTP acceptance is `internal/sub/client_policy_bulk_http_runtime_test.go`.
+
 ## Task 3: Verify and publish the vertical
 
 Update accounting/testing/deployment documentation and a requirement-to-evidence
