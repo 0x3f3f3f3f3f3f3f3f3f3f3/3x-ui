@@ -1,3 +1,4 @@
+import { SnellInboundSettingsSchema } from './snell';
 import { z } from 'zod';
 import { SSHInboundSettingsSchema } from './ssh';
 
@@ -22,6 +23,7 @@ export * from './hysteria';
 export * from './mixed';
 export * from './mieru';
 export * from './ssh';
+export * from './snell';
 export * from './mtproto';
 export * from './shadowsocks';
 export * from './trojan';
@@ -38,6 +40,7 @@ export * from './wireguard';
 // Consumers narrow on `.protocol` and TypeScript narrows `.settings` to the
 // matching leaf type.
 export const InboundSettingsSchema = z.discriminatedUnion('protocol', [
+  z.object({ protocol: z.literal('snell'), settings: SnellInboundSettingsSchema }),
   z.object({ protocol: z.literal('ssh'), settings: SSHInboundSettingsSchema }),
   z.object({ protocol: z.literal('mieru'), settings: MieruInboundSettingsSchema }),
   z.object({ protocol: z.literal('vmess'), settings: VmessInboundSettingsSchema }),

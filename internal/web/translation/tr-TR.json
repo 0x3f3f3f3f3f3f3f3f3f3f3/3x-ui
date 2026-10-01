@@ -742,6 +742,25 @@
           "reverseInvalid": "Reverse forwarding requires bind IPs, source CIDRs and an ordered port range.",
           "nativeTransportOnly": "SSH supports native TCP forwarding with no UDP, TLS/REALITY, transport wrappers or global mux.",
           "portInvalid": "SSH requires one integer listener port from 1 to 65535."
+        },
+        "snell": {
+          "version": "Snell version",
+          "obfs": "Obfuscation",
+          "mode": "Traffic shaping mode",
+          "quic": "Native QUIC",
+          "quicHelp": "Snell v5 reserves TCP and UDP on this port. Enable QUIC for native QUIC connections.",
+          "obfsHost": "HTTP obfuscation host",
+          "obfsUri": "HTTP obfuscation URI",
+          "reuse": "Reuse connections",
+          "owner": "Owner account",
+          "ownerHelp": "Each Snell service binds one account and uses its shared limits and traffic accounting. Disabled accounts retain their binding. Manage the PSK on the account.",
+          "optionsInvalid": "The selected Snell version does not support these options.",
+          "addressInvalid": "Enter an explicit server hostname, IPv4 address or bare IPv6 address.",
+          "ownerRequired": "Select one owner account for this Snell service.",
+          "exclusiveOwner": "A Snell service accepts exactly one owner account.",
+          "localOnly": "Snell services are available on this panel only.",
+          "portInvalid": "Snell requires one integer listener port from 1 to 65535.",
+          "nativeTransportOnly": "Snell uses its native transport and does not support TLS/REALITY, transport wrappers or global mux."
         }
       },
       "info": {
@@ -1065,7 +1084,14 @@
       "sshAuthenticationRequired": "Provide SSH public keys, or a password accepted by every selected SSH listener.",
       "sshHostTrust": "SSH server host trust",
       "sshBulkKeysDesc": "These public keys authenticate each account in this batch. Each account receives a distinct SSH username. Keep private keys on your client.",
-      "generateSshPasswords": "Generate an independent SSH password for each account"
+      "generateSshPasswords": "Generate an independent SSH password for each account",
+      "snellPsk": "Snell PSK",
+      "snellPskHelp": "An independent Snell credential. A blank value preserves the stored PSK; the server generates one for a new owner.",
+      "snellPskGenerated": "Preserve or generate on the server",
+      "snellPskInvalid": "Snell PSK must be valid UTF-8 and no more than 255 bytes.",
+      "snellPskV6Required": "Snell v6 requires a PSK of at least 12 UTF-8 bytes.",
+      "snellOccupied": "This Snell service is already bound to another account, including disabled accounts.",
+      "snellSingleOwner": "A Snell service accepts exactly one owner account. Create or attach one account at a time."
     },
     "groups": {
       "name": "İsim",

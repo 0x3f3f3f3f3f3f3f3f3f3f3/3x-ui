@@ -3506,6 +3506,15 @@ export const SCHEMAS: Record<string, unknown> = {
       "shareAddrStrategy": {
         "type": "string"
       },
+      "snellOwnerClientId": {
+        "type": "string"
+      },
+      "snellOwnerCount": {
+        "type": "integer"
+      },
+      "snellVersion": {
+        "type": "integer"
+      },
       "ssMethod": {
         "type": "string"
       },
@@ -3550,6 +3559,7 @@ export const SCHEMAS: Record<string, unknown> = {
       "port",
       "protocol",
       "remark",
+      "snellOwnerCount",
       "ssMethod",
       "sshAllowPassword",
       "tag",

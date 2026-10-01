@@ -22,6 +22,87 @@ import (
 
 var ErrSnellOwnerConflict = errors.New("Snell listener can belong to only one client")
 
+// Remove the selected canonical owner even when the presentation mirror is stale.
+func (s *ClientService) removeSnellOwners(inboundSvc *InboundService, inbound *model.Inbound, records []*model.ClientRecord, keepTraffic bool) (bool, error) {
+	wanted := make(map[int]string, len(records))
+	for _, record := range records {
+		if record != nil {
+			wanted[record.Id] = record.StableID
+		}
+	}
+	var saved model.Inbound
+	changed := false
+	err := runSerializedTx(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&saved, inbound.Id).Error; err != nil {
+			return err
+		}
+		if saved.Protocol != model.Snell || saved.NodeID != nil {
+			return ErrSnellOwnerConflict
+		}
+		var owners []model.ClientRecord
+		if err := tx.Table("clients c").Select("c.*").Joins("JOIN client_inbounds ci ON ci.client_id = c.id").
+			Clauses(clause.Locking{Strength: "UPDATE"}).Where("ci.inbound_id = ?", saved.Id).Find(&owners).Error; err != nil {
+			return err
+		}
+		if len(owners) > 1 {
+			return ErrSnellOwnerConflict
+		}
+		if len(owners) == 0 {
+			return nil
+		}
+		owner := owners[0]
+		stableID, selected := wanted[owner.Id]
+		if !selected {
+			return nil
+		}
+		if stableID == "" || stableID != owner.StableID {
+			return ErrSnellOwnerConflict
+		}
+		var settings map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(saved.Settings), &settings); err != nil {
+			return err
+		}
+		for _, key := range []string{"psk", "clientId", "client_id", "email", "level", "users"} {
+			delete(settings, key)
+		}
+		settings["clients"] = json.RawMessage(`[]`)
+		raw, err := json.Marshal(settings)
+		if err != nil {
+			return err
+		}
+		saved.Settings = string(raw)
+		if err := tx.Model(&model.Inbound{}).Where("id = ?", saved.Id).Update("settings", saved.Settings).Error; err != nil {
+			return err
+		}
+		if err := s.ApplyInboundClientDelta(tx, saved.Id, nil, []string{owner.Email}); err != nil {
+			return err
+		}
+		if !keepTraffic {
+			var siblings int64
+			if err := tx.Model(&model.ClientInbound{}).Where("client_id = ?", owner.Id).Count(&siblings).Error; err != nil {
+				return err
+			}
+			if siblings == 0 {
+				if err := inboundSvc.DelClientIPs(tx, owner.Email); err != nil {
+					return err
+				}
+				if err := inboundSvc.DelClientStat(tx, owner.Email); err != nil {
+					return err
+				}
+			}
+		}
+		saved.Enable, changed = false, true
+		return nil
+	})
+	if err != nil || !changed {
+		return false, err
+	}
+	if handled, err := inboundSvc.reconcileManagedChange(&saved); handled {
+		return err != nil, err
+	}
+	return stopOwnedTunnelListener(inboundSvc, &saved)
+}
+
 func validateProvidedSnellCredentials(client model.Client) error {
 	if len(client.SnellPSK) > 255 || !utf8.ValidString(client.SnellPSK) {
 		return errors.New("Snell PSK must be valid UTF-8 and at most 255 bytes")

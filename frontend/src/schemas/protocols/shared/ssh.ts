@@ -91,7 +91,7 @@ export function sshNativeFormGuard(standardStreamSchema: z.ZodType) {
       mux?: { enabled?: boolean };
       nativeWireOptionsError?: string;
     };
-    if (value.protocol !== 'ssh') {
+    if (value.protocol !== 'ssh' && value.protocol !== 'snell') {
       if (value.streamSettings != null) {
         const parsed = standardStreamSchema.safeParse(value.streamSettings);
         if (!parsed.success)
@@ -110,7 +110,7 @@ export function sshNativeFormGuard(standardStreamSchema: z.ZodType) {
       ctx.addIssue({
         code: 'custom',
         path: ['port'],
-        message: 'pages.inbounds.form.ssh.portInvalid',
+        message: `pages.inbounds.form.${value.protocol}.portInvalid`,
       });
     if (
       value.nativeWireOptionsError ||
@@ -121,7 +121,7 @@ export function sshNativeFormGuard(standardStreamSchema: z.ZodType) {
       ctx.addIssue({
         code: 'custom',
         path: ['streamSettings'],
-        message: 'pages.inbounds.form.ssh.nativeTransportOnly',
+        message: `pages.inbounds.form.${value.protocol}.nativeTransportOnly`,
       });
   });
 }

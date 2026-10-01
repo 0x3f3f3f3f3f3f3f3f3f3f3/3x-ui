@@ -16,6 +16,7 @@ import {
   FreedomNoiseSchema,
   MieruOutboundSettingsSchema,
   SSHOutboundSettingsSchema,
+  SnellOutboundSettingsSchema,
   OutboundDomainStrategySchema,
   WireguardDomainStrategySchema,
 } from '@/schemas/protocols/outbound';
@@ -197,6 +198,7 @@ export type LoopbackOutboundFormSettings = z.infer<typeof LoopbackOutboundFormSe
 // Discriminated union on `protocol`. Same tagged-wrapper pattern as the
 // inbound side: each branch is { protocol: literal, settings: <flat> }.
 export const OutboundFormSettingsSchema = z.discriminatedUnion('protocol', [
+  z.object({ protocol: z.literal('snell'), settings: SnellOutboundSettingsSchema }),
   z.object({ protocol: z.literal('ssh'), settings: SSHOutboundSettingsSchema }),
   z.object({ protocol: z.literal('mieru'), settings: MieruOutboundSettingsSchema }),
   z.object({ protocol: z.literal('vmess'), settings: VmessOutboundFormSettingsSchema }),

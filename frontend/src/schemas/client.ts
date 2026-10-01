@@ -1,3 +1,4 @@
+import { SnellPSKSchema } from '@/schemas/protocols/shared/snell';
 import { z } from 'zod';
 import {
   SSHUsernameSchema,
@@ -97,6 +98,7 @@ export const ClientRecordSchema = z
     subId: z.string().optional(),
     uuid: z.string().optional(),
     password: z.string().optional(),
+    snellPsk: SnellPSKSchema.optional(),
     mieruUsername: MieruCredentialSchema.optional(),
     mieruPassword: MieruCredentialSchema.optional(),
     sshUsername: SSHUsernameSchema.optional(),
@@ -205,6 +207,9 @@ export const InboundOptionSchema = z
     security: z.string().optional(),
     tlsFlowCapable: z.boolean().optional(),
     ssMethod: z.string().optional(),
+    snellVersion: z.number().optional(),
+    snellOwnerCount: z.number().int().min(0).optional(),
+    snellOwnerClientId: z.string().optional(),
     sshAllowPassword: z.boolean().optional(),
     sshHostPublicKey: z.string().optional(),
     sshHostFingerprint: z.string().optional(),
@@ -405,6 +410,7 @@ export const ClientFormSchema = z.object({
   subId: z.string().refine((v) => !hasForbiddenClientChars(v), 'pages.clients.subIdInvalidChars'),
   uuid: z.string(),
   password: z.string(),
+  snellPsk: SnellPSKSchema.default(''),
   mieruUsername: MieruCredentialSchema.default(''),
   mieruPassword: MieruCredentialSchema.default(''),
   sshUsername: SSHUsernameSchema.default(''),

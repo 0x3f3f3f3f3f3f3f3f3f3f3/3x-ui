@@ -74,6 +74,9 @@ func (s *ClientService) delInboundClients(inboundSvc *InboundService, inboundId 
 	if isPasswordProxy(oldInbound.Protocol) {
 		return s.removePasswordProxyOwners(inboundSvc, oldInbound, recs)
 	}
+	if oldInbound.Protocol == model.Snell {
+		return s.removeSnellOwners(inboundSvc, oldInbound, recs, keepTraffic)
+	}
 
 	var settings map[string]any
 	if err := json.Unmarshal([]byte(oldInbound.Settings), &settings); err != nil {
@@ -1264,6 +1267,16 @@ func (s *ClientService) delInboundClient(inboundSvc *InboundService, inboundId i
 			}
 		}
 		return s.removePasswordProxyOwners(inboundSvc, oldInbound, []*model.ClientRecord{record})
+	}
+	if oldInbound.Protocol == model.Snell {
+		record := expected
+		if record == nil {
+			record, err = s.GetRecordByEmail(nil, email)
+			if err != nil {
+				return false, err
+			}
+		}
+		return s.removeSnellOwners(inboundSvc, oldInbound, []*model.ClientRecord{record}, keepTraffic)
 	}
 
 	var settings map[string]any

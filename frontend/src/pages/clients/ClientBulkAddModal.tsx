@@ -41,6 +41,7 @@ const MULTI_CLIENT_PROTOCOLS = new Set([
   'tuic',
   'mieru',
   'ssh',
+  'snell',
 ]);
 
 const EMPTY: ClientBulkAddFormValues = {
@@ -90,6 +91,16 @@ export default function ClientBulkAddModal({
 
   const methods = useForm<ClientBulkAddFormValues>({ defaultValues: EMPTY });
   const inboundIds = useWatch({ control: methods.control, name: 'inboundIds' });
+  const selectedSnell = inbounds.filter(
+    (row) => row.protocol === 'snell' && (inboundIds || []).includes(row.id),
+  );
+  const hasSnell = selectedSnell.length > 0;
+  useEffect(() => {
+    if (hasSnell) {
+      methods.setValue('quantity', 1);
+      methods.setValue('emailMethod', 0);
+    }
+  }, [hasSnell, methods]);
   const selectedSSH = inbounds.filter(
     (row) => row.protocol === 'ssh' && (inboundIds || []).includes(row.id),
   );
@@ -165,6 +176,7 @@ export default function ClientBulkAddModal({
         .map((ib) => ({
           label: formatInboundLabel(ib.tag, ib.remark),
           value: ib.id,
+          disabled: ib.protocol === 'snell' && (ib.snellOwnerCount ?? 0) > 0,
         })),
     [inbounds],
   );
@@ -216,6 +228,13 @@ export default function ClientBulkAddModal({
       return;
     }
     const emails = buildEmails(current);
+    if (
+      hasSnell &&
+      (emails.length !== 1 || selectedSnell.some((row) => (row.snellOwnerCount ?? 0) > 0))
+    ) {
+      messageApi.error(t('pages.clients.snellSingleOwner'));
+      return;
+    }
     if (emails.length === 0) return;
 
     setSaving(true);
@@ -229,6 +248,7 @@ export default function ClientBulkAddModal({
             ? RandomUtil.randomShadowsocksPassword(ss2022Method)
             : RandomUtil.randomLowerAndNum(16),
           auth: RandomUtil.randomLowerAndNum(16),
+          snellPsk: '',
           mieruUsername: '',
           mieruPassword: '',
           sshUsername: '',
@@ -333,6 +353,7 @@ export default function ClientBulkAddModal({
 
             <FormField name="emailMethod" label={t('pages.clients.method')}>
               <Select
+                disabled={hasSnell}
                 options={[
                   { value: 0, label: 'Random' },
                   { value: 1, label: 'Random + Prefix' },
@@ -377,7 +398,7 @@ export default function ClientBulkAddModal({
                 label={t('pages.clients.clientCount')}
                 transform={{ output: (v) => Number(v) || 1 }}
               >
-                <InputNumber min={1} max={1000} />
+                <InputNumber min={1} max={hasSnell ? 1 : 1000} disabled={hasSnell} />
               </FormField>
             )}
 

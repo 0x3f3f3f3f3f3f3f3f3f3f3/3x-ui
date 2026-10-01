@@ -17,6 +17,8 @@ const MULTI_USER_PROTOCOLS = new Set([
   'mtproto',
   'amneziawg',
   'tuic',
+  'mieru',
+  'ssh',
 ]);
 
 interface BulkAttachInboundsModalProps {
@@ -49,18 +51,25 @@ export default function BulkAttachInboundsModal({
 
   const targetOptions = useMemo(() => {
     return (inbounds || [])
-      .filter((ib) => MULTI_USER_PROTOCOLS.has((ib.protocol || '').toLowerCase()))
+      .filter(
+        (ib) =>
+          MULTI_USER_PROTOCOLS.has((ib.protocol || '').toLowerCase()) ||
+          (ib.protocol === 'snell' && count === 1 && (ib.snellOwnerCount ?? 0) === 0),
+      )
       .map((ib) => ({
         value: ib.id,
         label: formatInboundLabel(ib.tag, ib.remark),
       }));
-  }, [inbounds]);
+  }, [inbounds, count]);
+  const selectedTargetIds = targetIds.filter((id) =>
+    targetOptions.some((option) => option.value === id),
+  );
 
   async function submit() {
-    if (targetIds.length === 0 || count === 0) return;
+    if (selectedTargetIds.length === 0 || count === 0) return;
     setSubmitting(true);
     try {
-      const result = await onSubmit(targetIds);
+      const result = await onSubmit(selectedTargetIds);
       if (!result) return;
       const attached = result.attached?.length ?? 0;
       const skipped = result.skipped?.length ?? 0;
@@ -86,7 +95,7 @@ export default function BulkAttachInboundsModal({
         title={t('pages.clients.attachToInboundsTitle', { count })}
         okText={t('pages.inbounds.attachClients')}
         cancelText={t('cancel')}
-        okButtonProps={{ disabled: targetIds.length === 0, loading: submitting }}
+        okButtonProps={{ disabled: selectedTargetIds.length === 0, loading: submitting }}
         onCancel={() => onOpenChange(false)}
         onOk={submit}
         destroyOnHidden
@@ -100,13 +109,13 @@ export default function BulkAttachInboundsModal({
           <>
             <SelectAllClearButtons
               options={targetOptions}
-              value={targetIds}
+              value={selectedTargetIds}
               onChange={setTargetIds}
             />
             <Select
               mode="multiple"
               style={{ width: '100%' }}
-              value={targetIds}
+              value={selectedTargetIds}
               onChange={setTargetIds}
               options={targetOptions}
               placeholder={t('pages.clients.attachToInboundsTargets')}

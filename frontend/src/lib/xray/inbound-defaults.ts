@@ -1,3 +1,7 @@
+import {
+  SnellInboundSettingsSchema,
+  type SnellInboundSettings,
+} from '@/schemas/protocols/inbound/snell';
 import { RandomUtil, Wireguard } from '@/utils';
 import { generateAwgObfuscation } from '@/lib/xray/amneziawg-obfuscation';
 
@@ -368,6 +372,7 @@ export function createDefaultTuicInboundSettings(): TuicInboundSettings {
 // Callers swapping off the class hierarchy use this in place of
 // `getSettings(p)` + `.toJson()`.
 export type AnyInboundSettings =
+  | SnellInboundSettings
   | MieruInboundSettings
   | SSHInboundSettings
   | VlessInboundSettings
@@ -386,6 +391,8 @@ export type AnyInboundSettings =
 
 export function createDefaultInboundSettings(protocol: string): AnyInboundSettings | null {
   switch (protocol) {
+    case 'snell':
+      return SnellInboundSettingsSchema.parse({ version: 4 });
     case 'ssh':
       return SSHInboundSettingsSchema.parse({});
     case 'mieru':

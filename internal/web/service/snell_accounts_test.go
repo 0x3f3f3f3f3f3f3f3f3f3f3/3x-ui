@@ -38,6 +38,87 @@ func nativeSnellPanelFields(t *testing.T, value any) map[string]any {
 	return fields
 }
 
+func TestSnellPanelOptionsRetainDisabledOwnerFromSQL(t *testing.T) {
+	setupPolicyLedgerDB(t)
+	inbounds, clients := &InboundService{}, &ClientService{}
+	listener, _, err := inbounds.AddInbound(&model.Inbound{
+		UserId: 1, Protocol: model.Snell, Port: 24996,
+		Settings: `{"version":6,"clients":[{"email":"reserved-owner","enable":false,"snellPsk":"private-native-psk"}]}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, err := clients.GetRecordByEmail(nil, "reserved-owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Stale JSON cannot release the SQL reservation or forge the owner presented by options.
+	if err := database.GetDB().Model(listener).Update("settings", `{"version":6,"clients":[{"email":"forged","clientId":"forged"}],"psk":"private-native-psk"}`).Error; err != nil {
+		t.Fatal(err)
+	}
+	options, err := inbounds.GetInboundOptions(1)
+	if err != nil || len(options) != 1 {
+		t.Fatalf("options: %v, %v", options, err)
+	}
+	fields := nativeSnellPanelFields(t, options[0])
+	if fields["snellVersion"] != float64(6) || fields["snellOwnerCount"] != float64(1) || fields["snellOwnerClientId"] != owner.StableID {
+		t.Fatalf("missing SQL owner reservation: %v", fields)
+	}
+	raw, err := json.Marshal(options)
+	if err != nil || strings.Contains(string(raw), "private-native-psk") || strings.Contains(string(raw), "forged") {
+		t.Fatal("options exposed a credential or JSON-supplied owner")
+	}
+	if other, err := inbounds.GetInboundOptions(2); err != nil || len(other) != 0 {
+		t.Fatalf("options leaked across panel users: %v", err)
+	}
+	if _, err := clients.Detach(inbounds, owner.Id, []int{listener.Id}); err != nil {
+		t.Fatal(err)
+	}
+	options, err = inbounds.GetInboundOptions(1)
+	if err != nil || len(options) != 1 {
+		t.Fatalf("detached options: %v", err)
+	}
+	fields = nativeSnellPanelFields(t, options[0])
+	if fields["snellOwnerCount"] != float64(0) || fields["snellOwnerClientId"] != nil {
+		t.Fatalf("detached reservation survived: %v", fields)
+	}
+}
+
+func TestSnellPanelBulkDetachIgnoresStaleOwnerMirror(t *testing.T) {
+	setupPolicyLedgerDB(t)
+	inbounds, clients := &InboundService{}, &ClientService{}
+	listener, _, err := inbounds.AddInbound(&model.Inbound{
+		Protocol: model.Snell, Port: 24997, Enable: true,
+		Settings: `{"version":5,"clients":[{"email":"sql-owner","enable":true,"snellPsk":"private-native-psk"}]}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, err := clients.GetRecordByEmail(nil, "sql-owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.GetDB().Model(listener).Update("settings", `{"version":5,"clients":[{"email":"stale-owner"}]}`).Error; err != nil {
+		t.Fatal(err)
+	}
+	result, _, err := clients.BulkDetach(inbounds, []string{owner.Email}, []int{listener.Id})
+	if err != nil || len(result.Errors) != 0 || len(result.Detached) != 1 {
+		t.Fatalf("canonical bulk removal failed: %+v %v", result, err)
+	}
+	listener, err = inbounds.GetInbound(listener.Id)
+	if err != nil || listener.Enable {
+		t.Fatal("empty Snell listener retained activation")
+	}
+	ids, err := clients.GetInboundIdsForRecord(owner.Id)
+	if err != nil || len(ids) != 0 {
+		t.Fatal("stale JSON retained canonical ownership")
+	}
+	stored, err := clients.GetByID(owner.Id)
+	if err != nil || stored.StableID != owner.StableID || stored.SnellPSK != owner.SnellPSK {
+		t.Fatal("detach changed the canonical account or credential")
+	}
+}
+
 func TestSnellPanelCanonicalIndependentPSK(t *testing.T) {
 	for _, version := range []int{4, 5, 6} {
 		t.Run(string(rune('0'+version)), func(t *testing.T) {

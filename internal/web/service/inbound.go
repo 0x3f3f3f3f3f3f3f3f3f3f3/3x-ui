@@ -359,6 +359,9 @@ type InboundOption struct {
 	SSHHostPublicKey   string `json:"sshHostPublicKey,omitempty"`
 	SSHHostFingerprint string `json:"sshHostFingerprint,omitempty"`
 	SSHAllowPassword   bool   `json:"sshAllowPassword"`
+	SnellVersion       int    `json:"snellVersion,omitempty"`
+	SnellOwnerCount    int    `json:"snellOwnerCount"`
+	SnellOwnerClientID string `json:"snellOwnerClientId,omitempty"`
 	// AwgServer carries the full AmneziaWG server block (keys, subnet,
 	// obfuscation params) so the clients page can render a downloadable
 	// per-client .conf without a second round trip.
@@ -409,6 +412,28 @@ func (s *InboundService) GetInboundOptions(userId int) ([]InboundOption, error) 
 	}
 	out := make([]InboundOption, 0, len(rows))
 	for _, r := range rows {
+		var snellVersion, snellOwnerCount int
+		var snellOwnerClientID string
+		if model.Protocol(r.Protocol) == model.Snell {
+			var settings struct {
+				Version int `json:"version"`
+			}
+			if err := json.Unmarshal([]byte(r.Settings), &settings); err != nil {
+				return nil, err
+			}
+			snellVersion = settings.Version
+			var owners []string
+			if err := db.Table("client_inbounds").
+				Joins("JOIN clients ON clients.id = client_inbounds.client_id").
+				Where("client_inbounds.inbound_id = ?", r.Id).
+				Order("clients.id ASC").Pluck("clients.stable_id", &owners).Error; err != nil {
+				return nil, err
+			}
+			snellOwnerCount = len(owners)
+			if len(owners) == 1 {
+				snellOwnerClientID = owners[0]
+			}
+		}
 		var sshPublicKey, sshFingerprint string
 		var sshAllowPassword bool
 		if model.Protocol(r.Protocol) == model.SSH {
@@ -446,6 +471,9 @@ func (s *InboundService) GetInboundOptions(userId int) ([]InboundOption, error) 
 			SSHHostPublicKey:   sshPublicKey,
 			SSHHostFingerprint: sshFingerprint,
 			SSHAllowPassword:   sshAllowPassword,
+			SnellVersion:       snellVersion,
+			SnellOwnerCount:    snellOwnerCount,
+			SnellOwnerClientID: snellOwnerClientID,
 			AwgServer:          inboundAmneziaWGServer(r.Protocol, r.Settings),
 			TuicServer:         inboundTuicServer(r.Protocol, r.Settings),
 			NodeId:             r.NodeId,

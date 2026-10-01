@@ -63,6 +63,7 @@ import {
   MixedFields,
   MieruFields,
   SSHFields,
+  SnellFields,
   MtprotoFields,
   ShadowsocksFields,
   TuicFields,
@@ -283,6 +284,7 @@ export default function InboundFormModal({
     protocol !== Protocols.TUNNEL &&
     protocol !== Protocols.MIERU &&
     protocol !== Protocols.SSH &&
+    protocol !== Protocols.SNELL &&
     protocol !== Protocols.TUIC;
 
   const wPort = useWatch({ control, name: 'port' });
@@ -550,7 +552,8 @@ export default function InboundFormModal({
         next === Protocols.WIREGUARD ||
         next === Protocols.TUNNEL ||
         next === Protocols.MIERU ||
-        next === Protocols.SSH
+        next === Protocols.SSH ||
+        next === Protocols.SNELL
       ) {
         setV('streamSettings', { security: 'none' });
       } else {
@@ -830,6 +833,7 @@ export default function InboundFormModal({
       {protocol === Protocols.HTTP && <HttpFields />}
       {protocol === Protocols.MIERU && <MieruFields />}
       {protocol === Protocols.SSH && <SSHFields />}
+      {protocol === Protocols.SNELL && <SnellFields />}
       {protocol === Protocols.MIXED && <MixedFields mixedUdpOn={mixedUdpOn} />}
 
       {protocol === Protocols.MTPROTO && <MtprotoFields />}
@@ -1166,6 +1170,7 @@ export default function InboundFormModal({
                     Protocols.TUIC,
                     Protocols.MIERU,
                     Protocols.SSH,
+                    Protocols.SNELL,
                   ] as string[]
                 ).includes(protocol) || isFallbackHost
                   ? [

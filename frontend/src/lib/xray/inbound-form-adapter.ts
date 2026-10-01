@@ -172,7 +172,7 @@ export function rawInboundToFormValues(row: RawInboundRow): InboundFormValues {
   const streamSettings =
     Object.keys(rawStream).length > 0 ? (rawStream as StreamSettings) : undefined;
   if (streamSettings) {
-    if (protocol !== 'ssh')
+    if (protocol !== 'ssh' && protocol !== 'snell')
       healStreamNetworkKey(streamSettings as unknown as Record<string, unknown>);
     synthesizeTlsCertUseFile(streamSettings as unknown as Record<string, unknown>);
     const streamRecord = streamSettings as unknown as Record<string, unknown>;
@@ -360,7 +360,9 @@ export function dropLegacyOptionalEmpties(
 export function formValuesToWirePayload(values: InboundFormValues): WireInboundPayload {
   const settingsPruned = (pruneEmpty(values.settings ?? {}) ?? {}) as Record<string, unknown>;
   const ownerClientId =
-    values.protocol === 'tunnel' && values.nodeId == null ? values.ownerClientId : null;
+    (values.protocol === 'tunnel' || values.protocol === 'snell') && values.nodeId == null
+      ? values.ownerClientId
+      : null;
   if (ownerClientId) delete settingsPruned.clients;
   if (Array.isArray(settingsPruned.clients)) {
     settingsPruned.clients = normalizeClients(values.protocol, settingsPruned.clients);

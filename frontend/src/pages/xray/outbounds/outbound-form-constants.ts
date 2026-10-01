@@ -57,6 +57,7 @@ export const HYSTERIA_NETWORK_OPTION = { value: 'hysteria', label: 'Hysteria' };
 export const SERVER_PROTOCOLS = new Set<string>([
   'mieru',
   'ssh',
+  'snell',
   'vmess',
   'vless',
   'trojan',

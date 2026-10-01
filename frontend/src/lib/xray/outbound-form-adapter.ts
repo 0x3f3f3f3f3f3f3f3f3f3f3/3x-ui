@@ -1,3 +1,4 @@
+import type { SnellOutboundSettings } from '@/schemas/protocols/outbound/snell';
 import { isSSHNativeWireMux } from '@/schemas/protocols/shared/ssh';
 import { XHttpXmuxSchema } from '@/schemas/protocols/stream/xhttp';
 import { OutboundDomainStrategySchema } from '@/schemas/protocols/outbound';
@@ -554,8 +555,8 @@ export function rawOutboundToFormValues(raw: RawOutboundRow): OutboundFormValues
   const freedomStrategy = freedomDomainStrategyFromWire(raw);
   const mux = muxFromWire(raw.mux);
   const nativeWireOptionsError =
-    protocol === 'ssh' && !isSSHNativeWireMux(raw.mux)
-      ? 'pages.inbounds.form.ssh.nativeTransportOnly'
+    (protocol === 'ssh' || protocol === 'snell') && !isSSHNativeWireMux(raw.mux)
+      ? `pages.inbounds.form.${protocol}.nativeTransportOnly`
       : undefined;
   const hasStream =
     raw.streamSettings &&
@@ -565,6 +566,9 @@ export function rawOutboundToFormValues(raw: RawOutboundRow): OutboundFormValues
 
   let typed: OutboundFormSettings;
   switch (protocol) {
+    case 'snell':
+      typed = { protocol: 'snell', settings: { ...settings } as SnellOutboundSettings };
+      break;
     case 'ssh':
       typed = {
         protocol: 'ssh',
@@ -901,6 +905,7 @@ export type WireOutboundPayload = Raw;
 export function formValuesToWirePayload(values: OutboundFormValues): WireOutboundPayload {
   let settings: Raw;
   switch (values.protocol) {
+    case 'snell':
     case 'ssh':
     case 'mieru':
       settings = { ...values.settings };

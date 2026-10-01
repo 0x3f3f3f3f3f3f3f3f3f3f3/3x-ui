@@ -1,3 +1,4 @@
+import type { SnellOutboundSettings } from '@/schemas/protocols/outbound/snell';
 import { RandomUtil, Wireguard } from '@/utils';
 
 import type { BlackholeOutboundSettings } from '@/schemas/protocols/outbound/blackhole';
@@ -133,6 +134,7 @@ export function createDefaultHysteriaOutboundSettings(): HysteriaOutboundSetting
 }
 
 export type AnyOutboundSettings =
+  | SnellOutboundSettings
   | MieruOutboundSettings
   | SSHOutboundSettings
   | BlackholeOutboundSettings
@@ -159,6 +161,19 @@ export type AnyOutboundSettings =
 export function createDefaultOutboundSettings(protocol: string): AnyOutboundSettings | null {
   void RandomUtil;
   switch (protocol) {
+    case 'snell':
+      return {
+        version: 4,
+        address: '',
+        port: 443,
+        psk: '',
+        obfs: 'off',
+        obfsHost: '',
+        obfsUri: '',
+        mode: '',
+        reuse: true,
+        quic: false,
+      };
     case 'ssh':
       return {
         address: '',

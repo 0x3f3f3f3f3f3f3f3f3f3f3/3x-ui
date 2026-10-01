@@ -1,3 +1,4 @@
+import { SnellOutboundSettingsSchema } from './snell';
 import { z } from 'zod';
 import { SSHOutboundSettingsSchema } from './ssh';
 
@@ -25,6 +26,7 @@ export * from './hysteria';
 export * from './loopback';
 export * from './mieru';
 export * from './ssh';
+export * from './snell';
 export * from './shadowsocks';
 export * from './socks';
 export * from './trojan';
@@ -33,6 +35,7 @@ export * from './vmess';
 export * from './wireguard';
 
 export const OutboundSettingsSchema = z.discriminatedUnion('protocol', [
+  z.object({ protocol: z.literal('snell'), settings: SnellOutboundSettingsSchema }),
   z.object({ protocol: z.literal('ssh'), settings: SSHOutboundSettingsSchema }),
   z.object({ protocol: z.literal('mieru'), settings: MieruOutboundSettingsSchema }),
   z.object({ protocol: z.literal('vmess'), settings: VmessOutboundSettingsSchema }),

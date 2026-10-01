@@ -742,6 +742,25 @@
           "reverseInvalid": "反向转发需要绑定 IP、来源 CIDR 及递增端口范围。",
           "nativeTransportOnly": "SSH 使用原生 TCP 转发，不支持 UDP、TLS/REALITY、传输封装或全局 mux。",
           "portInvalid": "SSH 需要一个 1 到 65535 之间的整数监听端口。"
+        },
+        "snell": {
+          "version": "Snell 版本",
+          "obfs": "混淆",
+          "mode": "流量整形模式",
+          "quic": "原生 QUIC",
+          "quicHelp": "Snell v5 会占用此端口的 TCP 和 UDP。启用后可使用原生 QUIC 连接。",
+          "obfsHost": "HTTP 混淆主机",
+          "obfsUri": "HTTP 混淆 URI",
+          "reuse": "连接复用",
+          "owner": "所属账户",
+          "ownerHelp": "每个 Snell 服务绑定一个账户，共用该账户的限额和流量统计。停用账户仍保留绑定；请在账户中管理 PSK。",
+          "optionsInvalid": "所选 Snell 版本不支持这些选项。",
+          "addressInvalid": "请输入服务器主机名、IPv4 地址或不带方括号的 IPv6 地址。",
+          "ownerRequired": "请为此 Snell 服务选择一个账户。",
+          "exclusiveOwner": "一个 Snell 服务只能绑定一个账户。",
+          "localOnly": "Snell 服务目前仅支持部署到此面板。",
+          "portInvalid": "Snell 监听端口必须是 1 到 65535 之间的单个整数。",
+          "nativeTransportOnly": "Snell 使用原生传输，不支持 TLS/REALITY、额外传输封装或全局 mux。"
         }
       },
       "info": {
@@ -1065,7 +1084,14 @@
       "sshAuthenticationRequired": "请提供 SSH 公钥，或所有选定 SSH 入站均接受的密码。",
       "sshHostTrust": "SSH 服务器主机信任",
       "sshBulkKeysDesc": "这些公钥可认证本批次的各个账号。每个账号会获得不同的 SSH 用户名，私钥应保留在客户端。",
-      "generateSshPasswords": "为每个账号生成独立的 SSH 密码"
+      "generateSshPasswords": "为每个账号生成独立的 SSH 密码",
+      "snellPsk": "Snell PSK",
+      "snellPskHelp": "Snell 的独立凭据。留空会保留已有 PSK；新账户由服务器生成 PSK。",
+      "snellPskGenerated": "保留已有值或由服务器生成",
+      "snellPskInvalid": "Snell PSK 必须是有效 UTF-8，且不超过 255 字节。",
+      "snellPskV6Required": "Snell v6 的 PSK 至少需要 12 个 UTF-8 字节。",
+      "snellOccupied": "此 Snell 服务已绑定其他账户，停用账户也会保留绑定。",
+      "snellSingleOwner": "一个 Snell 服务只能绑定一个账户。请逐个创建或绑定账户。"
     },
     "groups": {
       "name": "名称",

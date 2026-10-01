@@ -115,6 +115,20 @@ export const InboundFormSchema = sshNativeFormGuard(InboundStreamFormSchema).pip
   InboundFormBaseSchema.and(InboundDbFieldsSchema)
     .and(InboundSettingsSchema)
     .superRefine((value, ctx) => {
+      if (value.protocol === 'snell') {
+        if (value.nodeId != null)
+          ctx.addIssue({
+            code: 'custom',
+            path: ['nodeId'],
+            message: 'pages.inbounds.form.snell.localOnly',
+          });
+        if (value.enable && value.settings.clients.length !== 1 && !value.ownerClientId)
+          ctx.addIssue({
+            code: 'custom',
+            path: ['ownerClientId'],
+            message: 'pages.inbounds.form.snell.ownerRequired',
+          });
+      }
       if (value.protocol === 'mieru' && !isMieruNativeStream(value.streamSettings)) {
         ctx.addIssue({
           code: 'custom',

@@ -67,6 +67,7 @@ const MULTI_CLIENT_PROTOCOLS = new Set([
   'tuic',
   'mieru',
   'ssh',
+  'snell',
 ]);
 
 const CLIENT_FORM_MODAL_Z_INDEX = 1000;
@@ -151,6 +152,7 @@ const EMPTY: Values = {
   subId: '',
   uuid: '',
   password: '',
+  snellPsk: '',
   mieruUsername: '',
   mieruPassword: '',
   sshUsername: '',
@@ -292,6 +294,7 @@ export default function ClientFormModal({
   const password = useWatch({ control: methods.control, name: 'password' });
   const mieruUsername = useWatch({ control: methods.control, name: 'mieruUsername' });
   const mieruPassword = useWatch({ control: methods.control, name: 'mieruPassword' });
+  const snellPsk = useWatch({ control: methods.control, name: 'snellPsk' });
   const sshUsername = useWatch({ control: methods.control, name: 'sshUsername' });
   const sshAuthorizedKeys = useWatch({ control: methods.control, name: 'sshAuthorizedKeys' });
   const sshPassword = useWatch({ control: methods.control, name: 'sshPassword' });
@@ -388,6 +391,7 @@ export default function ClientFormModal({
         subId: client.subId || '',
         uuid: client.uuid || '',
         password: client.password || '',
+        snellPsk: client.snellPsk || '',
         mieruUsername: client.mieruUsername || '',
         mieruPassword: client.mieruPassword || '',
         sshUsername: client.sshUsername || '',
@@ -607,13 +611,17 @@ export default function ClientFormModal({
     () =>
       (inbounds || [])
         .filter((ib) => MULTI_CLIENT_PROTOCOLS.has(ib.protocol || ''))
-        .filter((ib) => ib.enable || (inboundIds || []).includes(ib.id))
+        .filter((ib) => ib.enable || ib.protocol === 'snell' || (inboundIds || []).includes(ib.id))
         .map((ib) => ({
           label: formatInboundLabel(ib.tag, ib.remark),
           value: ib.id,
           title: formatInboundLabel(ib.tag, ib.remark),
+          disabled:
+            ib.protocol === 'snell' &&
+            (ib.snellOwnerCount ?? 0) > 0 &&
+            ib.snellOwnerClientId !== client?.clientId,
         })),
-    [inbounds, inboundIds],
+    [inbounds, inboundIds, client?.clientId],
   );
 
   const expiryDayjs = useMemo<Dayjs | null>(
@@ -713,6 +721,7 @@ export default function ClientFormModal({
       subId: values.subId,
       uuid: values.uuid,
       password: values.password,
+      snellPsk: values.snellPsk,
       mieruUsername: values.mieruUsername,
       mieruPassword: values.mieruPassword,
       sshUsername: values.sshUsername,
@@ -746,6 +755,29 @@ export default function ClientFormModal({
       messageApi.error(t(issue?.message ?? 'somethingWentWrong'));
       return;
     }
+    const selectedSnell = inbounds.filter(
+      (row) => row.protocol === 'snell' && values.inboundIds.includes(row.id),
+    );
+    const effectiveSnellPsk = values.snellPsk || client?.snellPsk || '';
+    if (
+      selectedSnell.some((row) => row.snellVersion === 6) &&
+      effectiveSnellPsk &&
+      new TextEncoder().encode(effectiveSnellPsk).length < 12
+    ) {
+      messageApi.error(t('pages.clients.snellPskV6Required'));
+      return;
+    }
+    if (
+      selectedSnell.some(
+        (row) =>
+          (row.snellOwnerCount ?? 0) > 0 &&
+          row.snellOwnerClientId !== client?.clientId &&
+          !(attachedIds || []).includes(row.id),
+      )
+    ) {
+      messageApi.error(t('pages.clients.snellOccupied'));
+      return;
+    }
     const selectedSSH = inbounds.filter(
       (row) => row.protocol === 'ssh' && values.inboundIds.includes(row.id),
     );
@@ -773,6 +805,7 @@ export default function ClientFormModal({
       id: values.uuid,
       uuid: values.uuid,
       password: values.password,
+      snellPsk: values.snellPsk,
       mieruUsername: values.mieruUsername,
       mieruPassword: values.mieruPassword,
       sshUsername: values.sshUsername,
@@ -1307,6 +1340,16 @@ export default function ClientFormModal({
                         </Space.Compact>
                       </Form.Item>
 
+                      <Form.Item
+                        label={t('pages.clients.snellPsk')}
+                        extra={t('pages.clients.snellPskHelp')}
+                      >
+                        <Input.Password
+                          value={snellPsk}
+                          placeholder={t('pages.clients.snellPskGenerated')}
+                          onChange={(e) => methods.setValue('snellPsk', e.target.value)}
+                        />
+                      </Form.Item>
                       <Form.Item
                         label={t('pages.clients.mieruUsername')}
                         tooltip={t('pages.clients.mieruCredentialsDesc')}

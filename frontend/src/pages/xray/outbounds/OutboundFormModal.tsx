@@ -42,6 +42,7 @@ import {
   HttpFields,
   MieruFields,
   SSHFields,
+  SnellFields,
   LoopbackFields,
   ServerTarget,
   ShadowsocksFields,
@@ -132,7 +133,7 @@ export default function OutboundFormModal({
     const currentTag = methods.getValues('tag');
     if (!parsed.tag && currentTag) parsed.tag = currentTag;
     const next = rawOutboundToFormValues(parsed);
-    if (next.protocol === 'ssh') {
+    if (next.protocol === 'ssh' || next.protocol === 'snell') {
       const native = OutboundFormSchema.safeParse(next);
       if (!native.success) {
         messageApi.error(t(native.error.issues[0]?.message ?? 'somethingWentWrong'));
@@ -208,7 +209,7 @@ export default function OutboundFormModal({
       methods.setValue('settings', next.settings);
       if (nextProtocol === 'hysteria') {
         methods.setValue('streamSettings', hysteriaStreamSlice() as StreamValue);
-      } else if (nextProtocol === 'mieru' || nextProtocol === 'ssh') {
+      } else if (nextProtocol === 'mieru' || nextProtocol === 'ssh' || nextProtocol === 'snell') {
         const sockopt = methods.getValues('streamSettings.sockopt');
         methods.setValue('streamSettings', {
           security: 'none',
@@ -303,7 +304,7 @@ export default function OutboundFormModal({
       parsed = native;
     }
     const next = rawOutboundToFormValues(parsed);
-    if (next.protocol === 'ssh') {
+    if (next.protocol === 'ssh' || next.protocol === 'snell') {
       const native = OutboundFormSchema.safeParse(next);
       if (!native.success) {
         messageApi.error(t(native.error.issues[0]?.message ?? 'somethingWentWrong'));
@@ -363,7 +364,7 @@ export default function OutboundFormModal({
       if (!(await methods.trigger())) return;
       values = methods.getValues();
     }
-    if (values.protocol === 'mieru' || values.protocol === 'ssh') {
+    if (values.protocol === 'mieru' || values.protocol === 'ssh' || values.protocol === 'snell') {
       const native = OutboundFormSchema.safeParse(values);
       if (!native.success) {
         messageApi.error(t(native.error.issues[0]?.message ?? 'somethingWentWrong'));
@@ -488,6 +489,7 @@ export default function OutboundFormModal({
                       {protocol === 'http' && <HttpFields />}
                       {protocol === 'mieru' && <MieruFields />}
                       {protocol === 'ssh' && <SSHFields />}
+                      {protocol === 'snell' && <SnellFields />}
                       {protocol === 'socks' && <SocksFields />}
 
                       {protocol === 'loopback' && <LoopbackFields />}
@@ -604,7 +606,7 @@ export default function OutboundFormModal({
                         />
                       )}
 
-                      {protocol !== 'ssh' && protocol !== 'mieru' && (
+                      {protocol !== 'ssh' && protocol !== 'mieru' && protocol !== 'snell' && (
                         <Controller
                           control={methods.control}
                           name="streamSettings.finalmask"

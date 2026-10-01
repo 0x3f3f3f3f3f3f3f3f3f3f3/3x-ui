@@ -3532,6 +3532,15 @@
           "shareAddrStrategy": {
             "type": "string"
           },
+          "snellOwnerClientId": {
+            "type": "string"
+          },
+          "snellOwnerCount": {
+            "type": "integer"
+          },
+          "snellVersion": {
+            "type": "integer"
+          },
           "ssMethod": {
             "type": "string"
           },
@@ -3576,6 +3585,7 @@
           "port",
           "protocol",
           "remark",
+          "snellOwnerCount",
           "ssMethod",
           "sshAllowPassword",
           "tag",
@@ -5524,6 +5534,9 @@
                       "security": "",
                       "shareAddr": "",
                       "shareAddrStrategy": "",
+                      "snellOwnerClientId": "",
+                      "snellOwnerCount": 0,
+                      "snellVersion": 0,
                       "ssMethod": "",
                       "sshAllowPassword": false,
                       "sshHostFingerprint": "",

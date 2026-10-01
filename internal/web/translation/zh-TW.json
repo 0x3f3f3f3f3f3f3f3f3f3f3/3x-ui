@@ -742,6 +742,25 @@
           "reverseInvalid": "Reverse forwarding requires bind IPs, source CIDRs and an ordered port range.",
           "nativeTransportOnly": "SSH supports native TCP forwarding with no UDP, TLS/REALITY, transport wrappers or global mux.",
           "portInvalid": "SSH requires one integer listener port from 1 to 65535."
+        },
+        "snell": {
+          "version": "Snell 版本",
+          "obfs": "混淆",
+          "mode": "流量整形模式",
+          "quic": "原生 QUIC",
+          "quicHelp": "Snell v5 會占用此連接埠的 TCP 和 UDP。啟用後可使用原生 QUIC 連線。",
+          "obfsHost": "HTTP 混淆主機",
+          "obfsUri": "HTTP 混淆 URI",
+          "reuse": "連線複用",
+          "owner": "所屬帳戶",
+          "ownerHelp": "每個 Snell 服務綁定一個帳戶，共用該帳戶的限額和流量統計。停用帳戶仍保留綁定；請在帳戶中管理 PSK。",
+          "optionsInvalid": "所選 Snell 版本不支援這些選項。",
+          "addressInvalid": "請輸入伺服器主機名稱、IPv4 位址或不帶方括號的 IPv6 位址。",
+          "ownerRequired": "請為此 Snell 服務選擇一個帳戶。",
+          "exclusiveOwner": "一個 Snell 服務只能綁定一個帳戶。",
+          "localOnly": "Snell 服務目前僅支援部署到此面板。",
+          "portInvalid": "Snell 監聽連接埠必須是 1 到 65535 之間的單個整數。",
+          "nativeTransportOnly": "Snell 使用原生傳輸，不支援 TLS/REALITY、額外傳輸封裝或全域 mux。"
         }
       },
       "info": {
@@ -1065,7 +1084,14 @@
       "sshAuthenticationRequired": "Provide SSH public keys, or a password accepted by every selected SSH listener.",
       "sshHostTrust": "SSH server host trust",
       "sshBulkKeysDesc": "These public keys authenticate each account in this batch. Each account receives a distinct SSH username. Keep private keys on your client.",
-      "generateSshPasswords": "Generate an independent SSH password for each account"
+      "generateSshPasswords": "Generate an independent SSH password for each account",
+      "snellPsk": "Snell PSK",
+      "snellPskHelp": "Snell 的獨立憑證。留空會保留已有 PSK；新帳戶由伺服器產生 PSK。",
+      "snellPskGenerated": "保留已有值或由伺服器產生",
+      "snellPskInvalid": "Snell PSK 必須是有效 UTF-8，且不超過 255 位元組。",
+      "snellPskV6Required": "Snell v6 的 PSK 至少需要 12 個 UTF-8 位元組。",
+      "snellOccupied": "此 Snell 服務已綁定其他帳戶，停用帳戶也會保留綁定。",
+      "snellSingleOwner": "一個 Snell 服務只能綁定一個帳戶。請逐個建立或綁定帳戶。"
     },
     "groups": {
       "name": "名稱",

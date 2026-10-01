@@ -818,6 +818,9 @@ export interface InboundOption {
   security?: string;
   shareAddr?: string;
   shareAddrStrategy?: string;
+  snellOwnerClientId?: string;
+  snellOwnerCount: number;
+  snellVersion?: number;
   ssMethod: string;
   sshAllowPassword: boolean;
   sshHostFingerprint?: string;
