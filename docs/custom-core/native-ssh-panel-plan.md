@@ -94,6 +94,6 @@ OpenSSH config/instructions and known_hosts text through existing downloads.
 - [x] RED combined API → real core/OpenSSH -L/-D/controlled -R plus Tunnel
   lifecycle tests; implement missing glue and verify exact shared usage,
   policy restrictions, rotation, port release, restart and restored host key.
-- [ ] Complete required SQLite/PG/core/frontend gates, one whole-panel review
+- [x] Complete required SQLite/PG/core/frontend gates, one whole-panel review
   and one correction pass; integrate, publish clean artifacts and verify fork
   HEAD. Update only verified matrix rows; other project requirements stay open.

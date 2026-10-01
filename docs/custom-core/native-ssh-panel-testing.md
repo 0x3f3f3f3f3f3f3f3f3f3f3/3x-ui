@@ -172,8 +172,8 @@ with unchanged core/dependency bytes; final clean artifacts follow review.
 
 ## Remaining acceptance
 
-The single whole-panel review and correction are complete. Clean-source
-artifacts, integration and fork verification remain pending. Remote key
+The single whole-panel review, correction, clean-source artifacts, integration
+and fork checkpoint verification are complete within local scope. Remote key
 provisioning, coordinated remote budgets, Snell panel
 integration and the broader original project remain open. No deployment or
 default-branch merge is implied by these local checks.
@@ -232,3 +232,33 @@ startup, typecheck, lint, format and Vite build. English/Chinese are translated;
 the other11 languages receive explicit English fallback for63 new native keys.
 Final source/log hashes: /root/task-evidence/native-ssh-panel-review-final-receipt.json.
 No second reviewer was used. Clean integration/publication remains the final step.
+
+## Merged exact clean-source checkpoint — 2026-10-01
+
+Source69ed3f4f20eccb46b7597f6e1d0e2beb2af3b0fe integrates logical SSH commits
+3525f678,3b20eab0,676ddcc3 and final fixes1dd19b3a,21fd73f7 alongside the prior
+mieru/Snell QUIC checkpoint. Normal fork push and remote HEAD match are verified
+at that exact source on feature/custom-xray-unified-policy. No default merge or
+deployment was performed.
+
+A clean local clone built frontend/panel/core with Go1.27.1, Node26.10.0 and
+npm11.19.1, sharing the verified dependency caches. It is not a cold independent
+build. The source tree remained clean, and32 prior artifact hashes stayed
+unchanged. Distinct immutable artifacts:
+
+- build/x-ui-native-ssh-panel-checkpoint: SHA256
+  8729271af8eb13ec78680371468d6035c03fb2ffccbac0314b8ea4fbbb4524e6.
+- build/custom-xray-native-ssh-panel-checkpoint: SHA256
+  f7aff12a13710b454edf5728ef53abdd1fb28a15988881e817ffd91eabb7d36e.
+
+Using that exact core binary, all47SQLite/49actualPG named SSH and35/37 mieru
+panel requirements pass with no applicable SKIP. The clean clone also passes
+all42 required Snell core parents with pinned official reference fixtures and
+real inbound QUICv1/v2 HTTP/3. This verifies the local SSH/mieru panel and retains
+prior native Snell evidence; Snell panel and proprietary Surge/device validation
+are still open.
+
+Receipts: /root/task-evidence/native-ssh-panel-clean-build-manifest.json,
+native-ssh-panel-exact-artifact-receipt.json and
+native-ssh-panel-checkpoint-push-receipt.json. Subsequent documentation-only
+commits preserve the above product source and artifact provenance.

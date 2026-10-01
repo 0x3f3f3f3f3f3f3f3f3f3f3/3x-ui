@@ -19,8 +19,8 @@ This is the initial source-audit matrix, not a support announcement. `E/U` = exi
 | Snell v4 | native core TCP/UDP-over-TCP/reuse inbound/outbound I/V scoped | native immutable PSK owner, rotation/removal and idle cleanup I/V; panel/API/DB/forms/export N | native Dispatcher/CPE shared Tunnel directional rate/billing/quota/disable/expiry I/V scoped | official v4.1.1 server/native outbound verified; actual Surge-client inbound remains unverified |
 | Snell v5 | native core TCP/UDP-over-TCP/reuse and v5 QUIC inbound/outbound I/V scoped | native immutable PSK owner and resource cleanup I/V; panel/API/DB/forms/export N | native shared directional policy and actual datagram boundaries I/V scoped | official v5.0.1 server, first13k and real v1/v2 HTTP/3 I/V scoped; ordinary TCP large first reply truncation remains; actual Surge-client inbound remains unverified |
 | Snell v6 beta | native core TCP/UDP-over-TCP/reuse/default shaping/unshaped I/V scoped | native immutable PSK owner and resource cleanup I/V; panel/API/DB/forms/export N | native shared policy/decoded payload/accounting/live close I/V scoped | fixed official v6.0.0rc2 server scoped interop; missing-reply assertion Minor recorded; actual official client and broader mode matrix remain open |
-| mieru | native core inbound/outbound and local panel I/V scoped | independent SQL credentials, canonical RPC users, CRUD/attach/bulk/forms/official export and listener cleanup I/V local | decoded payload/shared Tunnel policy, exact billing, live disable/expiry/quota/rotation and restart I/V scoped | official-library TCP/UDP/mux; SQLite34/PG36 actual-child panel acceptance; packaged official clients/devices and coordinated nodes remain open |
-| SSH | native core inbound/outbound I/V scoped; panel integration N | verified public key and opt-in password, credential revocation, bounded transports/channels/listeners I/V; panel/API/DB/forms/export/key provisioning N | direct Dispatcher and client-relative reverse CPE, shared Tunnel rate/billing/quota/disable/expiry/restart I/V scoped | real OpenSSH -L/-D/authorized -R and strict native outbound pin verified; full panel lifecycle remains open |
+| mieru | native core inbound/outbound and local panel I/V scoped | independent SQL credentials, canonical RPC users, CRUD/attach/bulk/forms/official export and listener cleanup I/V local | decoded payload/shared Tunnel policy, exact billing, live disable/expiry/quota/rotation and restart I/V scoped | official-library TCP/UDP/mux; SQLite35/PG37 actual-child panel acceptance; packaged official clients/devices and coordinated nodes remain open |
+| SSH | native core inbound/outbound and local panel I/V scoped | independent SQL authentication, canonical CRUD/attach/bulk/forms, database-owned business host trust and pinned OpenSSH exports I/V local; remote key provisioning N | direct Dispatcher/client-relative reverse CPE and shared Tunnel rates/billing/quota/disable/expiry/rotation/restart I/V local | SQLite47/PG49 exact-clean-core acceptance, real OpenSSH -L/-D/authorized -R and strict outbound pin; coordinated remote nodes/devices remain open |
 | MTProto | E/U external mtg-multi; migration N | E/U secrets/ad-tags | N | preserve features, move execution into core |
 | TUIC v5 | E/U external tuic-server; migration N | E/U | N | preserve QUIC/UDP, remove panel relay after parity |
 | AmneziaWG | E/U panel-side runtime; migration N | E/U peers/forwarding | N | preserve obfuscation/IPv6/per-peer data, direct dispatcher |
@@ -304,3 +304,18 @@ and limitations; this increment is not whole-project completion.
 Distinct clean-source panel/core artifacts for this scoped increment are built
 and sourceab997b39 is exactly pushed to the fork feature branch. This supplies
 checkpoint provenance, not full installer/sidecar/multinode distribution parity.
+
+## Local SSH panel clean checkpoint — 2026-10-01
+
+The reviewed SSH panel integrates at69ed3f4f with unchanged core/dependency
+bytes from3525f678. One final review and one correction pass cover public
+canonical updates, shared native authentication, safe export and real startup.
+The final exact clean core passes47SQLite/49actualPG SSH and35/37 mieru named
+panel gates; clean-source Snell42 including pinned official QUIC also passes.
+Go whole-root, lint0/vet/gen and the retained606-case frontend baseline plus
+8 changed form/i18n cases and type/lint/format/build provide scoped evidence.
+The SSH row now covers local panel workflows; prior historical increments below
+that described SSH panel as open are superseded within this local scope.
+Remote key provisioning/coordinated budgets, Snell panel, packaged-client/device
+validation and the broader original migration/distribution work remain open.
+See native-ssh-panel-testing.md for source, artifact and fork provenance.

@@ -1055,3 +1055,19 @@ checksums and30 unchanged prior artifacts are recorded in mieru-panel-testing.
 The local mieru panel plan is complete within its explicit scope. SSH panel
 Task1 now executes inline from ab997b39 in /tmp/3x-ui-native-ssh-panel; native
 Snell panel and the remaining original full-project requirements stay open.
+
+## Reviewed local native SSH panel checkpoint — 2026-10-01
+
+SSH panel tasks complete within local scope: canonical independent authentication
+and database business trust3525f678, existing forms3b20eab0, truthful native
+OpenSSH/public HTTP lifecycle676ddcc3, one final review and single correction
+1dd19b3a/21fd73f7, integrated/published exact source69ed3f4f. Core source remains
+the same managed Snell/mieru/SSH core. Final47SQLite/49actualPG SSH and35/37 mieru
+requirements pass against the exact clean core artifact;42 pinned Snell parents
+also pass. Root Go/static/generation and affected frontend checks pass.
+
+The32 earlier artifacts remain unchanged. Native SSH panel checksums, bounded
+review findings/fixes and precise clean-build provenance are recorded in
+native-ssh-panel-testing.md. Local SSH panel work is complete; Snell panel is
+the next core-priority vertical. Remote key/budget coordination, packaged clients,
+real proprietary devices and the broader original migration remain open.
