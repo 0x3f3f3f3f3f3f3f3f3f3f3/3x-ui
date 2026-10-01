@@ -217,3 +217,23 @@ All 24 required Snell CI test names have explicit PASS lines; YAML and every
 workflow bash snippet passed syntax validation. Official server fixtures were
 exercised locally; the CI required-name gate covers native self-tests and does
 not count missing official fixtures as interoperability PASS.
+
+## Clean-source checkpoint provenance
+
+Source `d4b93bbb2c1947b5ffa287d76ecaf9f97fb6e615` was exactly pushed to the
+user's fork feature branch and built from a clean isolated clone. Native mieru
+and SSH remain compiled alongside Snell; no runtime sidecar or deployment is
+introduced. Distinct output filenames preserve every earlier checkpoint:
+
+- Panel `build/x-ui-native-snell-core-checkpoint`: SHA256
+  `232fd2762d86338264438b03f1643884f213b0f6b68300a150dcc596286fc4db`.
+- Core `build/custom-xray-native-snell-core-checkpoint`: SHA256
+  `1a0739fadf2804dafb7062a6ff11123ea38470d3c3f5f24627bd97e1be75c30e`.
+
+Version/build-info checks confirm full clean source revision, Go1.27.1 and
+pinned official mieru v3.38.0; native sing-snell is retained as local pinned
+source. All27 prior checkpoint/review artifacts were rehashed unchanged.
+Receipts: `/root/task-evidence/native-snell-clean-build-manifest.json`,
+`native-snell-clean-build-results.json` and
+`native-snell-post-build-prior-preservation.json`. Full Snell support still needs
+the mandatory native v5 QUIC increment and panel/official-client acceptance.

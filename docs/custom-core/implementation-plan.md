@@ -1018,3 +1018,8 @@ This covers authenticated TCP and UDP-over-TCP paths. Native v5 QUIC is being
 implemented separately from official codec probes; full panel lifecycle, actual
 Surge-client inbound and the official-v5 large-reply gap remain open. No deployment
 or release is authorized. See [native-snell-testing.md](native-snell-testing.md).
+
+Clean Snell TCP/UDP checkpoint sourced from d4b93bbb was built and exactly
+pushed to the fork feature branch; both named artifacts and27 preserved prior
+hashes are recorded in native-snell-testing.md. Native v5 QUIC and Snell panel
+integration continue; this is a core-only checkpoint, with no deployment.
