@@ -99,13 +99,19 @@ func parseMieruSubscriptionConfig(raw string) ([]Outbound, []string, error) {
 	}
 	var outbounds []Outbound
 	var identities []string
+	seen := make(map[string]int)
 	for _, profile := range config.Profiles {
 		parsed, err := mieruProfileOutbound(profile)
 		if err != nil {
 			return nil, nil, err
 		}
 		outbounds = append(outbounds, parsed.Outbound)
-		identities = append(identities, parsed.Identity)
+		identity := parsed.Identity
+		if n := seen[identity]; n > 0 {
+			identity = fmt.Sprintf("%s#%d", identity, n)
+		}
+		seen[parsed.Identity]++
+		identities = append(identities, identity)
 	}
 	return outbounds, identities, nil
 }

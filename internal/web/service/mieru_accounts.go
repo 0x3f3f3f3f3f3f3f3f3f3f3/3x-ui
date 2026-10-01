@@ -2,7 +2,6 @@ package service
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -12,7 +11,6 @@ import (
 	"github.com/xtls/xray-core/proxy/mieru"
 	"gorm.io/gorm"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
@@ -87,18 +85,8 @@ func prepareMieruInbound(inbound *model.Inbound) error {
 		if strings.TrimSpace(clients[i].Email) == "" {
 			return fmt.Errorf("mieru client label is required")
 		}
-		var stored model.ClientRecord
-		err := database.GetDB().Where("email = ?", clients[i].Email).First(&stored).Error
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		if clients[i].MieruUsername == "" {
-			clients[i].MieruUsername = stored.MieruUsername
-		}
-		if clients[i].MieruPassword == "" {
-			clients[i].MieruPassword = stored.MieruPassword
-		}
-		if err := fillMieruCredentials(&clients[i]); err != nil {
+		// Omitted fields must remain omitted until the serialized SQL write.
+		if err := validateProvidedMieruCredentials(clients[i]); err != nil {
 			return err
 		}
 	}
@@ -110,6 +98,51 @@ func prepareMieruInbound(inbound *model.Inbound) error {
 		return err
 	}
 	raw, err = json.Marshal(settings)
+	if err == nil {
+		inbound.Settings = string(raw)
+	}
+	return err
+}
+
+// Resolve omitted credentials and serialize their mirror while owning the
+// canonical SQL writer. No preserved secret is copied before this transaction.
+func resolveMieruInboundCredentials(tx *gorm.DB, inbound *model.Inbound) error {
+	if inbound.Protocol != model.Mieru {
+		return nil
+	}
+	clients, err := ParseInboundSettingsClients(inbound.Settings)
+	if err != nil {
+		return err
+	}
+	for i := range clients {
+		var records []model.ClientRecord
+		if err := tx.Where("email = ?", strings.TrimSpace(clients[i].Email)).Limit(1).Find(&records).Error; err != nil {
+			return err
+		}
+		if len(records) == 1 {
+			if clients[i].MieruUsername == "" {
+				clients[i].MieruUsername = records[0].MieruUsername
+			}
+			if clients[i].MieruPassword == "" {
+				clients[i].MieruPassword = records[0].MieruPassword
+			}
+		}
+		if err := fillMieruCredentials(&clients[i]); err != nil {
+			return err
+		}
+	}
+	if clients == nil {
+		clients = []model.Client{}
+	}
+	var settings map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(inbound.Settings), &settings); err != nil {
+		return err
+	}
+	settings["clients"], err = json.Marshal(clients)
+	if err != nil {
+		return err
+	}
+	raw, err := json.Marshal(settings)
 	if err == nil {
 		inbound.Settings = string(raw)
 	}

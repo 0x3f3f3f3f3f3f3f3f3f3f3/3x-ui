@@ -38,6 +38,10 @@ required = {
     'TestMieruOfficialLinksAndClientConfigReimport',
     'TestMieruImportRejectsSilentProfileLoss',
     'TestMieruExternalShareFormatsAreExplicit',
+    'TestMieruOmittedUpdateCannotRevertConcurrentRotation',
+    'TestMieruExternalRemarkRoundTrip',
+    'TestMieruExternalFullConfigDownload',
+    'TestMieruJSONRepeatedEndpointRetainsSubscriptionTags',
 }
 postgres_only = {"TestMieruPostgresOldSchemaUpgradePreservesIdentityAndReopen", "TestMieruCrossDatabaseExportPreservesCredentialsAndLedger"}
 if mode == "postgres":

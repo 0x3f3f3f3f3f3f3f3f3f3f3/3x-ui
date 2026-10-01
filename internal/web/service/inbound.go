@@ -1262,6 +1262,16 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 	needRestart := false
 	var postCommitApply func()
 	err = runSerializedTx(func(tx *gorm.DB) error {
+		if err := resolveMieruInboundCredentials(tx, inbound); err != nil {
+			return err
+		}
+		if inbound.Protocol == model.Mieru {
+			var err error
+			clients, err = s.GetClients(inbound)
+			if err != nil {
+				return err
+			}
+		}
 		if err := validateTunnelFixedOutboundSelection(tx, inbound); err != nil {
 			return err
 		}
@@ -1903,6 +1913,9 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	var postCommitApply func()
 
 	txErr := runSerializedTx(func(tx *gorm.DB) error {
+		if err := resolveMieruInboundCredentials(tx, inbound); err != nil {
+			return err
+		}
 		if err := validateTunnelFixedOutboundSelection(tx, inbound); err != nil {
 			return err
 		}

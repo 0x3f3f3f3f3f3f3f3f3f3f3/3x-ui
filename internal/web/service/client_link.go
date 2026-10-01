@@ -153,6 +153,21 @@ func (s *ClientService) syncInboundClients(tx *gorm.DB, inboundId int, clients [
 		}
 	}
 
+	if target.Protocol == model.Mieru {
+		for i := range clients {
+			if stored := existing[strings.TrimSpace(clients[i].Email)]; stored != nil {
+				if clients[i].MieruUsername == "" {
+					clients[i].MieruUsername = stored.MieruUsername
+				}
+				if clients[i].MieruPassword == "" {
+					clients[i].MieruPassword = stored.MieruPassword
+				}
+			}
+			if err := fillMieruCredentials(&clients[i]); err != nil {
+				return err
+			}
+		}
+	}
 	if err := guardRemoteClientPolicyAttachments(tx, inboundId, existing, clients); err != nil {
 		return err
 	}

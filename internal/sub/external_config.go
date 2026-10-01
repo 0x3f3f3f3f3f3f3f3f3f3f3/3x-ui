@@ -160,6 +160,9 @@ func applyRemarkToLink(rawLink, remark string) string {
 	if strings.HasPrefix(rawLink, "vmess://") {
 		return applyVmessRemark(rawLink, remark)
 	}
+	if isMieruShareLink(rawLink) {
+		return applyMieruRemark(rawLink, remark)
+	}
 	if i := strings.IndexByte(rawLink, '#'); i >= 0 {
 		rawLink = rawLink[:i]
 	}

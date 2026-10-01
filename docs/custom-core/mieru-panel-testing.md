@@ -84,3 +84,37 @@ and reject the absent trusted-mieru-client-id-v1 marker before preparation.
 
 Final whole-branch independent review, merged-parent validation and clean-source
 panel/core distribution provenance are recorded after these scoped gates pass.
+
+## Single whole-panel review and correction
+
+The clean candidate at 14215f5490b18cf3c903abe01b10b470a9bc4811 was reviewed
+against all 80 hashes, manifest SHA256
+3f5a0948fd5a1ccea7105b9b6c1a7c8cb755c293c845d98f7cd7ebeabba1067d.
+Four Important defects reproduced in independent overlays and repository tests:
+omitted credentials could revert a concurrent canonical rotation; external
+remarks introduced an unsupported fragment; full mieru:// external configs
+were silently omitted; repeated official-JSON endpoints shifted stable tags
+on an unchanged refresh. The corrected tests now cover all four.
+
+Omitted native fields remain omitted before the serialized SQL write. Inside
+that transaction, current credentials are resolved, first-use defaults are
+generated, and the inbound mirror and canonical records are persisted together.
+The first correction's mirror regression is preserved as a failure, not counted
+as a pass. Mieru names use the official profile representation. Full-config
+profiles are preserved; global client behavior that cannot be combined into
+a subscription returns an explicit error. Local proxy ports are selected by
+the aggregated client config. JSON identity duplicates use the same numbered
+identity suffixes as newline subscriptions.
+
+Fresh complete corrected runs passed all 34 SQLite and 36 actual PostgreSQL
+required names under race, using the real native core and missing-marker
+fixture. The PostgreSQL result is one complete command, not the earlier
+composite receipt. Full logs are native-mieru-panel-review-corrected-
+{sqlite,postgres}-required.log; correction RED, initial mirror failure and final
+GREEN logs are retained separately. Corrected lint reports 0 issues and vet
+exits 0. Frontend source was unchanged by this correction; the preceding
+290-test, typecheck/lint and frontend-build results still cover it.
+
+Parent integration, refreshed parent binaries and clean-source publication
+remain separate gates. SSH/Snell panel integration, coordinated remote budgets
+and packaged official-client/device acceptance are not asserted here.
