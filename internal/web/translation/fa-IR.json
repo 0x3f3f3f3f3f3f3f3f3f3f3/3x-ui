@@ -151,7 +151,6 @@
       "restartXray": "راه‌اندازی مجدد",
       "xraySwitch": "‌نسخه",
       "xrayUpdates": "به‌روزرسانی‌های Xray",
-      "xraySwitchClickDesk": "لطفا بادقت انتخاب کنید. درصورت انتخاب نسخه قدیمی‌تر، امکان ناهماهنگی با پیکربندی فعلی وجود دارد",
       "updatePanel": "به‌روزرسانی پنل",
       "panelUpdateDesc": "این عملیات 3X-UI را به آخرین نسخه به‌روزرسانی می‌کند و سرویس پنل را مجدداً راه‌اندازی می‌کند.",
       "currentPanelVersion": "نسخه فعلی پنل",
@@ -213,9 +212,6 @@
       "download": "دانلود",
       "sent": "ارسال شده",
       "received": "دریافت شده",
-      "xraySwitchVersionDialog": "آیا واقعاً می‌خواهید نسخه Xray را تغییر دهید؟",
-      "xraySwitchVersionDialogDesc": "این کار نسخه Xray را به #version# تغییر می‌دهد.",
-      "xraySwitchVersionPopover": "Xray با موفقیت به‌روز شد",
       "panelUpdateDialog": "آیا مطمئن هستید که می‌خواهید پنل را به‌روزرسانی کنید؟",
       "panelUpdateDialogDesc": "این 3X-UI را به نسخه #version# به‌روزرسانی کرده و سرویس پنل را مجدداً راه‌اندازی می‌کند.",
       "panelUpdateStartedPopover": "به‌روزرسانی پنل آغاز شد",
@@ -291,7 +287,9 @@
       "accessBlocked": "BLOCKED",
       "accessProxy": "PROXY",
       "importKeepHostSettings": "حفظ تنظیمات این دستگاه",
-      "importKeepHostSettingsDesc": "آدرس‌ها و پورت‌های شنود، مسیر پایه، گواهی‌ها و هویت نودِ همین پنل را نگه می‌دارد و آن‌ها را از فایل بارگذاری‌شده نمی‌گیرد."
+      "importKeepHostSettingsDesc": "آدرس‌ها و پورت‌های شنود، مسیر پایه، گواهی‌ها و هویت نودِ همین پنل را نگه می‌دارد و آن‌ها را از فایل بارگذاری‌شده نمی‌گیرد.",
+      "customCoreUpdateTitle": "به‌روزرسانی Custom Xray-core",
+      "customCoreUpdateDesc": "برای حفظ پشتیبانی از Snell، mieru و SSH، بستهٔ هماهنگ پنل و Custom Xray-core را ارتقا دهید."
     },
     "inbounds": {
       "totalDownUp": "دریافت/ارسال کل",

@@ -43,6 +43,20 @@ and neither source availability nor a standalone wire probe is acceptance.
 4. A listener reassigned to another client must never transfer live sessions/counters: tasks 3 and 6 test deletion/reassignment under load.
 5. Global policies cannot be copied in full to each node: task 12 tests two nodes and disconnection/recovery.
 
+## User execution priority — 2026-10-01
+
+Finish native Snell, mieru and SSH support first. Then complete multiplier billing,
+per-client upload/download rate enforcement and TCP/UDP forwarding through Xray
+Tunnel/dokodemo-door. Those features share canonical identity, routing, quotas,
+expiry and statistics, with full DB/API/UI/config/data-path acceptance.
+
+The local three-protocol panels now have scoped verified checkpoints. Finish the
+bounded official-core replacement guard already in progress, then return directly
+to the billing/rate/Tunnel vertical and its remaining acceptance gaps. Broader
+installation/distribution remains an original requirement, with its ordering
+subject to this explicit user priority. Existing partial tests do not close a
+whole feature; completion requires the agreed observable acceptance.
+
 ## Task 1: Audit and reproducible source baseline (in progress)
 
 Files: `docs/custom-core/*`, `core/xray/*`, root `go.mod`, `tools/build-custom-core.sh`, `.github/workflows/custom-core.yml`.

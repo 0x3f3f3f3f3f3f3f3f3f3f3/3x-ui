@@ -551,8 +551,10 @@ export const sections: readonly Section[] = [
       {
         method: 'GET',
         path: '/panel/api/server/getXrayVersion',
-        summary: 'List Xray binary versions available for install on this host.',
-        response: '{\n  "success": true,\n  "obj": ["v25.10.31", "v25.9.15", "v25.8.1"]\n}',
+        summary:
+          'Official core replacements are refused; upgrade the matching Custom Xray-core and panel package.',
+        response:
+          '{\n  "success": false,\n  "msg": "Custom Xray-core must be upgraded with its matching panel/core package to retain Snell, mieru and SSH support"\n}',
       },
       {
         method: 'GET',
@@ -651,13 +653,13 @@ export const sections: readonly Section[] = [
         method: 'POST',
         path: '/panel/api/server/installXray/:version',
         summary:
-          'Download and install the specified Xray version. Pass "latest" for the newest release.',
+          'Refuse individual official Xray replacement. Upgrade the matching Custom Xray-core and panel package.',
         params: [
           {
             name: 'version',
             in: 'path',
             type: 'string',
-            desc: 'Xray tag (e.g. v25.10.31) or "latest".',
+            desc: 'Requested core version; individual replacements are refused in this custom distribution.',
           },
         ],
       },

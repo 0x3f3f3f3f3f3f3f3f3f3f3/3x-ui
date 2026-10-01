@@ -151,7 +151,6 @@
       "restartXray": "Khởi động lại",
       "xraySwitch": "Phiên bản",
       "xrayUpdates": "Cập nhật Xray",
-      "xraySwitchClickDesk": "Hãy lựa chọn thận trọng, vì các phiên bản cũ có thể không tương thích với các cấu hình hiện tại.",
       "updatePanel": "Cập nhật Panel",
       "panelUpdateDesc": "Điều này sẽ cập nhật 3X-UI lên bản phát hành mới nhất và khởi động lại dịch vụ panel.",
       "currentPanelVersion": "Phiên bản panel hiện tại",
@@ -213,9 +212,6 @@
       "download": "Tải xuống",
       "sent": "Đã gửi",
       "received": "Đã nhận",
-      "xraySwitchVersionDialog": "Bạn có chắc chắn muốn thay đổi phiên bản Xray không?",
-      "xraySwitchVersionDialogDesc": "Hành động này sẽ thay đổi phiên bản Xray thành #version#.",
-      "xraySwitchVersionPopover": "Xray đã được cập nhật thành công",
       "panelUpdateDialog": "Bạn có chắc muốn cập nhật panel không?",
       "panelUpdateDialogDesc": "Điều này sẽ cập nhật 3X-UI lên #version# và khởi động lại dịch vụ panel.",
       "panelUpdateStartedPopover": "Bắt đầu cập nhật panel",
@@ -291,7 +287,9 @@
       "accessBlocked": "BLOCKED",
       "accessProxy": "PROXY",
       "importKeepHostSettings": "Giữ cài đặt của máy này",
-      "importKeepHostSettingsDesc": "Giữ nguyên địa chỉ lắng nghe, cổng, đường dẫn cơ sở, chứng chỉ và danh tính node của bảng điều khiển này thay vì lấy chúng từ tệp đã tải lên."
+      "importKeepHostSettingsDesc": "Giữ nguyên địa chỉ lắng nghe, cổng, đường dẫn cơ sở, chứng chỉ và danh tính node của bảng điều khiển này thay vì lấy chúng từ tệp đã tải lên.",
+      "customCoreUpdateTitle": "Cập nhật Custom Xray-core",
+      "customCoreUpdateDesc": "Nâng cấp gói bảng điều khiển và Custom Xray-core tương thích để duy trì hỗ trợ Snell, mieru và SSH."
     },
     "inbounds": {
       "totalDownUp": "Tổng tải lên/tải xuống",

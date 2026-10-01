@@ -6803,7 +6803,7 @@
         "tags": [
           "Server"
         ],
-        "summary": "List Xray binary versions available for install on this host.",
+        "summary": "Official core replacements are refused; upgrade the matching Custom Xray-core and panel package.",
         "operationId": "get_panel_api_server_getXrayVersion",
         "responses": {
           "200": {
@@ -6823,12 +6823,8 @@
                   }
                 },
                 "example": {
-                  "success": true,
-                  "obj": [
-                    "v25.10.31",
-                    "v25.9.15",
-                    "v25.8.1"
-                  ]
+                  "success": false,
+                  "msg": "Custom Xray-core must be upgraded with its matching panel/core package to retain Snell, mieru and SSH support"
                 }
               }
             }
@@ -7381,14 +7377,14 @@
         "tags": [
           "Server"
         ],
-        "summary": "Download and install the specified Xray version. Pass \"latest\" for the newest release.",
+        "summary": "Refuse individual official Xray replacement. Upgrade the matching Custom Xray-core and panel package.",
         "operationId": "post_panel_api_server_installXray_version",
         "parameters": [
           {
             "name": "version",
             "in": "path",
             "required": true,
-            "description": "Xray tag (e.g. v25.10.31) or \"latest\".",
+            "description": "Requested core version; individual replacements are refused in this custom distribution.",
             "schema": {
               "type": "string"
             }

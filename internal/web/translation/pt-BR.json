@@ -151,7 +151,6 @@
       "restartXray": "Reiniciar",
       "xraySwitch": "Versão",
       "xrayUpdates": "Atualizações do Xray",
-      "xraySwitchClickDesk": "Escolha com cuidado, pois versões mais antigas podem não ser compatíveis com as configurações atuais.",
       "updatePanel": "Atualizar painel",
       "panelUpdateDesc": "Isso atualizará o 3X-UI para a versão mais recente e reiniciará o serviço do painel.",
       "currentPanelVersion": "Versão atual do painel",
@@ -213,9 +212,6 @@
       "download": "Download",
       "sent": "Enviado",
       "received": "Recebido",
-      "xraySwitchVersionDialog": "Você realmente deseja alterar a versão do Xray?",
-      "xraySwitchVersionDialogDesc": "Isso mudará a versão do Xray para #version#.",
-      "xraySwitchVersionPopover": "Xray atualizado com sucesso",
       "panelUpdateDialog": "Deseja realmente atualizar o painel?",
       "panelUpdateDialogDesc": "Isso atualizará o 3X-UI para #version# e reiniciará o serviço do painel.",
       "panelUpdateStartedPopover": "Atualização do painel iniciada",
@@ -291,7 +287,9 @@
       "accessBlocked": "BLOCKED",
       "accessProxy": "PROXY",
       "importKeepHostSettings": "Manter as configurações desta máquina",
-      "importKeepHostSettingsDesc": "Mantém os endereços de escuta, as portas, o caminho base, os certificados e a identidade de nó deste painel em vez de obtê-los do arquivo enviado."
+      "importKeepHostSettingsDesc": "Mantém os endereços de escuta, as portas, o caminho base, os certificados e a identidade de nó deste painel em vez de obtê-los do arquivo enviado.",
+      "customCoreUpdateTitle": "Atualizações do Custom Xray-core",
+      "customCoreUpdateDesc": "Atualize o pacote correspondente do painel e Custom Xray-core para manter o suporte a Snell, mieru e SSH."
     },
     "inbounds": {
       "totalDownUp": "Total Enviado/Recebido",

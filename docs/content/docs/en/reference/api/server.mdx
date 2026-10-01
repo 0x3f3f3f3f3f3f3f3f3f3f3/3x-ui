@@ -50,8 +50,9 @@ _openapi:
         v} shape as the other history endpoints.
       url: '#time-series-of-observatory-probe-results-for-one-outbound-tag-same-t-v-shape-as-the-other-history-endpoints'
     - depth: 2
-      title: List Xray binary versions available for install on this host.
-      url: '#list-xray-binary-versions-available-for-install-on-this-host'
+      title: Official core replacements are refused; upgrade the matching Custom
+        Xray-core and panel package.
+      url: '#official-core-replacements-are-refused-upgrade-the-matching-custom-xray-core-and-panel-package'
     - depth: 2
       title: Check whether a newer 3x-ui release is available on GitHub.
       url: '#check-whether-a-newer-3x-ui-release-is-available-on-github'
@@ -109,9 +110,9 @@ _openapi:
         inbound or routing changes.
       url: '#reload-xray-with-the-current-config-typically-required-after-structural-inbound-or-routing-changes'
     - depth: 2
-      title: Download and install the specified Xray version. Pass "latest" for the
-        newest release.
-      url: '#download-and-install-the-specified-xray-version-pass-latest-for-the-newest-release'
+      title: Refuse individual official Xray replacement. Upgrade the matching Custom
+        Xray-core and panel package.
+      url: '#refuse-individual-official-xray-replacement-upgrade-the-matching-custom-xray-core-and-panel-package'
     - depth: 2
       title: Self-update the panel to the latest version. The server restarts on
         success.
@@ -215,8 +216,9 @@ _openapi:
       - content: Time-series of observatory probe results for one outbound tag. Same {t,
           v} shape as the other history endpoints.
         id: time-series-of-observatory-probe-results-for-one-outbound-tag-same-t-v-shape-as-the-other-history-endpoints
-      - content: List Xray binary versions available for install on this host.
-        id: list-xray-binary-versions-available-for-install-on-this-host
+      - content: Official core replacements are refused; upgrade the matching Custom
+          Xray-core and panel package.
+        id: official-core-replacements-are-refused-upgrade-the-matching-custom-xray-core-and-panel-package
       - content: Check whether a newer 3x-ui release is available on GitHub.
         id: check-whether-a-newer-3x-ui-release-is-available-on-github
       - content: Report the outcome of the most recently launched panel self-update (see
@@ -259,9 +261,9 @@ _openapi:
       - content: Reload Xray with the current config. Typically required after
           structural inbound or routing changes.
         id: reload-xray-with-the-current-config-typically-required-after-structural-inbound-or-routing-changes
-      - content: Download and install the specified Xray version. Pass "latest" for the
-          newest release.
-        id: download-and-install-the-specified-xray-version-pass-latest-for-the-newest-release
+      - content: Refuse individual official Xray replacement. Upgrade the matching
+          Custom Xray-core and panel package.
+        id: refuse-individual-official-xray-replacement-upgrade-the-matching-custom-xray-core-and-panel-package
       - content: Self-update the panel to the latest version. The server restarts on
           success.
         id: self-update-the-panel-to-the-latest-version-the-server-restarts-on-success

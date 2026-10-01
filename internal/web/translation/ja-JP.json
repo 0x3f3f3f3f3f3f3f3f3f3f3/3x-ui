@@ -151,7 +151,6 @@
       "restartXray": "再起動",
       "xraySwitch": "バージョン",
       "xrayUpdates": "Xrayの更新",
-      "xraySwitchClickDesk": "慎重に選択してください。古いバージョンは現在の設定と互換性がない可能性があります。",
       "updatePanel": "パネルを更新",
       "panelUpdateDesc": "これにより3X-UIが最新リリースに更新され、パネルサービスが再起動されます。",
       "currentPanelVersion": "現在のパネルバージョン",
@@ -213,9 +212,6 @@
       "download": "ダウンロード",
       "sent": "送信",
       "received": "受信",
-      "xraySwitchVersionDialog": "Xrayのバージョンを本当に変更しますか？",
-      "xraySwitchVersionDialogDesc": "Xrayのバージョンが#version#に変更されます。",
-      "xraySwitchVersionPopover": "Xrayの更新が成功しました",
       "panelUpdateDialog": "本当にパネルを更新しますか？",
       "panelUpdateDialogDesc": "これにより3X-UIが#version#に更新され、パネルサービスが再起動されます。",
       "panelUpdateStartedPopover": "パネルの更新を開始しました",
@@ -291,7 +287,9 @@
       "accessBlocked": "BLOCKED",
       "accessProxy": "PROXY",
       "importKeepHostSettings": "このマシンの設定を保持する",
-      "importKeepHostSettingsDesc": "アップロードしたファイルの値ではなく、このパネルのリッスンアドレス、ポート、ベースパス、証明書、ノード ID を保持します。"
+      "importKeepHostSettingsDesc": "アップロードしたファイルの値ではなく、このパネルのリッスンアドレス、ポート、ベースパス、証明書、ノード ID を保持します。",
+      "customCoreUpdateTitle": "Custom Xray-core の更新",
+      "customCoreUpdateDesc": "Snell、mieru、SSH のサポートを維持するため、対応するパネルと Custom Xray-core のパッケージを更新してください。"
     },
     "inbounds": {
       "totalDownUp": "総アップロード / ダウンロード",

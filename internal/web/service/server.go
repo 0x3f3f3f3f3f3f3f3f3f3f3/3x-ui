@@ -1,7 +1,6 @@
 package service
 
 import (
-	"archive/zip"
 	"bufio"
 	"bytes"
 	"cmp"
@@ -161,8 +160,7 @@ type ServerService struct {
 	lastStatus   *Status
 	coldStatusMu sync.Mutex
 
-	versionsCacheMu sync.Mutex
-	versionsCache   *cachedXrayVersions
+	versionsCache *cachedXrayVersions
 
 	fail2banMu        sync.Mutex
 	fail2banInstalled bool
@@ -173,11 +171,6 @@ type cachedXrayVersions struct {
 	versions  []string
 	fetchedAt time.Time
 }
-
-// xrayVersionsCacheTTL bounds how often /getXrayVersion hits GitHub. The list
-// is purely informational (rendered in the "switch Xray version" picker) so a
-// quarter-hour staleness window is fine and saves the API budget.
-const xrayVersionsCacheTTL = 15 * time.Minute
 
 // allowedHistoryBuckets is the bucket-second whitelist for time-series
 // aggregation endpoints (server + node metrics). Restricting it prevents
@@ -288,29 +281,9 @@ func (s *ServerService) RefreshStatus() *Status {
 	return next
 }
 
-// GetXrayVersionsCached wraps GetXrayVersions with a TTL cache. On fetch
-// failure we serve the last successful list (if any) so the UI doesn't go
-// blank during a GitHub API hiccup; if there's no cache at all the underlying
-// error is surfaced.
+// GetXrayVersionsCached refuses official release lists, including stale cached data.
 func (s *ServerService) GetXrayVersionsCached() ([]string, error) {
-	s.versionsCacheMu.Lock()
-	cache := s.versionsCache
-	s.versionsCacheMu.Unlock()
-	if cache != nil && time.Since(cache.fetchedAt) <= xrayVersionsCacheTTL {
-		return cache.versions, nil
-	}
-	versions, err := s.GetXrayVersions()
-	if err != nil {
-		if cache != nil {
-			logger.Warning("GetXrayVersionsCached: serving stale list:", err)
-			return cache.versions, nil
-		}
-		return nil, err
-	}
-	s.versionsCacheMu.Lock()
-	s.versionsCache = &cachedXrayVersions{versions: versions, fetchedAt: time.Now()}
-	s.versionsCacheMu.Unlock()
-	return versions, nil
+	return s.GetXrayVersions()
 }
 
 // GetDefaultLogOutboundTags scans the default Xray config for freedom and
@@ -864,72 +837,13 @@ func (s *ServerService) sampleCPUUtilization() (float64, error) {
 }
 
 const (
-	maxXrayArchiveBytes = 200 << 20
-	maxXrayBinaryBytes  = 200 << 20
 	// maxXrayDigestBytes caps the .dgst checksum sidecar read; it is a few
 	// hundred bytes in practice.
 	maxXrayDigestBytes = 64 << 10
 )
 
 func (s *ServerService) GetXrayVersions() ([]string, error) {
-	const (
-		XrayURL    = "https://api.github.com/repos/XTLS/Xray-core/releases"
-		bufferSize = 8192
-	)
-
-	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, XrayURL, nil)
-	if reqErr != nil {
-		return nil, reqErr
-	}
-	resp, err := s.settingService.NewProxiedHTTPClient(10 * time.Second).Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	// Check HTTP status code - GitHub API returns object instead of array on error
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		var errorResponse struct {
-			Message string `json:"message"`
-		}
-		if json.Unmarshal(bodyBytes, &errorResponse) == nil && errorResponse.Message != "" {
-			return nil, fmt.Errorf("GitHub API error: %s", errorResponse.Message)
-		}
-		return nil, fmt.Errorf("GitHub API returned status %d: %s", resp.StatusCode, resp.Status)
-	}
-
-	buffer := bytes.NewBuffer(make([]byte, bufferSize))
-	buffer.Reset()
-	if _, err := buffer.ReadFrom(resp.Body); err != nil {
-		return nil, err
-	}
-
-	var releases []Release
-	if err := json.Unmarshal(buffer.Bytes(), &releases); err != nil {
-		return nil, err
-	}
-
-	var versions []string
-	for _, release := range releases {
-		tagVersion := strings.TrimPrefix(release.TagName, "v")
-		tagParts := strings.Split(tagVersion, ".")
-		if len(tagParts) != 3 {
-			continue
-		}
-
-		major, err1 := strconv.Atoi(tagParts[0])
-		minor, err2 := strconv.Atoi(tagParts[1])
-		patch, err3 := strconv.Atoi(tagParts[2])
-		if err1 != nil || err2 != nil || err3 != nil {
-			continue
-		}
-
-		if major > 26 || (major == 26 && minor > 6) || (major == 26 && minor == 6 && patch >= 27) {
-			versions = append(versions, release.TagName)
-		}
-	}
-	return versions, nil
+	return nil, ErrCustomCoreBundledUpdate
 }
 
 func (s *ServerService) StopXrayService() error {
@@ -948,100 +862,6 @@ func (s *ServerService) RestartXrayService() error {
 		return err
 	}
 	return nil
-}
-
-func (s *ServerService) downloadXRay(version string) (string, error) {
-	osName := runtime.GOOS
-	arch := runtime.GOARCH
-
-	switch osName {
-	case "darwin":
-		osName = "macos"
-	case "windows":
-		osName = "windows"
-	}
-
-	switch arch {
-	case "amd64":
-		arch = "64"
-	case "arm64":
-		arch = "arm64-v8a"
-	case "armv7":
-		arch = "arm32-v7a"
-	case "armv6":
-		arch = "arm32-v6"
-	case "armv5":
-		arch = "arm32-v5"
-	case "386":
-		arch = "32"
-	case "s390x":
-		arch = "s390x"
-	}
-
-	fileName := fmt.Sprintf("Xray-%s-%s.zip", osName, arch)
-	url := fmt.Sprintf("https://github.com/XTLS/Xray-core/releases/download/%s/%s", version, fileName)
-	client := s.settingService.NewProxiedHTTPClient(60 * time.Second)
-	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
-	if reqErr != nil {
-		return "", reqErr
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("download xray: unexpected HTTP %d", resp.StatusCode)
-	}
-	if resp.ContentLength > maxXrayArchiveBytes {
-		return "", fmt.Errorf("download xray: archive exceeds %d bytes", maxXrayArchiveBytes)
-	}
-
-	file, err := os.CreateTemp("", "xray-*.zip")
-	if err != nil {
-		return "", err
-	}
-	path := file.Name()
-	ok := false
-	defer func() {
-		_ = file.Close()
-		if !ok {
-			_ = os.Remove(path)
-		}
-	}()
-
-	n, err := io.Copy(file, io.LimitReader(resp.Body, maxXrayArchiveBytes+1))
-	if err != nil {
-		return "", err
-	}
-	if n > maxXrayArchiveBytes {
-		return "", fmt.Errorf("download xray: archive exceeds %d bytes", maxXrayArchiveBytes)
-	}
-
-	// Verify the archive against the SHA2-256 published in the release's .dgst
-	// sidecar before installing it. TLS protects the transport, not the artifact;
-	// a corrupted or tampered asset must not be installed and run as xray.
-	want, err := s.fetchXrayDigestSHA256(client, url+".dgst")
-	if err != nil {
-		return "", err
-	}
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return "", err
-	}
-	hasher := sha256.New()
-	if _, err := io.Copy(hasher, file); err != nil {
-		return "", err
-	}
-	if got := hex.EncodeToString(hasher.Sum(nil)); !strings.EqualFold(got, want) {
-		// User-facing warning: the archive's SHA-256 does not match the official
-		// release checksum, so the download is corrupted or has been tampered
-		// with. Abort the install so a bad binary is never run, and tell the user
-		// to retry/re-download rather than proceed with a mismatched image.
-		return "", fmt.Errorf("Xray update aborted: the downloaded archive does not match the official SHA-256 checksum, so the image is corrupted or differs from the official release. Please exit and re-download the official image, then try again (expected %s, got %s)", want, got)
-	}
-
-	ok = true
-	return path, nil
 }
 
 // fetchXrayDigestSHA256 downloads the .dgst sidecar XTLS publishes next to each
@@ -1084,104 +904,7 @@ func parseXrayDigestSHA256(dgst []byte) (string, error) {
 }
 
 func (s *ServerService) UpdateXray(version string) error {
-	versions, err := s.GetXrayVersions()
-	if err != nil {
-		return err
-	}
-	if !slices.Contains(versions, version) {
-		return fmt.Errorf("xray version %q is not in the fetched release list", version)
-	}
-
-	// 1. Stop xray before doing anything
-	if err := s.StopXrayService(); err != nil {
-		logger.Warning("failed to stop xray before update:", err)
-	}
-
-	// 2. Download the zip
-	zipFileName, err := s.downloadXRay(version)
-	if err != nil {
-		return err
-	}
-	defer os.Remove(zipFileName)
-
-	zipFile, err := os.Open(zipFileName)
-	if err != nil {
-		return err
-	}
-	defer zipFile.Close()
-
-	stat, err := zipFile.Stat()
-	if err != nil {
-		return err
-	}
-	reader, err := zip.NewReader(zipFile, stat.Size())
-	if err != nil {
-		return err
-	}
-
-	// 3. Helper to extract files
-	copyZipFile := func(zipName string, fileName string) error {
-		zipFile, err := reader.Open(zipName)
-		if err != nil {
-			return err
-		}
-		defer zipFile.Close()
-		if err := os.MkdirAll(filepath.Dir(fileName), 0o755); err != nil {
-			return err
-		}
-		tmpFile, err := os.CreateTemp(filepath.Dir(fileName), ".xray-*")
-		if err != nil {
-			return err
-		}
-		tmpPath := tmpFile.Name()
-		ok := false
-		defer func() {
-			_ = tmpFile.Close()
-			if !ok {
-				_ = os.Remove(tmpPath)
-			}
-		}()
-		n, err := io.Copy(tmpFile, io.LimitReader(zipFile, maxXrayBinaryBytes+1))
-		if err != nil {
-			return err
-		}
-		if n > maxXrayBinaryBytes {
-			return fmt.Errorf("xray binary exceeds %d bytes", maxXrayBinaryBytes)
-		}
-		if err := tmpFile.Chmod(0o755); err != nil {
-			return err
-		}
-		if err := tmpFile.Close(); err != nil {
-			return err
-		}
-		if runtime.GOOS == "windows" {
-			_ = os.Remove(fileName)
-		}
-		if err := os.Rename(tmpPath, fileName); err != nil {
-			return err
-		}
-		ok = true
-		return nil
-	}
-
-	// 4. Extract correct binary
-	if runtime.GOOS == "windows" {
-		targetBinary := filepath.Join(config.GetBinFolderPath(), "xray-windows-amd64.exe")
-		err = copyZipFile("xray.exe", targetBinary)
-	} else {
-		err = copyZipFile("xray", xray.GetBinaryPath())
-	}
-	if err != nil {
-		return err
-	}
-
-	// 5. Restart xray
-	if err := s.xrayService.RestartXray(true); err != nil {
-		logger.Error("start xray failed:", err)
-		return err
-	}
-
-	return nil
+	return ErrCustomCoreBundledUpdate
 }
 
 func (s *ServerService) GetLogs(count string, level string, syslog string) []string {

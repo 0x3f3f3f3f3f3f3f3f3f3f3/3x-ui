@@ -151,7 +151,6 @@
       "restartXray": "إعادة تشغيل",
       "xraySwitch": "النسخة",
       "xrayUpdates": "تحديثات Xray",
-      "xraySwitchClickDesk": "اختار بحذر، النسخ القديمة ممكن ما تتوافقش مع الإعدادات الحالية.",
       "updatePanel": "تحديث البانل",
       "panelUpdateDesc": "ده هيحدث 3X-UI لآخر إصدار وهيعيد تشغيل خدمة البانل.",
       "currentPanelVersion": "إصدار البانل الحالي",
@@ -213,9 +212,6 @@
       "download": "تنزيل",
       "sent": "مرسل",
       "received": "مستقبل",
-      "xraySwitchVersionDialog": "هل تريد حقًا تغيير إصدار Xray؟",
-      "xraySwitchVersionDialogDesc": "سيؤدي هذا إلى تغيير إصدار Xray إلى #version#.",
-      "xraySwitchVersionPopover": "تم تحديث Xray بنجاح",
       "panelUpdateDialog": "هل فعلاً عايز تحدث البانل؟",
       "panelUpdateDialogDesc": "ده هيحدث 3X-UI للإصدار #version# وهيعيد تشغيل البانل.",
       "panelUpdateStartedPopover": "بدأ تحديث البانل",
@@ -291,7 +287,9 @@
       "accessBlocked": "BLOCKED",
       "accessProxy": "PROXY",
       "importKeepHostSettings": "الاحتفاظ بإعدادات هذا الجهاز",
-      "importKeepHostSettingsDesc": "يحتفظ بعناوين الاستماع والمنافذ والمسار الأساسي والشهادات وهوية العقدة الخاصة بهذه اللوحة بدلًا من أخذها من الملف المرفوع."
+      "importKeepHostSettingsDesc": "يحتفظ بعناوين الاستماع والمنافذ والمسار الأساسي والشهادات وهوية العقدة الخاصة بهذه اللوحة بدلًا من أخذها من الملف المرفوع.",
+      "customCoreUpdateTitle": "تحديثات Custom Xray-core",
+      "customCoreUpdateDesc": "حدّث حزمة اللوحة وCustom Xray-core المتوافقة للحفاظ على دعم Snell وmieru وSSH."
     },
     "inbounds": {
       "totalDownUp": "إجمالي المرسل/المستقبل",

@@ -151,7 +151,6 @@
       "restartXray": "Перезапуск",
       "xraySwitch": "Версія",
       "xrayUpdates": "Оновлення Xray",
-      "xraySwitchClickDesk": "Вибирайте уважно, оскільки старіші версії можуть бути несумісними з поточними конфігураціями.",
       "updatePanel": "Оновити панель",
       "panelUpdateDesc": "Це оновить 3X-UI до останнього релізу та перезапустить сервіс панелі.",
       "currentPanelVersion": "Поточна версія панелі",
@@ -213,9 +212,6 @@
       "download": "Завантажити",
       "sent": "Відправлено",
       "received": "Отримано",
-      "xraySwitchVersionDialog": "Ви дійсно хочете змінити версію Xray?",
-      "xraySwitchVersionDialogDesc": "Це змінить версію Xray на #version#.",
-      "xraySwitchVersionPopover": "Xray успішно оновлено",
       "panelUpdateDialog": "Ви дійсно хочете оновити панель?",
       "panelUpdateDialogDesc": "Це оновить 3X-UI до #version# та перезапустить сервіс панелі.",
       "panelUpdateStartedPopover": "Розпочато оновлення панелі",
@@ -291,7 +287,9 @@
       "accessBlocked": "ЗАБЛОКОВАНО",
       "accessProxy": "ЧЕРЕЗ ПРОКСІ",
       "importKeepHostSettings": "Зберегти налаштування цієї машини",
-      "importKeepHostSettingsDesc": "Залишає адреси та порти цієї панелі, базовий шлях, сертифікати та посвідчення для вузлів замість тих, що у завантаженому файлі."
+      "importKeepHostSettingsDesc": "Залишає адреси та порти цієї панелі, базовий шлях, сертифікати та посвідчення для вузлів замість тих, що у завантаженому файлі.",
+      "customCoreUpdateTitle": "Оновлення Custom Xray-core",
+      "customCoreUpdateDesc": "Оновіть сумісний пакет панелі та Custom Xray-core, щоб зберегти підтримку Snell, mieru та SSH."
     },
     "inbounds": {
       "totalDownUp": "Всього надісланих/отриманих",

@@ -202,11 +202,11 @@ func (a *ServerController) getPanelUpdateInfo(c *gin.Context) {
 	jsonObj(c, info, nil)
 }
 
-// installXray installs or updates Xray to the specified version.
+// installXray refuses core-only replacements in the custom distribution.
 func (a *ServerController) installXray(c *gin.Context) {
 	version := c.Param("version")
 	err := a.serverService.UpdateXray(version)
-	jsonMsg(c, I18nWeb(c, "pages.index.xraySwitchVersionPopover"), err)
+	jsonMsg(c, I18nWeb(c, "pages.index.customCoreUpdateTitle"), err)
 }
 
 // updatePanel starts a panel self-update. With no "dev" form value it follows

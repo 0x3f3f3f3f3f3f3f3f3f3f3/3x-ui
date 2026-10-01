@@ -44,23 +44,38 @@ _openapi:
       url: '#return-every-protocol-url-vless-vmess-trojan-ss-hysteria-mtproto-across-all-inbounds-and-all-of-their-clients-links-are-rendered-through-the-subscription-engine-so-the-configured-remark-template-name-only-display-part-is-applied-per-client--the-same-output-the-client-infoqr-pages-use-protocols-without-a-url-form-socks-http-mixed-wireguard-dokodemo-tunnel-contribute-nothing-used-by-the-panels-export-all-inbound-links-action'
     - depth: 2
       title: Fetch a single inbound by numeric ID. Tunnel responses include
-        ownerClientId when an authoritative client membership exists.
-      url: '#fetch-a-single-inbound-by-numeric-id-tunnel-responses-include-ownerclientid-when-an-authoritative-client-membership-exists'
+        ownerClientId when an authoritative client membership exists. Mixed/HTTP
+        settings.accounts retain each resource credential and its canonical
+        ownerClientId when selected.
+      url: '#fetch-a-single-inbound-by-numeric-id-tunnel-responses-include-ownerclientid-when-an-authoritative-client-membership-exists-mixedhttp-settingsaccounts-retain-each-resource-credential-and-its-canonical-ownerclientid-when-selected'
     - depth: 2
       title: Create a new inbound. Send the full inbound payload (protocol, port,
         settings, streamSettings, sniffing, remark, expiryTime, total, enable).
         settings, streamSettings, and sniffing may be sent as nested JSON
-        objects (preferred) or as JSON-encoded strings (legacy). A local Tunnel
-        may include ownerClientId (an existing stable client UUID); the server
-        resolves the canonical owner atomically, ignores settings.clients from
-        the request, and rejects nonempty clientStats or owners with remote
-        bindings. Tunnel settings.allowedSourceCidrs accepts up to 256 native
-        IPv4/IPv6 CIDRs; omitted, null or empty allows every source. A nonempty
-        ACL requires a local raw TCP/UDP listener (ordinary TCP TLS is
-        supported) and a canonical owner while enabled. PROXY protocol, other
-        transports and masks are rejected before saving. Use the exact
-        allowedSourceCidrs spelling.
-      url: '#create-a-new-inbound-send-the-full-inbound-payload-protocol-port-settings-streamsettings-sniffing-remark-expirytime-total-enable-settings-streamsettings-and-sniffing-may-be-sent-as-nested-json-objects-preferred-or-as-json-encoded-strings-legacy-a-local-tunnel-may-include-ownerclientid-an-existing-stable-client-uuid-the-server-resolves-the-canonical-owner-atomically-ignores-settingsclients-from-the-request-and-rejects-nonempty-clientstats-or-owners-with-remote-bindings-tunnel-settingsallowedsourcecidrs-accepts-up-to-256-native-ipv4ipv6-cidrs-omitted-null-or-empty-allows-every-source-a-nonempty-acl-requires-a-local-raw-tcpudp-listener-ordinary-tcp-tls-is-supported-and-a-canonical-owner-while-enabled-proxy-protocol-other-transports-and-masks-are-rejected-before-saving-use-the-exact-allowedsourcecidrs-spelling'
+        objects (preferred) or as JSON-encoded strings (legacy). For local
+        Mixed/HTTP proxies, settings.accounts[].ownerClientId selects an
+        existing canonical client UUID for each resource-specific user/pass. If
+        one active account selects an owner, all active accounts must do so;
+        Mixed requires auth=password. Shared client credentials and policy are
+        not copied into these accounts. Nonempty settings.clients or
+        clientStats, unknown UUIDs and owners with remote bindings are rejected.
+        A local Tunnel may include ownerClientId (an existing stable client
+        UUID); the server resolves the canonical owner atomically, ignores
+        settings.clients from the request, and rejects nonempty clientStats or
+        owners with remote bindings. Tunnel settings.allowedSourceCidrs accepts
+        up to 256 native IPv4/IPv6 CIDRs; omitted, null or empty allows every
+        source. A nonempty ACL requires a local raw TCP/UDP listener (ordinary
+        TCP TLS is supported) and a canonical owner while enabled. PROXY
+        protocol, other transports and masks are rejected before saving. Use the
+        exact allowedSourceCidrs spelling. Tunnel settings.outboundTag selects
+        one concrete template or active subscription outbound; omitted, null or
+        empty uses routing rules, including balancers. Enabled fixed selections
+        require a canonical local owner. Missing or ambiguous selected tags
+        reject saving or re-enabling. If the selected outbound is removed later,
+        the saved selection remains and forwarding fails when that configuration
+        is applied; it never silently changes to the default outbound. Use the
+        exact outboundTag spelling.
+      url: '#create-a-new-inbound-send-the-full-inbound-payload-protocol-port-settings-streamsettings-sniffing-remark-expirytime-total-enable-settings-streamsettings-and-sniffing-may-be-sent-as-nested-json-objects-preferred-or-as-json-encoded-strings-legacy-for-local-mixedhttp-proxies-settingsaccountsownerclientid-selects-an-existing-canonical-client-uuid-for-each-resource-specific-userpass-if-one-active-account-selects-an-owner-all-active-accounts-must-do-so-mixed-requires-authpassword-shared-client-credentials-and-policy-are-not-copied-into-these-accounts-nonempty-settingsclients-or-clientstats-unknown-uuids-and-owners-with-remote-bindings-are-rejected-a-local-tunnel-may-include-ownerclientid-an-existing-stable-client-uuid-the-server-resolves-the-canonical-owner-atomically-ignores-settingsclients-from-the-request-and-rejects-nonempty-clientstats-or-owners-with-remote-bindings-tunnel-settingsallowedsourcecidrs-accepts-up-to-256-native-ipv4ipv6-cidrs-omitted-null-or-empty-allows-every-source-a-nonempty-acl-requires-a-local-raw-tcpudp-listener-ordinary-tcp-tls-is-supported-and-a-canonical-owner-while-enabled-proxy-protocol-other-transports-and-masks-are-rejected-before-saving-use-the-exact-allowedsourcecidrs-spelling-tunnel-settingsoutboundtag-selects-one-concrete-template-or-active-subscription-outbound-omitted-null-or-empty-uses-routing-rules-including-balancers-enabled-fixed-selections-require-a-canonical-local-owner-missing-or-ambiguous-selected-tags-reject-saving-or-re-enabling-if-the-selected-outbound-is-removed-later-the-saved-selection-remains-and-forwarding-fails-when-that-configuration-is-applied-it-never-silently-changes-to-the-default-outbound-use-the-exact-outboundtag-spelling'
     - depth: 2
       title: Delete an inbound by ID. Also removes its associated client stats rows.
       url: '#delete-an-inbound-by-id-also-removes-its-associated-client-stats-rows'
@@ -73,17 +88,24 @@ _openapi:
       title: Replace an inbound’s configuration. Body shape mirrors /add. For a local
         Tunnel, ownerClientId atomically selects an existing stable client
         without changing that account or resetting its history. Omit the field
-        for legacy settings-based editing. Source ACL validation matches /add;
-        narrowing replaces this listener and terminates its old TCP/UDP flows
-        while other listeners remain active. Heavy on inbounds with thousands of
-        clients — prefer /setEnable for enable-only flips.
-      url: '#replace-an-inbounds-configuration-body-shape-mirrors-add-for-a-local-tunnel-ownerclientid-atomically-selects-an-existing-stable-client-without-changing-that-account-or-resetting-its-history-omit-the-field-for-legacy-settings-based-editing-source-acl-validation-matches-add-narrowing-replaces-this-listener-and-terminates-its-old-tcpudp-flows-while-other-listeners-remain-active-heavy-on-inbounds-with-thousands-of-clients--prefer-setenable-for-enable-only-flips'
+        for legacy settings-based editing. Mixed/HTTP account owners follow /add
+        validation; resource credential edits preserve shared client credentials
+        and history. Managed account-only changes revoke the changed owner’s
+        proxy alias sessions while other owners and its Tunnel bindings
+        continue. Source ACL and fixed outbound validation match /add. Narrowing
+        the ACL, changing a fixed outbound or clearing it to resume routing
+        replaces this listener and terminates its old TCP/UDP flows while other
+        listeners remain active. Heavy on inbounds with thousands of clients —
+        prefer /setEnable for enable-only flips.
+      url: '#replace-an-inbounds-configuration-body-shape-mirrors-add-for-a-local-tunnel-ownerclientid-atomically-selects-an-existing-stable-client-without-changing-that-account-or-resetting-its-history-omit-the-field-for-legacy-settings-based-editing-mixedhttp-account-owners-follow-add-validation-resource-credential-edits-preserve-shared-client-credentials-and-history-managed-account-only-changes-revoke-the-changed-owners-proxy-alias-sessions-while-other-owners-and-its-tunnel-bindings-continue-source-acl-and-fixed-outbound-validation-match-add-narrowing-the-acl-changing-a-fixed-outbound-or-clearing-it-to-resume-routing-replaces-this-listener-and-terminates-its-old-tcpudp-flows-while-other-listeners-remain-active-heavy-on-inbounds-with-thousands-of-clients--prefer-setenable-for-enable-only-flips'
     - depth: 2
       title: Toggle only the enable flag without serialising the whole settings JSON.
         Recommended for UI switches on large inbounds. Enabling a Tunnel with a
         nonempty source ACL rechecks its canonical owner and supported transport
-        in the same transaction.
-      url: '#toggle-only-the-enable-flag-without-serialising-the-whole-settings-json-recommended-for-ui-switches-on-large-inbounds-enabling-a-tunnel-with-a-nonempty-source-acl-rechecks-its-canonical-owner-and-supported-transport-in-the-same-transaction'
+        in the same transaction. A fixed outbound selection also rechecks the
+        canonical owner and the available concrete outbound; missing selections
+        remain saved but cannot be re-enabled.
+      url: '#toggle-only-the-enable-flag-without-serialising-the-whole-settings-json-recommended-for-ui-switches-on-large-inbounds-enabling-a-tunnel-with-a-nonempty-source-acl-rechecks-its-canonical-owner-and-supported-transport-in-the-same-transaction-a-fixed-outbound-selection-also-rechecks-the-canonical-owner-and-the-available-concrete-outbound-missing-selections-remain-saved-but-cannot-be-re-enabled'
     - depth: 2
       title: Set only the subscription sort order. Reads the stored inbound, so a
         reorder cannot carry a stale client list over a concurrent edit.
@@ -104,10 +126,15 @@ _openapi:
       url: '#reset-upload--download-counters-on-every-inbound-destructive--accounting-history-is-lost'
     - depth: 2
       title: Bulk-import an inbound from a JSON blob (e.g. one exported via the UI).
-        The body uses form encoding with a single "data" field. Any
-        ownerClientId annotation from the source panel is ignored; settings and
-        exported client statistics remain portable.
-      url: '#bulk-import-an-inbound-from-a-json-blob-eg-one-exported-via-the-ui-the-body-uses-form-encoding-with-a-single-data-field-any-ownerclientid-annotation-from-the-source-panel-is-ignored-settings-and-exported-client-statistics-remain-portable'
+        The body uses form encoding with a single "data" field. The top-level
+        Tunnel ownerClientId read annotation from the source panel is ignored;
+        Tunnel settings and exported client statistics remain portable. Nested
+        Mixed/HTTP account ownerClientId values must resolve to existing local
+        destination clients, and nonempty clientStats is rejected for owned
+        password accounts. Use a complete database backup/restore to preserve
+        canonical identities, memberships and history together; single-inbound
+        import does not remap foreign owner UUIDs.
+      url: '#bulk-import-an-inbound-from-a-json-blob-eg-one-exported-via-the-ui-the-body-uses-form-encoding-with-a-single-data-field-the-top-level-tunnel-ownerclientid-read-annotation-from-the-source-panel-is-ignored-tunnel-settings-and-exported-client-statistics-remain-portable-nested-mixedhttp-account-ownerclientid-values-must-resolve-to-existing-local-destination-clients-and-nonempty-clientstats-is-rejected-for-owned-password-accounts-use-a-complete-database-backuprestore-to-preserve-canonical-identities-memberships-and-history-together-single-inbound-import-does-not-remap-foreign-owner-uuids'
     - depth: 2
       title: Receive a master panel's aggregated per-client usage, keyed by the
         master's GUID. Stored in a side table used only for the UI display
@@ -158,21 +185,37 @@ _openapi:
         id: return-every-protocol-url-vless-vmess-trojan-ss-hysteria-mtproto-across-all-inbounds-and-all-of-their-clients-links-are-rendered-through-the-subscription-engine-so-the-configured-remark-template-name-only-display-part-is-applied-per-client--the-same-output-the-client-infoqr-pages-use-protocols-without-a-url-form-socks-http-mixed-wireguard-dokodemo-tunnel-contribute-nothing-used-by-the-panels-export-all-inbound-links-action
       - content: Fetch a single inbound by numeric ID. Tunnel responses include
           ownerClientId when an authoritative client membership exists.
-        id: fetch-a-single-inbound-by-numeric-id-tunnel-responses-include-ownerclientid-when-an-authoritative-client-membership-exists
+          Mixed/HTTP settings.accounts retain each resource credential and its
+          canonical ownerClientId when selected.
+        id: fetch-a-single-inbound-by-numeric-id-tunnel-responses-include-ownerclientid-when-an-authoritative-client-membership-exists-mixedhttp-settingsaccounts-retain-each-resource-credential-and-its-canonical-ownerclientid-when-selected
       - content: Create a new inbound. Send the full inbound payload (protocol, port,
           settings, streamSettings, sniffing, remark, expiryTime, total,
           enable). settings, streamSettings, and sniffing may be sent as nested
-          JSON objects (preferred) or as JSON-encoded strings (legacy). A local
-          Tunnel may include ownerClientId (an existing stable client UUID); the
-          server resolves the canonical owner atomically, ignores
-          settings.clients from the request, and rejects nonempty clientStats or
-          owners with remote bindings. Tunnel settings.allowedSourceCidrs
-          accepts up to 256 native IPv4/IPv6 CIDRs; omitted, null or empty
-          allows every source. A nonempty ACL requires a local raw TCP/UDP
-          listener (ordinary TCP TLS is supported) and a canonical owner while
-          enabled. PROXY protocol, other transports and masks are rejected
-          before saving. Use the exact allowedSourceCidrs spelling.
-        id: create-a-new-inbound-send-the-full-inbound-payload-protocol-port-settings-streamsettings-sniffing-remark-expirytime-total-enable-settings-streamsettings-and-sniffing-may-be-sent-as-nested-json-objects-preferred-or-as-json-encoded-strings-legacy-a-local-tunnel-may-include-ownerclientid-an-existing-stable-client-uuid-the-server-resolves-the-canonical-owner-atomically-ignores-settingsclients-from-the-request-and-rejects-nonempty-clientstats-or-owners-with-remote-bindings-tunnel-settingsallowedsourcecidrs-accepts-up-to-256-native-ipv4ipv6-cidrs-omitted-null-or-empty-allows-every-source-a-nonempty-acl-requires-a-local-raw-tcpudp-listener-ordinary-tcp-tls-is-supported-and-a-canonical-owner-while-enabled-proxy-protocol-other-transports-and-masks-are-rejected-before-saving-use-the-exact-allowedsourcecidrs-spelling
+          JSON objects (preferred) or as JSON-encoded strings (legacy). For
+          local Mixed/HTTP proxies, settings.accounts[].ownerClientId selects an
+          existing canonical client UUID for each resource-specific user/pass.
+          If one active account selects an owner, all active accounts must do
+          so; Mixed requires auth=password. Shared client credentials and policy
+          are not copied into these accounts. Nonempty settings.clients or
+          clientStats, unknown UUIDs and owners with remote bindings are
+          rejected. A local Tunnel may include ownerClientId (an existing stable
+          client UUID); the server resolves the canonical owner atomically,
+          ignores settings.clients from the request, and rejects nonempty
+          clientStats or owners with remote bindings. Tunnel
+          settings.allowedSourceCidrs accepts up to 256 native IPv4/IPv6 CIDRs;
+          omitted, null or empty allows every source. A nonempty ACL requires a
+          local raw TCP/UDP listener (ordinary TCP TLS is supported) and a
+          canonical owner while enabled. PROXY protocol, other transports and
+          masks are rejected before saving. Use the exact allowedSourceCidrs
+          spelling. Tunnel settings.outboundTag selects one concrete template or
+          active subscription outbound; omitted, null or empty uses routing
+          rules, including balancers. Enabled fixed selections require a
+          canonical local owner. Missing or ambiguous selected tags reject
+          saving or re-enabling. If the selected outbound is removed later, the
+          saved selection remains and forwarding fails when that configuration
+          is applied; it never silently changes to the default outbound. Use the
+          exact outboundTag spelling.
+        id: create-a-new-inbound-send-the-full-inbound-payload-protocol-port-settings-streamsettings-sniffing-remark-expirytime-total-enable-settings-streamsettings-and-sniffing-may-be-sent-as-nested-json-objects-preferred-or-as-json-encoded-strings-legacy-for-local-mixedhttp-proxies-settingsaccountsownerclientid-selects-an-existing-canonical-client-uuid-for-each-resource-specific-userpass-if-one-active-account-selects-an-owner-all-active-accounts-must-do-so-mixed-requires-authpassword-shared-client-credentials-and-policy-are-not-copied-into-these-accounts-nonempty-settingsclients-or-clientstats-unknown-uuids-and-owners-with-remote-bindings-are-rejected-a-local-tunnel-may-include-ownerclientid-an-existing-stable-client-uuid-the-server-resolves-the-canonical-owner-atomically-ignores-settingsclients-from-the-request-and-rejects-nonempty-clientstats-or-owners-with-remote-bindings-tunnel-settingsallowedsourcecidrs-accepts-up-to-256-native-ipv4ipv6-cidrs-omitted-null-or-empty-allows-every-source-a-nonempty-acl-requires-a-local-raw-tcpudp-listener-ordinary-tcp-tls-is-supported-and-a-canonical-owner-while-enabled-proxy-protocol-other-transports-and-masks-are-rejected-before-saving-use-the-exact-allowedsourcecidrs-spelling-tunnel-settingsoutboundtag-selects-one-concrete-template-or-active-subscription-outbound-omitted-null-or-empty-uses-routing-rules-including-balancers-enabled-fixed-selections-require-a-canonical-local-owner-missing-or-ambiguous-selected-tags-reject-saving-or-re-enabling-if-the-selected-outbound-is-removed-later-the-saved-selection-remains-and-forwarding-fails-when-that-configuration-is-applied-it-never-silently-changes-to-the-default-outbound-use-the-exact-outboundtag-spelling
       - content: Delete an inbound by ID. Also removes its associated client stats rows.
         id: delete-an-inbound-by-id-also-removes-its-associated-client-stats-rows
       - content: Delete many inbounds in one call. Processes the list sequentially;
@@ -182,16 +225,23 @@ _openapi:
       - content: Replace an inbound’s configuration. Body shape mirrors /add. For a
           local Tunnel, ownerClientId atomically selects an existing stable
           client without changing that account or resetting its history. Omit
-          the field for legacy settings-based editing. Source ACL validation
-          matches /add; narrowing replaces this listener and terminates its old
+          the field for legacy settings-based editing. Mixed/HTTP account owners
+          follow /add validation; resource credential edits preserve shared
+          client credentials and history. Managed account-only changes revoke
+          the changed owner’s proxy alias sessions while other owners and its
+          Tunnel bindings continue. Source ACL and fixed outbound validation
+          match /add. Narrowing the ACL, changing a fixed outbound or clearing
+          it to resume routing replaces this listener and terminates its old
           TCP/UDP flows while other listeners remain active. Heavy on inbounds
           with thousands of clients — prefer /setEnable for enable-only flips.
-        id: replace-an-inbounds-configuration-body-shape-mirrors-add-for-a-local-tunnel-ownerclientid-atomically-selects-an-existing-stable-client-without-changing-that-account-or-resetting-its-history-omit-the-field-for-legacy-settings-based-editing-source-acl-validation-matches-add-narrowing-replaces-this-listener-and-terminates-its-old-tcpudp-flows-while-other-listeners-remain-active-heavy-on-inbounds-with-thousands-of-clients--prefer-setenable-for-enable-only-flips
+        id: replace-an-inbounds-configuration-body-shape-mirrors-add-for-a-local-tunnel-ownerclientid-atomically-selects-an-existing-stable-client-without-changing-that-account-or-resetting-its-history-omit-the-field-for-legacy-settings-based-editing-mixedhttp-account-owners-follow-add-validation-resource-credential-edits-preserve-shared-client-credentials-and-history-managed-account-only-changes-revoke-the-changed-owners-proxy-alias-sessions-while-other-owners-and-its-tunnel-bindings-continue-source-acl-and-fixed-outbound-validation-match-add-narrowing-the-acl-changing-a-fixed-outbound-or-clearing-it-to-resume-routing-replaces-this-listener-and-terminates-its-old-tcpudp-flows-while-other-listeners-remain-active-heavy-on-inbounds-with-thousands-of-clients--prefer-setenable-for-enable-only-flips
       - content: Toggle only the enable flag without serialising the whole settings
           JSON. Recommended for UI switches on large inbounds. Enabling a Tunnel
           with a nonempty source ACL rechecks its canonical owner and supported
-          transport in the same transaction.
-        id: toggle-only-the-enable-flag-without-serialising-the-whole-settings-json-recommended-for-ui-switches-on-large-inbounds-enabling-a-tunnel-with-a-nonempty-source-acl-rechecks-its-canonical-owner-and-supported-transport-in-the-same-transaction
+          transport in the same transaction. A fixed outbound selection also
+          rechecks the canonical owner and the available concrete outbound;
+          missing selections remain saved but cannot be re-enabled.
+        id: toggle-only-the-enable-flag-without-serialising-the-whole-settings-json-recommended-for-ui-switches-on-large-inbounds-enabling-a-tunnel-with-a-nonempty-source-acl-rechecks-its-canonical-owner-and-supported-transport-in-the-same-transaction-a-fixed-outbound-selection-also-rechecks-the-canonical-owner-and-the-available-concrete-outbound-missing-selections-remain-saved-but-cannot-be-re-enabled
       - content: Set only the subscription sort order. Reads the stored inbound, so a
           reorder cannot carry a stale client list over a concurrent edit.
         id: set-only-the-subscription-sort-order-reads-the-stored-inbound-so-a-reorder-cannot-carry-a-stale-client-list-over-a-concurrent-edit
@@ -207,10 +257,15 @@ _openapi:
           accounting history is lost.
         id: reset-upload--download-counters-on-every-inbound-destructive--accounting-history-is-lost
       - content: Bulk-import an inbound from a JSON blob (e.g. one exported via the UI).
-          The body uses form encoding with a single "data" field. Any
-          ownerClientId annotation from the source panel is ignored; settings
-          and exported client statistics remain portable.
-        id: bulk-import-an-inbound-from-a-json-blob-eg-one-exported-via-the-ui-the-body-uses-form-encoding-with-a-single-data-field-any-ownerclientid-annotation-from-the-source-panel-is-ignored-settings-and-exported-client-statistics-remain-portable
+          The body uses form encoding with a single "data" field. The top-level
+          Tunnel ownerClientId read annotation from the source panel is ignored;
+          Tunnel settings and exported client statistics remain portable. Nested
+          Mixed/HTTP account ownerClientId values must resolve to existing local
+          destination clients, and nonempty clientStats is rejected for owned
+          password accounts. Use a complete database backup/restore to preserve
+          canonical identities, memberships and history together; single-inbound
+          import does not remap foreign owner UUIDs.
+        id: bulk-import-an-inbound-from-a-json-blob-eg-one-exported-via-the-ui-the-body-uses-form-encoding-with-a-single-data-field-the-top-level-tunnel-ownerclientid-read-annotation-from-the-source-panel-is-ignored-tunnel-settings-and-exported-client-statistics-remain-portable-nested-mixedhttp-account-ownerclientid-values-must-resolve-to-existing-local-destination-clients-and-nonempty-clientstats-is-rejected-for-owned-password-accounts-use-a-complete-database-backuprestore-to-preserve-canonical-identities-memberships-and-history-together-single-inbound-import-does-not-remap-foreign-owner-uuids
       - content: Receive a master panel's aggregated per-client usage, keyed by the
           master's GUID. Stored in a side table used only for the UI display
           overlay and local quota enforcement — never folded into the local

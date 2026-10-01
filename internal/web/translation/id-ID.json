@@ -151,7 +151,6 @@
       "restartXray": "Mulai ulang",
       "xraySwitch": "Versi",
       "xrayUpdates": "Pembaruan Xray",
-      "xraySwitchClickDesk": "Pilih dengan hati-hati, karena versi yang lebih lama mungkin tidak kompatibel dengan konfigurasi saat ini.",
       "updatePanel": "Perbarui Panel",
       "panelUpdateDesc": "Ini akan memperbarui 3X-UI ke rilis terbaru dan me-restart layanan panel.",
       "currentPanelVersion": "Versi panel saat ini",
@@ -213,9 +212,6 @@
       "download": "Unduh",
       "sent": "Dikirim",
       "received": "Diterima",
-      "xraySwitchVersionDialog": "Apakah Anda yakin ingin mengubah versi Xray?",
-      "xraySwitchVersionDialogDesc": "Ini akan mengubah versi Xray ke #version#.",
-      "xraySwitchVersionPopover": "Xray berhasil diperbarui",
       "panelUpdateDialog": "Apakah Anda benar-benar ingin memperbarui panel?",
       "panelUpdateDialogDesc": "Ini akan memperbarui 3X-UI ke #version# dan me-restart layanan panel.",
       "panelUpdateStartedPopover": "Pembaruan panel dimulai",
@@ -291,7 +287,9 @@
       "accessBlocked": "BLOCKED",
       "accessProxy": "PROXY",
       "importKeepHostSettings": "Pertahankan pengaturan mesin ini",
-      "importKeepHostSettingsDesc": "Mempertahankan alamat dengar, port, path dasar, sertifikat, dan identitas node panel ini alih-alih mengambilnya dari berkas yang diunggah."
+      "importKeepHostSettingsDesc": "Mempertahankan alamat dengar, port, path dasar, sertifikat, dan identitas node panel ini alih-alih mengambilnya dari berkas yang diunggah.",
+      "customCoreUpdateTitle": "Pembaruan Custom Xray-core",
+      "customCoreUpdateDesc": "Perbarui paket panel dan Custom Xray-core yang sesuai untuk mempertahankan dukungan Snell, mieru, dan SSH."
     },
     "inbounds": {
       "totalDownUp": "Total Terkirim/Diterima",

@@ -151,7 +151,6 @@
       "restartXray": "重启",
       "xraySwitch": "版本",
       "xrayUpdates": "Xray 更新",
-      "xraySwitchClickDesk": "请谨慎选择，因为较旧版本可能与当前配置不兼容",
       "updatePanel": "更新面板",
       "panelUpdateDesc": "这将把 3X-UI 更新到最新版本并重启面板服务。",
       "currentPanelVersion": "当前面板版本",
@@ -213,9 +212,6 @@
       "download": "下载",
       "sent": "已发送",
       "received": "已接收",
-      "xraySwitchVersionDialog": "您确定要更改 Xray 版本吗？",
-      "xraySwitchVersionDialogDesc": "这将把 Xray 版本更改为 #version#。",
-      "xraySwitchVersionPopover": "Xray 更新成功",
       "panelUpdateDialog": "您确定要更新面板吗？",
       "panelUpdateDialogDesc": "这将把 3X-UI 更新到 #version# 并重启面板服务。",
       "panelUpdateStartedPopover": "已开始更新面板",
@@ -291,7 +287,9 @@
       "accessBlocked": "BLOCKED",
       "accessProxy": "PROXY",
       "importKeepHostSettings": "保留本机设置",
-      "importKeepHostSettingsDesc": "保留本面板的监听地址、端口、基础路径、证书和节点身份，而不是使用上传文件中的值。"
+      "importKeepHostSettingsDesc": "保留本面板的监听地址、端口、基础路径、证书和节点身份，而不是使用上传文件中的值。",
+      "customCoreUpdateTitle": "Custom Xray-core 更新",
+      "customCoreUpdateDesc": "请升级配套的面板与 Custom Xray-core 安装包，以保留 Snell、mieru 和 SSH 支持。"
     },
     "inbounds": {
       "totalDownUp": "总上传 / 下载",

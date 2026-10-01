@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Button, Collapse, Modal, Radio, Spin, Tag, Tooltip } from 'antd';
+import { Alert, Button, Collapse, Modal, Tag, Tooltip } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 
 import { HttpUtil } from '@/utils';
@@ -34,46 +34,6 @@ export default function VersionModal({ open, status, onClose, onBusy }: VersionM
   const { t } = useTranslation();
   const [modal, modalContextHolder] = Modal.useModal();
   const [activeKey, setActiveKey] = useState<string | string[]>('1');
-  const [versions, setVersions] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const fetchVersions = useCallback(async () => {
-    try {
-      const msg = await HttpUtil.get<string[]>('/panel/api/server/getXrayVersion');
-      if (msg?.success) setVersions(msg.obj || []);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const [wasOpen, setWasOpen] = useState(false);
-  if (open !== wasOpen) {
-    setWasOpen(open);
-    if (open) setLoading(true);
-  }
-
-  useEffect(() => {
-    if (open) void fetchVersions();
-  }, [open, fetchVersions]);
-
-  function switchXrayVersion(version: string) {
-    modal.confirm({
-      title: t('pages.index.xraySwitchVersionDialog'),
-      content: t('pages.index.xraySwitchVersionDialogDesc').replace('#version#', version),
-      okText: t('confirm'),
-      cancelText: t('cancel'),
-      onOk: async () => {
-        onClose();
-        onBusy({ busy: true, tip: t('pages.index.dontRefresh') });
-        try {
-          await HttpUtil.post(`/panel/api/server/installXray/${version}`);
-        } finally {
-          onBusy({ busy: false });
-        }
-      },
-    });
-  }
-
   function updateGeofile(fileName: string) {
     const isSingle = !!fileName;
     modal.confirm({
@@ -103,77 +63,66 @@ export default function VersionModal({ open, status, onClose, onBusy }: VersionM
   return (
     <Modal open={open} title={t('pages.index.xrayUpdates')} footer={null} onCancel={onClose}>
       {modalContextHolder}
-      <Spin spinning={loading}>
-        <Collapse
-          accordion
-          activeKey={activeKey}
-          onChange={setActiveKey}
-          items={[
-            {
-              key: '1',
-              label: 'Xray',
-              children: (
-                <>
-                  <Alert
-                    type="warning"
-                    className="mb-12"
-                    title={t('pages.index.xraySwitchClickDesk')}
-                    showIcon
-                  />
-                  <div className="version-list">
-                    {versions.map((version, index) => (
-                      <div key={version} className="version-list-item">
-                        <Tag color={index % 2 === 0 ? 'purple' : 'green'}>{version}</Tag>
-                        <Radio
-                          checked={version === `v${status?.xray?.version}`}
-                          onClick={() => switchXrayVersion(version)}
+      <Collapse
+        accordion
+        activeKey={activeKey}
+        onChange={setActiveKey}
+        items={[
+          {
+            key: '1',
+            label: 'Custom Xray',
+            children: (
+              <>
+                <Alert
+                  type="info"
+                  className="mb-12"
+                  title={t('pages.index.customCoreUpdateTitle')}
+                  description={t('pages.index.customCoreUpdateDesc')}
+                  showIcon
+                />
+                <Tag>{status.xray.version}</Tag>
+              </>
+            ),
+          },
+          {
+            key: '2',
+            label: 'Geofiles',
+            children: (
+              <>
+                <div className="version-list">
+                  {GEOFILES.map((file, index) => (
+                    <div key={file} className="version-list-item">
+                      <Tag color={index % 2 === 0 ? 'purple' : 'green'}>{file}</Tag>
+                      <Tooltip title={t('update')}>
+                        <ReloadOutlined
+                          className="reload-icon"
+                          role="button"
+                          tabIndex={0}
+                          aria-label={t('update')}
+                          onClick={() => updateGeofile(file)}
+                          onKeyDown={activateOnKey(() => updateGeofile(file))}
                         />
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ),
-            },
-            {
-              key: '2',
-              label: 'Geofiles',
-              children: (
-                <>
-                  <div className="version-list">
-                    {GEOFILES.map((file, index) => (
-                      <div key={file} className="version-list-item">
-                        <Tag color={index % 2 === 0 ? 'purple' : 'green'}>{file}</Tag>
-                        <Tooltip title={t('update')}>
-                          <ReloadOutlined
-                            className="reload-icon"
-                            role="button"
-                            tabIndex={0}
-                            aria-label={t('update')}
-                            onClick={() => updateGeofile(file)}
-                            onKeyDown={activateOnKey(() => updateGeofile(file))}
-                          />
-                        </Tooltip>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="actions-row">
-                    <Button onClick={() => updateGeofile('')}>
-                      {t('pages.index.geofilesUpdateAll')}
-                    </Button>
-                  </div>
-                </>
-              ),
-            },
-            {
-              key: '3',
-              label: t('pages.index.geodataTitle'),
-              children: (
-                <GeodataSection active={activeKeyStr === '3'} onBusy={onBusy} onClose={onClose} />
-              ),
-            },
-          ]}
-        />
-      </Spin>
+                      </Tooltip>
+                    </div>
+                  ))}
+                </div>
+                <div className="actions-row">
+                  <Button onClick={() => updateGeofile('')}>
+                    {t('pages.index.geofilesUpdateAll')}
+                  </Button>
+                </div>
+              </>
+            ),
+          },
+          {
+            key: '3',
+            label: t('pages.index.geodataTitle'),
+            children: (
+              <GeodataSection active={activeKeyStr === '3'} onBusy={onBusy} onClose={onClose} />
+            ),
+          },
+        ]}
+      />
     </Modal>
   );
 }

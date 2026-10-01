@@ -151,7 +151,6 @@
       "restartXray": "Reiniciar",
       "xraySwitch": "Versión",
       "xrayUpdates": "Actualizaciones de Xray",
-      "xraySwitchClickDesk": "Elige sabiamente, ya que las versiones anteriores pueden no ser compatibles con las configuraciones actuales.",
       "updatePanel": "Actualizar panel",
       "panelUpdateDesc": "Esto actualizará 3X-UI a la última versión y reiniciará el servicio del panel.",
       "currentPanelVersion": "Versión actual del panel",
@@ -213,9 +212,6 @@
       "download": "Descargar",
       "sent": "Enviado",
       "received": "Recibido",
-      "xraySwitchVersionDialog": "¿Realmente deseas cambiar la versión de Xray?",
-      "xraySwitchVersionDialogDesc": "Esto cambiará la versión de Xray a #version#.",
-      "xraySwitchVersionPopover": "Xray se actualizó correctamente",
       "panelUpdateDialog": "¿Deseas actualizar el panel?",
       "panelUpdateDialogDesc": "Esto actualizará 3X-UI a la versión #version# y reiniciará el servicio del panel.",
       "panelUpdateStartedPopover": "Actualización del panel iniciada",
@@ -291,7 +287,9 @@
       "accessBlocked": "BLOCKED",
       "accessProxy": "PROXY",
       "importKeepHostSettings": "Mantener la configuración de esta máquina",
-      "importKeepHostSettingsDesc": "Conserva las direcciones de escucha, los puertos, la ruta base, los certificados y la identidad de nodo de este panel en lugar de tomarlos del archivo subido."
+      "importKeepHostSettingsDesc": "Conserva las direcciones de escucha, los puertos, la ruta base, los certificados y la identidad de nodo de este panel en lugar de tomarlos del archivo subido.",
+      "customCoreUpdateTitle": "Actualizaciones de Custom Xray-core",
+      "customCoreUpdateDesc": "Actualiza el paquete compatible del panel y Custom Xray-core para conservar el soporte de Snell, mieru y SSH."
     },
     "inbounds": {
       "totalDownUp": "Subidas/Descargas Totales",
