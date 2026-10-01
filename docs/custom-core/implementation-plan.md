@@ -1071,3 +1071,15 @@ review findings/fixes and precise clean-build provenance are recorded in
 native-ssh-panel-testing.md. Local SSH panel work is complete; Snell panel is
 the next core-priority vertical. Remote key/budget coordination, packaged clients,
 real proprietary devices and the broader original migration remain open.
+
+
+## Reviewed local native Snell panel checkpoint — 2026-10-01
+
+Canonical backend88aa5ddc, existing formsa2346d58 and exports/public runtime
+d442fa36 were reviewed together. Single correctiona94e102b fixes sniffed
+SOCKS/HTTP source cancellation. Source publication and exact fork feature HEAD
+are verified. Clean artifacts pass Snell47/50, SSH47/49 and mieru35/37 required
+SQLite/PostgreSQL checks;56 core race parents and1807 frontend tests pass.
+All34 preceding artifacts are unchanged. See native-snell-panel-testing.md for
+hashes, negative evidence and boundaries. Continue Task13 installation/upgrade/
+distribution for this core; the remaining original requirements stay open.

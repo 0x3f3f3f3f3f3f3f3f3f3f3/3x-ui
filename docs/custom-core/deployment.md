@@ -365,3 +365,13 @@ rehash unchanged. Evidence: `/root/task-evidence/native-ssh-clean-build-manifest
 and exact fork receipt `native-ssh-push-c282cc6b7b7c62f644cb88014d9c35a5c38ff129.json`.
 This closes the native core checkpoint provenance, not SSH panel/forms/export or
 full Task7. Snell native QUIC and three-protocol panel integration remain open.
+
+
+### Clean-source native Snell panel checkpoint
+
+Source `a94e102b16677885e20f84a6c1bcecedef414b2e` builds the local Snell/mieru/SSH
+panels and core from one clean clone. Distinct checksums,34 unchanged prior
+binaries and exact-artifact native checks are recorded in
+[native-snell-panel-testing.md](native-snell-panel-testing.md). Source publication
+is verified on the fork feature branch. Custom-core installation, upgrade and
+Docker packaging remain pending; no deployment or release was performed.
