@@ -933,6 +933,46 @@ Files: `internal/xray/process_traffic.go`,
   including old tables/columns absent without source mutation or fabricated data.
 - [x] One read-only review/same-review corrections, frozen source and named DB
   contracts plus required gen/lint/vet/full Go/affected race checks.
-- [ ] Scoped docs/matrix, logical commit/exact fork push and distinct clean
+- [x] Scoped docs/matrix, logical commit/exact fork push and distinct clean
   artifact provenance. Password live-handoff gate remains closed; owner mapping,
   conflicting labels and historical configuration proof remain later work.
+
+
+### Task5B8B: Native startup configuration provenance
+
+Spec: architecture.md, "Native startup configuration provenance prerequisite".
+Execute inline with superpowers:executing-plans and TDD. This is conservative
+proof storage, without alias ownership, bucket adoption or an open handoff gate.
+
+Files: modify `internal/xray/process.go`, `process_traffic.go`,
+`internal/web/service/legacy_traffic_retention.go`, `xray_traffic_settlement.go`,
+`internal/database/db.go`, `migrate_data.go`; create
+`internal/xray/process_traffic_provenance.go`,
+`internal/database/model/legacy_traffic_config_source.go`,
+`internal/web/service/legacy_traffic_provenance.go` and matching provenance tests.
+
+Interfaces: `xray.TrafficConfigProof` holds ConfigDigest, EffectiveConfigDigest
+and ConfigStable; `TrafficBatch.ConfigProof *TrafficConfigProof` is optional.
+`Process.NativeTrafficConfigProof() *TrafficConfigProof` returns a detached value
+(or nil for unknown), never credentials. Private digest/capture helpers prepare
+proof before child start; Process mutators invalidate stability under mu.
+`retainLegacyTrafficConfigSource(tx *gorm.DB, batch *xray.TrafficBatch) error`
+locks/persists the optional proof without altering counters or owner state.
+
+- [ ] Behavioral RED: real child's written/logical startup digests exist before
+  first poll; config restore cannot erase drift; missing command evidence stays
+  unknown. Observe actual failures before runtime implementation.
+- [ ] Capture per-child proof before startup, preserve lock order and detached
+  ordinary/final/pending snapshots; cover canonical-equivalent replacements,
+  bootstrap, restart and concurrent config/traffic access.
+- [ ] RED/GREEN original Task5B8A digest compatibility, changed-proof receipt
+  retry, cloned validator intent, immutable source digests, monotonic SQL
+  stability and late rollback across all layers. Persist source atomically.
+- [ ] SQLite/PostgreSQL schema/backup/migration/export current and missing-source
+  schemas, authentic original receipts/buckets and no fabricated proof.
+- [ ] Named real-core DB contracts and prior retention/handoff/first-use/job
+  regressions; update required CI PASS names and shell/YAML checks.
+- [ ] One read-only review/same-review corrections, frozen source, required
+  gen/lint/vet/full Go/affected race and scoped capability/testing docs.
+- [ ] Logical commit/exact fork push, distinct clean builds and provenance.
+  Future full mapping/consumption and password handoff remain unfinished.

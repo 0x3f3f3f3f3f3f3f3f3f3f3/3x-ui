@@ -260,3 +260,34 @@ handoff, generic creation, anonymous/foreign ownership, remaining adapters and
 whole-system single-core migration remain incomplete. Existing default frontend
 timeout/split test records remain in testing.md; this clean build does not claim
 a new full frontend or native-core suite run.
+
+
+### Clean-source unmatched native traffic retention checkpoint
+
+Commit `0fa4416e2f1c1ea1379bdc8a1078852c775691cd` was rebuilt from clean local
+clone `/tmp/legacy-unassigned-traffic-clean-source-az2dw40s` with pinned
+Go 1.27.1, Node 26.10.0/npm 11.19.1 and shared verified caches. npm ci
+(16.22 s), frontend (4.12 s), panel (29.47 s), core (3.15 s) and both
+version commands pass. Source status remains clean. Panel reports
+`dev+0fa4416e`; Custom Xray includes the full revision without `-dirty`.
+Fork push and exact remote SHA match pass. No deployment, release, merge
+or business service startup occurred.
+
+Distinct artifacts preserve every earlier checkpoint. All eight preceding
+owner form/removal/Update/fields binaries were rehashed unchanged before
+and after this build:
+
+- `build/x-ui-legacy-unassigned-traffic-checkpoint`: SHA-256
+  `e942ec816204b33bcb3cd124387f5fed0abb989a4e4119f997b3ca9f5132ca81`.
+- `build/custom-xray-legacy-unassigned-traffic-checkpoint`: SHA-256
+  `d5c00e1ef5aa786fd6bdeeb35771a46767c74c674bf4269175e7947be4a78510`.
+
+Evidence: /root/task-evidence/legacy-unassigned-traffic-clean-build-results.json,
+clean-build-manifest.json, post-build-prior-preservation.json and per-revision
+push receipt. Exact unmatched label/counter conservation, source-labelled
+retention, original receipt binding and scoped SQLite/PostgreSQL recovery are
+verified. Historical configuration proof, ownership mapping, atomic bucket
+consumption and password live legacy handoff remain incomplete. Whole Task5B
+and the original single-core/protocol/install goal remain open. The prior
+default frontend timeout/split suite records remain in testing.md; this build
+does not claim a new full frontend or native-core test suite.

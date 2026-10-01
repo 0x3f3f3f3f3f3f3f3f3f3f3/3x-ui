@@ -470,3 +470,67 @@ aggregated across different owners or colliding with another canonical label
 must reject before drain. Already-dropped historic counters cannot be recovered
 without independent evidence. No source IP, display name or case folding grants
 ownership. This spec establishes no implementation or acceptance claim.
+
+
+## Native startup configuration provenance prerequisite
+
+Task5B8A preserves unmatched native counters and source accounting, but does not
+prove the configuration under which their labels were emitted. Password handoff
+therefore remains closed. Task5B8B records conservative startup evidence before
+future mapping/consumption work. It grants no owner, rewrites no counter intent,
+and enables no protocol or handoff gate. The user authorizes ordinary engineering
+decisions autonomously; use the established inline plan and repository docs.
+
+Capture two SHA-256 digests before starting the child: the logical configuration
+passed to startConfig, and the effective configuration actually written after
+automatic traffic-control injection. Canonical JSON removes object-key/whitespace
+differences while preserving array order and every configuration field. Store
+digests only, never additional raw credentials. A direct helper command with no
+written configuration has unknown evidence. Managed control-only bootstrap
+starts with ConfigStable=false because its business listeners are added after
+the written snapshot; it remains managed and is never a legacy-adoption source.
+
+The Process owns an immutable per-child proof with logical/effective digests and
+a monotonic ConfigStable flag. Configuration replacement or policy replacement
+that differs from the logical startup snapshot marks it false; restoring the old
+configuration cannot make it true. A semantically identical object/whitespace
+replacement preserves true. Conservative array-order invalidation is intentional:
+it affects future proof eligibility, never normal counter conservation. Capture
+proof before business traffic and reset it on each new child. Its fields are
+guarded by process.mu; retain trafficMu→process.mu order and never add the reverse
+order to SetConfig/CompareAndSetClientPolicy. Ordinary and final pending batches
+copy the proof value before SQL, preserving it across later config changes/retry.
+
+TrafficBatch carries optional ConfigProof {ConfigDigest, EffectiveConfigDigest,
+ConfigStable}. Missing proof means unknown, including historical/manual batches.
+Validate both present digests as lowercase 64-character hex; a partially populated
+proof is invalid. Normalization clones the pointer value so a callback cannot
+change caller evidence. Receipt hashing appends the optional proof after existing
+intent fields and omits it when nil: historical Task5B8A nonempty digests remain
+byte-for-byte retry-compatible. Present proof, including false stability, is
+bound to original intent. Never fabricate proof while replaying an old receipt.
+
+Persist LegacyTrafficConfigSource in the same settlement transaction as bucket,
+known/inbound/outbound counters and receipt. ProcessID is the primary key;
+ConfigDigest/EffectiveConfigDigest default to empty (unknown), ConfigStable to
+false. Digests cannot change within a source row; empty historical evidence cannot
+be promoted by a later configuration. Stability can only remain or become false.
+Sort/lock source acquisition consistently after the process receipt and before
+traffic row locks. A later failure rolls back source changes too. Changed proof
+under the same committed receipt rejects; pending retry does not backfill a
+changed current config. No bucket primary key or existing raw amounts change.
+
+Include the optional source table in schema, SQLite backup and cross-database
+migration/native export. Old schemas acquire an empty table; existing buckets
+and receipts acquire no invented startup proof. Source schema stays unchanged
+during export. Cross-process/panel restart recovery, owner mapping, historical
+source eligibility and atomic bucket consumption remain later requirements.
+
+Acceptance includes real legacy child startup and private API flow, proof captured
+without a first poll, hot/config restore monotonicity, unknown direct command,
+managed bootstrap exclusion, pending retries, ordinary/final snapshots, concurrent
+config/traffic access, source drift and late transaction rollback. SQLite/PG
+contracts must prove exact old-digest compatibility and backup/migration with old
+table absence. Finish one read-only review, frozen production hashes, required
+generation/lint/vet/full Go/affected race, scoped docs, exact fork push and distinct
+clean artifact provenance before accepting this prerequisite.

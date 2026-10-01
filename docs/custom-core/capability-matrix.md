@@ -264,3 +264,7 @@ reproduced and resolved. Named database contracts, generation/lint/vet/full Go
 and affected race checks pass. Future historical config proof, mapping and atomic
 bucket consumption are N; password live legacy handoff stays closed. Whole
 Task5B, remaining protocol adapters and single-core distribution remain open.
+
+The retention checkpoint also passes distinct clean panel/core builds,
+version/source checks and exact fork push verification; see deployment.md.
+This scoped prerequisite is complete. Historical label-to-owner handoff is N.
