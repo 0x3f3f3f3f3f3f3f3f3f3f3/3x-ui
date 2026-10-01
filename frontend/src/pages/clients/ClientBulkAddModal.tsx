@@ -40,10 +40,13 @@ const MULTI_CLIENT_PROTOCOLS = new Set([
   'amneziawg',
   'tuic',
   'mieru',
+  'ssh',
 ]);
 
 const EMPTY: ClientBulkAddFormValues = {
   emailMethod: 0,
+  sshAuthorizedKeys: '',
+  generateSshPasswords: false,
   firstNum: 1,
   lastNum: 1,
   emailPrefix: '',
@@ -87,6 +90,11 @@ export default function ClientBulkAddModal({
 
   const methods = useForm<ClientBulkAddFormValues>({ defaultValues: EMPTY });
   const inboundIds = useWatch({ control: methods.control, name: 'inboundIds' });
+  const selectedSSH = inbounds.filter(
+    (row) => row.protocol === 'ssh' && (inboundIds || []).includes(row.id),
+  );
+  const allSSHAllowPassword =
+    selectedSSH.length > 0 && selectedSSH.every((row) => row.sshAllowPassword);
   const emailMethod = useWatch({ control: methods.control, name: 'emailMethod' });
   const firstNum = useWatch({ control: methods.control, name: 'firstNum' });
   const flow = useWatch({ control: methods.control, name: 'flow' });
@@ -199,6 +207,14 @@ export default function ClientBulkAddModal({
       messageApi.error(t(validated.error.issues[0]?.message ?? 'somethingWentWrong'));
       return;
     }
+    if (
+      selectedSSH.length &&
+      !current.sshAuthorizedKeys.trim() &&
+      !(current.generateSshPasswords && allSSHAllowPassword)
+    ) {
+      messageApi.error(t('pages.clients.sshAuthenticationRequired'));
+      return;
+    }
     const emails = buildEmails(current);
     if (emails.length === 0) return;
 
@@ -215,6 +231,12 @@ export default function ClientBulkAddModal({
           auth: RandomUtil.randomLowerAndNum(16),
           mieruUsername: '',
           mieruPassword: '',
+          sshUsername: '',
+          sshAuthorizedKeys: selectedSSH.length ? current.sshAuthorizedKeys : '',
+          sshPassword:
+            selectedSSH.length && current.generateSshPasswords && allSSHAllowPassword
+              ? RandomUtil.randomUUID().replaceAll('-', '')
+              : '',
           flow: showFlow ? current.flow || '' : '',
           totalGB: Math.round((current.totalGB || 0) * SizeFormatter.ONE_GB),
           expiryTime: current.expiryTime,
@@ -287,6 +309,27 @@ export default function ClientBulkAddModal({
                 }}
               />
             </Form.Item>
+
+            {selectedSSH.length > 0 && (
+              <>
+                <FormField
+                  name="sshAuthorizedKeys"
+                  label={t('pages.clients.sshAuthorizedKeys')}
+                  tooltip={t('pages.clients.sshBulkKeysDesc')}
+                >
+                  <Input.TextArea rows={3} />
+                </FormField>
+                {allSSHAllowPassword && (
+                  <FormField
+                    name="generateSshPasswords"
+                    label={t('pages.clients.generateSshPasswords')}
+                    valueProp="checked"
+                  >
+                    <Switch />
+                  </FormField>
+                )}
+              </>
+            )}
 
             <FormField name="emailMethod" label={t('pages.clients.method')}>
               <Select

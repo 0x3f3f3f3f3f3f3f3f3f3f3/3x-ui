@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { sshNativeFormGuard, SSHNativeStreamSchema } from '@/schemas/protocols/shared/ssh';
 import { isMieruNativeStream } from '@/schemas/protocols/shared/mieru';
 
 import { InboundPortSchema, SniffingSchema } from '@/schemas/primitives';
@@ -104,23 +105,25 @@ export const InboundFormBaseSchema = z.object({
     ipsExcluded: [],
     domainsExcluded: [],
   }),
-  streamSettings: InboundStreamFormSchema.optional(),
+  streamSettings: z.union([SSHNativeStreamSchema, InboundStreamFormSchema]).optional(),
 });
 export type InboundFormBase = z.infer<typeof InboundFormBaseSchema>;
 
 // Full form values = base + db fields + protocol-discriminated settings.
 // Consumers narrow on `.protocol` to access the matching settings branch.
-export const InboundFormSchema = InboundFormBaseSchema.and(InboundDbFieldsSchema)
-  .and(InboundSettingsSchema)
-  .superRefine((value, ctx) => {
-    if (value.protocol === 'mieru' && !isMieruNativeStream(value.streamSettings)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['streamSettings'],
-        message: 'pages.inbounds.form.mieru.nativeTransportOnly',
-      });
-    }
-  });
+export const InboundFormSchema = sshNativeFormGuard(InboundStreamFormSchema).pipe(
+  InboundFormBaseSchema.and(InboundDbFieldsSchema)
+    .and(InboundSettingsSchema)
+    .superRefine((value, ctx) => {
+      if (value.protocol === 'mieru' && !isMieruNativeStream(value.streamSettings)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['streamSettings'],
+          message: 'pages.inbounds.form.mieru.nativeTransportOnly',
+        });
+      }
+    }),
+);
 export type InboundFormValues = z.infer<typeof InboundFormSchema>;
 
 export const FallbackRowSchema = z.object({

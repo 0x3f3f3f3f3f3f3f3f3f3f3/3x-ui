@@ -72,6 +72,9 @@ func (s *SubClashService) getClash(subId string, host string, legacy bool) (stri
 		if inbound.Protocol == model.Mieru {
 			return "", "", errMieruClientFormat
 		}
+		if inbound.Protocol == model.SSH {
+			return "", "", errSSHClientFormat
+		}
 		subReq.projectThroughFallbackMaster(inbound)
 		if hostEps := subReq.hostEndpoints(inbound, "clash"); len(hostEps) > 0 {
 			injectExternalProxy(inbound, hostEps)

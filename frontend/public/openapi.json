@@ -1700,6 +1700,12 @@
             "description": "Auth password (Hysteria)",
             "type": "string"
           },
+          "clearSshAuthorizedKeys": {
+            "type": "boolean"
+          },
+          "clearSshPassword": {
+            "type": "boolean"
+          },
           "comment": {
             "description": "Client comment",
             "type": "string"
@@ -1805,6 +1811,15 @@
           },
           "security": {
             "description": "Security method (e.g., \"auto\", \"aes-128-gcm\")",
+            "type": "string"
+          },
+          "sshAuthorizedKeys": {
+            "type": "string"
+          },
+          "sshPassword": {
+            "type": "string"
+          },
+          "sshUsername": {
             "type": "string"
           },
           "subId": {
@@ -2132,6 +2147,15 @@
             "type": "string"
           },
           "security": {
+            "type": "string"
+          },
+          "sshAuthorizedKeys": {
+            "type": "string"
+          },
+          "sshPassword": {
+            "type": "string"
+          },
+          "sshUsername": {
             "type": "string"
           },
           "subId": {
@@ -3290,7 +3314,8 @@
               "mtproto",
               "amneziawg",
               "tuic",
-              "mieru"
+              "mieru",
+              "ssh"
             ],
             "example": "vless",
             "type": "string"
@@ -3313,6 +3338,9 @@
             "type": "string"
           },
           "sniffing": {},
+          "sshHostKeyId": {
+            "type": "string"
+          },
           "streamSettings": {},
           "subSortIndex": {
             "description": "Sort order of this inbound's links in subscription output only (lower first; negatives allowed; 0/omitted → 1; ties by id)",
@@ -3501,6 +3529,15 @@
           "ssMethod": {
             "type": "string"
           },
+          "sshAllowPassword": {
+            "type": "boolean"
+          },
+          "sshHostFingerprint": {
+            "type": "string"
+          },
+          "sshHostPublicKey": {
+            "type": "string"
+          },
           "tag": {
             "example": "in-443-tcp",
             "type": "string"
@@ -3534,6 +3571,7 @@
           "protocol",
           "remark",
           "ssMethod",
+          "sshAllowPassword",
           "tag",
           "tlsFlowCapable"
         ],
@@ -5367,6 +5405,7 @@
                       "shareAddr": "",
                       "shareAddrStrategy": "node",
                       "sniffing": null,
+                      "sshHostKeyId": "",
                       "streamSettings": null,
                       "subSortIndex": 1,
                       "tag": "in-443-tcp",
@@ -5480,6 +5519,9 @@
                       "shareAddr": "",
                       "shareAddrStrategy": "",
                       "ssMethod": "",
+                      "sshAllowPassword": false,
+                      "sshHostFingerprint": "",
+                      "sshHostPublicKey": "",
                       "tag": "in-443-tcp",
                       "tlsFlowCapable": true,
                       "tuicServer": null,
@@ -16517,6 +16559,7 @@
                   "shareAddr": "",
                   "shareAddrStrategy": "node",
                   "sniffing": null,
+                  "sshHostKeyId": "",
                   "streamSettings": null,
                   "subSortIndex": 1,
                   "tag": "in-443-tcp",

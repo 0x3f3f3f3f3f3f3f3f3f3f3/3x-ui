@@ -65,6 +65,8 @@ const MULTI_CLIENT_PROTOCOLS = new Set([
   'mtproto',
   'amneziawg',
   'tuic',
+  'mieru',
+  'ssh',
 ]);
 
 const CLIENT_FORM_MODAL_Z_INDEX = 1000;
@@ -151,6 +153,11 @@ const EMPTY: Values = {
   password: '',
   mieruUsername: '',
   mieruPassword: '',
+  sshUsername: '',
+  sshAuthorizedKeys: '',
+  sshPassword: '',
+  clearSshPassword: false,
+  clearSshAuthorizedKeys: false,
   auth: '',
   flow: '',
   security: 'auto',
@@ -285,6 +292,14 @@ export default function ClientFormModal({
   const password = useWatch({ control: methods.control, name: 'password' });
   const mieruUsername = useWatch({ control: methods.control, name: 'mieruUsername' });
   const mieruPassword = useWatch({ control: methods.control, name: 'mieruPassword' });
+  const sshUsername = useWatch({ control: methods.control, name: 'sshUsername' });
+  const sshAuthorizedKeys = useWatch({ control: methods.control, name: 'sshAuthorizedKeys' });
+  const sshPassword = useWatch({ control: methods.control, name: 'sshPassword' });
+  const clearSshPassword = useWatch({ control: methods.control, name: 'clearSshPassword' });
+  const clearSshAuthorizedKeys = useWatch({
+    control: methods.control,
+    name: 'clearSshAuthorizedKeys',
+  });
   const subId = useWatch({ control: methods.control, name: 'subId' });
   const limitHwid = useWatch({ control: methods.control, name: 'limitHwid' });
   const auth = useWatch({ control: methods.control, name: 'auth' });
@@ -375,6 +390,9 @@ export default function ClientFormModal({
         password: client.password || '',
         mieruUsername: client.mieruUsername || '',
         mieruPassword: client.mieruPassword || '',
+        sshUsername: client.sshUsername || '',
+        sshAuthorizedKeys: client.sshAuthorizedKeys || '',
+        sshPassword: client.sshPassword || '',
         auth: client.auth || '',
         flow: client.flow || '',
         security:
@@ -697,6 +715,11 @@ export default function ClientFormModal({
       password: values.password,
       mieruUsername: values.mieruUsername,
       mieruPassword: values.mieruPassword,
+      sshUsername: values.sshUsername,
+      sshAuthorizedKeys: values.clearSshAuthorizedKeys ? '' : values.sshAuthorizedKeys,
+      sshPassword: values.clearSshPassword ? '' : values.sshPassword,
+      clearSshPassword: values.clearSshPassword,
+      clearSshAuthorizedKeys: values.clearSshAuthorizedKeys,
       auth: values.auth,
       flow: values.flow,
       security: values.security,
@@ -723,6 +746,23 @@ export default function ClientFormModal({
       messageApi.error(t(issue?.message ?? 'somethingWentWrong'));
       return;
     }
+    const selectedSSH = inbounds.filter(
+      (row) => row.protocol === 'ssh' && values.inboundIds.includes(row.id),
+    );
+    const effectiveKeys = values.clearSshAuthorizedKeys
+      ? ''
+      : values.sshAuthorizedKeys || client?.sshAuthorizedKeys || '';
+    const effectivePassword = values.clearSshPassword
+      ? ''
+      : values.sshPassword || client?.sshPassword || '';
+    if (
+      selectedSSH.length &&
+      !effectiveKeys.trim() &&
+      (!effectivePassword || selectedSSH.some((row) => !row.sshAllowPassword))
+    ) {
+      messageApi.error(t('pages.clients.sshAuthenticationRequired'));
+      return;
+    }
     const expiryTime = values.delayedStart
       ? -86400000 * (Number(values.delayedDays) || 0)
       : values.expiryDate || 0;
@@ -735,6 +775,11 @@ export default function ClientFormModal({
       password: values.password,
       mieruUsername: values.mieruUsername,
       mieruPassword: values.mieruPassword,
+      sshUsername: values.sshUsername,
+      sshAuthorizedKeys: values.clearSshAuthorizedKeys ? '' : values.sshAuthorizedKeys,
+      sshPassword: values.clearSshPassword ? '' : values.sshPassword,
+      clearSshPassword: values.clearSshPassword,
+      clearSshAuthorizedKeys: values.clearSshAuthorizedKeys,
       auth: values.auth,
       flow: showFlow ? values.flow || '' : '',
       security: showSecurity ? values.security || 'auto' : 'auto',
@@ -1305,6 +1350,72 @@ export default function ClientFormModal({
                           />
                         </Space.Compact>
                       </Form.Item>
+
+                      <Form.Item
+                        label={t('pages.clients.sshUsername')}
+                        tooltip={t('pages.clients.sshCredentialsDesc')}
+                      >
+                        <Input
+                          value={sshUsername}
+                          placeholder={t('pages.clients.sshGenerated')}
+                          onChange={(e) => methods.setValue('sshUsername', e.target.value)}
+                        />
+                      </Form.Item>
+                      <Form.Item
+                        label={t('pages.clients.sshAuthorizedKeys')}
+                        tooltip={t('pages.clients.sshPublicKeysDesc')}
+                      >
+                        <Input.TextArea
+                          value={sshAuthorizedKeys}
+                          rows={3}
+                          disabled={clearSshAuthorizedKeys}
+                          onChange={(e) => methods.setValue('sshAuthorizedKeys', e.target.value)}
+                        />
+                      </Form.Item>
+                      {isEdit && (
+                        <Form.Item label={t('pages.clients.clearSshAuthorizedKeys')}>
+                          <Switch
+                            aria-label={t('pages.clients.clearSshAuthorizedKeys')}
+                            checked={clearSshAuthorizedKeys}
+                            onChange={(value) => methods.setValue('clearSshAuthorizedKeys', value)}
+                          />
+                        </Form.Item>
+                      )}
+                      <Form.Item
+                        label={t('pages.clients.sshPassword')}
+                        tooltip={t('pages.clients.sshPasswordDesc')}
+                      >
+                        <Input.Password
+                          value={sshPassword}
+                          disabled={clearSshPassword}
+                          onChange={(e) => methods.setValue('sshPassword', e.target.value)}
+                        />
+                      </Form.Item>
+                      {isEdit && (
+                        <Form.Item label={t('pages.clients.clearSshPassword')}>
+                          <Switch
+                            aria-label={t('pages.clients.clearSshPassword')}
+                            checked={clearSshPassword}
+                            onChange={(value) => methods.setValue('clearSshPassword', value)}
+                          />
+                        </Form.Item>
+                      )}
+                      {inbounds
+                        .filter((row) => row.protocol === 'ssh' && inboundIds.includes(row.id))
+                        .map((row) => (
+                          <div key={row.id}>
+                            <Typography.Text>
+                              {t('pages.clients.sshHostTrust')} —{' '}
+                              {formatInboundLabel(row.tag, row.remark)}
+                            </Typography.Text>
+                            <Typography.Paragraph copyable code>
+                              {row.sshHostFingerprint}
+                            </Typography.Paragraph>
+                            <Typography.Paragraph copyable code>
+                              {row.sshHostPublicKey}
+                            </Typography.Paragraph>
+                          </div>
+                        ))}
 
                       <Form.Item
                         label={t('pages.clients.subId')}

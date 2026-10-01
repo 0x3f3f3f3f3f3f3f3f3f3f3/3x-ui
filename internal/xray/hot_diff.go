@@ -13,10 +13,11 @@ import (
 // process. It only covers the sections Xray can reload at runtime: inbounds,
 // outbounds and routing rules/balancers.
 type HotDiff struct {
-	RemovedInboundTags []string
-	AddedInbounds      [][]byte
-	RemovedUsers       []UserOp
-	AddedUsers         []UserOp
+	RemovedInboundTags      []string
+	RemovedInboundProtocols map[string]string
+	AddedInbounds           [][]byte
+	RemovedUsers            []UserOp
+	AddedUsers              []UserOp
 	// DroppedClients are emails an inbound that survives the change stopped
 	// serving, including the protocols diffInboundUsers will not diff.
 	DroppedClients      []UserOp
@@ -189,6 +190,12 @@ func diffInbounds(oldCfg, newCfg *Config, diff *HotDiff, managedPassword bool) b
 			return false
 		}
 		diff.RemovedInboundTags = append(diff.RemovedInboundTags, oldIb.Tag)
+		if managedPassword {
+			if diff.RemovedInboundProtocols == nil {
+				diff.RemovedInboundProtocols = make(map[string]string)
+			}
+			diff.RemovedInboundProtocols[oldIb.Tag] = oldIb.Protocol
+		}
 		if exists {
 			raw, err := json.Marshal(newIb)
 			if err != nil {
@@ -242,7 +249,7 @@ func droppedClients(oldIb, newIb *InboundConfig) []UserOp {
 	return dropped
 }
 
-var userDiffableProtocols = map[string]struct{}{"vless": {}, "vmess": {}, "trojan": {}, "hysteria": {}, "mieru": {}}
+var userDiffableProtocols = map[string]struct{}{"vless": {}, "vmess": {}, "trojan": {}, "hysteria": {}, "mieru": {}, "ssh": {}}
 
 // diffInboundUsers emits per-user AlterInbound ops when two same-tag inbounds
 // differ only in settings.clients, so the handler (and its listener) survives.
@@ -295,7 +302,7 @@ type clientEntry struct {
 // splitSettingsClients indexes settings.clients by email and returns the rest of
 // the settings in canonical form; ok is false when a client has no unique email.
 func inboundAccountListField(protocol string) string {
-	if protocol == "mieru" {
+	if protocol == "mieru" || protocol == "ssh" {
 		return "users"
 	}
 	return "clients"

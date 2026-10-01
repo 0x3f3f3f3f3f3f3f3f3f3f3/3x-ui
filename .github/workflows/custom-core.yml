@@ -2,9 +2,9 @@ name: Custom core
 on:
   push:
     branches: [feature/custom-xray-unified-policy]
-    paths: ["core/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
+    paths: ["core/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "tools/build-ssh-capability-fixture.sh", "tools/verify-native-ssh-panel.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
   pull_request:
-    paths: ["core/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
+    paths: ["core/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "tools/build-ssh-capability-fixture.sh", "tools/verify-native-ssh-panel.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
 permissions:
   contents: read
 jobs:
@@ -92,6 +92,16 @@ jobs:
             go test -race -count=1 -v ./internal/database/model ./internal/database ./internal/web/service ./internal/xray ./internal/sub ./internal/util/link github.com/xtls/xray-core/app/clientpolicy/command \
             -run '^TestMieru|^TestCapabilitiesAdvertiseVerifiedNativeMieru' | tee /tmp/native-mieru-panel-sqlite.log
           python3 tools/verify-native-mieru-panel.py sqlite /tmp/native-mieru-panel-sqlite.log
+      - name: Build missing native SSH identity capability fixture
+        run: bash tools/build-ssh-capability-fixture.sh
+      - name: Native SSH panel public OpenSSH lifecycle and strict outbound
+        run: |
+          set -euo pipefail
+          make dist-stub
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" XRAY_PRE_SSH_MARKER_E2E_BINARY="$PWD/build/pre-ssh-marker-xray" \
+            go test -race -count=1 -v ./internal/database/model ./internal/database ./internal/web/service ./internal/xray ./internal/sub github.com/xtls/xray-core/app/clientpolicy/command \
+            -run '^TestSSH|^TestCapabilitiesAdvertiseVerifiedNativeSSH$|^TestMigrationModelsMatchPanelModels$' | tee /tmp/native-ssh-panel-sqlite.log
+          python3 tools/verify-native-ssh-panel.py sqlite /tmp/native-ssh-panel-sqlite.log
       - name: Password proxy identity and credential lifecycle
         working-directory: core/xray
         run: |
@@ -320,6 +330,16 @@ jobs:
             go test -race -count=1 -v ./internal/database/model ./internal/database ./internal/web/service ./internal/xray ./internal/sub ./internal/util/link github.com/xtls/xray-core/app/clientpolicy/command \
             -run '^TestMieru|^TestCapabilitiesAdvertiseVerifiedNativeMieru' | tee /tmp/native-mieru-panel-postgres.log
           python3 tools/verify-native-mieru-panel.py postgres /tmp/native-mieru-panel-postgres.log
+      - name: Build missing native SSH identity capability fixture
+        run: bash tools/build-ssh-capability-fixture.sh
+      - name: Native SSH panel public OpenSSH lifecycle and strict outbound
+        run: |
+          set -euo pipefail
+          make dist-stub
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" XRAY_PRE_SSH_MARKER_E2E_BINARY="$PWD/build/pre-ssh-marker-xray" \
+            go test -race -count=1 -v ./internal/database/model ./internal/database ./internal/web/service ./internal/xray ./internal/sub github.com/xtls/xray-core/app/clientpolicy/command \
+            -run '^TestSSH|^TestCapabilitiesAdvertiseVerifiedNativeSSH$|^TestMigrationModelsMatchPanelModels$' | tee /tmp/native-ssh-panel-postgres.log
+          python3 tools/verify-native-ssh-panel.py postgres /tmp/native-ssh-panel-postgres.log
       - name: Build pinned unmodified core for handoff rejection
         run: |
           upstream_core_dir="$(go mod download -json github.com/xtls/xray-core@v1.260327.1-0.20260908222543-52a412d9e2f5 | jq -er .Dir)"
@@ -368,3 +388,26 @@ jobs:
             grep -q -- "--- PASS: TestLegacyUnassignedTrafficRealCollectorRetryAndGrowth/$test " /tmp/legacy-unassigned-postgres.log
             grep -q -- "--- PASS: TestLegacyTrafficConfigProofRealCollectorRetryAndGrowth/$test " /tmp/legacy-unassigned-postgres.log
           done
+  native-protocol-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: make dist-stub
+      - name: Native protocol forms, exports and shared existing workflows
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run gen
+          npm run typecheck
+          npm run lint
+          npx vitest run src/test/ssh-*.test.* src/test/mieru-*.test.* src/test/client-form*.test.* src/test/client-qr-modal*.test.* src/test/inbound-form*.test.* src/test/outbound-form*.test.* src/test/tunnel-*-form.test.tsx --maxWorkers=2 --testTimeout=30000
+          npm run build

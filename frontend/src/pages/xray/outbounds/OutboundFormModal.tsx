@@ -41,6 +41,7 @@ import {
   FreedomFields,
   HttpFields,
   MieruFields,
+  SSHFields,
   LoopbackFields,
   ServerTarget,
   ShadowsocksFields,
@@ -131,6 +132,13 @@ export default function OutboundFormModal({
     const currentTag = methods.getValues('tag');
     if (!parsed.tag && currentTag) parsed.tag = currentTag;
     const next = rawOutboundToFormValues(parsed);
+    if (next.protocol === 'ssh') {
+      const native = OutboundFormSchema.safeParse(next);
+      if (!native.success) {
+        messageApi.error(t(native.error.issues[0]?.message ?? 'somethingWentWrong'));
+        return false;
+      }
+    }
     methods.reset(next);
     setJsonText(JSON.stringify(formValuesToWirePayload(next), null, 2));
     setJsonDirty(false);
@@ -149,7 +157,7 @@ export default function OutboundFormModal({
   }, [open, outboundProp, methods]);
 
   useEffect(() => {
-    if (!streamAllowed) return;
+    if (!streamAllowed || methods.getValues('protocol') !== protocol) return;
     /*
      * Wireguard dials its own UDP — only finalmask/sockopt apply, never a
      * transport. Don't seed network 'tcp'; clear a leftover one (from a
@@ -200,10 +208,9 @@ export default function OutboundFormModal({
       methods.setValue('settings', next.settings);
       if (nextProtocol === 'hysteria') {
         methods.setValue('streamSettings', hysteriaStreamSlice() as StreamValue);
-      } else if (nextProtocol === 'mieru') {
+      } else if (nextProtocol === 'mieru' || nextProtocol === 'ssh') {
         const sockopt = methods.getValues('streamSettings.sockopt');
         methods.setValue('streamSettings', {
-          network: 'tcp',
           security: 'none',
           sockopt,
         } as StreamValue);
@@ -296,6 +303,13 @@ export default function OutboundFormModal({
       parsed = native;
     }
     const next = rawOutboundToFormValues(parsed);
+    if (next.protocol === 'ssh') {
+      const native = OutboundFormSchema.safeParse(next);
+      if (!native.success) {
+        messageApi.error(t(native.error.issues[0]?.message ?? 'somethingWentWrong'));
+        return false;
+      }
+    }
     methods.reset(next);
     setJsonDirty(false);
     return true;
@@ -349,7 +363,7 @@ export default function OutboundFormModal({
       if (!(await methods.trigger())) return;
       values = methods.getValues();
     }
-    if (values.protocol === 'mieru') {
+    if (values.protocol === 'mieru' || values.protocol === 'ssh') {
       const native = OutboundFormSchema.safeParse(values);
       if (!native.success) {
         messageApi.error(t(native.error.issues[0]?.message ?? 'somethingWentWrong'));
@@ -473,6 +487,7 @@ export default function OutboundFormModal({
                       {protocol === 'shadowsocks' && <ShadowsocksFields />}
                       {protocol === 'http' && <HttpFields />}
                       {protocol === 'mieru' && <MieruFields />}
+                      {protocol === 'ssh' && <SSHFields />}
                       {protocol === 'socks' && <SocksFields />}
 
                       {protocol === 'loopback' && <LoopbackFields />}
@@ -589,19 +604,21 @@ export default function OutboundFormModal({
                         />
                       )}
 
-                      <Controller
-                        control={methods.control}
-                        name="streamSettings.finalmask"
-                        render={({ field }) => (
-                          <FinalMaskField
-                            key={`${protocol}:${network}`}
-                            value={field.value}
-                            onChange={field.onChange}
-                            network={network}
-                            protocol={protocol}
-                          />
-                        )}
-                      />
+                      {protocol !== 'ssh' && protocol !== 'mieru' && (
+                        <Controller
+                          control={methods.control}
+                          name="streamSettings.finalmask"
+                          render={({ field }) => (
+                            <FinalMaskField
+                              key={`${protocol}:${network}`}
+                              value={field.value}
+                              onChange={field.onChange}
+                              network={network}
+                              protocol={protocol}
+                            />
+                          )}
+                        />
+                      )}
 
                       <MuxForm protocol={protocol} network={network} />
                     </>

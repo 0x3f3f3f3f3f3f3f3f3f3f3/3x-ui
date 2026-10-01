@@ -1,3 +1,4 @@
+import { isSSHNativeWireMux } from '@/schemas/protocols/shared/ssh';
 import { XHttpXmuxSchema } from '@/schemas/protocols/stream/xhttp';
 import { OutboundDomainStrategySchema } from '@/schemas/protocols/outbound';
 import { AmneziaWGOutboundSettingsSchema } from '@/schemas/protocols/outbound';
@@ -5,6 +6,7 @@ import { normalizeStreamSettingsForWire } from '@/lib/xray/stream-wire-normalize
 import { Wireguard } from '@/utils';
 import type { Sniffing, SniffingDest } from '@/schemas/primitives';
 import type { OutboundDomainStrategy } from '@/schemas/protocols/outbound';
+import type { SSHOutboundSettings } from '@/schemas/protocols/outbound/ssh';
 import type { MieruOutboundSettings } from '@/schemas/protocols/outbound/mieru';
 
 import type {
@@ -551,6 +553,10 @@ export function rawOutboundToFormValues(raw: RawOutboundRow): OutboundFormValues
   const targetStrategy = targetStrategyFromWire(raw.targetStrategy);
   const freedomStrategy = freedomDomainStrategyFromWire(raw);
   const mux = muxFromWire(raw.mux);
+  const nativeWireOptionsError =
+    protocol === 'ssh' && !isSSHNativeWireMux(raw.mux)
+      ? 'pages.inbounds.form.ssh.nativeTransportOnly'
+      : undefined;
   const hasStream =
     raw.streamSettings &&
     typeof raw.streamSettings === 'object' &&
@@ -559,6 +565,22 @@ export function rawOutboundToFormValues(raw: RawOutboundRow): OutboundFormValues
 
   let typed: OutboundFormSettings;
   switch (protocol) {
+    case 'ssh':
+      typed = {
+        protocol: 'ssh',
+        settings: {
+          address: '',
+          port: 22,
+          username: '',
+          password: '',
+          privateKeyFile: '',
+          hostKey: '',
+          handshakeTimeoutSeconds: 10,
+          idleTimeoutSeconds: 300,
+          ...settings,
+        } as SSHOutboundSettings,
+      };
+      break;
     case 'mieru':
       typed = {
         protocol: 'mieru',
@@ -622,6 +644,7 @@ export function rawOutboundToFormValues(raw: RawOutboundRow): OutboundFormValues
 
   return {
     ...typed,
+    ...(nativeWireOptionsError ? { nativeWireOptionsError } : {}),
     tag,
     sendThrough,
     // The freedom card owns the strategy for freedom, so the shared root field
@@ -878,6 +901,7 @@ export type WireOutboundPayload = Raw;
 export function formValuesToWirePayload(values: OutboundFormValues): WireOutboundPayload {
   let settings: Raw;
   switch (values.protocol) {
+    case 'ssh':
     case 'mieru':
       settings = { ...values.settings };
       break;

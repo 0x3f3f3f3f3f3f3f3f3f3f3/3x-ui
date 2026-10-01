@@ -15,12 +15,20 @@ import (
 	corehttp "github.com/xtls/xray-core/proxy/http"
 	"github.com/xtls/xray-core/proxy/mieru"
 	"github.com/xtls/xray-core/proxy/socks"
+	coressh "github.com/xtls/xray-core/proxy/ssh"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // ManagedHotDiffCapabilities checks the same account adapters used by handler RPCs before preparation.
 func ManagedHotDiffCapabilities(diff *HotDiff) ([]string, error) {
 	required := make(map[string]bool)
+	for _, protocol := range diff.RemovedInboundProtocols {
+		if protocol == "ssh" {
+			for _, name := range []string{"trusted-ssh-client-id-v1", "authenticated-credential-revocation-v1", "inbound-scoped-session-close-v1"} {
+				required[name] = true
+			}
+		}
+	}
 	if len(diff.RemovedUsers) > 0 {
 		required["inbound-scoped-session-close-v1"] = true
 		required["authenticated-credential-revocation-v1"] = true
@@ -28,6 +36,8 @@ func ManagedHotDiffCapabilities(diff *HotDiff) ([]string, error) {
 	for _, user := range diff.RemovedUsers {
 		var accountType string
 		switch user.Protocol {
+		case "ssh":
+			accountType = "xray.proxy.ssh.Account"
 		case "mieru":
 			accountType = "xray.proxy.mieru.Account"
 		case "socks", "mixed":
@@ -101,6 +111,8 @@ func (x *XrayAPI) requireManagedControl(ctx context.Context, required []string) 
 func managedUserCapabilities(accountType string) ([]string, error) {
 	var capability string
 	switch accountType {
+	case "xray.proxy.ssh.Account":
+		capability = "trusted-ssh-client-id-v1"
 	case "xray.proxy.mieru.Account":
 		capability = "trusted-mieru-client-id-v1"
 	case "xray.proxy.vless.Account":
@@ -124,6 +136,11 @@ func managedUserCapabilities(accountType string) ([]string, error) {
 
 func managedIdentityCapabilities(message protoreflect.Message, required map[string]bool) error {
 	switch value := message.Interface().(type) {
+	case *coressh.ServerConfig:
+		required["trusted-ssh-client-id-v1"] = true
+		required["authenticated-credential-revocation-v1"] = true
+		required["inbound-scoped-session-close-v1"] = true
+		return nil
 	case *mieru.ServerConfig:
 		required["trusted-mieru-client-id-v1"] = true
 		required["authenticated-credential-revocation-v1"] = true

@@ -43,6 +43,7 @@ func migrationModels() []any {
 		&model.Node{},
 		&model.ApiToken{},
 		&model.Inbound{},
+		&model.NativeSSHHostKey{},
 		&xray.ClientTraffic{},
 		&model.OutboundTraffics{},
 		&model.LegacyTrafficReceipt{},

@@ -48,15 +48,15 @@ prepareSSHInbound(*model.Inbound) error, resolveSSHInboundCredentials(*gorm.DB,
 dedicated host-key records/files through current Runtime preparation after
 capability checks. No public standalone user-management endpoint is needed.
 
-- [ ] Write behavioral RED tests for independent SQL credentials, canonical
+- [x] Write behavioral RED tests for independent SQL credentials, canonical
   ownership, omitted/explicit-clear updates, duplicates and invalid public keys.
-- [ ] Persist/validate native fields inside existing CRUD/attach/bulk transactions;
+- [x] Persist/validate native fields inside existing CRUD/attach/bulk transactions;
   pass the named account tests without changing other protocol credentials.
-- [ ] Write host-key first-use/restart/file-loss/backup/missing-reference and
+- [x] Write host-key first-use/restart/file-loss/backup/missing-reference and
   private-path RED tests; implement SQL authority and guarded materialization.
-- [ ] Write native user/hot-diff/missing-marker RED tests; add typed accounts,
+- [x] Write native user/hot-diff/missing-marker RED tests; add typed accounts,
   capabilities and preparation fences; verify current/markerless actual cores.
-- [ ] Run SQLite/actualPG migration/restore and real public service lifecycle;
+- [x] Run SQLite/actualPG migration/restore and real public service lifecycle;
   affected race, generation/lint/vet and logical backend commit.
 
 ### Task 2: Existing native SSH forms and options
@@ -71,11 +71,11 @@ InboundFormModal/OutboundFormModal; EN/ZH translations and generated contracts.
 Consumes Task1 SQL/client/options contracts; produces unchanged existing API
 payload envelopes with SSH-native settings and client authentication fields.
 
-- [ ] Write real component/adapter RED tests for create/edit/attach/bulk, native
+- [x] Write real component/adapter RED tests for create/edit/attach/bulk, native
   credential limits, explicit clear controls, reverse controls and host trust.
-- [ ] Implement native fields/defaults/validation, real outbound pin and key-path
+- [x] Implement native fields/defaults/validation, real outbound pin and key-path
   controls; reject UDP/security/global-mux wrappers rather than losing settings.
-- [ ] Verify reopen/clone/rename and unrelated forms; affected frontend tests,
+- [x] Verify reopen/clone/rename and unrelated forms; affected frontend tests,
   typecheck/lint/generation/build; logical UI commit.
 
 ### Task 3: OpenSSH export and combined public acceptance
@@ -87,11 +87,11 @@ lifecycle tests; tools/verify-native-ssh-panel.py and custom-core CI; testing do
 Consumes persisted service public host key and canonical account, producing
 OpenSSH config/instructions and known_hosts text through existing downloads.
 
-- [ ] RED tests for host/IPv6/Unicode-safe quoting, strict host pin, user-owned
+- [x] RED tests for host/IPv6/Unicode-safe quoting, strict host pin, user-owned
   private-key instructions, enabled reverse controls and explicit format errors.
-- [ ] Implement exports; verify existing download/copy controls and reimport
+- [x] Implement exports; verify existing download/copy controls and reimport
   only where a native representation exists; no invented share protocol.
-- [ ] RED combined API → real core/OpenSSH -L/-D/controlled -R plus Tunnel
+- [x] RED combined API → real core/OpenSSH -L/-D/controlled -R plus Tunnel
   lifecycle tests; implement missing glue and verify exact shared usage,
   policy restrictions, rotation, port release, restart and restored host key.
 - [ ] Complete required SQLite/PG/core/frontend gates, one whole-panel review

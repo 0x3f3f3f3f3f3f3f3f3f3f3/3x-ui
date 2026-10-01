@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SSHOutboundSettingsSchema } from './ssh';
 
 import { BlackholeOutboundSettingsSchema } from './blackhole';
 import { AmneziaWGOutboundSettingsSchema } from './amneziawg';
@@ -23,6 +24,7 @@ export * from './http';
 export * from './hysteria';
 export * from './loopback';
 export * from './mieru';
+export * from './ssh';
 export * from './shadowsocks';
 export * from './socks';
 export * from './trojan';
@@ -31,6 +33,7 @@ export * from './vmess';
 export * from './wireguard';
 
 export const OutboundSettingsSchema = z.discriminatedUnion('protocol', [
+  z.object({ protocol: z.literal('ssh'), settings: SSHOutboundSettingsSchema }),
   z.object({ protocol: z.literal('mieru'), settings: MieruOutboundSettingsSchema }),
   z.object({ protocol: z.literal('vmess'), settings: VmessOutboundSettingsSchema }),
   z.object({ protocol: z.literal('vless'), settings: VlessOutboundSettingsSchema }),

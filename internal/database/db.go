@@ -66,6 +66,7 @@ func allModels() []any {
 	return []any{
 		&model.User{},
 		&model.Inbound{},
+		&model.NativeSSHHostKey{},
 		&model.OutboundTraffics{},
 		&model.LegacyTrafficReceipt{},
 		&model.LegacyUnassignedTraffic{},

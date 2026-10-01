@@ -2,12 +2,35 @@ package service
 
 import (
 	"fmt"
+	"strings"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 )
+
+// Resolve native omissions only while holding the canonical SQL writer. These
+// credentials are shared by all their listeners, including excluded filters.
+func resolveNativeClientUpdate(tx *gorm.DB, current *model.ClientRecord, updated *model.Client) error {
+	if err := resolveSSHClientCredentials(updated, current, false); err != nil {
+		return err
+	}
+	if err := validateProvidedMieruCredentials(*updated); err != nil {
+		return err
+	}
+	if updated.MieruUsername == "" {
+		updated.MieruUsername = current.MieruUsername
+	}
+	if updated.MieruPassword == "" {
+		updated.MieruPassword = current.MieruPassword
+	}
+	existing := map[string]*model.ClientRecord{strings.TrimSpace(updated.Email): current}
+	if err := validateLinkedSSHCredentialChanges(tx, 0, []model.Client{*updated}, existing); err != nil {
+		return err
+	}
+	return validateLinkedMieruCredentialChanges(tx, 0, []model.Client{*updated}, existing)
+}
 
 // Ordinary siblings may already have applied this request's rename. Refuse
 // unrelated changes or reuse of the old label before any email-based writes.
@@ -70,6 +93,9 @@ func updateCanonicalMirrorMetadata(tx *gorm.DB, current *model.ClientRecord, upd
 	if links != 1 {
 		return ErrManagedConfigStale
 	}
+	if err := resolveNativeClientUpdate(tx, current, &updated); err != nil {
+		return err
+	}
 	incoming := updated.ToRecord()
 	incoming.UUID, incoming.Password, incoming.Auth, incoming.Secret = current.UUID, current.Password, current.Auth, current.Secret
 	incoming.Flow, incoming.Security, incoming.Reverse = current.Flow, current.Security, current.Reverse
@@ -79,7 +105,10 @@ func updateCanonicalMirrorMetadata(tx *gorm.DB, current *model.ClientRecord, upd
 	merged := *current
 	applyClientRecordMerge(&merged, incoming)
 	merged.Email, merged.UpdatedAt = updated.Email, max(current.UpdatedAt, updated.UpdatedAt)
-	return model.SaveClientRecord(tx, &merged)
+	if err := model.SaveClientRecord(tx, &merged); err != nil {
+		return err
+	}
+	return refreshSSHCredentialMirrors(tx, inboundID, []int{current.Id})
 }
 
 func guardPasswordProxyOwnerUpdate(tx *gorm.DB, current *model.ClientRecord, policy *model.ClientPolicyOptions) error {
@@ -130,6 +159,9 @@ func (s *ClientService) updatePasswordProxyOwner(inbounds *InboundService, expec
 		if err := guardPasswordProxyOwnerUpdate(tx, current, updated.Policy); err != nil {
 			return err
 		}
+		if err := resolveNativeClientUpdate(tx, current, &updated); err != nil {
+			return err
+		}
 		if err := reserveClientUpdateEmail(tx, current, updated.Email); err != nil {
 			return err
 		}
@@ -144,6 +176,8 @@ func (s *ClientService) updatePasswordProxyOwner(inbounds *InboundService, expec
 		fields := map[string]any{
 			"email": updated.Email, "sub_id": merged.SubID,
 			"uuid": merged.UUID, "password": merged.Password, "auth": merged.Auth, "secret": merged.Secret,
+			"ssh_username": merged.SSHUsername, "ssh_authorized_keys": merged.SSHAuthorizedKeys, "ssh_password": merged.SSHPassword,
+			"mieru_username": merged.MieruUsername, "mieru_password": merged.MieruPassword,
 			"flow": merged.Flow, "security": merged.Security, "reverse": updated.ToRecord().Reverse,
 			"wg_private_key": merged.PrivateKey, "wg_public_key": merged.PublicKey, "wg_allowed_ips": merged.AllowedIPs,
 			"wg_pre_shared_key": merged.PreSharedKey, "wg_keep_alive": merged.KeepAlive,
@@ -174,6 +208,9 @@ func (s *ClientService) updatePasswordProxyOwner(inbounds *InboundService, expec
 			}
 		}
 		if err := tx.Model(&model.ClientRecord{}).Where("id = ?", current.Id).Updates(fields).Error; err != nil {
+			return err
+		}
+		if err := refreshSSHCredentialMirrors(tx, 0, []int{current.Id}); err != nil {
 			return err
 		}
 		return s.setClientLimitHwidByEmailTx(tx, updated.Email, limitHwid)

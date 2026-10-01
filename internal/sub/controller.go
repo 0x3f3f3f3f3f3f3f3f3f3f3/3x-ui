@@ -35,6 +35,10 @@ const (
 // client, never-existed id) and becomes 404. A real error becomes 500. No
 // body — VPN clients only look at the status.
 func writeSubError(c *gin.Context, err error) {
+	if errors.Is(err, errSSHClientFormat) {
+		c.String(http.StatusNotAcceptable, "%s", errSSHClientFormat.Error())
+		return
+	}
 	if errors.Is(err, errMieruClientFormat) {
 		c.String(http.StatusNotAcceptable, "%s", errMieruClientFormat.Error())
 		return
@@ -467,6 +471,13 @@ func dedupeEmails(emails []string) []string {
 // subs handles HTTP requests for subscription links, returning either HTML page or base64-encoded subscription data.
 func (a *SUBController) subs(c *gin.Context) {
 	userAgent := c.GetHeader("User-Agent")
+	switch format := strings.ToLower(c.Query("format")); format {
+	case "ssh", "ssh-known-hosts", "ssh-instructions":
+		if a.enforceHwid(c) {
+			a.serveSSHBody(c, format)
+		}
+		return
+	}
 	if strings.EqualFold(c.Query("format"), "mieru") {
 		if a.enforceHwid(c) {
 			a.serveMieruBody(c)
@@ -499,6 +510,7 @@ func (a *SUBController) subs(c *gin.Context) {
 	scheme, host, hostWithPort, _ := a.subService.ResolveRequest(c)
 	subReq := a.subService.ForRequest(host)
 	subReq.subscriptionBody = true
+	subReq.requireShareURI = true
 	subs, _, _, traffic, err := subReq.getSubs(subId)
 	if err != nil || subs == nil {
 		writeSubError(c, err)
@@ -545,6 +557,23 @@ func (a *SUBController) serveMieruBody(c *gin.Context) {
 	c.Data(http.StatusOK, "application/json; charset=utf-8", []byte(body))
 	a.recordSubscriptionFetch(c)
 	logSubscriptionRoute(c.GetHeader("User-Agent"), "mieru")
+}
+
+func (a *SUBController) serveSSHBody(c *gin.Context, format string) {
+	scheme, host, hostWithPort, _ := a.subService.ResolveRequest(c)
+	body, header, err := a.subService.GetSSHExport(c.Param("subid"), host, format)
+	if err != nil || body == "" {
+		writeSubError(c, err)
+		return
+	}
+	request := a.subService.ForRequest(host)
+	metadata := a.metadataForSubRequest(func() *SubService { return request }, c.Param("subid"), builtinProfileURL(c, scheme, hostWithPort))
+	a.ApplyCommonHeaders(c, header, a.updateInterval, metadata.Title, metadata.SupportURL, metadata.ProfileURL, metadata.Announce, a.subEnableRouting, a.subRoutingRules, a.subHideSettings)
+	filename := map[string]string{"ssh": "x-ui-ssh.conf", "ssh-known-hosts": "x-ui-ssh-known_hosts", "ssh-instructions": "x-ui-ssh-instructions.txt"}[format]
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(body))
+	a.recordSubscriptionFetch(c)
+	logSubscriptionRoute(c.GetHeader("User-Agent"), format)
 }
 
 func (a *SUBController) recordSubscriptionFetch(c *gin.Context) {

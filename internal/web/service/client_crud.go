@@ -83,6 +83,9 @@ func validateClientResetMax(resetMax int) error {
 }
 
 func validateClientSettings(client model.Client) error {
+	if err := normalizeSSHCredentials(&client); err != nil {
+		return err
+	}
 	if err := validateProvidedMieruCredentials(client); err != nil {
 		return err
 	}
@@ -254,6 +257,9 @@ func (s *ClientService) Create(inboundSvc *InboundService, payload *ClientCreate
 
 func (s *ClientService) createUnattached(client model.Client, limitHwid int) error {
 	return runSerializedTx(func(tx *gorm.DB) error {
+		if err := normalizeSSHCredentials(&client); err != nil {
+			return err
+		}
 		var taken int64
 		if err := tx.Model(&model.ClientRecord{}).Where("LOWER(email) = ?", strings.ToLower(client.Email)).Count(&taken).Error; err != nil {
 			return err
@@ -425,6 +431,9 @@ func markInboundNodesDirty(inboundIds []int) error {
 
 func (s *ClientService) fillProtocolDefaults(c *model.Client, ib *model.Inbound) error {
 	switch ib.Protocol {
+	case model.SSH:
+		// Resolve omissions and generate the native username inside SQL's writer.
+		return normalizeSSHCredentials(c)
 	case model.Mieru:
 		return fillMieruCredentials(c)
 	case model.VMESS, model.VLESS:
@@ -685,12 +694,6 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 	if updated.Password == "" {
 		updated.Password = existing.Password
 	}
-	if updated.MieruUsername == "" {
-		updated.MieruUsername = existing.MieruUsername
-	}
-	if updated.MieruPassword == "" {
-		updated.MieruPassword = existing.MieruPassword
-	}
 	if updated.Auth == "" {
 		updated.Auth = existing.Auth
 	}
@@ -774,7 +777,15 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 			}
 		}
 		if selected[ibId] {
-			if err := s.fillProtocolDefaults(&updated, inbound); err != nil {
+			// Native credentials are resolved from the current canonical row
+			// inside the writer, preserving concurrent rotations on omissions.
+			var err error
+			if inbound.Protocol == model.Mieru {
+				err = validateProvidedMieruCredentials(updated)
+			} else {
+				err = s.fillProtocolDefaults(&updated, inbound)
+			}
+			if err != nil {
 				return false, err
 			}
 		}
@@ -827,7 +838,7 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 		}
 		data := &model.Inbound{Id: ibId, Settings: string(settingsPayload)}
 		applies = append(applies, inboundApply{id: ibId, run: func() (bool, error) {
-			if passwordBindings > 0 {
+			if passwordBindings > 0 || inbound.Protocol == model.SSH || inbound.Protocol == model.Mieru {
 				return s.updateInboundClient(inboundSvc, data, existing.Email, existing, !selected[ibId])
 			}
 			return s.UpdateInboundClient(inboundSvc, data, existing.Email)
@@ -878,31 +889,34 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 		merged := *existing
 		applyClientRecordMerge(&merged, updated.ToRecord())
 		fields := map[string]any{
-			"sub_id":            merged.SubID,
-			"uuid":              merged.UUID,
-			"password":          merged.Password,
-			"mieru_username":    merged.MieruUsername,
-			"mieru_password":    merged.MieruPassword,
-			"auth":              merged.Auth,
-			"secret":            merged.Secret,
-			"flow":              merged.Flow,
-			"security":          merged.Security,
-			"wg_private_key":    merged.PrivateKey,
-			"wg_public_key":     merged.PublicKey,
-			"wg_allowed_ips":    merged.AllowedIPs,
-			"wg_pre_shared_key": merged.PreSharedKey,
-			"wg_keep_alive":     merged.KeepAlive,
-			"limit_ip":          merged.LimitIP,
-			"total_gb":          merged.TotalGB,
-			"expiry_time":       merged.ExpiryTime,
-			"tg_id":             merged.TgID,
-			"comment":           merged.Comment,
-			"reset":             merged.Reset,
-			"reset_day":         merged.ResetDay,
-			"reset_weekday":     merged.ResetWeekday,
-			"reset_max":         merged.ResetMax,
-			"traffic_reset":     merged.TrafficReset,
-			"traffic_reset_day": merged.TrafficResetDay,
+			"sub_id":              merged.SubID,
+			"uuid":                merged.UUID,
+			"password":            merged.Password,
+			"mieru_username":      merged.MieruUsername,
+			"mieru_password":      merged.MieruPassword,
+			"ssh_username":        merged.SSHUsername,
+			"ssh_authorized_keys": merged.SSHAuthorizedKeys,
+			"ssh_password":        merged.SSHPassword,
+			"auth":                merged.Auth,
+			"secret":              merged.Secret,
+			"flow":                merged.Flow,
+			"security":            merged.Security,
+			"wg_private_key":      merged.PrivateKey,
+			"wg_public_key":       merged.PublicKey,
+			"wg_allowed_ips":      merged.AllowedIPs,
+			"wg_pre_shared_key":   merged.PreSharedKey,
+			"wg_keep_alive":       merged.KeepAlive,
+			"limit_ip":            merged.LimitIP,
+			"total_gb":            merged.TotalGB,
+			"expiry_time":         merged.ExpiryTime,
+			"tg_id":               merged.TgID,
+			"comment":             merged.Comment,
+			"reset":               merged.Reset,
+			"reset_day":           merged.ResetDay,
+			"reset_weekday":       merged.ResetWeekday,
+			"reset_max":           merged.ResetMax,
+			"traffic_reset":       merged.TrafficReset,
+			"traffic_reset_day":   merged.TrafficResetDay,
 		}
 		if updated.Policy != nil {
 			fields["policy_upload_bytes_per_second"] = updated.Policy.UploadBytesPerSecond
@@ -910,11 +924,17 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 			fields["policy_multiplier"] = updated.Policy.Multiplier
 		}
 		if err := runSerializedTx(func(tx *gorm.DB) error {
+			var current model.ClientRecord
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("stable_id = ?", existing.StableID).First(&current).Error; err != nil {
+				return err
+			}
+			nativeUpdate := updated
+			if err := resolveNativeClientUpdate(tx, &current, &nativeUpdate); err != nil {
+				return err
+			}
+			fields["ssh_username"], fields["ssh_authorized_keys"], fields["ssh_password"] = nativeUpdate.SSHUsername, nativeUpdate.SSHAuthorizedKeys, nativeUpdate.SSHPassword
+			fields["mieru_username"], fields["mieru_password"] = nativeUpdate.MieruUsername, nativeUpdate.MieruPassword
 			if updated.Policy != nil {
-				var current model.ClientRecord
-				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("stable_id = ?", existing.StableID).First(&current).Error; err != nil {
-					return err
-				}
 				if err := guardClientPolicyTargets(tx, &current, updated.Policy, nil, false); err != nil {
 					return err
 				}
@@ -1186,6 +1206,9 @@ func (s *ClientService) Attach(inboundSvc *InboundService, id int, inboundIds []
 	}
 
 	clientWire := existing.ToClient()
+	// Attachment is a membership command, not an authentication update. Resolve
+	// native SSH credentials from the current SQL row in the serialized writer.
+	clientWire.SSHUsername, clientWire.SSHAuthorizedKeys, clientWire.SSHPassword = "", "", ""
 	flow, ffErr := s.EffectiveFlow(nil, id)
 	if ffErr != nil {
 		return false, ffErr

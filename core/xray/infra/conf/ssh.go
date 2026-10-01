@@ -46,6 +46,9 @@ func (c *SSHServerConfig) Build() (proto.Message, error) {
 	if r := c.Reverse; r != nil {
 		out.Reverse = &coressh.ReverseConfig{Enabled: r.Enabled, BindAddresses: r.BindAddresses, PortFrom: r.PortFrom, PortTo: r.PortTo, SourceCidrs: r.SourceCIDRs, MaxListeners: r.MaxListeners, AllowPortZero: r.AllowPortZero}
 	}
+	if err := coressh.ValidateServerOptions(out); err != nil {
+		return nil, err
+	}
 	for _, u := range c.Users {
 		if u == nil || u.ClientID == "" || u.Email == "" || u.Username == "" {
 			return nil, coressh.ErrConfiguration

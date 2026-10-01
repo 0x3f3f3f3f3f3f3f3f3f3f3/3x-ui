@@ -203,6 +203,9 @@ func (x *XrayAPI) DelInbound(tag string) error {
 // startup — notably v26.7.11's refusal of unencrypted vless/trojan outbounds
 // whose server address is a public IP or domain.
 func ValidateOutboundConfig(outbound []byte) error {
+	if err := validateNativeSSHOutbound(outbound); err != nil {
+		return err
+	}
 	ensureXrayAssetLocation()
 
 	detour := new(conf.OutboundDetourConfig)
@@ -215,6 +218,9 @@ func ValidateOutboundConfig(outbound []byte) error {
 
 // AddOutbound adds a new outbound configuration to the Xray core via gRPC.
 func (x *XrayAPI) AddOutbound(outbound []byte) error {
+	if err := validateNativeSSHOutbound(outbound); err != nil {
+		return err
+	}
 	if x.HandlerServiceClient == nil {
 		return common.NewError("xray HandlerServiceClient is not initialized")
 	}
@@ -578,6 +584,8 @@ func isShadowsocks2022Cipher(cipher string) bool {
 // that would panic the core and kill every connection on the server.
 func buildUserAccount(protocolName string, user map[string]any) (*serial.TypedMessage, error) {
 	switch protocolName {
+	case "ssh":
+		return buildSSHUserAccount(user)
 	case "mieru":
 		username, err := getRequiredUserString(user, "username")
 		if err != nil {
