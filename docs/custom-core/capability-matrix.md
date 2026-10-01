@@ -19,7 +19,7 @@ This is the initial source-audit matrix, not a support announcement. `E/U` = exi
 | Snell v4 | N both | N | N | official Surge interoperability + independent outbound test |
 | Snell v5 | N both | N | N | v4-like paths separately, QUIC Proxy Mode mandatory |
 | Snell v6 beta | N both | N | N | fixed beta client/server, shaping modes, TCP/UDP/reuse |
-| mieru | N both | N | N | official client/server, TCP/UDP/mux, deleted active users |
+| mieru | native core inbound/outbound I/V scoped; panel integration N | core typed users/removal/listener cleanup I/V; panel/API/DB/forms/export N | core decoded payload, shared Tunnel directional rate/billing/quota/disable/expiry I/V scoped | pinned official-library TCP/UDP/mux interop; full panel lifecycle and packaged reference validation remain open |
 | SSH | N both | N | N | OpenSSH -L/-D/authorized -R, strict upstream host key |
 | MTProto | E/U external mtg-multi; migration N | E/U secrets/ad-tags | N | preserve features, move execution into core |
 | TUIC v5 | E/U external tuic-server; migration N | E/U | N | preserve QUIC/UDP, remove panel relay after parity |
@@ -62,7 +62,7 @@ Lack of an upstream API, platform test machine or commercial client is **not** i
 - Selected SOCKS outbound and default block: exercised in one core instance with a separate internal SOCKS listener as the test upstream. Metering is once at the managed ingress. Missing managed policy rejects traffic.
 - Engine primitives: fixed-point multipliers, batch/fraction invariance, concurrent quota, reason composition, expiry, stale policy/revocation and shared directional token buckets pass race tests. These are not proof of all protocols, global limits or persistent accounting.
 - 100 MiB quota at multiplier 2: admitted 50 MiB bidirectional payload; exact figures and endpoint loss are in testing.md.
-- Panel UI/API/DB integration, durable panel settlement/restore fencing, all Snell/mieru/SSH adapters, ACL/listener ownership lifecycle and full single-core migration are still N.
+- Panel UI/API/DB integration, durable panel settlement/restore fencing, Snell/SSH adapters and full mieru panel integration, ACL/listener ownership lifecycle and full single-core migration are still N.
 
 - Independent binary TCP Tunnel rates: two connections share each configured upload/download limit, 256 KiB/s and 1 MiB/s; six cases including unlimited controls pass. See testing.md and evidence/tunnel-rates.jsonl.
 

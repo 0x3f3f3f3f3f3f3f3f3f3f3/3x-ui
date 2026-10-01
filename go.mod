@@ -56,6 +56,7 @@ require (
 	github.com/cloudflare/circl v1.6.5 // indirect
 	github.com/cloudwego/base64x v0.1.7 // indirect
 	github.com/ebitengine/purego v0.11.1 // indirect
+	github.com/enfein/mieru/v3 v3.38.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
 	github.com/gin-contrib/sse v1.1.2 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.8 // indirect

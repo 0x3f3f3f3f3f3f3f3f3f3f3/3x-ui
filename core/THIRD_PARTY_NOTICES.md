@@ -37,3 +37,17 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+## mieru v3.38.0
+
+Copyright (C) 2024–2026 mieru authors. GPL-3.0-or-later.
+Pinned source: https://github.com/enfein/mieru/tree/b961978c3be9dd26b94158487c760858e19d1db2
+
+The official library is compiled into Custom Xray-core. Its original source
+notices remain in the dependency; the complete license is retained at
+[licenses/mieru-GPL-3.0.txt](licenses/mieru-GPL-3.0.txt). No external mieru server
+process or local proxy bridge is used. Native adapter source and its pinned
+wire/header dependencies are in core/xray/proxy/mieru. Build metadata retains
+Custom Xray naming and the source revision. Release licensing review remains
+part of the existing packaging gate.

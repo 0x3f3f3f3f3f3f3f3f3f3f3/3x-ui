@@ -17,6 +17,7 @@ import (
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/proxy/dokodemo"
 	"github.com/xtls/xray-core/proxy/freedom"
+	"github.com/xtls/xray-core/proxy/mieru"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
@@ -27,6 +28,7 @@ var (
 		"http":          func() interface{} { return new(HTTPServerConfig) },
 		"shadowsocks":   func() interface{} { return new(ShadowsocksServerConfig) },
 		"mixed":         func() interface{} { return new(SocksServerConfig) },
+		"mieru":         func() interface{} { return new(MieruServerConfig) },
 		"socks":         func() interface{} { return new(SocksServerConfig) },
 		"vless":         func() interface{} { return new(VLessInboundConfig) },
 		"vmess":         func() interface{} { return new(VMessInboundConfig) },
@@ -40,6 +42,7 @@ var (
 		"block":       func() interface{} { return new(BlackholeConfig) },
 		"blackhole":   func() interface{} { return new(BlackholeConfig) },
 		"loopback":    func() interface{} { return new(LoopbackConfig) },
+		"mieru":       func() interface{} { return new(MieruClientConfig) },
 		"direct":      func() interface{} { return new(FreedomConfig) },
 		"freedom":     func() interface{} { return new(FreedomConfig) },
 		"http":        func() interface{} { return new(HTTPClientConfig) },
@@ -196,6 +199,24 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 	rawConfig, err := inboundConfigLoader.LoadWithID(settings, c.Protocol)
 	if err != nil {
 		return nil, errors.New("failed to load inbound detour config for protocol ", c.Protocol).Base(err)
+	}
+	if _, ok := rawConfig.(*MieruServerConfig); ok {
+		if receiverSettings.PortList == nil || len(receiverSettings.PortList.Range) != 1 || receiverSettings.PortList.Range[0].From == 0 || receiverSettings.PortList.Range[0].From != receiverSettings.PortList.Range[0].To {
+			return nil, errors.New("native mieru requires one nonzero listener port")
+		}
+		stream, err := internet.ToMemoryStreamConfig(receiverSettings.StreamSettings)
+		if err != nil {
+			return nil, err
+		}
+		if err := mieru.ValidateNativeStream(stream); err != nil {
+			return nil, err
+		}
+		if receiverSettings.Listen == nil {
+			receiverSettings.Listen = net.NewIPOrDomain(net.AnyIP)
+		}
+		if !receiverSettings.Listen.AsAddress().Family().IsIP() {
+			return nil, errors.New("native mieru requires an IP listener")
+		}
 	}
 	if dokodemoConfig, ok := rawConfig.(*DokodemoConfig); ok {
 		receiverSettings.ReceiveOriginalDestination = dokodemoConfig.FollowRedirect

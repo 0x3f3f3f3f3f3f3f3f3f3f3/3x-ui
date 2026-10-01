@@ -1,0 +1,9 @@
+{
+  "module": "github.com/enfein/mieru/v3",
+  "version": "v3.38.0",
+  "commit": "b961978c3be9dd26b94158487c760858e19d1db2",
+  "license": "GPL-3.0-or-later",
+  "integration": "compiled native core library, no sidecar",
+  "udpHeaderBoundary": "cipher.DefaultNonceSize + protocol.MetadataLength + cipher.DefaultOverhead; metadata[0]=openSessionRequest(2), metadata[6:10]=big-endian session ID from pinned metadata.go",
+  "source": "https://github.com/enfein/mieru/tree/b961978c3be9dd26b94158487c760858e19d1db2"
+}

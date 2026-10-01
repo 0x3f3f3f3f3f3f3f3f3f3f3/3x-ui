@@ -40,21 +40,22 @@ implements proxy.Inbound, common.Runnable and proxy.UserManager; outbound
 `NewClient(ctx context.Context, config *ClientConfig) (*Client,error)` implements
 proxy.Outbound and common.Closable. Mieru Account implements protocol.Account.
 
-- [ ] Write `TestMieruNativeConfigBuildsAuthenticatedInboundAndOutbound` using
+- [x] Write `TestMieruNativeConfigBuildsAuthenticatedInboundAndOutbound` using
   literal JSON with trusted client IDs and TCP/UDP modes; run it and observe
   unknown protocol RED before adding core configuration registration.
-- [ ] Add typed config/account conversion, pinned dependency and registrations;
-  pass JSON/config validation including duplicate IDs, bad modes and endpoints.
-- [ ] Write real native core interoperability tests with official client/server,
+- [x] Add typed config/account conversion, pinned dependency and registrations;
+  pass JSON/config validation including duplicate credentials, bad modes and endpoints.
+- [x] Write real native core interoperability tests with official client/server,
   independent payload TCP/UDP targets, route selection and mux; observe RED.
-- [ ] Implement native listeners, authenticated session dispatch, packet framing
+- [x] Implement native listeners, authenticated session dispatch, packet framing
   and injected outbound dialers; pass actual TCP/UDP interop tests.
-- [ ] Add user replacement/deletion, listener cleanup, sibling survival,
+- [x] Add user replacement/deletion, listener cleanup, sibling survival,
   shared Tunnel identity, exact ledger, quota/expiry and aggregate rate tests.
   Observe failures before fixing lifecycle and policy boundaries.
-- [ ] Run focused core race/config/control, core suite, root type compatibility
-  and generation/lint checks; one read-only review and corrections, documentation,
-  logical commit/fork push and distinct core build provenance.
+- [x] Run focused core race/config/control, core suite, root type compatibility
+  and generation/lint checks; one read-only review and corrections.
+- [ ] Finish documentation, logical commit/fork push and distinct clean-source
+  core/panel build provenance.
 
 Next vertical task: panel/API/DB/forms/export/runtime binding for mieru. Snell
 and SSH native adapter work remains the same central protocol priority; no

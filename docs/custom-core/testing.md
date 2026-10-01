@@ -2340,3 +2340,58 @@ stands. Logical commit, fork push and clean artifact evidence follow in
 deployment.md. This prerequisite is not Snell/mieru/SSH support or whole-project
 completion. The user's priority correction moves native protocol work ahead of
 further legacy-password refinement.
+
+## Native mieru core acceptance — 2026-10-01
+
+Scope is the pinned compiled mieru v3.38.0 core inbound and outbound. Official
+embedding client/server APIs provide the independent reference endpoints; no
+reference subprocess or runtime sidecar is used. Panel/API/database/forms/export
+and negotiated panel activation remain open. This does not complete Task8 or
+Snell/SSH support.
+
+Actual JSON registration RED (unknown protocol) preceded typed config GREEN.
+Real client/core/server TCP and UDP payloads over both native transports pass
+through injected core dialers and Dispatcher links. Tests cover observed deny
+routes, HTTP-host sniffing, domain and IPv6 targets, 12 multiplexed streams,
+13,000-byte and empty UDP datagrams, exact decrypted-payload ledger at 1.5,
+shared Tunnel live multiplier/quota and separate aggregate upload/download
+limits, disable and expiry, removed and rotated cached credentials, unaffected
+siblings, listener release and bounded pending handshakes.
+
+One read-only reviewer reproduced eight initial Important findings and three
+additional outbound pool findings; all were corrected and independently passed
+in 19.956s. Root actual RED logs are preserved under task-evidence. Raw public
+Mux handshakes avoid the embedding EarlyConn Close/Once block, selected gateways
+isolate pools, and owned physical connection fences close late successful UDP
+dials. Partial-response cancellation and one-second absolute handshake tests
+pass over TCP and UDP. Earlier timeout assertions now classify the library's
+TIMEOUT errors, not only net.Error.
+
+An initial rate fixture used burst4096 below the core read buffer8192 and failed
+closed with ErrPacketTooLarge; its failed output is retained. The valid burst8192
+fixture passed shared directional rates and exact ledger in 3.09s; eight real
+disable/expiry transport/payload cases passed .87s. This leaves the existing
+packet-vs-burst validation behavior intact.
+
+Final full core suite `go test -count=1 -timeout=10m ./...` passed, including
+native mieru38.057s and existing scenarios395.204s. Post-correction focused race
+passed all27 required native/config top-level names: mieru29.252s, conf1.271s,
+buf1.776s, pipe3.132s, Dispatcher2.115s, CPE5.746s. Same-module panel type
+compatibility passed. An isolated copy over current feature source a00a7b5
+passed full root `make test-go` (service148.171s; explicit AmneziaWG1.937s),
+lint0issues, vet and generation check. Protobuf regeneration matches exactly.
+Existing managed current-core binary regressions passed15.821s; older-core
+fixture cases without their required separate binaries were explicitly skipped
+and are not new passing evidence. Distinct clean-source final checkpoint builds
+and fork publication remain pending. Initial full suite3m timed out after total package budget while
+its active TLS/WebSocket case had only run6s; this is not passing evidence.
+The subsequent full suite found an admission-close ordering race: immediate
+UDP retry could see peer EOF before the connection registry was released.
+Root repeated100 attempts reproduced3 failures; admission is now released
+before peer-visible close: root100/100 passed2.029s and independent same-review
+100/100 passed1.989s. Final native source hashes remained unchanged through
+post-correction gates. The shared UDP changes form local commit8a31d5bf; actual
+original-buffer overlay failed both new behavioral tests (.232s), corrected
+race passed1.076s and independent race1.074s; full buf/pipe race passed1.914/3.156s.
+Only the pending publication/build record closes this core increment; full
+protocol panel integration remains open.

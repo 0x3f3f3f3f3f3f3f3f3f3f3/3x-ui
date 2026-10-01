@@ -30,15 +30,22 @@ Decrypted TCP payload goes to the existing Dispatcher with canonical user,
 inbound tag, physical source and original target in a fresh session context.
 Disable splice for managed payload. UDP payload is decoded from the library's
 PacketOverStreamTunnel and SOCKS UDP framing, preserving datagram boundaries and
-per-packet destinations. Dispatch datagrams through Xray's UDP routing helpers;
+per-packet destinations. Dispatch each destination through bounded Xray Dispatcher links;
 count payload once, excluding framing. All paths share Client Policy Engine
 limits, multipliers, quota, expiry and revocation with other protocols.
 
-The outbound uses the official embedding client API. Supply both stream and
+The outbound uses the official public profile-built transport multiplexer and
+SOCKS request/response model. The adapter owns the raw logical session during
+handshake so cancellation and an absolute timer can close partial responses. Supply both stream and
 packet dialers backed by the Xray internet.Dialer so the library cannot create
 independent target connections. The remote mieru server is the transport peer;
 destination TCP/UDP requests travel inside that authenticated transport. Preserve
-packet destinations and boundaries. The existing dispatched link already owns
+packet destinations and boundaries. Pools isolate immutable authenticated
+MemoryUser generations, inbound tag, supplied dialer, selected gateway and
+socket mark. Logical cancellation closes only its own session; credential
+revocation and core Close fence pending dials and close every owned physical
+socket, including late successful UDP returns. Idle pools expire after 30s;
+OFF retains no idle pool. The existing dispatched link already owns
 policy accounting: never add a second admission or billing ledger on egress.
 
 Add typed core configurations and JSON registration for `mieru`, keeping
