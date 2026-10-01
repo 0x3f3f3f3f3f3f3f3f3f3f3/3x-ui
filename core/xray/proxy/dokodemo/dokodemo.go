@@ -81,6 +81,10 @@ func (d *DokodemoDoor) Network() []net.Network {
 	return d.config.AllowedNetworks
 }
 
+// PreserveDatagrams keeps raw UDP forwarding boundaries at the listener. The
+// default hub buffer is smaller than a valid datagram and drops empty packets.
+func (*DokodemoDoor) PreserveDatagrams() bool { return true }
+
 func (d *DokodemoDoor) policy() policy.Session {
 	config := d.config
 	p := d.policyManager.ForLevel(config.UserLevel)
@@ -175,9 +179,18 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 
 	var reader buf.Reader
 	if dest.Network == net.Network_TCP {
+		content := new(session.Content)
+		if original := session.ContentFromContext(ctx); original != nil {
+			*content = *original
+		}
+		content.PreserveTCPHalfClose = true
+		ctx = session.ContextWithContent(ctx, content)
 		reader = buf.NewReader(conn)
 	} else {
 		reader = buf.NewPacketReader(conn)
+		if !destinationOverridden {
+			reader = &emptyDatagramReader{Reader: reader, source: inbound.Source, destination: dest}
+		}
 	}
 
 	var writer buf.Writer
