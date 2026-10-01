@@ -251,3 +251,16 @@ foreign-owner import, remaining adapters and single-core distribution stay N.
 Final generation/lint/vet/full Go/affected race and named database contracts pass.
 Distinct clean panel/core builds, version and prior artifact preservation pass;
 see deployment.md. This scoped checkpoint is complete; whole Task5B stays open.
+
+
+Unmatched native counter retention: exact labels, raw amounts, source mode and
+managed instance plus original receipt payload digests are I/V as a prerequisite
+for legacy migration. SQLite/PostgreSQL tests retain long, case-sensitive,
+newline and NUL usernames without assigning an owner; known siblings and
+managed lifetime billing remain intact. Late SQL failure, lost acknowledgement,
+cursor growth, collisions, overflow, source drift, historic receipts, backup
+and cross-database export are verified. Three read-only review findings were
+reproduced and resolved. Named database contracts, generation/lint/vet/full Go
+and affected race checks pass. Future historical config proof, mapping and atomic
+bucket consumption are N; password live legacy handoff stays closed. Whole
+Task5B, remaining protocol adapters and single-core distribution remain open.

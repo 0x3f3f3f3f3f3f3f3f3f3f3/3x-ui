@@ -2,9 +2,12 @@ package xray
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"math"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -13,12 +16,14 @@ import (
 
 // TrafficBatch is stable across retries, including a lost SQL commit acknowledgement.
 type TrafficBatch struct {
-	ProcessID      string
-	Sequence       int64
-	ID             string
-	Final          bool
-	Traffics       []*Traffic
-	ClientTraffics []*ClientTraffic
+	ProcessID        string
+	Sequence         int64
+	ID               string
+	Final            bool
+	Traffics         []*Traffic
+	ClientTraffics   []*ClientTraffic
+	SourceMode       string
+	SourceInstanceID string
 }
 
 type pendingTrafficBatch struct {
@@ -95,6 +100,10 @@ func (p *Process) commitTrafficPending(settle func(*TrafficBatch) error) error {
 }
 
 func (p *Process) trafficBatchFromCounters(values map[string]int64, final bool) (*pendingTrafficBatch, error) {
+	mode, instanceID, err := p.trafficSourceAccounting()
+	if err != nil {
+		return nil, err
+	}
 	if final {
 		for name, last := range p.trafficCursor {
 			if values[name] < last {
@@ -130,5 +139,25 @@ func (p *Process) trafficBatchFromCounters(values map[string]int64, final bool) 
 	return &pendingTrafficBatch{batch: TrafficBatch{
 		ProcessID: p.trafficID, Sequence: p.trafficSequence + 1, ID: uuid.NewString(),
 		Traffics: traffics, ClientTraffics: clientTraffics, Final: final,
+		SourceMode: mode, SourceInstanceID: instanceID,
 	}, cursor: cursor}, nil
+}
+
+// Snapshot before entering the SQL callback; a retry retains this batch even
+// when the current process or its stored configuration later changes.
+func (p *Process) trafficSourceAccounting() (string, string, error) {
+	config := p.GetConfig()
+	if config == nil {
+		return "unknown", "", nil
+	}
+	if len(config.ClientPolicy) == 0 || strings.TrimSpace(string(config.ClientPolicy)) == "null" {
+		return "legacy", "", nil
+	}
+	var policy struct {
+		InstanceID string `json:"instanceId"`
+	}
+	if err := json.Unmarshal(config.ClientPolicy, &policy); err != nil || !utf8.Valid(config.ClientPolicy) || policy.InstanceID == "" || len(policy.InstanceID) > 36 {
+		return "", "", errors.New("invalid managed traffic source accounting")
+	}
+	return "managed", policy.InstanceID, nil
 }

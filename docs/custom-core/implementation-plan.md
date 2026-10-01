@@ -918,20 +918,20 @@ Files: `internal/xray/process_traffic.go`,
 `internal/web/service/xray_traffic_settlement.go`, new
 `internal/web/service/legacy_traffic_retention.go`, and collector/migration tests.
 
-- [ ] Actual RED: unknown labels/case variants/long UTF-8 survive settlement;
+- [x] Actual RED: unknown labels/case variants/long UTF-8 survive settlement;
   changed retry payload rejects; late bucket failure rolls back all layers.
-- [ ] Persist raw unmatched source-labelled buckets and original receipt digest
+- [x] Persist raw unmatched source-labelled buckets and original receipt digest
   transactionally; capture matched rows once and preserve ordinary maintenance.
   Validate identity/input, checked addition and hash collision; bound SQL batches.
-- [ ] Capture legacy/managed/unknown source mode and managed instance before the
+- [x] Capture legacy/managed/unknown source mode and managed instance before the
   SQL callback; retain it in pending retries, digests and buckets. Never infer it
   from a later current child or reuse managed native bytes as legacy usage.
-- [ ] Real ordinary polling, lost-commit acknowledgement, cursor retry/growth,
+- [x] Real ordinary polling, lost-commit acknowledgement, cursor retry/growth,
   late-created matching row, many labels and preserved known sibling counters.
   Existing handoff/first-use/job behavior remains green.
-- [ ] SQLite/PostgreSQL schema/backup/migration/export preserve buckets/digests,
+- [x] SQLite/PostgreSQL schema/backup/migration/export preserve buckets/digests,
   including old tables/columns absent without source mutation or fabricated data.
-- [ ] One read-only review/same-review corrections, frozen source and named DB
+- [x] One read-only review/same-review corrections, frozen source and named DB
   contracts plus required gen/lint/vet/full Go/affected race checks.
 - [ ] Scoped docs/matrix, logical commit/exact fork push and distinct clean
   artifact provenance. Password live-handoff gate remains closed; owner mapping,

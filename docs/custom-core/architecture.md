@@ -426,8 +426,12 @@ does not assign ownership or enable that gate.
 
 Persist each exact raw label with its source Process ID, source accounting mode
 and managed instance, raw upload/download, and a SHA-256 label key. Keep the
-original label as TEXT to support long UTF-8 and case-sensitive aliases; reject a
-different label at the same key. Nonnegative int64 additions must be exact:
+original label as reversibly encoded TEXT to support every valid UTF-8 label,
+including NUL, long usernames and case-sensitive aliases; reject a different
+original label at the same key. JSON string serialization preserves exact bytes
+and distinguishes literal escape-looking labels. PostgreSQL NUL labels cannot
+match client email TEXT and remain unassigned without binding an invalid query
+parameter. Native parsing includes newline labels in normal and final batches. Nonnegative int64 additions must be exact:
 overflow or late persistence failure rolls back the whole settlement. Use sorted,
 bounded writes. Source metadata must remain consistent within a retained key.
 

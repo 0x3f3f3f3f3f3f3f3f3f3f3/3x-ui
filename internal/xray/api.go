@@ -44,8 +44,8 @@ import (
 // Compiled once at package load: GetTraffic runs on every traffic-stats tick,
 // so recompiling these per call is wasted work.
 var (
-	trafficRegex       = regexp.MustCompile(`^(inbound|outbound)>>>(.+)>>>traffic>>>(downlink|uplink)$`)
-	clientTrafficRegex = regexp.MustCompile(`^user>>>(.+)>>>traffic>>>(downlink|uplink)$`)
+	trafficRegex       = regexp.MustCompile(`(?s)^(inbound|outbound)>>>(.+)>>>traffic>>>(downlink|uplink)$`)
+	clientTrafficRegex = regexp.MustCompile(`(?s)^user>>>(.+)>>>traffic>>>(downlink|uplink)$`)
 )
 
 // XrayAPI is a gRPC client for managing Xray core configuration, inbounds, outbounds, and statistics.

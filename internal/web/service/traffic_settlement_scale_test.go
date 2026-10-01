@@ -75,7 +75,9 @@ func TestLegacyTrafficSettlementLateWriteRollsBackAllChunks(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Callback().Raw().Remove(hook) })
-	deltas = append(deltas, &xray.ClientTraffic{Email: "late-000000", Up: 5, Down: 11})
+	// The collector produces one delta per exact label. Duplicate-input legacy
+	// accumulator compatibility is verified separately below.
+	deltas[0].Up, deltas[0].Down = 5, 11
 	batch := &xray.TrafficBatch{ProcessID: "late-child", Sequence: 1, ID: "late-final", Final: true, ClientTraffics: deltas}
 	svc := &XrayService{}
 	if err := svc.settleLegacyTrafficBatch(batch); !errors.Is(err, injected) {
@@ -99,7 +101,33 @@ func TestLegacyTrafficSettlementLateWriteRollsBackAllChunks(t *testing.T) {
 	}
 	var duplicate xray.ClientTraffic
 	if err := db.Where("email = ?", "late-000000").First(&duplicate).Error; err != nil || duplicate.Up != 16 || duplicate.Down != 30 {
-		t.Fatalf("duplicate email across SQL chunks changed settlement: %+v %v", duplicate, err)
+		t.Fatalf("first delta across SQL chunks changed settlement: %+v %v", duplicate, err)
+	}
+}
+
+func TestLegacyClientTrafficDuplicateAcrossChunksPreservesLastDelta(t *testing.T) {
+	setupPolicyLedgerDB(t)
+	db := database.GetDB()
+	rows := make([]xray.ClientTraffic, 1001)
+	deltas := make([]*xray.ClientTraffic, len(rows))
+	for i := range rows {
+		email := fmt.Sprintf("duplicate-%06d", i)
+		rows[i] = xray.ClientTraffic{Email: email, Up: 11, Down: 19}
+		deltas[i] = &xray.ClientTraffic{Email: email, Up: 3, Down: 7}
+	}
+	if err := db.CreateInBatches(rows, 500).Error; err != nil {
+		t.Fatal(err)
+	}
+	deltas = append(deltas, &xray.ClientTraffic{Email: rows[0].Email, Up: 5, Down: 11})
+	if err := runSerializedTx(func(tx *gorm.DB) error { return (&InboundService{}).addClientTraffic(tx, deltas) }); err != nil {
+		t.Fatal(err)
+	}
+	var wrong int64
+	if err := db.Model(&xray.ClientTraffic{}).Where("email <> ? AND (up <> 14 OR down <> 26)", rows[0].Email).Count(&wrong).Error; err != nil || wrong != 0 {
+		t.Fatalf("legacy accumulator missed unique sibling deltas: %d/%v", wrong, err)
+	}
+	if got := trafficOf(t, rows[0].Email); got.Up != 16 || got.Down != 30 {
+		t.Fatalf("legacy duplicate input no longer keeps its final delta: %+v", got)
 	}
 }
 

@@ -217,4 +217,35 @@ func TestPasswordProxyConfigFeedsRealSharedLedger(t *testing.T) {
 	if total := policyLedgerTotal(t, disabled.StableID); total.RawUpload != 0 || total.RawDownload != 0 || total.BilledBytes != 0 {
 		t.Fatalf("disabled owner received traffic: %+v", total)
 	}
+	if _, _, err := process.SettleTraffic(func(batch *xray.TrafficBatch) error {
+		if batch.SourceMode != "managed" || batch.SourceInstanceID != generated.InstanceID {
+			t.Fatalf("actual managed batch has incorrect source: %s/%s", batch.SourceMode, batch.SourceInstanceID)
+		}
+		wantNative := map[string]int64{first.Email: 30, second.Email: 12}
+		seen := make(map[string]bool)
+		for _, row := range batch.ClientTraffics {
+			if row.Up != wantNative[row.Email] || row.Down != wantNative[row.Email] {
+				t.Fatalf("actual managed native labels differ from admitted payload: %+v", row)
+			}
+			if row.Up > 0 {
+				seen[row.Email] = true
+			}
+		}
+		if !seen[first.Email] || !seen[second.Email] {
+			t.Fatal("actual managed batch omitted admitted native counters")
+		}
+		return (&XrayService{}).settleLegacyTrafficBatch(batch)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var retained []model.LegacyUnassignedTraffic
+	if err := database.GetDB().Find(&retained).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(retained) != 0 {
+		t.Fatalf("generated canonical native labels became unassigned: %+v", retained)
+	}
+	if total := policyLedgerTotal(t, first.StableID); total.RawUpload != 130 || total.RawDownload != 230 || total.BilledBytes != 390 {
+		t.Fatalf("native collection replayed managed billing: %+v", total)
+	}
 }

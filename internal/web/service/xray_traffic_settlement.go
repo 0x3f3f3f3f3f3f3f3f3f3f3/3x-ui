@@ -46,6 +46,14 @@ func (s *XrayService) settleLegacyTrafficBatch(batch *xray.TrafficBatch) error {
 }
 
 func (s *XrayService) settleLegacyTrafficBatchChecked(batch *xray.TrafficBatch, check func(*gorm.DB, *xray.TrafficBatch) error) error {
+	batch, err := normalizeLegacyTrafficBatch(batch)
+	if err != nil {
+		return err
+	}
+	digest, err := legacyTrafficPayloadDigest(batch)
+	if err != nil {
+		return err
+	}
 	return runSerializedTx(func(tx *gorm.DB) error {
 		receipt := model.LegacyTrafficReceipt{ProcessID: batch.ProcessID}
 		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&receipt).Error; err != nil {
@@ -55,6 +63,9 @@ func (s *XrayService) settleLegacyTrafficBatchChecked(batch *xray.TrafficBatch, 
 			return err
 		}
 		if receipt.Sequence == batch.Sequence && receipt.BatchID == batch.ID {
+			if receipt.PayloadDigest != "" && receipt.PayloadDigest != digest {
+				return ErrLegacyTrafficBatch
+			}
 			return nil
 		}
 		if receipt.Sequence != batch.Sequence-1 {
@@ -64,9 +75,25 @@ func (s *XrayService) settleLegacyTrafficBatchChecked(batch *xray.TrafficBatch, 
 			if err := check(tx, batch); err != nil {
 				return err
 			}
+			checked, err := normalizeLegacyTrafficBatch(batch)
+			if err != nil {
+				return err
+			}
+			checkedDigest, err := legacyTrafficPayloadDigest(checked)
+			if err != nil {
+				return err
+			}
+			if checkedDigest != digest {
+				return ErrLegacyTrafficBatch
+			}
+			batch = checked
 		}
-		traffics, clients := batch.Traffics, batch.ClientTraffics
+		traffics := batch.Traffics
 		if err := s.inboundService.addInboundTraffic(tx, traffics); err != nil {
+			return err
+		}
+		clients, err := retainUnassignedLegacyTraffic(tx, batch)
+		if err != nil {
 			return err
 		}
 		if err := s.inboundService.addClientTraffic(tx, clients); err != nil {
@@ -76,6 +103,7 @@ func (s *XrayService) settleLegacyTrafficBatchChecked(batch *xray.TrafficBatch, 
 			return err
 		}
 		receipt.Sequence, receipt.BatchID = batch.Sequence, batch.ID
+		receipt.PayloadDigest = digest
 		return tx.Save(&receipt).Error
 	})
 }

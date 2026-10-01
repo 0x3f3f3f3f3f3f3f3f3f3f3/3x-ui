@@ -46,6 +46,7 @@ func migrationModels() []any {
 		&xray.ClientTraffic{},
 		&model.OutboundTraffics{},
 		&model.LegacyTrafficReceipt{},
+		&model.LegacyUnassignedTraffic{},
 		&model.InboundClientIps{},
 		&model.ClientRecord{},
 		&model.ClientPolicyTombstone{},
@@ -111,6 +112,7 @@ func MigrateData(srcPath, dstDSN string) error {
 	hasResetBatches := src.Migrator().HasTable(&model.ClientTrafficResetBatch{})
 	hasResetTimes := src.Migrator().HasTable(&model.ClientTrafficResetTime{})
 	hasLegacyTrafficReceipts := src.Migrator().HasTable(&model.LegacyTrafficReceipt{})
+	hasLegacyUnassignedTraffic := src.Migrator().HasTable(&model.LegacyUnassignedTraffic{})
 	if hasPolicyResets && policyTableCount != len(policyTables) {
 		return errors.New("source has client policy resets without a complete ledger")
 	}
@@ -160,6 +162,9 @@ func MigrateData(srcPath, dstDSN string) error {
 				continue
 			}
 			if _, ok := m.(*model.LegacyTrafficReceipt); ok && !hasLegacyTrafficReceipts {
+				continue
+			}
+			if _, ok := m.(*model.LegacyUnassignedTraffic); ok && !hasLegacyUnassignedTraffic {
 				continue
 			}
 			if _, ok := m.(*model.ClientTrafficResetTime); ok && !hasResetTimes {
@@ -250,6 +255,12 @@ func copyAllModels(src, dst *gorm.DB) error {
 		}
 	}
 	for _, m := range migrationModels() {
+		switch m.(type) {
+		case *model.LegacyUnassignedTraffic, *model.LegacyTrafficReceipt:
+			if !src.Migrator().HasTable(m) {
+				continue
+			}
+		}
 		if _, err := copyTable(src, dst, m); err != nil {
 			return fmt.Errorf("copy %T: %w", m, err)
 		}

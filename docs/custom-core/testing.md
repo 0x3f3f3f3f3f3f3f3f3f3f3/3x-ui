@@ -2197,3 +2197,84 @@ record remains unchanged. Clean builds are distinct artifact checks.
 Live legacy alias-counter handoff, generic credential creation, anonymous
 ownership, foreign-owner import and remaining protocol/single-core work remain
 unfinished. This increment does not complete Task5B or the original goal.
+
+
+### Unmatched native counter retention prerequisite
+
+The initial behavioral regressions reproduced dropped unmatched labels and
+accepted changed retry intent before implementation. Retained counters keep
+exact labels, original-byte SHA-256 keys, source Process/mode/managed instance
+and raw amounts without assigning ownership or creating a billing ledger.
+New receipt digests bind original intent independently of later matching rows.
+Old blank-digest receipts retain identity-only replay compatibility; replay
+creates neither an invented digest nor historical buckets. The next genuine
+sequence receives a digest. Source accounting is captured before the SQL
+callback and retained across config changes and pending retries.
+
+Tests cover callback mutation and rollback, invalid UTF-8 identities, negative
+and duplicate inputs, ordering-independent digest retries, changed direction,
+final flag and source metadata, int64 overflow, corrupt stored counters, label
+collision, source drift, and late persistence failure. A matching row created
+after classification does not adopt that delta; only later batches use it.
+601 unmatched labels exercise bounded writes, failure in the third chunk,
+complete rollback and exact retry. The existing 100001-known-client and late
+SQL-chunk regressions remain selected. The old duplicate-label settlement
+fixture conflicted with the new explicit input contract and reproduced RED;
+it now uses the collector's unique final delta. A separate 1001-row test keeps
+the unchanged legacy accumulator's last-duplicate-delta behavior covered.
+
+The single read-only review found three Important boundaries, each reproduced
+in root before correction: newline labels were consumed without parsing; NUL
+labels stalled PostgreSQL lookup/storage; native export from a pre-receipt
+database failed. Native parsing now includes exact multiline labels. Reversible
+JSON string serialization in TEXT stores NUL without confusing literal escape
+or base64-looking aliases; hashes remain over original bytes. PostgreSQL lookup
+excludes labels that cannot exist in its client TEXT column. Missing historical
+receipt and bucket tables are optional during export. Valid encoded collisions
+still reject. The initial raw-label collision fixture wrote invalid JSON after
+the storage change; that failure is archived, and the corrected fixture writes
+a valid different original label through the model serializer.
+
+Real Mixed/HTTP ordinary collection exercises late bucket-write failure and SQL
+commit with a lost acknowledgement, followed by pending retry and new growth.
+Each of four cases sends 36 independent target bytes: alice 12/12, ALICE 6/6,
+newline username 6/6, NUL username 6/6 and known Tunnel 6/6. The known historical
+row ends at 106/206; no managed lifetime total is invented. The fixture disables
+legacy splice because download counters otherwise publish only when the copy
+ends. Private socket directory/mode/length and the missing binary variable
+fixture failures remain archived; skipped execution is not accepted evidence.
+The existing generated managed password test verifies immutable managed source
+metadata and canonical native labels while its prior lifetime ledger remains
+unchanged by native SQL settlement.
+
+Actual SQLite backup/reopen upgrades and SQLite→PostgreSQL→SQLite migrations
+preserve original amounts, long/case/NUL labels and receipt bindings.
+Current, missing-bucket, missing-digest and pre-receipt schemas preserve existing
+users and historical receipts without modifying source schema or inventing
+traffic. NUL migration and literal-escape separation pass on real PostgreSQL.
+The same reviewer clears all three findings: independent migration/export
+12.506 s, four PostgreSQL real-core cases 6.384 s, focused PostgreSQL race
+42.116 s and independent row-lock/late-insert probe 1.663 s pass. No remaining
+Critical, Important or Minor implementation finding was reported. Future bucket
+ownership/consumption and live password handoff remain explicitly deferred.
+
+All final verification gates pass. The earlier SQLite 169.14 s
+PASS/PostgreSQL 328.46 s FAIL run compiled before review corrections and is
+archived. Final SQLite contracts pass in 156.15 s wall with all 43 selected
+names and four real-core subcases explicitly passing. PostgreSQL contracts pass
+in 321.50 s wall with all 47 selected names and four real-core subcases passing.
+Final generation (0.85 s), lint (54.03 s, 0 issues) and vet (18.26 s) pass.
+Full make test-go passes in 362.66 s wall, including service 156.919 s and
+the explicit AmneziaWG device package 1.012 s. Full affected race/shuffle passes
+in 643.04 s wall across service, database, controller, Xray process and traffic
+job packages; service 456.493 s and database 83.362 s. This includes final
+serializer/collision fixtures and ordinary/final multiline parsing. Contracts compiled before
+nonfunctional unused-variable/selector cleanup; full Go/race compiles the cleaned
+source. All eight reviewed production hashes are recorded and remain unchanged
+after final formatting. YAML and all 33 Bash run blocks parse; no remote CI
+execution is claimed. This prerequisite does not complete Task5B or the original
+single-core/protocol/install goal. No core/frontend production source changed;
+preceding native-core/frontend suite evidence remains applicable without a new
+full native-core/frontend suite claim. The earlier default frontend timeout and
+split validation record remains unchanged. Clean builds are separate artifact
+checks, with provenance recorded in deployment.md.
