@@ -121,9 +121,9 @@ Files: `internal/database/{db.go,model/*}`, `internal/web/{service,controller,ru
 
 Files: core `proxy/ssh`, config/control and existing panel protocol forms/export.
 
-- [ ] Standard OpenSSH tests for -L/-D and opt-in controlled -R, wrong/revoked keys and denied shell/exec/subsystems.
-- [ ] Implement in-process SSH using Go SSH, separate persistent host keys, bounded handshake/channels/listeners and strict outbound host verification.
-- [ ] Route direct channels through Dispatcher; meter reverse channels with explicit direction and honest target visibility.
+- [x] Standard OpenSSH tests for -L/-D and opt-in controlled -R, wrong/revoked keys and denied shell/exec/subsystems.
+- [x] Implement in-process SSH using Go SSH, separate persistent host keys, bounded handshake/channels/listeners and strict outbound host verification.
+- [x] Route direct channels through Dispatcher; meter reverse channels with explicit direction and honest target visibility.
 - [ ] Verify shared policy over multiple connections/channels, listener cleanup, export and API/UI lifecycle.
 
 ## Task 8: mieru inbound and outbound
@@ -992,3 +992,14 @@ as unknown, preventing later proof insertion from promoting their history.
   gen/lint/vet/full Go/affected race and scoped capability/testing docs.
 - [x] Logical commit/exact fork push, distinct clean builds and provenance.
   Future full mapping/consumption and password handoff remain unfinished.
+
+## Native SSH core checkpoint — 2026-10-01
+
+Core implementation follows native-ssh-design.md and native-ssh-plan.md. One
+independent review's two Important lifecycle findings plus bounded CLOSE
+acknowledgment follow-up were reproduced and corrected before integration.
+Exact acceptance and parent verification are in native-ssh-testing.md.
+Task 7 remains open for panel/API/DB/forms/export, dedicated business host-key
+provisioning/rotation, negotiated capability and full lifecycle acceptance.
+Snell remains a core priority and mieru panel integration is in progress; no
+new password/legacy migration feature scope is introduced by this checkpoint.

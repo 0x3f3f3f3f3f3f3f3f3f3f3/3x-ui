@@ -24,7 +24,7 @@ jobs:
       - name: Core race checks
         working-directory: core/xray
         run: |
-          go test -race -count=1 ./app/clientpolicy/... ./app/commander ./app/dispatcher ./app/proxyman/inbound ./app/proxyman/outbound ./app/reverse ./app/router ./app/stats ./app/trafficcontrol ./infra/conf ./proxy ./proxy/dokodemo ./proxy/loopback ./proxy/socks ./proxy/http ./proxy/mieru ./proxy/vless/inbound ./proxy/vless/outbound ./proxy/wireguard ./common/buf ./common/mux ./common/protocol ./common/signal ./transport/internet/udp ./transport/internet/websocket ./transport/internet/splithttp ./transport/internet/httpupgrade ./transport/internet/finalmask/realm ./testing/policy
+          go test -race -count=1 ./app/clientpolicy/... ./app/commander ./app/dispatcher ./app/proxyman/inbound ./app/proxyman/outbound ./app/reverse ./app/router ./app/stats ./app/trafficcontrol ./infra/conf ./proxy ./proxy/dokodemo ./proxy/loopback ./proxy/socks ./proxy/http ./proxy/mieru ./proxy/ssh ./proxy/vless/inbound ./proxy/vless/outbound ./proxy/wireguard ./common/buf ./common/mux ./common/protocol ./common/signal ./transport/internet/udp ./transport/internet/websocket ./transport/internet/splithttp ./transport/internet/httpupgrade ./transport/internet/finalmask/realm ./testing/policy
           go test -race -count=1 ./core -run '^(TestRejectedHandlerConstructionClosesProxy|TestTrafficDrain)'
       - name: Tunnel mux routing and legacy compatibility
         working-directory: core/xray
@@ -41,6 +41,15 @@ jobs:
           go test -race -count=1 -v ./proxy/mieru ./infra/conf -run '^(TestMieruNative|TestNativeMieru|TestReview)' | tee /tmp/native-mieru.log
           for test in TestNativeMieruOutboundPoolIsolatesAuthenticationAndCancellation TestNativeMieruDisableAndExpiryCloseTCPAndUDP TestNativeMieruAndTunnelShareUploadAndDownloadRate TestReviewUDPPartialHandshakeCannotDefeatTimeout TestReviewUDPFailedHandshakeMustReleaseCapacity TestReviewOutboundHighMultiplexingSharesTransport TestReviewOutboundClientCloseReleasesQuietPeer TestReviewCancellationInterruptsPendingOfficialHandshake TestNativeMieruOutboundHandshakeTimeoutIsAbsolute TestReviewPoolDoesNotShareDistinctSelectedGateways TestReviewPoolCloseCannotLeakLateDialResult TestReviewNativeInboundHonorsSniffing TestReviewUDPAssociateMayUseUnspecifiedTarget TestReviewNativeStreamWrappersAreRejected TestReviewEmptyUDPDatagramReachesTarget TestNativeMieruUDPRoutesEveryDestinationIncludingDomain TestNativeMieruIPv6TCPDestination TestNativeMieruLargeUDPDatagramKeepsBoundaryAndBilling TestNativeMieruConcurrentMuxSameCredentialsRemainUsable TestNativeMieruSharesTunnelPolicyAndLiveQuota TestNativeMieruUnauthenticatedTimeoutReleasesCapacity TestNativeMieruCloseReleasesNativeListeners TestNativeMieruCredentialRotationClosesOldMuxAndPreservesSibling TestNativeMieruOutboundUsesOfficialServer TestNativeMieruOfficialClientPayloadUsesCoreDispatcher TestMieruNativeConfigRejectsUnusableIdentityAndTransport TestMieruNativeConfigBuildsAuthenticatedInboundAndOutbound; do
             grep -q -- "^--- PASS: $test " /tmp/native-mieru.log
+          done
+      - name: Native SSH OpenSSH forwarding and lifecycle
+        working-directory: core/xray
+        run: |
+          set -euo pipefail
+          command -v ssh
+          go test -race -count=1 -v -timeout=90s ./proxy/ssh ./testing/policy -run '^(TestOutbound|TestSSH|TestChannel)' | tee /tmp/native-ssh.log
+          for test in TestSSHOpenSSHDirectSharesTunnelLedgerAndDisable TestSSHOpenSSHReverseMetersClientRelativeDirection TestSSHNativeOutboundStrictPinAndRoutedPayload TestSSHMissingPolicyAndBlockedRouteCannotReachTarget TestSSHChannelEOFAndCredentialRemovalPreserveTunnelSibling TestSSHAndTunnelShareLiveDirectionalRates TestSSHQuotaAndExpiryCloseIdleTransportAndTunnelSibling TestSSHRestartRetainsBusinessHostKeyAndSharedUsage TestSSHPasswordDefaultOffRejectsCorrectPassword TestSSHPasswordOptInRotationAndRemovalPreserveCanonicalSiblings TestSSHReversePortZeroCancellationAndDisableReleaseOwnedResources TestSSHReverseAuthorizationChecksBindPortAndRealSource TestSSHConnectionChannelHandshakeAndIdleBounds TestSSHCancelledPendingReverseOpenCannotLeakAcceptedChannel TestSSHVerifiedAuthenticationCannotTransferRevokedOfferToReplacement TestSSHStalledControlWriteClosesWithinChannelBound TestChannelCapacityRetainsDelayedPeerCloseAndOwnedDrains TestChannelRetirementTimeoutClosesTransportAndJoinsOwnedDrains TestOutboundUDPReturnsExplicitUnsupportedNetwork TestOutboundHostMismatchReturnsTypedError TestOutboundHandshakeCancellationClosesSuppliedTransport TestOutboundHandshakeUsesAbsoluteDeadline TestOutboundIdleClosesBothCopyDirectionsAtConfiguredDeadline; do
+            grep -q -- "^--- PASS: $test " /tmp/native-ssh.log
           done
       - name: Build custom core
         run: bash tools/build-custom-core.sh

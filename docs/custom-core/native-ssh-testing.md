@@ -251,3 +251,24 @@ coverage remain unverified; tested OpenSSH public-key forwarding and independent
 Go password/outbound acceptance are reported separately. The reviewer's first
 close-ack harness did not reproduce runtime growth; the later faithful bounded
 three-channel regression proves the corrected capacity/drain contract.
+
+## Combined feature branch validation
+
+Additive SSH registration merged with native mieru without conflict. The
+standalone core uses x/crypto v0.55.0; the panel module resolves v0.57.0 and
+was independently tested rather than assuming equivalent SSH lifecycle behavior.
+Combined-core race passed SSH4.299s/policy7.550s. All23 required SSH top-level
+CI names explicitly PASS in both combined-core and root-module MVS race logs.
+Root `make test-go`, `make lint-go` (0 issues), `go vet ./...` and `make
+gen-check` exited0. Workflow YAML parsed and new SSH step passed bash syntax
+validation. The first combined-core run lacked loopback permission and failed;
+only the subsequent socket-enabled run is passing evidence.
+
+Evidence: `/root/task-evidence/native-ssh-root-validation-progress.json`,
+`native-ssh-root-mvs-race.log`, `native-ssh-integrated-core-race-sockets.log`.
+Root-module actual package receipts:
+
+```text
+ok  	github.com/xtls/xray-core/proxy/ssh	4.298s
+ok  	github.com/xtls/xray-core/testing/policy	7.561s
+```

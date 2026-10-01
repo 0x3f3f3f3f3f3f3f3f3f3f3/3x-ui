@@ -2400,3 +2400,20 @@ original-buffer overlay failed both new behavioral tests (.232s), corrected
 race passed1.076s and independent race1.074s; full buf/pipe race passed1.914/3.156s.
 The publication/build record closes this core increment; full protocol panel
 integration remains open.
+
+## Native SSH core acceptance — 2026-10-01
+
+The native core increment verifies real OpenSSH public-key -L/-D and authorized
+-R, an independent Go SSH outbound reference with strict host pins, and explicit
+opt-in password authentication using a Go SSH client. Direct decoded payload
+uses Dispatcher; reverse CPE directions are client-relative and final client
+target visibility remains honestly unknown. Shared Tunnel billing, hot rates,
+quota/disable/expiry, persistent business host key and restart ledger are tested.
+
+One review's premature slot release and unbounded channel request replies were
+reproduced and corrected. Bounded missing acknowledgment also closes the owned
+transport and joins drains; healthy acknowledged siblings survive. Parent final
+race suite passed SSH4.300s/policy7.526s; affected configuration/dispatcher/CPE/
+SOCKS passed0.317/1.088/4.395/0.067s and scoped vet exited0.
+Full named evidence and limits: [native-ssh-testing.md](native-ssh-testing.md).
+Panel/API/DB/forms/export/key provisioning and full Task7 acceptance remain open.
