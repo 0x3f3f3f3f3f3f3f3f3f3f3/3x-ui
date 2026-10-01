@@ -6,6 +6,7 @@ import type { FreedomOutboundSettings } from '@/schemas/protocols/outbound/freed
 import type { HttpOutboundSettings } from '@/schemas/protocols/outbound/http';
 import type { HysteriaOutboundSettings } from '@/schemas/protocols/outbound/hysteria';
 import type { LoopbackOutboundSettings } from '@/schemas/protocols/outbound/loopback';
+import { type SSHOutboundSettings } from '@/schemas/protocols/outbound/ssh';
 import type { MieruOutboundSettings } from '@/schemas/protocols/outbound/mieru';
 import type { ShadowsocksOutboundSettings } from '@/schemas/protocols/outbound/shadowsocks';
 import type { SocksOutboundSettings } from '@/schemas/protocols/outbound/socks';
@@ -133,6 +134,7 @@ export function createDefaultHysteriaOutboundSettings(): HysteriaOutboundSetting
 
 export type AnyOutboundSettings =
   | MieruOutboundSettings
+  | SSHOutboundSettings
   | BlackholeOutboundSettings
   | DNSOutboundSettings
   | FreedomOutboundSettings
@@ -157,6 +159,17 @@ export type AnyOutboundSettings =
 export function createDefaultOutboundSettings(protocol: string): AnyOutboundSettings | null {
   void RandomUtil;
   switch (protocol) {
+    case 'ssh':
+      return {
+        address: '',
+        port: 22,
+        username: '',
+        password: '',
+        privateKeyFile: '',
+        hostKey: '',
+        handshakeTimeoutSeconds: 10,
+        idleTimeoutSeconds: 300,
+      };
     case 'mieru':
       return {
         address: '',

@@ -3529,6 +3529,9 @@
           "ssMethod": {
             "type": "string"
           },
+          "sshAllowPassword": {
+            "type": "boolean"
+          },
           "sshHostFingerprint": {
             "type": "string"
           },
@@ -3568,6 +3571,7 @@
           "protocol",
           "remark",
           "ssMethod",
+          "sshAllowPassword",
           "tag",
           "tlsFlowCapable"
         ],
@@ -5515,6 +5519,7 @@
                       "shareAddr": "",
                       "shareAddrStrategy": "",
                       "ssMethod": "",
+                      "sshAllowPassword": false,
                       "sshHostFingerprint": "",
                       "sshHostPublicKey": "",
                       "tag": "in-443-tcp",

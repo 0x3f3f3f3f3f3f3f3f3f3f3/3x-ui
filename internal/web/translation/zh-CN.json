@@ -719,6 +719,29 @@
           "userHint": "要求用户提示",
           "multiplexing": "多路复用",
           "nativeTransportOnly": "mieru 使用自身的 TCP/UDP 传输和多路复用，不支持 Xray 传输封装或全局 mux。"
+        },
+        "ssh": {
+          "description": "原生 SSH TCP 转发。账号在客户端页面管理，每个服务具有持久保存的独立主机密钥。不提供 shell、命令执行或 UDP 转发。资源参数为零时使用原生默认值。",
+          "allowPassword": "允许密码认证",
+          "handshakeTimeout": "握手超时（秒）",
+          "channelOpenTimeout": "通道打开超时（秒）",
+          "idleTimeout": "空闲超时（秒）",
+          "maxAuthTries": "最大认证尝试次数",
+          "maxConnections": "最大连接数",
+          "maxConnectionsPerUser": "每用户最大连接数",
+          "maxChannelsPerConnection": "每连接最大通道数",
+          "maxChannels": "最大通道数",
+          "reverseEnabled": "允许反向 TCP 转发",
+          "reverseBindAddresses": "反向绑定地址",
+          "reversePortFrom": "首个允许的反向端口",
+          "reversePortTo": "最后允许的反向端口",
+          "reverseSourceCIDRs": "允许的反向来源 CIDR",
+          "reverseMaxListeners": "每账号最大反向监听器数",
+          "reverseAllowPortZero": "允许自动分配反向端口",
+          "reverseDescription": "指定绑定 IP、允许端口范围和来源 CIDR。反向转发在服务器上开放监听器；最终目标由 SSH 客户端选择，服务器无法验证。",
+          "reverseInvalid": "反向转发需要绑定 IP、来源 CIDR 及递增端口范围。",
+          "nativeTransportOnly": "SSH 使用原生 TCP 转发，不支持 UDP、TLS/REALITY、传输封装或全局 mux。",
+          "portInvalid": "SSH 需要一个 1 到 65535 之间的整数监听端口。"
         }
       },
       "info": {
@@ -1020,7 +1043,23 @@
       "mieruCredentialsDesc": "仅用于 mieru 的独立凭据。修改客户端名称不会改变认证信息。",
       "mieruGenerated": "留空则在首次附加时生成",
       "mieruConfiguration": "mieru 客户端配置",
-      "downloadMieruConfiguration": "下载 mieru 配置"
+      "downloadMieruConfiguration": "下载 mieru 配置",
+      "sshUsername": "SSH 用户名",
+      "sshAuthorizedKeys": "SSH 授权公钥",
+      "sshPassword": "SSH 密码",
+      "clearSshPassword": "清除已保存的 SSH 密码",
+      "clearSshAuthorizedKeys": "清除已保存的 SSH 公钥",
+      "sshCredentialsDesc": "SSH 使用独立认证。重命名客户端会保留用户名和凭据。空字段保留原值；请使用清除开关撤销凭据。",
+      "sshPublicKeysDesc": "粘贴最多 16 个 OpenSSH 公钥，每行一个，不允许 authorized_keys 选项或证书。对应私钥应保留在客户端。",
+      "sshPasswordDesc": "仅用于明确允许密码认证的 SSH 入站。",
+      "sshGenerated": "首次绑定 SSH 时自动生成一次",
+      "sshUsernameInvalid": "SSH 用户名必须是有效 Unicode，最多 256 个 UTF-8 字节，不能包含空白或控制字符。",
+      "sshPasswordInvalid": "SSH 密码必须是有效 Unicode，最多 1024 个 UTF-8 字节。",
+      "sshPublicKeysInvalid": "请提供最多 16 行有效 OpenSSH 公钥，不含选项或证书；每行最多 16384 个 UTF-8 字节。",
+      "sshAuthenticationRequired": "请提供 SSH 公钥，或所有选定 SSH 入站均接受的密码。",
+      "sshHostTrust": "SSH 服务器主机信任",
+      "sshBulkKeysDesc": "这些公钥可认证本批次的各个账号。每个账号会获得不同的 SSH 用户名，私钥应保留在客户端。",
+      "generateSshPasswords": "为每个账号生成独立的 SSH 密码"
     },
     "groups": {
       "name": "名称",
@@ -1987,7 +2026,13 @@
         "proxyProtocol": "Proxy protocol",
         "tcpUserTimeoutMs": "TCP user timeout (ms)",
         "tcpKeepAliveIdleS": "TCP keep-alive idle (s)",
-        "mieruImportUnsupported": "原生 mieru 出站需要单个配置、单个服务器和单个 TCP 或 UDP 端口。请明确移除不支持的配置选项。"
+        "mieruImportUnsupported": "原生 mieru 出站需要单个配置、单个服务器和单个 TCP 或 UDP 端口。请明确移除不支持的配置选项。",
+        "sshHostKey": "固定 SSH 主机公钥",
+        "sshHostKeyRequired": "请提供实际 OpenSSH 主机公钥，只有指纹不能用于校验。",
+        "sshPrivateKeyFile": "SSH 业务私钥文件",
+        "sshPrivateKeyDescription": "使用密码，或已放置在本面板数据库目录/native-ssh/outbound 下的私钥文件。目录权限须为 0700，文件须为 0600，均不得为链接。请使用专用业务密钥。",
+        "sshPrivateKeyPathInvalid": "请使用数据库目录/native-ssh/outbound 下文件的绝对业务密钥路径。",
+        "sshAuthenticationRequired": "请提供 SSH 密码或已配置的业务私钥文件。"
       },
       "outbound": {
         "tag": "标签",

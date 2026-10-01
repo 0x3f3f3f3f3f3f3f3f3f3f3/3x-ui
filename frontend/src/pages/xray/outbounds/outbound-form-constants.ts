@@ -56,6 +56,7 @@ export const HYSTERIA_NETWORK_OPTION = { value: 'hysteria', label: 'Hysteria' };
 // blackhole/loopback have no connect target.
 export const SERVER_PROTOCOLS = new Set<string>([
   'mieru',
+  'ssh',
   'vmess',
   'vless',
   'trojan',

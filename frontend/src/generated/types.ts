@@ -817,6 +817,7 @@ export interface InboundOption {
   shareAddr?: string;
   shareAddrStrategy?: string;
   ssMethod: string;
+  sshAllowPassword: boolean;
   sshHostFingerprint?: string;
   sshHostPublicKey?: string;
   tag: string;

@@ -172,7 +172,8 @@ export function rawInboundToFormValues(row: RawInboundRow): InboundFormValues {
   const streamSettings =
     Object.keys(rawStream).length > 0 ? (rawStream as StreamSettings) : undefined;
   if (streamSettings) {
-    healStreamNetworkKey(streamSettings as unknown as Record<string, unknown>);
+    if (protocol !== 'ssh')
+      healStreamNetworkKey(streamSettings as unknown as Record<string, unknown>);
     synthesizeTlsCertUseFile(streamSettings as unknown as Record<string, unknown>);
     const streamRecord = streamSettings as unknown as Record<string, unknown>;
     const xh = streamRecord.xhttpSettings;

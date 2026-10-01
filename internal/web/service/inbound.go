@@ -358,6 +358,7 @@ type InboundOption struct {
 	MtprotoDomain      string `json:"mtprotoDomain,omitempty"`
 	SSHHostPublicKey   string `json:"sshHostPublicKey,omitempty"`
 	SSHHostFingerprint string `json:"sshHostFingerprint,omitempty"`
+	SSHAllowPassword   bool   `json:"sshAllowPassword"`
 	// AwgServer carries the full AmneziaWG server block (keys, subnet,
 	// obfuscation params) so the clients page can render a downloadable
 	// per-client .conf without a second round trip.
@@ -409,12 +410,17 @@ func (s *InboundService) GetInboundOptions(userId int) ([]InboundOption, error) 
 	out := make([]InboundOption, 0, len(rows))
 	for _, r := range rows {
 		var sshPublicKey, sshFingerprint string
+		var sshAllowPassword bool
 		if model.Protocol(r.Protocol) == model.SSH {
 			key, err := loadSSHHostKey(db, r.SSHHostKeyID)
 			if err != nil {
 				return nil, err
 			}
 			sshPublicKey, sshFingerprint = key.PublicKey, key.Fingerprint
+			sshAllowPassword, err = sshPasswordAllowed(&model.Inbound{Settings: r.Settings})
+			if err != nil {
+				return nil, err
+			}
 		}
 		wgPublicKey, wgMtu, wgDns := inboundWireguardHints(r.Protocol, r.Settings)
 		netHint, secHint := inboundStreamHints(r.Protocol, r.StreamSettings, r.Settings)
@@ -439,6 +445,7 @@ func (s *InboundService) GetInboundOptions(userId int) ([]InboundOption, error) 
 			MtprotoDomain:      inboundMtprotoDomain(r.Protocol, r.Settings),
 			SSHHostPublicKey:   sshPublicKey,
 			SSHHostFingerprint: sshFingerprint,
+			SSHAllowPassword:   sshAllowPassword,
 			AwgServer:          inboundAmneziaWGServer(r.Protocol, r.Settings),
 			TuicServer:         inboundTuicServer(r.Protocol, r.Settings),
 			NodeId:             r.NodeId,

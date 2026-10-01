@@ -720,6 +720,29 @@
           "userHint": "Require user hint",
           "multiplexing": "Multiplexing",
           "nativeTransportOnly": "mieru uses its own TCP/UDP transport and multiplexing. Xray stream wrappers and global mux are unsupported."
+        },
+        "ssh": {
+          "description": "Native SSH TCP forwarding. Accounts are managed through Clients. The service has its own persistent host key. Shell, command execution and UDP forwarding are unavailable. Zero resource values use the native defaults.",
+          "allowPassword": "Allow password authentication",
+          "handshakeTimeout": "Handshake timeout (seconds)",
+          "channelOpenTimeout": "Channel open timeout (seconds)",
+          "idleTimeout": "Idle timeout (seconds)",
+          "maxAuthTries": "Maximum authentication attempts",
+          "maxConnections": "Maximum connections",
+          "maxConnectionsPerUser": "Maximum connections per user",
+          "maxChannelsPerConnection": "Maximum channels per connection",
+          "maxChannels": "Maximum channels",
+          "reverseEnabled": "Allow reverse TCP forwarding",
+          "reverseBindAddresses": "Reverse bind addresses",
+          "reversePortFrom": "First allowed reverse port",
+          "reversePortTo": "Last allowed reverse port",
+          "reverseSourceCIDRs": "Allowed reverse source CIDRs",
+          "reverseMaxListeners": "Maximum reverse listeners per account",
+          "reverseAllowPortZero": "Allow allocated reverse ports",
+          "reverseDescription": "Specify literal bind IPs, an allowed port range and source CIDRs. Reverse forwarding exposes a listener on this server; the final destination is selected by the SSH client and cannot be verified by the server.",
+          "reverseInvalid": "Reverse forwarding requires bind IPs, source CIDRs and an ordered port range.",
+          "nativeTransportOnly": "SSH supports native TCP forwarding with no UDP, TLS/REALITY, transport wrappers or global mux.",
+          "portInvalid": "SSH requires one integer listener port from 1 to 65535."
         }
       },
       "info": {
@@ -1020,7 +1043,23 @@
       "mieruCredentialsDesc": "Independent credentials used only by mieru. Changing the client label does not change authentication.",
       "mieruGenerated": "Generated when first attached if left empty",
       "mieruConfiguration": "mieru client configuration",
-      "downloadMieruConfiguration": "Download mieru configuration"
+      "downloadMieruConfiguration": "Download mieru configuration",
+      "sshUsername": "SSH username",
+      "sshAuthorizedKeys": "SSH authorized public keys",
+      "sshPassword": "SSH password",
+      "clearSshPassword": "Clear stored SSH password",
+      "clearSshAuthorizedKeys": "Clear stored SSH public keys",
+      "sshCredentialsDesc": "Independent SSH authentication. Renaming this client preserves the username and credentials. Empty fields preserve stored values; use the clear controls to revoke credentials.",
+      "sshPublicKeysDesc": "Paste up to 16 OpenSSH public keys, one per line, without authorized_keys options or certificates. Keep the corresponding private keys on your client.",
+      "sshPasswordDesc": "Used only by SSH listeners that explicitly allow password authentication.",
+      "sshGenerated": "Generated once on first SSH attachment if empty",
+      "sshUsernameInvalid": "SSH usernames must be valid Unicode, at most 256 UTF-8 bytes, without whitespace or control characters.",
+      "sshPasswordInvalid": "SSH passwords must be valid Unicode and at most 1024 UTF-8 bytes.",
+      "sshPublicKeysInvalid": "Provide up to 16 valid OpenSSH public-key lines without options or certificates; each line must be at most 16384 UTF-8 bytes.",
+      "sshAuthenticationRequired": "Provide SSH public keys, or a password accepted by every selected SSH listener.",
+      "sshHostTrust": "SSH server host trust",
+      "sshBulkKeysDesc": "These public keys authenticate each account in this batch. Each account receives a distinct SSH username. Keep private keys on your client.",
+      "generateSshPasswords": "Generate an independent SSH password for each account"
     },
     "groups": {
       "name": "Name",
@@ -2105,7 +2144,13 @@
         "proxyProtocol": "Proxy protocol",
         "tcpUserTimeoutMs": "TCP user timeout (ms)",
         "tcpKeepAliveIdleS": "TCP keep-alive idle (s)",
-        "mieruImportUnsupported": "A native mieru outbound requires one profile, one server and one TCP or UDP port. Unsupported profile options must be removed explicitly."
+        "mieruImportUnsupported": "A native mieru outbound requires one profile, one server and one TCP or UDP port. Unsupported profile options must be removed explicitly.",
+        "sshHostKey": "Pinned SSH host public key",
+        "sshHostKeyRequired": "Provide the actual OpenSSH host public key; a fingerprint alone is insufficient.",
+        "sshPrivateKeyFile": "SSH business private-key file",
+        "sshPrivateKeyDescription": "Use a password or an existing private-key file directly inside this panel’s configured database folder/native-ssh/outbound. The folder must be private (0700), the file 0600, and neither may be a link. Provision a dedicated business key.",
+        "sshPrivateKeyPathInvalid": "Use an absolute business key path directly inside database-folder/native-ssh/outbound.",
+        "sshAuthenticationRequired": "Provide an SSH password or a provisioned business private-key file."
       },
       "outbound": {
         "tag": "Tag",

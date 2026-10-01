@@ -912,6 +912,7 @@ export const EXAMPLES: Record<string, unknown> = {
     "shareAddr": "",
     "shareAddrStrategy": "",
     "ssMethod": "",
+    "sshAllowPassword": false,
     "sshHostFingerprint": "",
     "sshHostPublicKey": "",
     "tag": "in-443-tcp",

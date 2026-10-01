@@ -3503,6 +3503,9 @@ export const SCHEMAS: Record<string, unknown> = {
       "ssMethod": {
         "type": "string"
       },
+      "sshAllowPassword": {
+        "type": "boolean"
+      },
       "sshHostFingerprint": {
         "type": "string"
       },
@@ -3542,6 +3545,7 @@ export const SCHEMAS: Record<string, unknown> = {
       "protocol",
       "remark",
       "ssMethod",
+      "sshAllowPassword",
       "tag",
       "tlsFlowCapable"
     ],

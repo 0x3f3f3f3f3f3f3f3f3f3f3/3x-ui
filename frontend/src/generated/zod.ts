@@ -868,6 +868,7 @@ export const InboundOptionSchema = z.object({
   shareAddr: z.string().optional(),
   shareAddrStrategy: z.string().optional(),
   ssMethod: z.string(),
+  sshAllowPassword: z.boolean(),
   sshHostFingerprint: z.string().optional(),
   sshHostPublicKey: z.string().optional(),
   tag: z.string(),

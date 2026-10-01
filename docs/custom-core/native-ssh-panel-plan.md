@@ -71,11 +71,11 @@ InboundFormModal/OutboundFormModal; EN/ZH translations and generated contracts.
 Consumes Task1 SQL/client/options contracts; produces unchanged existing API
 payload envelopes with SSH-native settings and client authentication fields.
 
-- [ ] Write real component/adapter RED tests for create/edit/attach/bulk, native
+- [x] Write real component/adapter RED tests for create/edit/attach/bulk, native
   credential limits, explicit clear controls, reverse controls and host trust.
-- [ ] Implement native fields/defaults/validation, real outbound pin and key-path
+- [x] Implement native fields/defaults/validation, real outbound pin and key-path
   controls; reject UDP/security/global-mux wrappers rather than losing settings.
-- [ ] Verify reopen/clone/rename and unrelated forms; affected frontend tests,
+- [x] Verify reopen/clone/rename and unrelated forms; affected frontend tests,
   typecheck/lint/generation/build; logical UI commit.
 
 ### Task 3: OpenSSH export and combined public acceptance

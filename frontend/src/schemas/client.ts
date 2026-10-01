@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  SSHUsernameSchema,
+  SSHPasswordSchema,
+  SSHAuthorizedKeysSchema,
+} from '@/schemas/protocols/shared/ssh';
 import { MieruCredentialSchema } from '@/schemas/protocols/shared/mieru';
 
 const nullableStringArray = z
@@ -94,6 +99,9 @@ export const ClientRecordSchema = z
     password: z.string().optional(),
     mieruUsername: MieruCredentialSchema.optional(),
     mieruPassword: MieruCredentialSchema.optional(),
+    sshUsername: SSHUsernameSchema.optional(),
+    sshAuthorizedKeys: SSHAuthorizedKeysSchema.optional(),
+    sshPassword: SSHPasswordSchema.optional(),
     auth: z.string().optional(),
     flow: z.string().optional(),
     security: z.string().optional(),
@@ -197,6 +205,9 @@ export const InboundOptionSchema = z
     security: z.string().optional(),
     tlsFlowCapable: z.boolean().optional(),
     ssMethod: z.string().optional(),
+    sshAllowPassword: z.boolean().optional(),
+    sshHostPublicKey: z.string().optional(),
+    sshHostFingerprint: z.string().optional(),
     wgPublicKey: z.string().optional(),
     wgMtu: z.number().optional(),
     wgDns: z.string().optional(),
@@ -396,6 +407,11 @@ export const ClientFormSchema = z.object({
   password: z.string(),
   mieruUsername: MieruCredentialSchema.default(''),
   mieruPassword: MieruCredentialSchema.default(''),
+  sshUsername: SSHUsernameSchema.default(''),
+  sshAuthorizedKeys: SSHAuthorizedKeysSchema.default(''),
+  sshPassword: SSHPasswordSchema.default(''),
+  clearSshPassword: z.boolean().default(false),
+  clearSshAuthorizedKeys: z.boolean().default(false),
   auth: z.string(),
   flow: z.string(),
   security: z.string(),
@@ -452,6 +468,8 @@ export const ClientBulkAdjustFormSchema = z
   );
 
 export const ClientBulkAddFormSchema = z.object({
+  sshAuthorizedKeys: SSHAuthorizedKeysSchema.default(''),
+  generateSshPasswords: z.boolean().default(false),
   emailMethod: z.number().int().min(0).max(4),
   firstNum: z.number().int().min(1),
   lastNum: z.number().int().min(1),

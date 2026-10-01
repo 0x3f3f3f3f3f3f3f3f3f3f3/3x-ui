@@ -9,6 +9,7 @@ import {
   MieruInboundSettingsSchema,
   type MieruInboundSettings,
 } from '@/schemas/protocols/inbound/mieru';
+import { SSHInboundSettingsSchema, type SSHInboundSettings } from '@/schemas/protocols/inbound/ssh';
 import type { MtprotoClient, MtprotoInboundSettings } from '@/schemas/protocols/inbound/mtproto';
 import type {
   ShadowsocksClient,
@@ -368,6 +369,7 @@ export function createDefaultTuicInboundSettings(): TuicInboundSettings {
 // `getSettings(p)` + `.toJson()`.
 export type AnyInboundSettings =
   | MieruInboundSettings
+  | SSHInboundSettings
   | VlessInboundSettings
   | VmessInboundSettings
   | TrojanInboundSettings
@@ -384,6 +386,8 @@ export type AnyInboundSettings =
 
 export function createDefaultInboundSettings(protocol: string): AnyInboundSettings | null {
   switch (protocol) {
+    case 'ssh':
+      return SSHInboundSettingsSchema.parse({});
     case 'mieru':
       return MieruInboundSettingsSchema.parse({});
     case 'vless':

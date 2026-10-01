@@ -20,6 +20,7 @@ export const OutboundProtocols = Object.freeze({
   AmneziaWG: 'amneziawg',
   Hysteria: 'hysteria',
   Mieru: 'mieru',
+  SSH: 'ssh',
   Socks: 'socks',
   HTTP: 'http',
   Loopback: 'loopback',

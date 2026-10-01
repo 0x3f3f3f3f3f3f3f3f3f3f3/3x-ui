@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { sshNativeFormGuard, SSHNativeStreamSchema } from '@/schemas/protocols/shared/ssh';
 import { isMieruNativeStream } from '@/schemas/protocols/shared/mieru';
 
 import { PortSchema, SniffingSchema, type Sniffing } from '@/schemas/primitives';
@@ -14,6 +15,7 @@ import {
   FreedomFragmentSchema,
   FreedomNoiseSchema,
   MieruOutboundSettingsSchema,
+  SSHOutboundSettingsSchema,
   OutboundDomainStrategySchema,
   WireguardDomainStrategySchema,
 } from '@/schemas/protocols/outbound';
@@ -195,6 +197,7 @@ export type LoopbackOutboundFormSettings = z.infer<typeof LoopbackOutboundFormSe
 // Discriminated union on `protocol`. Same tagged-wrapper pattern as the
 // inbound side: each branch is { protocol: literal, settings: <flat> }.
 export const OutboundFormSettingsSchema = z.discriminatedUnion('protocol', [
+  z.object({ protocol: z.literal('ssh'), settings: SSHOutboundSettingsSchema }),
   z.object({ protocol: z.literal('mieru'), settings: MieruOutboundSettingsSchema }),
   z.object({ protocol: z.literal('vmess'), settings: VmessOutboundFormSettingsSchema }),
   z.object({ protocol: z.literal('vless'), settings: VlessOutboundFormSettingsSchema }),
@@ -237,7 +240,7 @@ export const OutboundFormBaseSchema = z.object({
   tag: z.string().default(''),
   sendThrough: z.string().default(''),
   targetStrategy: z.union([OutboundDomainStrategySchema, z.literal('')]).default(''),
-  streamSettings: OutboundStreamFormSchema.optional(),
+  streamSettings: z.union([SSHNativeStreamSchema, OutboundStreamFormSchema]).optional(),
   mux: MuxFormSchema.default({
     enabled: false,
     concurrency: 8,
@@ -249,18 +252,18 @@ export type OutboundFormBase = z.infer<typeof OutboundFormBaseSchema>;
 
 // Full form values = base + protocol-discriminated settings. Consumers
 // narrow on `.protocol` to access the matching settings branch.
-export const OutboundFormSchema = OutboundFormBaseSchema.and(
-  OutboundFormSettingsSchema,
-).superRefine((value, ctx) => {
-  if (
-    value.protocol === 'mieru' &&
-    (!isMieruNativeStream(value.streamSettings) || value.mux.enabled)
-  ) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['streamSettings'],
-      message: 'pages.inbounds.form.mieru.nativeTransportOnly',
-    });
-  }
-});
+export const OutboundFormSchema = sshNativeFormGuard(OutboundStreamFormSchema).pipe(
+  OutboundFormBaseSchema.and(OutboundFormSettingsSchema).superRefine((value, ctx) => {
+    if (
+      value.protocol === 'mieru' &&
+      (!isMieruNativeStream(value.streamSettings) || value.mux.enabled)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['streamSettings'],
+        message: 'pages.inbounds.form.mieru.nativeTransportOnly',
+      });
+    }
+  }),
+);
 export type OutboundFormValues = z.infer<typeof OutboundFormSchema>;

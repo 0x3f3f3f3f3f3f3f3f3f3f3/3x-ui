@@ -64,9 +64,53 @@ validator was added. It is not a published clean checkpoint. Its predecessor
 fixture is the preserved custom-xray-native-mieru-panel-snell-quic-checkpoint.
 The final panel branch will build and verify a fresh core from its exact source.
 
+## Existing forms increment — 2026-10-01
+
+Task 2 adds native SSH to the existing client, bulk client, inbound and outbound
+forms. Username, multiline authorized public keys and password remain separate
+from other protocols. Clear-password and clear-public-key switches submit explicit
+commands; blank inputs preserve stored credentials. Client creation/attachment
+requires a public key or a password allowed by every selected SSH listener.
+Public options now include sshAllowPassword alongside the public host key and
+fingerprint, so mixed bindings can check actual listener authentication.
+
+Bulk accounts use supplied public keys with distinct server-generated usernames.
+Independent per-account SSH passwords require explicit opt-in and password
+permission on all selected SSH listeners. No client private key is generated.
+Listener forms expose bounded native resources and explicit reverse bind IP,
+port-range and source-CIDR controls. Reverse descriptions state that the client
+chooses its final target. Outbound forms require the actual host public key and
+password or a provisioned business key path. UDP, TLS/REALITY, transport wrappers
+and global mux are refused before submission; explicit disabled-mux UDP options
+are retained as validation errors instead of silently discarded.
+
+Real component tests exposed stale default-protocol initialization adding a TCP
+wrapper to a reopened SSH outbound. Initialization now checks the current form
+protocol; unsupported native mask controls are hidden. Native empty stream
+values match the core, SSH listener ports must be one integer, and other
+protocols retain their existing transport validation. EN/ZH messages cover all
+new controls and validation errors.
+
+Final Task 2 evidence under /root/task-evidence/native-ssh-panel-task2-*:
+
+- 17 native SSH frontend cases cover actual create/edit/attach/bulk, credential
+  bounds, explicit clear/last-method rejection, public trust, native resources,
+  reverse controls, pinned business-key/password outbounds and JSON workflows.
+- Final affected frontend regression: 28 files, 539 tests passed, including
+  native mieru and existing client/inbound/outbound/Tunnel workflows.
+- SQLite and isolated actual PostgreSQL public host-trust/authentication-option
+  race checks passed; affected Go vet and repository lint passed (0 issues).
+- Final generated TypeScript typecheck, frontend lint, affected formatting check
+  and Vite build passed. All five generated API artifacts were byte-identical
+  on repeat generation. The receipt records hashes of all 36 changed product
+  and test files and confirms they did not change during the final gates.
+- Initial localhost sandbox startup refusal and test selector/type mistakes are
+  retained as environment/test-harness evidence, separate from behavioral RED
+  failures and their corrections.
+
 ## Remaining acceptance
 
-Existing client/inbound/outbound forms and EN/ZH validation are Task 2. OpenSSH
+Existing client/inbound/outbound forms and EN/ZH validation passed Task 2. OpenSSH
 config/known_hosts downloads and public HTTP -> real OpenSSH-L/-D/authorized-R
 acceptance are Task 3; the current Go SSH service test does not substitute for
 those checks. Whole-panel review, final clean artifacts and fork push follow

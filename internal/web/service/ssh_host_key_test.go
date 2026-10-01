@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -119,6 +120,29 @@ func TestSSHPanelInboundOptionsExposeOnlyPublicBusinessTrust(t *testing.T) {
 	raw, err := json.Marshal(options)
 	if err != nil || strings.Contains(string(raw), key.PrivateKeyPEM) || strings.Contains(string(raw), "PRIVATE KEY") {
 		t.Fatal("SSH public options exposed private host material")
+	}
+}
+
+func TestSSHPanelInboundOptionsDescribeAllowedAuthentication(t *testing.T) {
+	setupPolicyLedgerDB(t)
+	svc := &InboundService{}
+	for i, enabled := range []bool{false, true} {
+		settings := `{"clients":[],"allowPassword":false}`
+		if enabled {
+			settings = `{"clients":[],"allowPassword":true}`
+		}
+		if _, _, err := svc.AddInbound(&model.Inbound{Tag: fmt.Sprintf("ssh-auth-option-%d", i), Protocol: model.SSH, Port: 24620 + i, Settings: settings}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	options, err := svc.GetInboundOptions(0)
+	if err != nil || len(options) != 2 {
+		t.Fatalf("native SSH authentication options: %v", err)
+	}
+	for i, option := range options {
+		if sshPanelFields(t, option)["sshAllowPassword"] != (i == 1) {
+			t.Fatal("public options must describe actual listener authentication")
+		}
 	}
 }
 
