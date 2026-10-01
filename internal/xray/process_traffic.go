@@ -24,6 +24,7 @@ type TrafficBatch struct {
 	ClientTraffics   []*ClientTraffic
 	SourceMode       string
 	SourceInstanceID string
+	ConfigProof      *TrafficConfigProof
 }
 
 type pendingTrafficBatch struct {
@@ -140,6 +141,7 @@ func (p *Process) trafficBatchFromCounters(values map[string]int64, final bool) 
 		ProcessID: p.trafficID, Sequence: p.trafficSequence + 1, ID: uuid.NewString(),
 		Traffics: traffics, ClientTraffics: clientTraffics, Final: final,
 		SourceMode: mode, SourceInstanceID: instanceID,
+		ConfigProof: p.NativeTrafficConfigProof(),
 	}, cursor: cursor}, nil
 }
 

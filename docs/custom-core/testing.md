@@ -2278,3 +2278,65 @@ preceding native-core/frontend suite evidence remains applicable without a new
 full native-core/frontend suite claim. The earlier default frontend timeout and
 split validation record remains unchanged. Clean builds are separate artifact
 checks, with provenance recorded in deployment.md.
+
+
+Task5B8B startup configuration provenance passes source acceptance checks. Actual runtime
+REDs cover missing startup evidence, pending snapshots, and configuration drift
+between proof preparation and installation. Before first polling, a real legacy
+child now exposes canonical logical and actual-written SHA-256 digests. Changes
+through SetConfig or acknowledged policy CAS invalidate stability permanently;
+equivalent object formatting preserves it. Restart, failed start, managed
+control-only bootstrap, unknown direct command, exact large integers, array
+order and concurrent getter/config/traffic access are covered. Runtime boundary
+race passes in 13.731 s.
+
+Five SQLite SQL behavior REDs precede durable proof implementation. The original
+Task5B8A nil-proof golden digest remains unchanged. Present false/true proof is
+bound to receipt intent, validated and detached from callback edits. Source
+digests cannot change or promote unknown evidence; stability cannot recover.
+Final receipt failure rolls back source, bucket and known counter changes.
+SQLite focused race passes in 3.793 s; PostgreSQL source plus real-core tests
+pass in 17.971 s. Four actual Mixed/HTTP late bucket-write/lost-commit-ACK cases
+preserve the old pending proof through later saved-config drift; subsequent
+polling downgrades stability without changing digests. Each retains the prior
+36-byte target conservation and known 106/206 result with no invented billing.
+
+SQLite backup/reopen passes in 4.629 s. PostgreSQL-backed database tests pass in
+9.573 s: current and missing-source SQLite→PostgreSQL→SQLite plus old native
+export preserve authentic old receipts/buckets, unknown/false/true source rows,
+and historical source schema. Missing tables gain no fabricated startup proof.
+Final SQLite contracts pass in 194.06 s wall with all 60 required names;
+PostgreSQL passes in 301.37 s with all 66 names. Both include eight actual
+Mixed/HTTP retention/proof subcases. CI requires all 19 new top-level names as
+applicable and both sets of
+four real-core subcases; YAML and 33 Bash blocks parse locally, without a remote
+CI claim. No eligibility/adoption gate consumes this metadata. Historical API
+mutation lineage and current runtime fencing remain future handoff requirements.
+
+
+The single review found one Important source bug: a committed historical
+receipt without a source header could be promoted by later known proof. Actual
+root RED (0.588 s) precedes the locked previous-receipt-sequence fence. The final
+regression uses the authentic Task5B8A golden digest and raw bucket, rejects
+promotion without writes, then preserves nil-proof growth 7/11→14/22. Same-review
+independent exact-digest overlays pass on SQLite (1.099 s) and PostgreSQL
+(1.484 s); six SQL contracts pass on SQLite (2.058 s)/PG (4.301 s), and PG
+migration/backup/export checks pass (4.739 s). No Critical or Important finding
+remains; the minor required-name count was corrected to 19. Broader API mutation
+lineage, dead-source eligibility and owner adoption remain outside this increment.
+
+All final gates pass: generation 1.02 s, lint 96.21 s (0 issues), vet 12.99 s,
+full make test-go 404.37 s and affected race/shuffle 678.71 s across service,
+database, controller, Xray process and traffic job. The initial formatting/static
+check failure (110.58 s) and earlier compiled contract evidence remain archived.
+The earlier SQLite 171.02 s run passed 59 names; PostgreSQL 309.74 s failed the
+required-name audit because its binary compiled before the added historical
+regression. The final runs compile the corrected source and stronger fixture.
+Nine reviewed production hashes remain unchanged; ten earlier binaries were
+rehashed unchanged. YAML and 33 Bash blocks parse, with 17 applicable SQLite and
+19 PG new names explicitly required. No remote CI run or new complete frontend/
+native-core suite is claimed; the existing default frontend timeout/split record
+stands. Logical commit, fork push and clean artifact evidence follow in
+deployment.md. This prerequisite is not Snell/mieru/SSH support or whole-project
+completion. The user's priority correction moves native protocol work ahead of
+further legacy-password refinement.

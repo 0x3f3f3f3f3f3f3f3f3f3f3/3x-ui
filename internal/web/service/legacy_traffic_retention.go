@@ -35,6 +35,13 @@ func normalizeLegacyTrafficBatch(batch *xray.TrafficBatch) (*xray.TrafficBatch, 
 		return nil, ErrLegacyTrafficBatch
 	}
 	copy := *batch
+	if batch.ConfigProof != nil {
+		proof := *batch.ConfigProof
+		if !validTrafficConfigDigest(proof.ConfigDigest) || !validTrafficConfigDigest(proof.EffectiveConfigDigest) {
+			return nil, ErrLegacyTrafficBatch
+		}
+		copy.ConfigProof = &proof
+	}
 	if copy.SourceMode == "" {
 		copy.SourceMode = "unknown"
 	}
@@ -95,9 +102,11 @@ func legacyTrafficPayloadDigest(batch *xray.TrafficBatch) (string, error) {
 		SourceInstanceID string
 		Traffics         []*xray.Traffic
 		Clients          []legacyClientCounter
+		ConfigProof      *xray.TrafficConfigProof `json:",omitempty"`
 	}{
 		ProcessID: batch.ProcessID, Sequence: batch.Sequence, ID: batch.ID, Final: batch.Final,
 		SourceMode: batch.SourceMode, SourceInstanceID: batch.SourceInstanceID, Traffics: batch.Traffics,
+		ConfigProof: batch.ConfigProof,
 	}
 	for _, client := range batch.ClientTraffics {
 		intent.Clients = append(intent.Clients, legacyClientCounter{Label: client.Email, Up: client.Up, Down: client.Down})

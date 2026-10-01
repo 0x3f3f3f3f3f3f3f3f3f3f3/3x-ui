@@ -69,6 +69,7 @@ func allModels() []any {
 		&model.OutboundTraffics{},
 		&model.LegacyTrafficReceipt{},
 		&model.LegacyUnassignedTraffic{},
+		&model.LegacyTrafficConfigSource{},
 		&model.Setting{},
 		&model.InboundClientIps{},
 		&xray.ClientTraffic{},

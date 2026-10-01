@@ -18,6 +18,15 @@ import (
 )
 
 func TestLegacyUnassignedTrafficRealCollectorRetryAndGrowth(t *testing.T) {
+	legacyRealCollectorRetryAndGrowth(t, false)
+}
+
+func TestLegacyTrafficConfigProofRealCollectorRetryAndGrowth(t *testing.T) {
+	legacyRealCollectorRetryAndGrowth(t, true)
+}
+
+func legacyRealCollectorRetryAndGrowth(t *testing.T, checkProof bool) {
+	t.Helper()
 	for _, protocol := range []model.Protocol{model.Mixed, model.HTTP} {
 		for _, failure := range []string{"bucket-write", "commit-ack"} {
 			t.Run(string(protocol)+"/"+failure, func(t *testing.T) {
@@ -102,6 +111,20 @@ func TestLegacyUnassignedTrafficRealCollectorRetryAndGrowth(t *testing.T) {
 					managedActivationEcho(t, flow, "hello!")
 				}
 				injected := errors.New("legacy retention response unavailable")
+				var sourceID, pendingID string
+				startupProof := process.NativeTrafficConfigProof()
+				if checkProof && (startupProof == nil || !startupProof.ConfigStable) {
+					t.Fatal("real legacy child lacks stable startup evidence before collection")
+				}
+				settle := func(batch *xray.TrafficBatch) error {
+					if checkProof {
+						sourceID, pendingID = batch.ProcessID, batch.ID
+						if batch.ConfigProof == nil || *batch.ConfigProof != *startupProof {
+							t.Fatal("actual first native batch lost startup evidence")
+						}
+					}
+					return svc.settleLegacyTrafficBatch(batch)
+				}
 				if failure == "bucket-write" {
 					const hook = "test-retained-real-bucket-failure"
 					if err := database.GetDB().Callback().Create().Before("gorm:create").Register(hook, func(tx *gorm.DB) {
@@ -112,8 +135,20 @@ func TestLegacyUnassignedTrafficRealCollectorRetryAndGrowth(t *testing.T) {
 						t.Fatal(err)
 					}
 					t.Cleanup(func() { _ = database.GetDB().Callback().Create().Remove(hook) })
-					if _, err := svc.CollectAndSettleTraffic(); !errors.Is(err, injected) {
+					var err error
+					if checkProof {
+						_, _, err = process.SettleTraffic(settle)
+					} else {
+						_, err = svc.CollectAndSettleTraffic()
+					}
+					if !errors.Is(err, injected) {
 						t.Fatalf("real late write failure=%v", err)
+					}
+					if checkProof {
+						var count int64
+						if err := database.GetDB().Model(&model.LegacyTrafficConfigSource{}).Count(&count).Error; err != nil || count != 0 {
+							t.Fatalf("real failed bucket write committed startup evidence: %d/%v", count, err)
+						}
 					}
 					if history := trafficOf(t, owner.Email); history.Up != 100 || history.Down != 200 {
 						t.Fatalf("failed bucket write committed known usage: %+v", history)
@@ -121,7 +156,7 @@ func TestLegacyUnassignedTrafficRealCollectorRetryAndGrowth(t *testing.T) {
 					_ = database.GetDB().Callback().Create().Remove(hook)
 				} else {
 					if _, _, err := process.SettleTraffic(func(batch *xray.TrafficBatch) error {
-						if err := svc.settleLegacyTrafficBatch(batch); err != nil {
+						if err := settle(batch); err != nil {
 							return err
 						}
 						return injected
@@ -129,10 +164,31 @@ func TestLegacyUnassignedTrafficRealCollectorRetryAndGrowth(t *testing.T) {
 						t.Fatalf("committed lost response=%v", err)
 					}
 				}
+				if checkProof {
+					changed := *process.GetConfig()
+					changed.LogConfig = []byte(`{"loglevel":"warning"}`)
+					process.SetConfig(&changed)
+					if _, _, err := process.SettleTraffic(func(batch *xray.TrafficBatch) error {
+						if batch.ID != pendingID || batch.ConfigProof == nil || *batch.ConfigProof != *startupProof {
+							t.Fatal("SQL retry replaced immutable proof with changed current configuration")
+						}
+						return svc.settleLegacyTrafficBatch(batch)
+					}); err != nil {
+						t.Fatal(err)
+					}
+					if source := configSourceOf(t, sourceID); !source.ConfigStable || source.ConfigDigest != startupProof.ConfigDigest || source.EffectiveConfigDigest != startupProof.EffectiveConfigDigest {
+						t.Fatalf("real original retry lost its captured evidence: %+v", source)
+					}
+				}
 				managedActivationEcho(t, first, "growth")
 				for range 3 {
 					if _, err := svc.CollectAndSettleTraffic(); err != nil {
 						t.Fatal(err)
+					}
+				}
+				if checkProof {
+					if source := configSourceOf(t, sourceID); source.ConfigStable || source.ConfigDigest != startupProof.ConfigDigest || source.EffectiveConfigDigest != startupProof.EffectiveConfigDigest {
+						t.Fatalf("new real poll erased drift or changed startup identity: %+v", source)
 					}
 				}
 				var retained []model.LegacyUnassignedTraffic

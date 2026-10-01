@@ -514,7 +514,9 @@ Persist LegacyTrafficConfigSource in the same settlement transaction as bucket,
 known/inbound/outbound counters and receipt. ProcessID is the primary key;
 ConfigDigest/EffectiveConfigDigest default to empty (unknown), ConfigStable to
 false. Digests cannot change within a source row; empty historical evidence cannot
-be promoted by a later configuration. Stability can only remain or become false.
+be promoted by a later configuration. A committed receipt with no source header
+also represents unknown history: later proof insertion rejects, while nil-proof
+counter settlement remains supported. Stability can only remain or become false.
 Sort/lock source acquisition consistently after the process receipt and before
 traffic row locks. A later failure rolls back source changes too. Changed proof
 under the same committed receipt rejects; pending retry does not backfill a
@@ -525,6 +527,13 @@ migration/native export. Old schemas acquire an empty table; existing buckets
 and receipts acquire no invented startup proof. Source schema stays unchanged
 during export. Cross-process/panel restart recovery, owner mapping, historical
 source eligibility and atomic bucket consumption remain later requirements.
+
+This header records startup identity and subsequent saved-configuration drift;
+it does not certify every historical HandlerService/NodeService API mutation.
+Temporary API changes can precede or bypass SetConfig. No eligibility gate uses
+ConfigStable in this increment. Future adoption must fence runtime mutations,
+validate the current child and reject history whose full configuration lineage
+cannot be proved; a durable true flag alone never authorizes dead-source usage.
 
 Acceptance includes real legacy child startup and private API flow, proof captured
 without a first poll, hot/config restore monotonicity, unknown direct command,

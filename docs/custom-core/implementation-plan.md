@@ -10,10 +10,24 @@
 
 **Spec:** [requirements.md](requirements.md), [architecture.md](architecture.md), [accounting.md](accounting.md).
 
+## Current execution priority — 2026-10-01
+
+The user reiterates that Snell, mieru and SSH support is the central deliverable.
+Tasks 7–9 now take execution priority over further Task5B legacy/password
+refinements. Close verification of already-written Task5B8B changes, then build
+real native protocol adapters, with protocol-specific configuration,
+authenticated identity, Dispatcher routing, shared policy and real client tests.
+Develop each adapter in an isolated local worktree while prior checks finish.
+Panel/API/UI/export integration follows the native protocol paths; historical
+password alias adoption remains deferred. The three protocols are currently N,
+and neither source availability nor a standalone wire probe is acceptance.
+
 ## Global constraints
 
 - Start from main `17d7dd46b512d0a9c22921a6094f30c672e436c9`, never from `feat/unified-client-policy-backends`.
-- Work and push only `feature/custom-xray-unified-policy`; leave existing branch tips unchanged. No releases, merges, production deployment or force pushes.
+- Push only `feature/custom-xray-unified-policy`; isolated local adapter worktrees
+  may use temporary feature branches. Preserve existing branch tips. No releases,
+  default-branch merges, production deployment or force pushes.
 - Preserve existing functionality, credentials, data, upstream attribution, and supported platforms.
 - No extra business proxy process, panel-side decode/bridge, source-IP identity, or independent routing subsystem.
 - Missing capabilities fail explicitly. Unsupported, unimplemented and unverified are distinct.
@@ -956,23 +970,25 @@ and ConfigStable; `TrafficBatch.ConfigProof *TrafficConfigProof` is optional.
 `Process.NativeTrafficConfigProof() *TrafficConfigProof` returns a detached value
 (or nil for unknown), never credentials. Private digest/capture helpers prepare
 proof before child start; Process mutators invalidate stability under mu.
-`retainLegacyTrafficConfigSource(tx *gorm.DB, batch *xray.TrafficBatch) error`
+`retainLegacyTrafficConfigSource(tx *gorm.DB, batch *xray.TrafficBatch, previousSequence int64) error`
 locks/persists the optional proof without altering counters or owner state.
+The locked previous receipt sequence fences missing-header historical sources
+as unknown, preventing later proof insertion from promoting their history.
 
-- [ ] Behavioral RED: real child's written/logical startup digests exist before
+- [x] Behavioral RED: real child's written/logical startup digests exist before
   first poll; config restore cannot erase drift; missing command evidence stays
   unknown. Observe actual failures before runtime implementation.
-- [ ] Capture per-child proof before startup, preserve lock order and detached
+- [x] Capture per-child proof before startup, preserve lock order and detached
   ordinary/final/pending snapshots; cover canonical-equivalent replacements,
   bootstrap, restart and concurrent config/traffic access.
-- [ ] RED/GREEN original Task5B8A digest compatibility, changed-proof receipt
+- [x] RED/GREEN original Task5B8A digest compatibility, changed-proof receipt
   retry, cloned validator intent, immutable source digests, monotonic SQL
   stability and late rollback across all layers. Persist source atomically.
-- [ ] SQLite/PostgreSQL schema/backup/migration/export current and missing-source
+- [x] SQLite/PostgreSQL schema/backup/migration/export current and missing-source
   schemas, authentic original receipts/buckets and no fabricated proof.
-- [ ] Named real-core DB contracts and prior retention/handoff/first-use/job
+- [x] Named real-core DB contracts and prior retention/handoff/first-use/job
   regressions; update required CI PASS names and shell/YAML checks.
-- [ ] One read-only review/same-review corrections, frozen source, required
+- [x] One read-only review/same-review corrections, frozen source, required
   gen/lint/vet/full Go/affected race and scoped capability/testing docs.
 - [ ] Logical commit/exact fork push, distinct clean builds and provenance.
   Future full mapping/consumption and password handoff remain unfinished.

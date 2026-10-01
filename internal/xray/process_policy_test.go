@@ -79,6 +79,10 @@ func TestManagedProcessNegotiatesAndSeedsBeforeOpeningListeners(t *testing.T) {
 			defer cancel()
 			errSetup := errors.New("panel ledger transaction failed")
 			err = process.StartManaged(ctx, func(ctx context.Context, api *ClientPolicyAPI) error {
+				proof := process.NativeTrafficConfigProof()
+				if proof == nil || proof.ConfigStable {
+					t.Error("control-only bootstrap acquired legacy configuration eligibility")
+				}
 				if process.IsControlReady() {
 					t.Error("runtime control admitted operations before usage preparation")
 				}

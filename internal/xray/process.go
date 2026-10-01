@@ -125,19 +125,20 @@ func NewTestProcess(xrayConfig *Config, configPath string) *Process {
 }
 
 type process struct {
-	trafficOwners        map[string]string
-	trafficExecutableDir string
-	trafficExecutable    []byte
-	trafficBootID        string
-	trafficEndpoint      string
-	trafficDraining      bool
-	trafficFinal         map[string]int64
-	trafficFinalSettled  bool
-	trafficMu            sync.Mutex
-	trafficCursor        map[string]int64
-	trafficID            string
-	trafficSequence      int64
-	trafficPending       *pendingTrafficBatch
+	nativeTrafficConfigProof *TrafficConfigProof // guarded by mu
+	trafficOwners            map[string]string
+	trafficExecutableDir     string
+	trafficExecutable        []byte
+	trafficBootID            string
+	trafficEndpoint          string
+	trafficDraining          bool
+	trafficFinal             map[string]int64
+	trafficFinalSettled      bool
+	trafficMu                sync.Mutex
+	trafficCursor            map[string]int64
+	trafficID                string
+	trafficSequence          int64
+	trafficPending           *pendingTrafficBatch
 
 	// mu guards the process lifecycle fields (cmd, done, exitErr) plus version,
 	// apiPort, and config, which are written by Start/startCommand/refreshVersion/
@@ -331,6 +332,7 @@ func (p *Process) SetConfig(config *Config) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.config = config
+	p.invalidateTrafficConfigProofLocked()
 }
 
 // Preserve unrelated hot configuration changes when recording an acknowledged policy update.
@@ -343,6 +345,7 @@ func (p *Process) CompareAndSetClientPolicy(previous, next []byte) bool {
 	snapshot := *p.config
 	snapshot.ClientPolicy = append(snapshot.ClientPolicy[:0:0], next...)
 	p.config = &snapshot
+	p.invalidateTrafficConfigProofLocked()
 	return true
 }
 
@@ -629,10 +632,13 @@ func (p *process) refreshVersion() bool {
 
 // Start launches the Xray process with the current configuration.
 func (p *process) Start() (err error) {
-	if len(p.config.ClientPolicy) > 0 {
+	p.mu.RLock()
+	configSnapshot := p.config
+	p.mu.RUnlock()
+	if len(configSnapshot.ClientPolicy) > 0 {
 		return fmt.Errorf("%w: managed configuration requires negotiated activation", ErrClientPolicyCapability)
 	}
-	if err = p.startConfig(p.config); err == nil {
+	if err = p.startConfig(configSnapshot); err == nil {
 		p.controlReady.Store(true)
 	}
 	return err
@@ -652,6 +658,7 @@ func (p *process) startConfig(startConfig *Config) (err error) {
 		}
 	}()
 
+	logicalConfig := startConfig
 	startConfig, ownedControlDir, err := automaticTrafficControl(startConfig, p.refreshVersion())
 	if err != nil {
 		return err
@@ -668,6 +675,10 @@ func (p *process) startConfig(startConfig *Config) (err error) {
 	data, err := json.MarshalIndent(startConfig, "", "  ")
 	if err != nil {
 		return common.NewErrorf("Failed to generate XRAY configuration files: %v", err)
+	}
+	proof, err := prepareTrafficConfigProof(logicalConfig, data)
+	if err != nil {
+		return err
 	}
 
 	err = os.MkdirAll(config.GetLogFolder(), 0o770)
@@ -688,7 +699,7 @@ func (p *process) startConfig(startConfig *Config) (err error) {
 	cmd.Stdout = p.logWriter
 	cmd.Stderr = p.logWriter
 
-	err = p.startCommandOwned(cmd, ownedControlDir)
+	err = p.startCommandOwned(cmd, ownedControlDir, proof)
 	if err != nil {
 		return err
 	}
@@ -755,10 +766,10 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) (err error) {
 var renameFile = os.Rename
 
 func (p *process) startCommand(cmd *exec.Cmd) error {
-	return p.startCommandOwned(cmd, "")
+	return p.startCommandOwned(cmd, "", nil)
 }
 
-func (p *process) startCommandOwned(cmd *exec.Cmd, controlDir string) error {
+func (p *process) startCommandOwned(cmd *exec.Cmd, controlDir string, proof *TrafficConfigProof) error {
 	p.trafficMu.Lock()
 	defer p.trafficMu.Unlock()
 
@@ -766,6 +777,12 @@ func (p *process) startCommandOwned(cmd *exec.Cmd, controlDir string) error {
 	p.cmd = cmd
 	p.done = make(chan struct{})
 	p.exitErr = nil
+	p.nativeTrafficConfigProof = nil
+	if proof != nil {
+		copy := *proof
+		p.nativeTrafficConfigProof = &copy
+		p.invalidateTrafficConfigProofLocked()
+	}
 	done := p.done
 	p.mu.Unlock()
 	p.intentionalStop.Store(false)
@@ -777,6 +794,7 @@ func (p *process) startCommandOwned(cmd *exec.Cmd, controlDir string) error {
 		close(done)
 		p.mu.Lock()
 		p.cmd = nil
+		p.nativeTrafficConfigProof = nil
 		p.mu.Unlock()
 		return err
 	}

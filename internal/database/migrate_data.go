@@ -47,6 +47,7 @@ func migrationModels() []any {
 		&model.OutboundTraffics{},
 		&model.LegacyTrafficReceipt{},
 		&model.LegacyUnassignedTraffic{},
+		&model.LegacyTrafficConfigSource{},
 		&model.InboundClientIps{},
 		&model.ClientRecord{},
 		&model.ClientPolicyTombstone{},
@@ -113,6 +114,7 @@ func MigrateData(srcPath, dstDSN string) error {
 	hasResetTimes := src.Migrator().HasTable(&model.ClientTrafficResetTime{})
 	hasLegacyTrafficReceipts := src.Migrator().HasTable(&model.LegacyTrafficReceipt{})
 	hasLegacyUnassignedTraffic := src.Migrator().HasTable(&model.LegacyUnassignedTraffic{})
+	hasLegacyTrafficConfigSources := src.Migrator().HasTable(&model.LegacyTrafficConfigSource{})
 	if hasPolicyResets && policyTableCount != len(policyTables) {
 		return errors.New("source has client policy resets without a complete ledger")
 	}
@@ -165,6 +167,9 @@ func MigrateData(srcPath, dstDSN string) error {
 				continue
 			}
 			if _, ok := m.(*model.LegacyUnassignedTraffic); ok && !hasLegacyUnassignedTraffic {
+				continue
+			}
+			if _, ok := m.(*model.LegacyTrafficConfigSource); ok && !hasLegacyTrafficConfigSources {
 				continue
 			}
 			if _, ok := m.(*model.ClientTrafficResetTime); ok && !hasResetTimes {
@@ -256,7 +261,7 @@ func copyAllModels(src, dst *gorm.DB) error {
 	}
 	for _, m := range migrationModels() {
 		switch m.(type) {
-		case *model.LegacyUnassignedTraffic, *model.LegacyTrafficReceipt:
+		case *model.LegacyUnassignedTraffic, *model.LegacyTrafficReceipt, *model.LegacyTrafficConfigSource:
 			if !src.Migrator().HasTable(m) {
 				continue
 			}

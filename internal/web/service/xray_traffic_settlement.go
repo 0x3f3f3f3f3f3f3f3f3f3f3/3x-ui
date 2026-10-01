@@ -88,6 +88,9 @@ func (s *XrayService) settleLegacyTrafficBatchChecked(batch *xray.TrafficBatch, 
 			}
 			batch = checked
 		}
+		if err := retainLegacyTrafficConfigSource(tx, batch, receipt.Sequence); err != nil {
+			return err
+		}
 		traffics := batch.Traffics
 		if err := s.inboundService.addInboundTraffic(tx, traffics); err != nil {
 			return err

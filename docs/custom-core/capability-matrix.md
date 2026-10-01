@@ -268,3 +268,14 @@ Task5B, remaining protocol adapters and single-core distribution remain open.
 The retention checkpoint also passes distinct clean panel/core builds,
 version/source checks and exact fork push verification; see deployment.md.
 This scoped prerequisite is complete. Historical label-to-owner handoff is N.
+
+
+Native startup configuration metadata: logical/effective digests before child
+start, detached pending/final snapshots, sticky saved-config drift and atomic
+source persistence are I/V. SQLite/PG old digest compatibility, unknown-history
+fences, rollback, migration/export and actual Mixed/HTTP retry/growth pass.
+One Important review finding was reproduced and resolved; final named contracts,
+generation/lint/vet/full Go/affected race pass. Broader runtime API lineage,
+historical source eligibility and owner adoption remain N. No new password
+handoff gate opens. Snell, mieru and SSH remain N and now have execution priority;
+protocol source audits and isolated wire probes alone do not change that status.
