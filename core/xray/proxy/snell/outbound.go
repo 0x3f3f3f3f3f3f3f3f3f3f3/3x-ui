@@ -35,6 +35,7 @@ type Outbound struct {
 	reuse       bool
 	connections map[*outboundConnection]struct{}
 	pending     map[*dialReservation]struct{}
+	requests    map[*packetRequest]struct{}
 	config      *ClientConfig
 	pools       map[poolScope]*pooledClient
 }
@@ -60,6 +61,10 @@ type dialReservation struct {
 	pool   *pooledClient
 }
 
+type packetRequest struct {
+	cancel context.CancelFunc
+}
+
 func NewClient(ctx context.Context, c *ClientConfig) (*Outbound, error) {
 	if err := ValidateClient(c); err != nil {
 		return nil, err
@@ -67,7 +72,7 @@ func NewClient(ctx context.Context, c *ClientConfig) (*Outbound, error) {
 	if err := validateTransport(ctx); err != nil {
 		return nil, err
 	}
-	o := &Outbound{server: X.TCPDestination(c.Address.AsAddress(), X.Port(c.Port)), reuse: c.Reuse, connections: make(map[*outboundConnection]struct{}), pending: make(map[*dialReservation]struct{}), config: c, pools: make(map[poolScope]*pooledClient)}
+	o := &Outbound{server: X.TCPDestination(c.Address.AsAddress(), X.Port(c.Port)), reuse: c.Reuse, connections: make(map[*outboundConnection]struct{}), pending: make(map[*dialReservation]struct{}), requests: make(map[*packetRequest]struct{}), config: c, pools: make(map[poolScope]*pooledClient)}
 	var err error
 	o.method, err = o.newMethod(false)
 	return o, err
@@ -188,6 +193,9 @@ func (o *Outbound) Close() error {
 	for r := range o.pending {
 		pending = append(pending, r.cancel)
 	}
+	for r := range o.requests {
+		pending = append(pending, r.cancel)
+	}
 	o.mu.Unlock()
 	for _, cancel := range pending {
 		cancel()
@@ -249,6 +257,10 @@ func (c *outboundConnection) Close() error {
 }
 
 func (o *Outbound) open(ctx context.Context, d internet.Dialer) (net.Conn, error) {
+	return o.openTo(ctx, d, o.server)
+}
+
+func (o *Outbound) openTo(ctx context.Context, d internet.Dialer, server X.Destination) (net.Conn, error) {
 	dialCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	r := &dialReservation{cancel: cancel}
@@ -275,7 +287,7 @@ func (o *Outbound) open(ctx context.Context, d internet.Dialer) (net.Conn, error
 	}
 	o.pending[r] = struct{}{}
 	o.mu.Unlock()
-	raw, err := d.Dial(dialCtx, o.server)
+	raw, err := d.Dial(dialCtx, server)
 	if untrackDial != nil {
 		untrackDial()
 	}
@@ -320,6 +332,9 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, d internet
 	dest := ob.Target
 	ob.Name = "snell"
 	ob.CanSpliceCopy = 3
+	if dest.Network == X.Network_UDP && o.config.Version == 5 {
+		return o.processV5Packets(ctx, link, d, dest)
+	}
 	if dest.Network == X.Network_TCP && o.reuse {
 		pool, err := o.acquirePool(ctx, d, ob)
 		if err != nil {

@@ -149,7 +149,21 @@ func (i *Inbound) Close() error {
 	}
 	return nil
 }
-func (i *Inbound) Network() []X.Network { return []X.Network{X.Network_TCP} }
+
+func (i *Inbound) Network() []X.Network {
+	if i.config.Version == 5 {
+		return []X.Network{X.Network_TCP, X.Network_UDP}
+	}
+	return []X.Network{X.Network_TCP}
+}
+
+// PreserveDatagrams requests the full native UDP listener option. Other Snell
+// versions keep the ordinary TCP listener and UDP-over-TCP transport.
+func (i *Inbound) PreserveDatagrams() bool { return i.config.Version == 5 }
+
+// QUIC Process bounds both authentication and duplex idle activity itself;
+// the generic UDP worker must not replace that policy with its legacy 120s cap.
+func (i *Inbound) OwnsDatagramTimeouts() bool { return i.config.Version == 5 }
 
 type (
 	acceptedKey struct{}
@@ -172,6 +186,9 @@ func (c *acceptedConnection) Close() error {
 }
 
 func (i *Inbound) Process(ctx context.Context, network X.Network, c stat.Connection, d routing.Dispatcher) error {
+	if network == X.Network_UDP && i.config.Version == 5 {
+		return i.processQUIC(ctx, c, d)
+	}
 	if network != X.Network_TCP {
 		return errors.New("Snell uses a native TCP listener")
 	}

@@ -27,7 +27,7 @@ func TestNativeSnellConfigVersions(t *testing.T) {
 func TestNativeSnellConfigRejectsUnsupportedModes(t *testing.T) {
 	for _, settings := range []string{
 		`"version":3`, `"version":7`, `"version":6,"mode":"unsafe-raw"`,
-		`"version":4,"mode":"unshaped"`, `"version":5,"quic":true`,
+		`"version":4,"mode":"unshaped"`, `"version":4,"quic":true`, `"version":6,"quic":true`,
 		`"version":4,"obfs":"tls"`, `"version":6,"obfs":"http"`,
 		`"version":4,"clientId":"not-a-uuid"`,
 	} {

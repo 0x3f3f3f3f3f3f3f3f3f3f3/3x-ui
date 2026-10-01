@@ -51,14 +51,35 @@ jobs:
           for test in TestSSHOpenSSHDirectSharesTunnelLedgerAndDisable TestSSHOpenSSHReverseMetersClientRelativeDirection TestSSHNativeOutboundStrictPinAndRoutedPayload TestSSHMissingPolicyAndBlockedRouteCannotReachTarget TestSSHChannelEOFAndCredentialRemovalPreserveTunnelSibling TestSSHAndTunnelShareLiveDirectionalRates TestSSHQuotaAndExpiryCloseIdleTransportAndTunnelSibling TestSSHRestartRetainsBusinessHostKeyAndSharedUsage TestSSHPasswordDefaultOffRejectsCorrectPassword TestSSHPasswordOptInRotationAndRemovalPreserveCanonicalSiblings TestSSHReversePortZeroCancellationAndDisableReleaseOwnedResources TestSSHReverseAuthorizationChecksBindPortAndRealSource TestSSHConnectionChannelHandshakeAndIdleBounds TestSSHCancelledPendingReverseOpenCannotLeakAcceptedChannel TestSSHVerifiedAuthenticationCannotTransferRevokedOfferToReplacement TestSSHStalledControlWriteClosesWithinChannelBound TestChannelCapacityRetainsDelayedPeerCloseAndOwnedDrains TestChannelRetirementTimeoutClosesTransportAndJoinsOwnedDrains TestOutboundUDPReturnsExplicitUnsupportedNetwork TestOutboundHostMismatchReturnsTypedError TestOutboundHandshakeCancellationClosesSuppliedTransport TestOutboundHandshakeUsesAbsoluteDeadline TestOutboundIdleClosesBothCopyDirectionsAtConfiguredDeadline; do
             grep -q -- "^--- PASS: $test " /tmp/native-ssh.log
           done
-      - name: Native Snell versioned stream and datagram lifecycle
+      - name: Native Snell versions and QUIC payload lifecycle
         working-directory: core/xray
         run: |
           set -euo pipefail
-          go test -race -count=1 -v -timeout=120s ./proxy/snell ./infra/conf ./testing/policy -run '^(TestOutbound|TestNativeSnell|TestNativeCanonical|TestNativeMalformed|TestNativeRejects)' | tee /tmp/native-snell.log
-          for test in TestNativeRejectsWrappedTransports TestNativeCanonicalUUID TestNativeMalformedAddressRejectsWithoutPanic TestOutboundUDPIdleCleanupUsesPolicy TestOutboundCloseFencesLateDials TestOutboundCapacityIncludesPendingDials TestOutboundReuseScopeAndCredentialFence TestOutboundNonreuseHandshakeWriteUsesPolicy TestNativeSnellConfigVersions TestNativeSnellConfigRejectsUnsupportedModes TestNativeSnellInboundHTTPAndV6UnshapedTCPUDP TestNativeSnellCredentialRemovalRotationAndSibling TestNativeSnellQuotaExpiryAndMissingPolicy TestNativeSnellOutboundUDPFirst13kEmptyExactLedger TestNativeSnellWireIDsShareCanonicalRateAndLedger TestNativeSnellUDPDisableExpiryQuotaAndCredentialCleanup TestNativeSnellUDPWireBoundary TestNativeSnellUDPVersions TestNativeSnellRespectsHandshakeTimeout TestNativeSnellUDPFirst13kEmptyDomainIPv6SourceAndRoutePolicy TestNativeSnellTCPVersionsPolicyAndRouteDeny TestNativeSnellOutboundVersions TestNativeSnellTCPReuseIdleStartsAfterLogicalCompletion TestNativeSnellUDPDownlinkRefreshesIdle; do
-            grep -q -- "^--- PASS: $test " /tmp/native-snell.log
+          go test -race -shuffle=on -count=1 -v ./proxy/snell ./infra/conf ./testing/policy ./transport/internet/udp ./app/proxyman/inbound -run '^TestNativeSnell|^TestOutbound|^TestHubFullDatagrams|^TestUDPWorkerNativeTimeout|^TestNativeCanonical|^TestNativeMalformed|^TestNativeRejects' | tee /tmp/native-snell-core.log
+          for test in TestNativeRejectsWrappedTransports TestNativeCanonicalUUID TestNativeMalformedAddressRejectsWithoutPanic TestOutboundUDPIdleCleanupUsesPolicy TestOutboundCloseFencesLateDials TestOutboundCapacityIncludesPendingDials TestOutboundReuseScopeAndCredentialFence TestOutboundNonreuseHandshakeWriteUsesPolicy TestNativeSnellConfigVersions TestNativeSnellConfigRejectsUnsupportedModes TestNativeSnellInboundHTTPAndV6UnshapedTCPUDP TestNativeSnellCredentialRemovalRotationAndSibling TestNativeSnellQuotaExpiryAndMissingPolicy TestNativeSnellOutboundUDPFirst13kEmptyExactLedger TestNativeSnellWireIDsShareCanonicalRateAndLedger TestNativeSnellUDPDisableExpiryQuotaAndCredentialCleanup TestNativeSnellUDPWireBoundary TestNativeSnellUDPVersions TestNativeSnellRespectsHandshakeTimeout TestNativeSnellUDPFirst13kEmptyDomainIPv6SourceAndRoutePolicy TestNativeSnellTCPVersionsPolicyAndRouteDeny TestNativeSnellOutboundVersions TestNativeSnellTCPReuseIdleStartsAfterLogicalCompletion TestNativeSnellUDPDownlinkRefreshesIdle TestNativeSnellV5QUICInboundEnvelopeRawRepeatedCanonicalLedger TestNativeSnellV5QUICFirst13kDomainIPv6SourceIsolationAndRouteDeny TestNativeSnellV5QUICDisableExpiryQuotaRemovalAndHandlerCleanup TestNativeSnellV5QUICMissingDisabledExpiredPolicyRejectsFreshSource TestNativeSnellV5QUICWireIDsShareDirectionalRates TestNativeSnellV5QUICDownlinkIdleRefreshAndAssociationReclaim TestNativeSnellV5QUICCredentialRotationPreservesSiblingAndLedger TestNativeSnellV5QUICRealV1V2HTTP3BothDirections TestNativeSnellQUICUnauthenticatedHandshakeBound TestNativeSnellQUICPhysicalCapacityAndCloseJoin TestNativeSnellQUICLateDialFencesHandlerCredentialAndRequest TestNativeSnellQUICFirstWriteObeysHandshakeBound TestNativeSnellQUICCloseBeforeFirstDatagram TestNativeSnellQUICConcurrentPendingBoundAndJoin TestNativeSnellQUICHandshakePrecedesConnectionIdle TestNativeSnellQUICRejectsEmbeddedHostWhitespace TestHubFullDatagramsOptInPreservesLargeAndEmpty TestUDPWorkerNativeTimeoutOwnershipPreservesLegacyReaper; do
+            grep -q -- "^--- PASS: $test " /tmp/native-snell-core.log
           done
+          for version in v1 v2; do
+            grep -q -- "--- PASS: TestNativeSnellV5QUICRealV1V2HTTP3BothDirections/inbound/quic-$version " /tmp/native-snell-core.log
+          done
+      - name: Pinned Snell source and extraction hashes
+        run: |
+          python3 - <<'PYCODE'
+          import hashlib, json
+          from pathlib import Path
+          root = Path("core/deps")
+          upstream = json.loads((root / "opensnell.UPSTREAM.json").read_text())
+          assert len(upstream["file_sha256"]) == upstream["complete_upstream_files"] == 42
+          actual = {str(p.relative_to(root / "opensnell")) for p in (root / "opensnell").rglob("*") if p.is_file()}
+          assert actual == set(upstream["file_sha256"])
+          for path, digest in upstream["file_sha256"].items():
+              assert hashlib.sha256((root / "opensnell" / path).read_bytes()).hexdigest() == digest, path
+          for path, digest in upstream["extraction"]["native_file_sha256"].items():
+              assert hashlib.sha256((root / path).read_bytes()).hexdigest() == digest, path
+          snell = json.loads((root / "sing-snell.UPSTREAM.json").read_text())
+          for file in snell["modified_files"]:
+              assert hashlib.sha256((root / "sing-snell" / file["path"]).read_bytes()).hexdigest() == file["managed_sha256"], file["path"]
+          PYCODE
       - name: Build custom core
         run: bash tools/build-custom-core.sh
       - name: Password proxy identity and credential lifecycle

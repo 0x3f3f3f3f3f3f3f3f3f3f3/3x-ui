@@ -61,3 +61,18 @@ and the narrow UDP datagram/empty-response changes are in
 [the manifest](deps/sing-snell.UPSTREAM.json). The larger GPL distribution
 must supply complete corresponding source and preserve Xray's MPL notices.
 This library does not implement v5 QUIC Proxy Mode.
+
+## OpenSnell native v5 QUIC envelope codec
+
+GPL-3.0-or-later source from
+https://github.com/missuo/opensnell/tree/3100984fd7c3a2bd7b41e292ad41f10d928bfb2d
+is retained completely in [deps/opensnell](deps/opensnell/LICENSE.md). The
+immutable archive and all 42 source-file hashes are in
+[the extraction manifest](deps/opensnell.UPSTREAM.json). The native pure envelope
+codec is adapted under `xray/proxy/snell/quic_codec.go` with its GPL notice; the
+published captured Surge Initial remains a separately identified test fixture.
+Native code clears the official v5 QUIC fixed bit in random envelope salts and
+re-authenticates repeated envelopes, following real official-server probes.
+The source's independent server relay and DNS/dial paths are not called.
+Combined GPL distributions must include corresponding source and existing MPL
+notices. This notice alone does not imply full native QUIC acceptance.

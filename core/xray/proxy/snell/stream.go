@@ -45,8 +45,15 @@ func (a activity) Update() {
 }
 
 func awaitCopies(ctx context.Context, cancel context.CancelFunc, done <-chan copyResult, updates activity) error {
+	return awaitCopiesEstablished(ctx, cancel, done, updates, nil)
+}
+
+func awaitCopiesEstablished(ctx context.Context, cancel context.CancelFunc, done <-chan copyResult, updates activity, established <-chan struct{}) error {
 	plcy := timeouts(ctx)
 	duration := plcy.ConnectionIdle
+	if established != nil {
+		duration = plcy.Handshake
+	}
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
 	var result error
@@ -55,6 +62,14 @@ func awaitCopies(ctx context.Context, cancel context.CancelFunc, done <-chan cop
 	cancelled := ctx.Done()
 	for remaining > 0 {
 		select {
+		case <-established:
+			established = nil
+			if !aborting {
+				if remaining == 2 {
+					duration = plcy.ConnectionIdle
+				}
+				timer.Reset(duration)
+			}
 		case r := <-done:
 			remaining--
 			if result == nil {

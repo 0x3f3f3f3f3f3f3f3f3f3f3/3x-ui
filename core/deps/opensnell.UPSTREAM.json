@@ -1,0 +1,79 @@
+{
+  "source": "https://github.com/missuo/opensnell",
+  "commit": "3100984fd7c3a2bd7b41e292ad41f10d928bfb2d",
+  "archive_sha256": "2532ad83a46375652cf5b78c1a429b7f2390e27731542bf77242977d56a3365e",
+  "license": "GPL-3.0-or-later",
+  "license_file": "opensnell/LICENSE.md",
+  "complete_upstream_files": 42,
+  "file_sha256": {
+    "go.sum": "63b452d1f4774261a1c5f0641893bd710dde41420beec7669cde748310b2f47a",
+    "go.mod": "4b439092805d301b2c986f57e36f58508dd3cc5f34804bcc1212c4baeba13934",
+    "SNELL_V6.md": "648b91be0cc6d9428eb0a2412a70aefd0797ce923a30c3f3fcb0599a6c1fbf8f",
+    "Dockerfile": "fe079a1a278e29bc98144df8efb14df11e1aebb8a84f6d55f4074e2b3dc6c328",
+    "README.md": "192f49b45f25d8f681f49d2ef5718d5f70c6e2ef0813e5fc3f1e53168b13a192",
+    "compose.yaml": "bbef8c2ca981d6bdd4edaf693ea91cd806c8bef55c4f0c1175a5434bef28f084",
+    "README_zh.md": "e56f786a81f4be24ae3498bba55e33ee94772d26d29394d6efe6fd08c98f9815",
+    "install.sh": "f53fe0be8dbdaea7e49c95058c35d23a4a2048ef5bd1ebbb8a789b55bd982a3a",
+    "docker-entrypoint.sh": "f51240c0df922fd0d510965c28c3a17f84d63e3ddc033fda8dc14cecb954841e",
+    ".gitignore": "18a6a6f1e040c666de050119117a552585017ff92753bf34a98d9b81fe1f168b",
+    "LICENSE.md": "982b4aa12f1eeb169feae72ae5ada1443e608343f29ccee0ce5ee58f21b1a851",
+    ".github/workflows/docker.yml": "3671c0f223677f1950cd5aaaaac5a51a0ac7ad51aca26de5d4b2e4b558a8f15f",
+    ".github/workflows/build.yml": "499decbb6f94ab5d013afc5d3abea20a27e7e3f659ebb10c2f93a3e15c4a8ce1",
+    "components/utils/relay.go": "7f068f500c8eeedb460cce1def7466621cb9102b012b5d614964d399edbcadb8",
+    "components/socks5/socks5.go": "4397db7ec6c969527c471fbf1daea6314f123ecaaffa90f719765820b54b6ffb",
+    "components/snell/client.go": "d886226f73a58b5a3bad0ecc04c6b8cabcd43696e5dd262f11a4be7373a6b1e0",
+    "components/snell/egress_other.go": "5bd18b30d1a289f6ebd43f49e05f85f36b8cd79dcab35b781eecd7dfc9294df8",
+    "components/snell/quic_test_fixture.go": "23c65c6981380e6314856d3fd6313f06b947f178564a8b00567d99676a878043",
+    "components/snell/quic.go": "3df259629f2a57ba1f4ff23d0632392aede9dbc31d197793c545c50f255fa8ef",
+    "components/snell/udp.go": "d06e32c261de5a14f438970c8ea4035136c2e83e0be57a18c760714888dedfbd",
+    "components/snell/quic_test.go": "c5f934c0fe39abb4891a93bf3e4d2a5a9ac7ee7dcc51256d4bac9df34227c0a3",
+    "components/snell/protocol.go": "5c2e81385979ea424e269183472cb6c5bbe3ba81431670812e7df02894263aa0",
+    "components/snell/conn.go": "b48526feab5d7ac59af0b4ecee061aefbd9a21a359dcd060f29d347af5998286",
+    "components/snell/pool.go": "05a4006f561885cf2b1deacf5554d9cc3d214f895dea456cffd6c7086caf9c1e",
+    "components/snell/cipher.go": "d721c079aab89d042ec4ea1b6081648e614b10c1eedc9fe596186ad9c6eeb58a",
+    "components/snell/tfo_other.go": "fa7bf268b032db37807569a06bf0b747ef986a47af3841c04c1629346cb72a9d",
+    "components/snell/server_test.go": "426b38f7cc1feaf7e306afe83b8027af18ec302482924c1bb5da55bc84438140",
+    "components/snell/server.go": "47fc251a23dcbffd9e3334a56ced681916c9ea7b1fe4e8fdc2c138c9fc2faa54",
+    "components/snell/v4.go": "651249b528b01f959a509520f9b03e8e9e909301b29c065d81c7679db21206dd",
+    "components/snell/egress_darwin.go": "82b619e61c9756ce1419a2d553533840a07eef4e6aa5445163c2dee0ccc9116d",
+    "components/snell/tfo_linux.go": "8703c20c9ceba3a624932ff8731f634b1a27bd75787e7ef1bc45e35fad1b3a09",
+    "components/snell/egress_linux.go": "0b4ba85b6054944af5d8a092dea24808d295052b865dd627cf2027c11493994c",
+    "components/obfs/obfs.go": "592a4bdafc6df6aacf0ba5eb0ef9345305a0bb274c0deeba0c1f1bc1b1f165ea",
+    "components/utils/pool/pool.go": "f45bf81857fa01bd874a9214e916a7f43f13e4fbf82d0e39b7a52de0bfb17ca9",
+    "components/utils/pool/alloc.go": "e5b104bba20c6e8b0e8d97c48cc322fee19e211330a7d945b40e61831aa2a2cf",
+    "components/obfs/http/client.go": "73554cc0f4e056b0457318761d52067f08920be197f9373c885aa2ba2b23b80d",
+    "components/obfs/http/server.go": "5c6e2781eace2df1a74e45455f3f74aa7f764830561729116e84fc2ce8811039",
+    "components/obfs/tls/client.go": "9408c6ee937580a8e6a50e31961ca1d5dd3d545aeb10fc9625517b80e4baaeba",
+    "components/obfs/tls/server.go": "d5b4acf81285bf37f7620fbcdbe6052aba33a56eae398753ef1161e8e998fbb9",
+    "components/obfs/tls/common.go": "f77077482048f1633f2b5a75646cf9f5061128a992974c8f7335282b37c44c68",
+    "cmd/snell-server/main.go": "a0314ee05db74fa91113e423e2ec03e9b70c5e381bb084d3296eb214997b35dd",
+    "cmd/snell-client/main.go": "a19f7569554f22cf66b81a8907e7b3670604ed1da20339ff018c03ab87da6485"
+  },
+  "upstream_files_modified": [],
+  "extraction": {
+    "source_files": [
+      "components/snell/quic.go",
+      "components/snell/cipher.go",
+      "components/snell/v4.go",
+      "components/snell/quic_test_fixture.go"
+    ],
+    "native_files": [
+      "../xray/proxy/snell/quic_codec.go",
+      "../xray/proxy/snell/quic_capture_test.go"
+    ],
+    "changes": [
+      "Extract pure authenticated envelope codec into native Snell package; no source ServeQUIC or independent relay dialing",
+      "Clear fixed-bit0x40 in random salt first byte; verified official four-prefix matrix",
+      "Validate target/network/port, packet bounds and command before Dispatcher admission",
+      "Re-decode fixed-bit-clear authentic envelopes on established associations instead of stock relay raw-forward behavior",
+      "Encode IPv6 targets as unbracketed IP literals; actual official v5 fixture rejects bracketed host as Misformatted domain name",
+      "Reject raw whitespace/control target host before ParseAddress can normalize it",
+      "Retain the first authenticated target for each source; official different-target repeated-envelope fixture verified original binding"
+    ],
+    "native_file_sha256": {
+      "../xray/proxy/snell/quic_codec.go": "46b7e320ee098cb102a2dca0140b046bfa6c4f38ac495d027740c341c1619337",
+      "../xray/proxy/snell/quic_capture_test.go": "f51c73b37391a67876a79005e82b45071ae7a51451acf306f9b2c5a5fed22458"
+    }
+  },
+  "archive_url": "https://codeload.github.com/missuo/opensnell/tar.gz/3100984fd7c3a2bd7b41e292ad41f10d928bfb2d"
+}

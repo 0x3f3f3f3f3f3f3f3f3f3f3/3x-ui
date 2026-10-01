@@ -12,6 +12,10 @@ import (
 
 type HubOption func(h *Hub)
 
+func HubFullDatagrams() HubOption {
+	return func(h *Hub) { h.fullDatagrams = true }
+}
+
 func HubCapacity(capacity int) HubOption {
 	return func(h *Hub) {
 		h.capacity = capacity
@@ -25,11 +29,12 @@ func HubReceiveOriginalDestination(r bool) HubOption {
 }
 
 type Hub struct {
-	conn         net.PacketConn
-	udpConn      *net.UDPConn
-	cache        chan *udp.Packet
-	capacity     int
-	recvOrigDest bool
+	conn          net.PacketConn
+	udpConn       *net.UDPConn
+	cache         chan *udp.Packet
+	capacity      int
+	recvOrigDest  bool
+	fullDatagrams bool
 }
 
 func ListenUDP(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, options ...HubOption) (*Hub, error) {
@@ -104,10 +109,17 @@ func (h *Hub) start() {
 	oobBytes := make([]byte, 256)
 
 	for {
-		buffer := buf.New()
+		var buffer *buf.Buffer
+		packetSize := int32(buf.Size)
+		if h.fullDatagrams {
+			packetSize = buf.MaxDatagramSize
+			buffer = buf.NewWithSize(packetSize)
+		} else {
+			buffer = buf.New()
+		}
 		var noob int
 		var udpAddr *net.UDPAddr
-		rawBytes := buffer.Extend(buf.Size)
+		rawBytes := buffer.Extend(packetSize)
 
 		var n int
 		var err error
@@ -128,7 +140,7 @@ func (h *Hub) start() {
 		}
 		buffer.Resize(0, int32(n))
 
-		if buffer.IsEmpty() {
+		if buffer.IsEmpty() && !h.fullDatagrams {
 			buffer.Release()
 			continue
 		}
@@ -136,6 +148,9 @@ func (h *Hub) start() {
 		payload := &udp.Packet{
 			Payload: buffer,
 			Source:  net.UDPDestination(net.IPAddress(udpAddr.IP), net.Port(udpAddr.Port)),
+		}
+		if buffer.IsEmpty() {
+			buffer.UDP = &payload.Source
 		}
 		if h.recvOrigDest && noob > 0 {
 			payload.Target = RetrieveOriginalDest(oobBytes[:noob])

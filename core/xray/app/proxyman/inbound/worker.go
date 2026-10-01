@@ -414,6 +414,9 @@ func (w *udpWorker) clean() error {
 	if len(w.activeConn) == 0 {
 		return errors.New("no more connections. stopping...")
 	}
+	if native, ok := w.proxy.(interface{ OwnsDatagramTimeouts() bool }); ok && native.OwnsDatagramTimeouts() {
+		return nil
+	}
 
 	for addr, conn := range w.activeConn {
 		if nowSec-atomic.LoadInt64(&conn.lastActivityTime) > 2*60 {
@@ -432,7 +435,11 @@ func (w *udpWorker) clean() error {
 func (w *udpWorker) Start() error {
 	w.activeConn = make(map[connID]*udpConn, 16)
 	ctx := context.Background()
-	h, err := udp.ListenUDP(ctx, w.address, w.port, w.stream, udp.HubCapacity(256))
+	options := []udp.HubOption{udp.HubCapacity(256)}
+	if native, ok := w.proxy.(interface{ PreserveDatagrams() bool }); ok && native.PreserveDatagrams() {
+		options = append(options, udp.HubFullDatagrams())
+	}
+	h, err := udp.ListenUDP(ctx, w.address, w.port, w.stream, options...)
 	if err != nil {
 		return err
 	}

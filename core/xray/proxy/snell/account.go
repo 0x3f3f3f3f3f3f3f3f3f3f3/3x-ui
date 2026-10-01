@@ -31,8 +31,8 @@ func validate(version uint32, psk, obfs, mode string, quic bool) error {
 	if psk == "" || len(psk) > 255 || version == 6 && len(psk) < 12 {
 		return errors.New("invalid Snell PSK length")
 	}
-	if quic {
-		return errors.New("Snell v5 QUIC Proxy Mode is not implemented")
+	if quic && version != 5 {
+		return errors.New("Snell QUIC Proxy Mode requires v5")
 	}
 	if version == 6 {
 		if obfs != "" && obfs != "off" {
