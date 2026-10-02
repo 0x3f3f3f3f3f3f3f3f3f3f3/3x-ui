@@ -19,6 +19,7 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/protocol/tls/cert"
 	"github.com/xtls/xray-core/transport/internet"
+	"google.golang.org/protobuf/proto"
 )
 
 var globalSessionCache = tls.NewLRUClientSessionCache(128)
@@ -45,10 +46,23 @@ func (c *Config) loadSelfCertPool() (*x509.CertPool, error) {
 	return root, nil
 }
 
-// BuildCertificates builds a list of TLS certificates from proto definition.
+// BuildCertificates returns a certificate snapshot from the proto definition.
+// Its slice and certificate values remain unchanged by subsequent file reload or
+// OCSP renewal. Use GetTLSConfig for live certificate selection after updates.
 func (c *Config) BuildCertificates() []*tls.Certificate {
+	access := new(sync.RWMutex)
+	certs := c.buildCertificates(access)
+	access.RLock()
+	defer access.RUnlock()
+	return slices.Clone(certs)
+}
+
+func (c *Config) buildCertificates(access *sync.RWMutex) []*tls.Certificate {
 	certs := make([]*tls.Certificate, 0, len(c.Certificate))
-	for _, entry := range c.Certificate {
+	for _, definition := range c.Certificate {
+		// Each reload worker owns its PEM bytes: GetTLSConfig may build several
+		// certificate sets from the same protobuf definition concurrently.
+		entry := proto.Clone(definition).(*Certificate)
 		if entry.Usage != Certificate_ENCIPHERMENT {
 			continue
 		}
@@ -66,13 +80,17 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 			return &keyPair
 		}
 		if keyPair := getX509KeyPair(); keyPair != nil {
+			access.Lock()
 			certs = append(certs, keyPair)
+			access.Unlock()
 		} else {
 			continue
 		}
 		index := len(certs) - 1
 		setupOcspTicker(entry, func(isReloaded, isOcspstapling bool) {
+			access.RLock()
 			cert := certs[index]
+			access.RUnlock()
 			if isReloaded {
 				if newKeyPair := getX509KeyPair(); newKeyPair != nil {
 					cert = newKeyPair
@@ -84,10 +102,16 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 				if newOCSPData, err := ocsp.GetOCSPForCert(cert.Certificate); err != nil {
 					errors.LogWarningInner(context.Background(), err, "ignoring invalid OCSP")
 				} else if string(newOCSPData) != string(cert.OCSPStaple) {
-					cert.OCSPStaple = newOCSPData
+					// A handshake may still hold cert after selection releases the
+					// lock, so publish an updated copy instead of mutating it.
+					updated := *cert
+					updated.OCSPStaple = newOCSPData
+					cert = &updated
 				}
 			}
+			access.Lock()
 			certs[index] = cert
+			access.Unlock()
 		})
 	}
 	return certs
@@ -243,8 +267,10 @@ func getGetCertificateFunc(c *tls.Config, ca []*Certificate) func(hello *tls.Cli
 	}
 }
 
-func getNewGetCertificateFunc(certs []*tls.Certificate, rejectUnknownSNI bool) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+func getNewGetCertificateFunc(certs []*tls.Certificate, rejectUnknownSNI bool, access *sync.RWMutex) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	return func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		access.RLock()
+		defer access.RUnlock()
 		if len(certs) == 0 {
 			return nil, errNoCertificates
 		}
@@ -411,7 +437,8 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	if len(caCerts) > 0 {
 		config.GetCertificate = getGetCertificateFunc(config, caCerts)
 	} else {
-		config.GetCertificate = getNewGetCertificateFunc(c.BuildCertificates(), c.RejectUnknownSni)
+		access := new(sync.RWMutex)
+		config.GetCertificate = getNewGetCertificateFunc(c.buildCertificates(access), c.RejectUnknownSni, access)
 	}
 
 	if sn := c.parseServerName(); len(sn) > 0 {

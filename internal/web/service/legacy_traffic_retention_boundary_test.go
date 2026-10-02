@@ -200,8 +200,16 @@ func TestLegacyUnassignedTrafficReceiptBindsOriginalIntent(t *testing.T) {
 		})
 	}
 	var buckets []model.LegacyUnassignedTraffic
-	if err := database.GetDB().Order("label").Find(&buckets).Error; err != nil || len(buckets) != 2 || buckets[0].RawUpload != 13 || buckets[1].RawUpload != 7 {
+	if err := database.GetDB().Find(&buckets).Error; err != nil || len(buckets) != 2 {
 		t.Fatalf("digest retries changed original raw evidence: %+v/%v", buckets, err)
+	}
+	byLabel := make(map[string]model.LegacyUnassignedTraffic, len(buckets))
+	for _, bucket := range buckets {
+		byLabel[bucket.Label] = bucket
+	}
+	if len(byLabel) != 2 || byLabel["alice"].RawUpload != 7 || byLabel["alice"].RawDownload != 11 ||
+		byLabel["ALICE"].RawUpload != 13 || byLabel["ALICE"].RawDownload != 17 {
+		t.Fatalf("digest retries changed original raw evidence: %+v", buckets)
 	}
 }
 
