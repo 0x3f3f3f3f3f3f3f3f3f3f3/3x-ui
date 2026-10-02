@@ -47,7 +47,7 @@ func rpcError(err error) error {
 		code = codes.Aborted
 	case errors.Is(err, clientpolicy.ErrInvalidPolicy), errors.Is(err, clientpolicy.ErrInvalidUsage):
 		code = codes.InvalidArgument
-	case errors.Is(err, clientpolicy.ErrRevoked), errors.Is(err, clientpolicy.ErrEngineClosed), errors.Is(err, clientpolicy.ErrStorage), errors.Is(err, clientpolicy.ErrLedgerCursor), errors.Is(err, clientpolicy.ErrAlreadyInitialized):
+	case errors.Is(err, clientpolicy.ErrRevoked), errors.Is(err, clientpolicy.ErrEngineClosed), errors.Is(err, clientpolicy.ErrEngineNotStarted), errors.Is(err, clientpolicy.ErrAuthority), errors.Is(err, clientpolicy.ErrStorage), errors.Is(err, clientpolicy.ErrLedgerCursor), errors.Is(err, clientpolicy.ErrAlreadyInitialized):
 		code = codes.FailedPrecondition
 	case errors.Is(err, clientpolicy.ErrQueueFull):
 		code = codes.ResourceExhausted
@@ -65,6 +65,7 @@ func BuiltinCapabilities() []string {
 	features = append(features, "trusted-mieru-client-id-v1")
 	features = append(features, "trusted-ssh-client-id-v1")
 	features = append(features, "trusted-snell-client-id-v1")
+	features = append(features, "fresh-core-incarnation-v1", "monotonic-authority-challenge-v1")
 	return features
 }
 
@@ -77,7 +78,18 @@ func (s *service) GetCapabilities(ctx context.Context, _ *Empty) (*Capabilities,
 	if c.Persistent {
 		features = append(features, "local-durable-reservations-v1", "committed-cumulative-ledger-v1", "create-only-usage-seed-v1", "durable-first-use-expiry-v1")
 	}
-	return &Capabilities{ApiVersion: 1, CoreVersion: core.VersionStatement()[0], InstanceId: c.InstanceID, Epoch: c.Epoch, Capabilities: features, ReservationRawBytes: c.ReservationRawBytes}, nil
+	return &Capabilities{ApiVersion: 1, CoreVersion: core.VersionStatement()[0], InstanceId: c.InstanceID, Epoch: c.Epoch, Capabilities: features, ReservationRawBytes: c.ReservationRawBytes, BootId: c.BootID}, nil
+}
+
+func (s *service) GetAuthorityChallenge(ctx context.Context, r *AuthorityChallengeRequest) (*AuthorityChallenge, error) {
+	if err := s.authorize(ctx); err != nil {
+		return nil, err
+	}
+	challenge, err := s.engine.BeginAuthorityChallenge(r.GetExpectedBootId())
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &AuthorityChallenge{InstanceId: challenge.InstanceID, BootId: challenge.BootID, ChallengeId: challenge.ChallengeID, MaxDurationMillis: uint64(clientpolicy.MaxAuthorityLeaseDuration.Milliseconds())}, nil
 }
 
 func policyConfig(p clientpolicy.Policy) *clientpolicy.PolicyConfig {

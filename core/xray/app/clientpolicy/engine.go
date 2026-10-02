@@ -11,18 +11,21 @@ import (
 const maxClientSessions = 4096
 
 type Engine struct {
-	ready      atomic.Bool
-	initial    []Policy
-	startOnce  sync.Once
-	startErr   error
-	store      stateStore
-	instanceID string
-	epoch      uint64
-	failed     atomic.Bool
-	mu         sync.Mutex
-	clients    map[string]*clientState
-	closed     bool
-	nextID     atomic.Uint64
+	bootID      string
+	authorityMu sync.Mutex
+	challenges  map[string]time.Time
+	ready       atomic.Bool
+	initial     []Policy
+	startOnce   sync.Once
+	startErr    error
+	store       stateStore
+	instanceID  string
+	epoch       uint64
+	failed      atomic.Bool
+	mu          sync.Mutex
+	clients     map[string]*clientState
+	closed      bool
+	nextID      atomic.Uint64
 }
 
 type clientState struct {

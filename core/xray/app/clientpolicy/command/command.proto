@@ -11,7 +11,15 @@ message Capabilities {
  string instance_id = 3;
  uint64 epoch = 4;
  repeated string capabilities = 5;
- uint64 reservation_raw_bytes = 6;
+	uint64 reservation_raw_bytes = 6;
+	string boot_id = 7;
+}
+message AuthorityChallengeRequest { string expected_boot_id = 1; }
+message AuthorityChallenge {
+ string instance_id = 1;
+ string boot_id = 2;
+ string challenge_id = 3;
+ uint64 max_duration_millis = 4;
 }
 message Usage {
  uint64 raw_upload = 1;
@@ -55,6 +63,7 @@ message LedgerRecord {
 message LedgerPage { repeated LedgerRecord records = 1; uint64 next_sequence = 2; }
 service ClientPolicyService {
  rpc GetCapabilities(Empty) returns (Capabilities);
+ rpc GetAuthorityChallenge(AuthorityChallengeRequest) returns (AuthorityChallenge);
  rpc GetClient(ClientRequest) returns (ClientState);
  rpc ApplyPolicies(ApplyRequest) returns (Empty);
  rpc InitializeClient(InitializeRequest) returns (Empty);

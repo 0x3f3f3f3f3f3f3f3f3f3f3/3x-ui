@@ -19,15 +19,16 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ClientPolicyService_GetCapabilities_FullMethodName  = "/xray.app.clientpolicy.command.v1.ClientPolicyService/GetCapabilities"
-	ClientPolicyService_GetClient_FullMethodName        = "/xray.app.clientpolicy.command.v1.ClientPolicyService/GetClient"
-	ClientPolicyService_ApplyPolicies_FullMethodName    = "/xray.app.clientpolicy.command.v1.ClientPolicyService/ApplyPolicies"
-	ClientPolicyService_InitializeClient_FullMethodName = "/xray.app.clientpolicy.command.v1.ClientPolicyService/InitializeClient"
-	ClientPolicyService_RevokeClient_FullMethodName     = "/xray.app.clientpolicy.command.v1.ClientPolicyService/RevokeClient"
-	ClientPolicyService_ListConnections_FullMethodName  = "/xray.app.clientpolicy.command.v1.ClientPolicyService/ListConnections"
-	ClientPolicyService_CloseConnections_FullMethodName = "/xray.app.clientpolicy.command.v1.ClientPolicyService/CloseConnections"
-	ClientPolicyService_CheckpointUsage_FullMethodName  = "/xray.app.clientpolicy.command.v1.ClientPolicyService/CheckpointUsage"
-	ClientPolicyService_ReadLedger_FullMethodName       = "/xray.app.clientpolicy.command.v1.ClientPolicyService/ReadLedger"
+	ClientPolicyService_GetCapabilities_FullMethodName       = "/xray.app.clientpolicy.command.v1.ClientPolicyService/GetCapabilities"
+	ClientPolicyService_GetAuthorityChallenge_FullMethodName = "/xray.app.clientpolicy.command.v1.ClientPolicyService/GetAuthorityChallenge"
+	ClientPolicyService_GetClient_FullMethodName             = "/xray.app.clientpolicy.command.v1.ClientPolicyService/GetClient"
+	ClientPolicyService_ApplyPolicies_FullMethodName         = "/xray.app.clientpolicy.command.v1.ClientPolicyService/ApplyPolicies"
+	ClientPolicyService_InitializeClient_FullMethodName      = "/xray.app.clientpolicy.command.v1.ClientPolicyService/InitializeClient"
+	ClientPolicyService_RevokeClient_FullMethodName          = "/xray.app.clientpolicy.command.v1.ClientPolicyService/RevokeClient"
+	ClientPolicyService_ListConnections_FullMethodName       = "/xray.app.clientpolicy.command.v1.ClientPolicyService/ListConnections"
+	ClientPolicyService_CloseConnections_FullMethodName      = "/xray.app.clientpolicy.command.v1.ClientPolicyService/CloseConnections"
+	ClientPolicyService_CheckpointUsage_FullMethodName       = "/xray.app.clientpolicy.command.v1.ClientPolicyService/CheckpointUsage"
+	ClientPolicyService_ReadLedger_FullMethodName            = "/xray.app.clientpolicy.command.v1.ClientPolicyService/ReadLedger"
 )
 
 // ClientPolicyServiceClient is the client API for ClientPolicyService service.
@@ -35,6 +36,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ClientPolicyServiceClient interface {
 	GetCapabilities(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Capabilities, error)
+	GetAuthorityChallenge(ctx context.Context, in *AuthorityChallengeRequest, opts ...grpc.CallOption) (*AuthorityChallenge, error)
 	GetClient(ctx context.Context, in *ClientRequest, opts ...grpc.CallOption) (*ClientState, error)
 	ApplyPolicies(ctx context.Context, in *ApplyRequest, opts ...grpc.CallOption) (*Empty, error)
 	InitializeClient(ctx context.Context, in *InitializeRequest, opts ...grpc.CallOption) (*Empty, error)
@@ -57,6 +59,16 @@ func (c *clientPolicyServiceClient) GetCapabilities(ctx context.Context, in *Emp
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Capabilities)
 	err := c.cc.Invoke(ctx, ClientPolicyService_GetCapabilities_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *clientPolicyServiceClient) GetAuthorityChallenge(ctx context.Context, in *AuthorityChallengeRequest, opts ...grpc.CallOption) (*AuthorityChallenge, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AuthorityChallenge)
+	err := c.cc.Invoke(ctx, ClientPolicyService_GetAuthorityChallenge_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -148,6 +160,7 @@ func (c *clientPolicyServiceClient) ReadLedger(ctx context.Context, in *LedgerRe
 // for forward compatibility.
 type ClientPolicyServiceServer interface {
 	GetCapabilities(context.Context, *Empty) (*Capabilities, error)
+	GetAuthorityChallenge(context.Context, *AuthorityChallengeRequest) (*AuthorityChallenge, error)
 	GetClient(context.Context, *ClientRequest) (*ClientState, error)
 	ApplyPolicies(context.Context, *ApplyRequest) (*Empty, error)
 	InitializeClient(context.Context, *InitializeRequest) (*Empty, error)
@@ -168,6 +181,9 @@ type UnimplementedClientPolicyServiceServer struct{}
 
 func (UnimplementedClientPolicyServiceServer) GetCapabilities(context.Context, *Empty) (*Capabilities, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCapabilities not implemented")
+}
+func (UnimplementedClientPolicyServiceServer) GetAuthorityChallenge(context.Context, *AuthorityChallengeRequest) (*AuthorityChallenge, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetAuthorityChallenge not implemented")
 }
 func (UnimplementedClientPolicyServiceServer) GetClient(context.Context, *ClientRequest) (*ClientState, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetClient not implemented")
@@ -228,6 +244,24 @@ func _ClientPolicyService_GetCapabilities_Handler(srv interface{}, ctx context.C
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ClientPolicyServiceServer).GetCapabilities(ctx, req.(*Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ClientPolicyService_GetAuthorityChallenge_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AuthorityChallengeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ClientPolicyServiceServer).GetAuthorityChallenge(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ClientPolicyService_GetAuthorityChallenge_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ClientPolicyServiceServer).GetAuthorityChallenge(ctx, req.(*AuthorityChallengeRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -386,6 +420,10 @@ var ClientPolicyService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetCapabilities",
 			Handler:    _ClientPolicyService_GetCapabilities_Handler,
+		},
+		{
+			MethodName: "GetAuthorityChallenge",
+			Handler:    _ClientPolicyService_GetAuthorityChallenge_Handler,
 		},
 		{
 			MethodName: "GetClient",

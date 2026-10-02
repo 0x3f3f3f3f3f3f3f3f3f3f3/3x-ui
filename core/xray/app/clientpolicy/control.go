@@ -31,6 +31,7 @@ type Connection struct {
 }
 
 type Capabilities struct {
+	BootID              string
 	InstanceID          string
 	Epoch               uint64
 	ReservationRawBytes uint64
@@ -39,7 +40,7 @@ type Capabilities struct {
 }
 
 func (e *Engine) Capabilities() Capabilities {
-	return Capabilities{InstanceID: e.instanceID, Epoch: e.epoch, ReservationRawBytes: reservationRawBytes, Ready: e.ready.Load() && !e.failed.Load(), Persistent: e.store != nil}
+	return Capabilities{BootID: e.bootID, InstanceID: e.instanceID, Epoch: e.epoch, ReservationRawBytes: reservationRawBytes, Ready: e.ready.Load() && !e.failed.Load(), Persistent: e.store != nil}
 }
 
 func (e *Engine) GetClient(id string) (Policy, Snapshot, error) {

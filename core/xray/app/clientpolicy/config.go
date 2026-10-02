@@ -17,6 +17,7 @@ type Manager interface {
 	RemoveVersion(string, uint64) error
 	ApplyBatch([]Policy) error
 	Capabilities() Capabilities
+	BeginAuthorityChallenge(string) (AuthorityChallenge, error)
 	GetClient(string) (Policy, Snapshot, error)
 	Connections(string) ([]Connection, error)
 	CloseConnections(string) (int, error)
@@ -30,6 +31,11 @@ func init() {
 		config := raw.(*Config)
 		e, err := OpenPersistentEngine(config.StateFile, config.InstanceId)
 		if err != nil {
+			return nil, err
+		}
+		e.bootID, err = freshAuthorityNonce()
+		if err != nil {
+			_ = e.Close()
 			return nil, err
 		}
 		policies := make([]Policy, 0, len(config.Policies))
