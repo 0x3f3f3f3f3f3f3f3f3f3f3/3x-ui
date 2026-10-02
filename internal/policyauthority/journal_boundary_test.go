@@ -225,3 +225,24 @@ func TestProvisioningRetryNeverOverwritesConfirmedUsage(t *testing.T) {
 		t.Fatalf("changed initialization intent reused canonical ID: %v", err)
 	}
 }
+
+func TestJournalDisappearingBeforeOpenIsNeverRecreated(t *testing.T) {
+	j, id, _, path := journalFixture(t)
+	if err := j.Close(); err != nil {
+		t.Fatal(err)
+	}
+	previous := openJournal
+	t.Cleanup(func() { openJournal = previous })
+	openJournal = func(path string, mode os.FileMode, options *bolt.Options) (*bolt.DB, error) {
+		if err := os.Rename(path, path+".retained"); err != nil {
+			return nil, err
+		}
+		return previous(path, mode, options)
+	}
+	if _, err := Open(path, id); !errors.Is(err, ErrJournal) {
+		t.Fatalf("missing activated journal reopened: %v", err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("open recreated a lost authority file: %v", err)
+	}
+}

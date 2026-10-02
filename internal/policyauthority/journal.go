@@ -18,6 +18,15 @@ const maxRecordBytes = 16 << 10
 const maxRecords = 100000
 
 var bucketNames = []string{"metadata", "accounts", "nodes", "boots", "grants", "requests"}
+var openJournal = bolt.Open
+
+func journalOptions() *bolt.Options {
+	return &bolt.Options{Timeout: 250 * time.Millisecond, MaxSize: maxJournalBytes, OpenFile: func(path string, flags int, mode os.FileMode) (*os.File, error) {
+		// Create already reserved a new file exclusively. Opening either path
+		// must fail if that file disappears; bbolt normally includes O_CREATE.
+		return os.OpenFile(path, flags&^os.O_CREATE, mode)
+	}}
+}
 
 type metadata struct {
 	Schema   uint64   `json:"schema"`
@@ -52,7 +61,7 @@ func Create(path string, seeds []Seed) (*Journal, Identity, error) {
 	if err := f.Close(); err != nil {
 		return nil, Identity{}, err
 	}
-	db, err := bolt.Open(path, 0o600, &bolt.Options{Timeout: 250 * time.Millisecond})
+	db, err := openJournal(path, 0o600, journalOptions())
 	if err != nil {
 		return nil, Identity{}, fmt.Errorf("%w: open: %v", ErrJournal, err)
 	}
@@ -102,7 +111,7 @@ func Open(path string, expected Identity) (*Journal, error) {
 	if err := privatePath(path, true); err != nil {
 		return nil, err
 	}
-	db, err := bolt.Open(path, 0o600, &bolt.Options{Timeout: 250 * time.Millisecond})
+	db, err := openJournal(path, 0o600, journalOptions())
 	if err != nil {
 		return nil, fmt.Errorf("%w: open: %v", ErrJournal, err)
 	}
