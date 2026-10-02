@@ -70,7 +70,7 @@ trap 'exit 130' INT
 
 if _command_exists curl; then
     curl_bin=$(which curl)
-else
+elif [[ -z "${XUI_LOCAL_PACKAGE:-}" ]]; then
     _fail "ERROR: Command 'curl' not found."
 fi
 

@@ -144,3 +144,18 @@ Docker/CI review evidence is recorded in `paired-docker-testing.md` and
 `paired-ci-testing.md`, including their dirty-snapshot and platform limits.
 
 The complete root Go suite passed in `paired-distribution-integration-root-regression.log`. Native optional fixture gates are covered separately by the required actual-core protocol/SQL receipts; this root-suite result alone does not assert zero skips.
+
+## Whole-stage correction batch in progress
+
+One whole-stage review of `83f9c08e..a980ef95` found eight Important issues and
+no Critical issue. Its retained reproductions are under
+`/tmp/paired-stage-review.YHV5Y3HH`. The single correction batch is documented in
+`paired-resource-corrections.md`, `paired-activation-corrections.md` and
+`paired-frontend-license-corrections.md`: mutable installed geodata with strict
+incoming hashes; current-state rollback resource classification; retryable
+synchronized journals; BusyBox control copying; actual managed-core readiness;
+recovery before completion; local offline dependency handling; and complete
+selected frontend source/notices. Earlier packages and passing receipts are
+historical evidence, not proof of the corrected integrated artifact. Final
+clean build and actual lifecycle/native protocol/container acceptance remain
+open until their new receipts are recorded.

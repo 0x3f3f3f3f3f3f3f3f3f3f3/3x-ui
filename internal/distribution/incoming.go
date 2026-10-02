@@ -35,12 +35,12 @@ func checkIncomingFiles(root string, m *Manifest) error {
 }
 
 func VerifyIncoming(ctx context.Context, root string) (*Manifest, error) {
-	m, err := Verify(ctx, root)
+	m, err := verifyFiles(root, true)
 	if err != nil {
 		return nil, err
 	}
 	if err := checkIncomingFiles(root, m); err != nil {
 		return nil, err
 	}
-	return m, nil
+	return Verify(ctx, root)
 }

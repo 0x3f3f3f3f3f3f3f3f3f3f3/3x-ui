@@ -7,8 +7,24 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestIncomingCLIRejectsMutableGeodataInNewPackage(t *testing.T) {
+	root := t.TempDir()
+	correctionPackage(t, root, strings.Repeat("a", 40), map[string]string{"bin/geoip.dat": "original geodata"})
+	if err := os.WriteFile(filepath.Join(root, "bin/geoip.dat"), []byte("modified geodata"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	if err := RunCommand(context.Background(), []string{"verify", root}, &output); err != nil {
+		t.Fatal(err)
+	}
+	if err := RunCommand(context.Background(), []string{"verify-incoming", root}, &output); err == nil {
+		t.Fatal("CLI accepted changed incoming geodata")
+	}
+}
 
 func TestPackageCommandInfoAndFailedVerifyLeaveConfiguredStateUntouched(t *testing.T) {
 	root := t.TempDir()

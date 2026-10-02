@@ -88,13 +88,36 @@ paired_service() {
 }
 
 paired_atomic_copy() {
-    local source="$1" destination="$2" temporary
+    local source="$1" destination="$2" temporary mode="${3:-}"
     [[ -s "$source" && -f "$source" && ! -L "$source" ]] || return 1
     mkdir -p -- "$(dirname -- "$destination")" || return 1
     temporary=$(mktemp "${destination}.paired.XXXXXXXX") || return 1
     cp -- "$source" "$temporary" || return 1
-    chmod --reference="$source" "$temporary" || return 1
+    [[ -n "$mode" ]] || mode=$(stat -c '%a' "$source") || return 1
+    [[ "$mode" =~ ^[0-7]{3,4}$ ]] || return 1
+    chmod "$mode" "$temporary" || return 1
     mv -f -- "$temporary" "$destination"
+}
+
+paired_dependencies() {
+    local missing=() command
+    for command in bash cp mv mkdir mktemp sed stat chmod date sleep; do
+        command -v "$command" >/dev/null 2>&1 || missing+=("$command")
+    done
+    if [[ -z "${XUI_LOCAL_PACKAGE:-}" ]]; then
+        for command in curl sha256sum awk; do command -v "$command" >/dev/null 2>&1 || missing+=("$command"); done
+    fi
+    if [[ "$release" == alpine ]]; then
+        for command in rc-service rc-update; do command -v "$command" >/dev/null 2>&1 || missing+=("$command"); done
+    else command -v systemctl >/dev/null 2>&1 || missing+=(systemctl)
+    fi
+    if [[ "${#missing[@]}" == 0 ]]; then return 0; fi
+    if [[ -n "${XUI_LOCAL_PACKAGE:-}" || "${XUI_OFFLINE:-0}" == 1 ]]; then
+        echo "Offline activation requires locally installed commands: ${missing[*]}" >&2
+        return 1
+    fi
+    install_base || return 1
+    for command in "${missing[@]}"; do command -v "$command" >/dev/null 2>&1 || return 1; done
 }
 
 paired_control_paths() {
@@ -161,9 +184,53 @@ paired_activation_failure() {
 }
 
 paired_apply() {
-    local mode="$1" had_previous=0
-    [[ ! -e "$xui_folder/x-ui" ]] || had_previous=1
+    local mode="$1" had_previous=0 original_work="" original_previous="" request_work="$PAIRED_WORK"
+    # All service/dependency checks precede the first stop or filesystem swap.
+    [[ "$xui_folder" =~ ^/[A-Za-z0-9_./-]+$ ]] || { echo 'installation path contains unsupported service-template characters' >&2; return 1; }
+    paired_dependencies || return 1
     paired_control_paths
+    if [[ -e "$xui_folder.pending.json" ]]; then
+        original_work=$("$PAIRED_VERIFIER" recovery-work "$xui_folder") || return 1
+        original_previous=$("$PAIRED_VERIFIER" recovery-previous "$xui_folder") || return 1
+        if [[ ! -d "$original_previous" && ! -s "$original_work/configured" ]] && ! declare -F config_after_install >/dev/null; then
+            echo 'Interrupted fresh installation requires the install entrypoint to finish its configuration; pending files retained.' >&2
+            return 1
+        fi
+    fi
+    [[ ! -e "$xui_folder/x-ui" ]] || had_previous=1
+    if [[ "$had_previous" == 1 || -e "$xui_folder.pending.json" ]]; then paired_service stop || return 1; fi
+    "$PAIRED_VERIFIER" recover "$xui_folder" > "$PAIRED_WORK/recovery.json" || return 1
+    if [[ -n "$original_work" ]]; then
+        PAIRED_WORK="$original_work"
+        PAIRED_PREVIOUS="$original_previous"
+        if [[ -e "$xui_folder.pending.json" && -d "$original_previous" ]]; then
+            # Supersede only after restoring known old code with CURRENT state.
+            # Original control backups belong to the interrupted transaction.
+            local failed="$xui_folder.failed.$(date -u +%Y%m%dT%H%M%S).$$"
+            "$PAIRED_VERIFIER" rollback "$xui_folder" "$failed" > "$request_work/interrupted-rollback.json" || return 1
+            paired_restore_controls || return 1
+        elif [[ -e "$xui_folder.pending.json" ]]; then
+            # A fresh installation has no previous code. Finish actual activation
+            # before allowing this code to become the next rollback baseline.
+            paired_install_controls || return 1
+            cd -- "$xui_folder" || return 1
+            if [[ ! -s "$original_work/configured" ]]; then
+                config_after_install || return 1
+                printf '%s\n' configured > "$original_work/configured" || return 1
+            else "$xui_folder/x-ui" migrate || return 1
+            fi
+            paired_service start || return 1
+            paired_service status || return 1
+            "$PAIRED_VERIFIER" complete "$xui_folder" "${XUI_DB_FOLDER:-/etc/x-ui}/panel-health.json" > "$original_work/recovered-activation.json" || return 1
+            paired_service stop || return 1
+        else
+            # Recovery already restored previous code or the completed rollback.
+            paired_restore_controls || return 1
+        fi
+        PAIRED_WORK="$request_work"
+    fi
+    had_previous=0
+    [[ ! -e "$xui_folder/x-ui" ]] || had_previous=1
     for name in menu unit; do
         local path="$PAIRED_MENU"
         [[ "$name" != unit ]] || path="$PAIRED_UNIT"
@@ -172,19 +239,7 @@ paired_apply() {
             cp -a -- "$path" "$PAIRED_WORK/previous-$name" || return 1
         fi
     done
-    # Base packages may be needed by service/configuration helpers, but package
-    # verification has already completed and the lifecycle lock is held.
-    install_base || return 1
-    if [[ "$had_previous" == 1 || -e "$xui_folder.pending.json" ]]; then
-        paired_service stop || return 1
-    fi
-    "$PAIRED_VERIFIER" recover "$xui_folder" > "$PAIRED_WORK/recovery.json" || return 1
-    # An interrupted promoted pair is now verified and quiescent. A new update
-    # carries its latest state forward rather than restoring old usage.
-    if [[ -e "$xui_folder.pending.json" ]]; then
-        "$PAIRED_VERIFIER" complete "$xui_folder" > "$PAIRED_WORK/recovered-completion.json" || return 1
-    fi
-    [[ ! -e "$xui_folder/x-ui" ]] || had_previous=1
+    printf '%s\n' snapshots-complete > "$PAIRED_WORK/controls-snapshot" || return 1
     paired_promote || { [[ "$had_previous" != 1 ]] || paired_service start; return 1; }
     if ! paired_install_controls; then paired_activation_failure; return 1; fi
     cd -- "$xui_folder" || return 1
@@ -193,11 +248,10 @@ paired_apply() {
     else
         "$xui_folder/x-ui" migrate || { paired_activation_failure; return 1; }
     fi
+    printf '%s\n' configured > "$PAIRED_WORK/configured" || { paired_activation_failure; return 1; }
     paired_service start || { paired_activation_failure; return 1; }
-    # Require the service to remain up after its initial start returns.
-    sleep 2
     paired_service status || { paired_activation_failure; return 1; }
-    "$PAIRED_VERIFIER" complete "$xui_folder" > "$PAIRED_WORK/activation.json" || return 1
+    "$PAIRED_VERIFIER" complete "$xui_folder" "${XUI_DB_FOLDER:-/etc/x-ui}/panel-health.json" > "$PAIRED_WORK/activation.json" || { paired_activation_failure; return 1; }
     setup_fail2ban
     echo "Source-matched panel and Custom Xray activated; installation receipts: $PAIRED_WORK"
 }
@@ -207,9 +261,9 @@ paired_entrypoint() {
     paired_prepare "$requested" || return 1
     if [[ "${XUI_PACKAGE_ONLY:-0}" == 1 ]]; then
         "$PAIRED_VERIFIER" recover "$xui_folder" > "$PAIRED_WORK/recovery.json" || return 1
-        [[ ! -e "$xui_folder.pending.json" ]] || "$PAIRED_VERIFIER" complete "$xui_folder" > "$PAIRED_WORK/recovered-completion.json" || return 1
+        [[ ! -e "$xui_folder.pending.json" ]] || "$PAIRED_VERIFIER" complete-offline "$xui_folder" > "$PAIRED_WORK/recovered-offline-completion.json" || return 1
         paired_promote || return 1
-        "$PAIRED_VERIFIER" complete "$xui_folder" > "$PAIRED_WORK/activation.json" || return 1
+        "$PAIRED_VERIFIER" complete-offline "$xui_folder" > "$PAIRED_WORK/offline-completion.json" || return 1
         return 0
     fi
     if [[ "${XUI_PAIRED_LIFECYCLE_LOCK:-}" != "$xui_folder" ]]; then

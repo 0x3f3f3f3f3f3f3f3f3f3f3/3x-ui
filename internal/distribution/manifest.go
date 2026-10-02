@@ -107,9 +107,15 @@ func readManifest(root string) (*Manifest, error) {
 	return &m, nil
 }
 
-// VerifyFiles verifies the complete declared pair for this host without
-// executing binaries, loading service settings or opening accounting state.
+// VerifyFiles verifies the installed pair for this host without executing
+// binaries or opening accounting state. Geodata is mutable after installation;
+// its path, regular-file type and size bound remain enforced. All other declared
+// files retain the distributed size and checksum requirements.
 func VerifyFiles(root string) (*Manifest, error) {
+	return verifyFiles(root, false)
+}
+
+func verifyFiles(root string, incoming bool) (*Manifest, error) {
 	info, err := os.Lstat(root)
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return nil, errors.New("package root must be an existing directory without a link")
@@ -172,6 +178,12 @@ func VerifyFiles(root string) (*Manifest, error) {
 		name, fileInfo, err := regularFile(root, entry.Path)
 		if err != nil {
 			return nil, err
+		}
+		if entry.Role == "geodata" && !incoming {
+			if fileInfo.Size() <= 0 || fileInfo.Size() > maxFileBytes {
+				return nil, fmt.Errorf("installed geodata size is invalid: %s", entry.Path)
+			}
+			continue
 		}
 		if fileInfo.Size() != entry.Size {
 			return nil, fmt.Errorf("package file size changed: %s", entry.Path)

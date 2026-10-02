@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func readPending(installed string) (*Promotion, error) {
@@ -67,6 +68,23 @@ func installedTree(name string) (bool, error) {
 	return true, nil
 }
 
+func verifyPendingPackage(ctx context.Context, p *Promotion) (*Manifest, error) {
+	m, err := Verify(ctx, p.Installed)
+	if err != nil {
+		return nil, err
+	}
+	if m.SourceRevision != p.SourceRevision {
+		return nil, errors.New("installed pair differs from pending source")
+	}
+	if p.PackageSHA256 != "" {
+		receipt, err := snapshotResource(p.Installed, ManifestName, "manifest", maxManifestBytes)
+		if err != nil || receipt.SHA256 != p.PackageSHA256 {
+			return nil, errors.New("installed package differs from pending manifest")
+		}
+	}
+	return m, nil
+}
+
 // Recover restores a retained old tree only when the installation path is
 // missing. A promoted pair is validated and reported for the caller to finish
 // activating; its live database and policy state are never restored from backup.
@@ -103,21 +121,33 @@ func Recover(ctx context.Context, installed string) (*Promotion, error) {
 		return nil, errors.New("pending installation has neither installed nor retained panel")
 	}
 	if !exists {
-		if err := os.Rename(p.Previous, installed); err != nil {
+		if err := renamePromotionPath(p.Previous, installed); err != nil {
 			return nil, err
 		}
 		p.State = "recovered-previous"
 	} else if retained || p.State == "promoted" {
-		m, err := Verify(ctx, installed)
-		if err != nil {
+		if _, err := verifyPendingPackage(ctx, p); err != nil {
 			return nil, err
-		}
-		if m.SourceRevision != p.SourceRevision {
-			return nil, errors.New("installed pair differs from the pending transaction")
 		}
 		p.State = "promoted"
 		return p, nil
 	} else if p.State == "prepared" {
+		candidate, err := installedTree(p.Candidate)
+		if err != nil {
+			return nil, err
+		}
+		if !candidate {
+			// Fresh rename completed before its promoted journal write. The
+			// installed code still requires actual activation, never completion.
+			if _, err := verifyPendingPackage(ctx, p); err != nil {
+				return nil, err
+			}
+			p.State = "promoted"
+			if err := writePromotionJournal(installed+".pending.json", p); err != nil {
+				return nil, err
+			}
+			return p, nil
+		}
 		p.State = "recovered-unmodified"
 	} else {
 		return nil, errors.New("pending transaction is ambiguous")
@@ -125,7 +155,7 @@ func Recover(ctx context.Context, installed string) (*Promotion, error) {
 	if err := writePromotionJournal(p.Previous+".transaction.json", p); err != nil {
 		return nil, err
 	}
-	if err := os.Remove(installed + ".pending.json"); err != nil {
+	if err := removePromotionJournal(installed + ".pending.json"); err != nil {
 		return nil, err
 	}
 	return p, nil
@@ -149,12 +179,8 @@ func recoverRollback(ctx context.Context, p *Promotion) (*Promotion, error) {
 	}
 	if installed && candidate && !failed {
 		// Death before moving the new installation: preserve the current pair.
-		m, err := Verify(ctx, p.Installed)
-		if err != nil {
+		if _, err := verifyPendingPackage(ctx, p); err != nil {
 			return nil, err
-		}
-		if m.SourceRevision != p.SourceRevision {
-			return nil, errors.New("rollback recovery current source mismatch")
 		}
 		p.State = "promoted"
 		p.RollbackCandidate, p.Failed = "", ""
@@ -166,24 +192,27 @@ func recoverRollback(ctx context.Context, p *Promotion) (*Promotion, error) {
 	if !installed && candidate && failed {
 		// This candidate already contains CURRENT state. Never use the stale
 		// retained previous tree after starting a code rollback.
-		if err := os.Rename(p.RollbackCandidate, p.Installed); err != nil {
+		if err := renamePromotionPath(p.RollbackCandidate, p.Installed); err != nil {
 			return nil, err
 		}
 	} else if !installed && !candidate && failed {
-		if err := os.Rename(p.Failed, p.Installed); err != nil {
+		if err := renamePromotionPath(p.Failed, p.Installed); err != nil {
 			return nil, err
 		}
-		p.State = "recovered-current"
+		p.State = "promoted"
+		p.RollbackCandidate, p.Failed = "", ""
+		if err := writePromotionJournal(p.Installed+".pending.json", p); err != nil {
+			return nil, err
+		}
+		return p, nil
 	} else if !(installed && !candidate && failed) {
 		return nil, errors.New("rollback recovery tree state is ambiguous")
 	}
-	if p.State != "recovered-current" {
-		p.State = "rolled-back-code"
-	}
+	p.State = "rolled-back-code"
 	if err := writePromotionJournal(p.Previous+".transaction.json", p); err != nil {
 		return nil, err
 	}
-	if err := os.Remove(p.Installed + ".pending.json"); err != nil {
+	if err := removePromotionJournal(p.Installed + ".pending.json"); err != nil {
 		return nil, err
 	}
 	return p, nil
@@ -191,7 +220,15 @@ func recoverRollback(ctx context.Context, p *Promotion) (*Promotion, error) {
 
 // CompletePromotion records successful activation after the caller checks the
 // service. Retained trees and per-transaction receipts are kept indefinitely.
-func CompletePromotion(ctx context.Context, installed string) (*Promotion, error) {
+func CompletePromotion(ctx context.Context, installed, healthPath string) (*Promotion, error) {
+	return finishPromotion(ctx, installed, healthPath, "activated")
+}
+
+func CompleteOfflinePromotion(ctx context.Context, installed string) (*Promotion, error) {
+	return finishPromotion(ctx, installed, "", "installed-offline")
+}
+
+func finishPromotion(ctx context.Context, installed, healthPath, state string) (*Promotion, error) {
 	installed, err := filepath.Abs(installed)
 	if err != nil {
 		return nil, err
@@ -205,19 +242,52 @@ func CompletePromotion(ctx context.Context, installed string) (*Promotion, error
 	if err != nil || p == nil {
 		return p, err
 	}
-	m, err := Verify(ctx, installed)
-	if err != nil {
+	if p.State != "promoted" {
+		return nil, errors.New("installation requires recovery before completion")
+	}
+	if _, err := verifyPendingPackage(ctx, p); err != nil {
 		return nil, err
 	}
-	if m.SourceRevision != p.SourceRevision {
-		return nil, errors.New("activation pair differs from pending source")
+	if state == "activated" {
+		if err := WaitRuntimeHealth(ctx, installed, healthPath); err != nil {
+			return nil, err
+		}
 	}
-	p.State = "activated"
+	p.State = state
 	if err := writePromotionJournal(p.Previous+".transaction.json", p); err != nil {
 		return nil, err
 	}
-	if err := os.Remove(installed + ".pending.json"); err != nil {
+	if err := removePromotionJournal(installed + ".pending.json"); err != nil {
 		return nil, err
 	}
 	return p, nil
+}
+
+// RecoveryWork returns only the original private installer workspace, never a
+// path supplied by an unvalidated shell JSON parser. The snapshot marker proves
+// control backups were finished before this transaction stopped the service.
+func RecoveryWork(installed string) (string, error) {
+	installed, err := filepath.Abs(installed)
+	if err != nil {
+		return "", err
+	}
+	p, err := readPending(installed)
+	if err != nil || p == nil {
+		return "", err
+	}
+	work := filepath.Dir(p.Candidate)
+	if filepath.Base(work) == "staged" {
+		work = filepath.Dir(work)
+	}
+	if filepath.Dir(work) != filepath.Dir(installed) || !strings.HasPrefix(filepath.Base(work), ".x-ui-paired.") {
+		return "", errors.New("pending transaction has no private installer workspace")
+	}
+	info, err := os.Lstat(work)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0077 != 0 {
+		return "", errors.New("pending installer workspace is missing or unsafe")
+	}
+	if _, _, err := regularFile(work, "controls-snapshot"); err != nil {
+		return "", errors.New("original control snapshot is incomplete; retain transaction for recovery")
+	}
+	return work, nil
 }

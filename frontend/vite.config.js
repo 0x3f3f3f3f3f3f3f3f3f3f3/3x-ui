@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { frontendDependencyClosurePlugin } from '../tools/frontend-dependencies.mjs';
 
 const outDir = path.resolve(import.meta.dirname, '../internal/web/dist');
 const BACKEND_TARGET = 'http://localhost:2053';
@@ -203,7 +204,7 @@ const SWAGGER_ONLY_DEPS = [
 ];
 
 export default defineConfig({
-  plugins: [react(), injectBasePathPlugin(), rocketLoaderOptOutPlugin()],
+  plugins: [react(), injectBasePathPlugin(), rocketLoaderOptOutPlugin(), frontendDependencyClosurePlugin(import.meta.dirname, outDir)],
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, 'src'),

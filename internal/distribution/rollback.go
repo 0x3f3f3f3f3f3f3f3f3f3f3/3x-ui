@@ -123,12 +123,9 @@ func Rollback(ctx context.Context, installed, failed string) (*Promotion, error)
 	if ok, err := installedTree(p.Previous); err != nil || !ok {
 		return nil, errors.New("no retained old installation for code rollback")
 	}
-	m, err := Verify(ctx, installed)
+	m, err := verifyPendingPackage(ctx, p)
 	if err != nil {
 		return nil, err
-	}
-	if m.SourceRevision != p.SourceRevision {
-		return nil, errors.New("installed pair differs from pending source")
 	}
 	candidate, err := os.MkdirTemp(filepath.Dir(installed), ".x-ui-code-rollback-")
 	if err != nil {
@@ -137,28 +134,48 @@ func Rollback(ctx context.Context, installed, failed string) (*Promotion, error)
 	if err := copyRollbackCode(p.Previous, candidate); err != nil {
 		return nil, err
 	}
-	if err := PreserveResources(installed, candidate, m); err != nil {
+	var rollbackManifest *Manifest
+	if _, err := os.Lstat(filepath.Join(candidate, ManifestName)); err == nil {
+		rollbackManifest, err = VerifyFiles(candidate)
+		if err != nil {
+			return nil, err
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, err
+	}
+	if err := preserveResources(installed, candidate, rollbackManifest, m, true); err != nil {
 		return nil, err
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	p.RollbackCandidate, p.Failed, p.State = candidate, failed, "rollback-prepared"
+	p.RollbackResourceOverrides, err = resourceOverrides(candidate, rollbackManifest)
+	if err != nil {
+		return nil, err
+	}
+	if rollbackManifest != nil {
+		manifestReceipt, err := snapshotResource(candidate, ManifestName, "manifest", maxManifestBytes)
+		if err != nil {
+			return nil, err
+		}
+		p.RollbackPackageSHA256, p.RollbackSourceRevision = manifestReceipt.SHA256, rollbackManifest.SourceRevision
+	}
 	if err := writePromotionJournal(installed+".pending.json", p); err != nil {
 		return nil, err
 	}
-	if err := os.Rename(installed, failed); err != nil {
+	if err := renamePromotionPath(installed, failed); err != nil {
 		return nil, err
 	}
-	if err := os.Rename(candidate, installed); err != nil {
-		restoreErr := os.Rename(failed, installed)
+	if err := renamePromotionPath(candidate, installed); err != nil {
+		restoreErr := renamePromotionPath(failed, installed)
 		return nil, fmt.Errorf("code rollback rename: %v; current tree restore: %v", err, restoreErr)
 	}
 	p.State = "rolled-back-code"
 	if err := writePromotionJournal(p.Previous+".transaction.json", p); err != nil {
 		return nil, err
 	}
-	if err := os.Remove(installed + ".pending.json"); err != nil {
+	if err := removePromotionJournal(installed + ".pending.json"); err != nil {
 		return nil, err
 	}
 	return p, nil

@@ -11,13 +11,18 @@ import (
 )
 
 type Promotion struct {
-	SourceRevision    string `json:"sourceRevision"`
-	Installed         string `json:"installed"`
-	Previous          string `json:"previous"`
-	Candidate         string `json:"candidate"`
-	State             string `json:"state"`
-	RollbackCandidate string `json:"rollbackCandidate,omitempty"`
-	Failed            string `json:"failed,omitempty"`
+	SourceRevision            string `json:"sourceRevision"`
+	Installed                 string `json:"installed"`
+	Previous                  string `json:"previous"`
+	Candidate                 string `json:"candidate"`
+	State                     string `json:"state"`
+	PackageSHA256             string `json:"packageSHA256,omitempty"`
+	ResourceOverrides         []File `json:"resourceOverrides,omitempty"`
+	RollbackSourceRevision    string `json:"rollbackSourceRevision,omitempty"`
+	RollbackPackageSHA256     string `json:"rollbackPackageSHA256,omitempty"`
+	RollbackResourceOverrides []File `json:"rollbackResourceOverrides,omitempty"`
+	RollbackCandidate         string `json:"rollbackCandidate,omitempty"`
+	Failed                    string `json:"failed,omitempty"`
 }
 
 func containsPath(parent, child string) bool {
@@ -30,8 +35,10 @@ func writePromotionJournal(name string, p *Promotion) error {
 	if err != nil {
 		return err
 	}
-	temporary := name + ".tmp"
-	f, err := os.OpenFile(temporary, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if len(data)+1 > maxManifestBytes {
+		return errors.New("promotion recovery journal exceeds size limit")
+	}
+	f, err := os.CreateTemp(filepath.Dir(name), filepath.Base(name)+".tmp-")
 	if err != nil {
 		return err
 	}
@@ -40,7 +47,40 @@ func writePromotionJournal(name string, p *Promotion) error {
 	if writeErr != nil || syncErr != nil || closeErr != nil {
 		return errors.New("write promotion recovery journal")
 	}
-	return os.Rename(temporary, name)
+	// Interrupted and failed temporary writes remain as recovery evidence.
+	return renamePromotionPath(f.Name(), name)
+}
+
+func syncPromotionDirectory(name string) error {
+	dir, err := os.Open(name)
+	if err != nil {
+		return err
+	}
+	syncErr, closeErr := dir.Sync(), dir.Close()
+	if syncErr != nil {
+		return syncErr
+	}
+	return closeErr
+}
+
+func renamePromotionPath(previous, next string) error {
+	if err := os.Rename(previous, next); err != nil {
+		return err
+	}
+	if err := syncPromotionDirectory(filepath.Dir(previous)); err != nil {
+		return err
+	}
+	if filepath.Dir(previous) != filepath.Dir(next) {
+		return syncPromotionDirectory(filepath.Dir(next))
+	}
+	return nil
+}
+
+func removePromotionJournal(name string) error {
+	if err := os.Remove(name); err != nil {
+		return err
+	}
+	return syncPromotionDirectory(filepath.Dir(name))
 }
 
 // Promote validates the candidate before changing an installed path. Its caller
@@ -79,12 +119,12 @@ func Promote(ctx context.Context, candidate, installed, previous string) (*Promo
 	if err != nil || !parent.IsDir() || parent.Mode()&os.ModeSymlink != 0 {
 		return nil, errors.New("installation parent must be a directory without a link")
 	}
-	for _, reserved := range []string{previous, previous + ".transaction.json", previous + ".transaction.json.tmp"} {
+	for _, reserved := range []string{previous, previous + ".transaction.json"} {
 		if _, err := os.Lstat(reserved); !os.IsNotExist(err) {
 			return nil, errors.New("retained previous path or recovery journal already exists")
 		}
 	}
-	m, err := Verify(ctx, candidate)
+	m, err := VerifyIncoming(ctx, candidate)
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +148,15 @@ func Promote(ctx context.Context, candidate, installed, previous string) (*Promo
 		return nil, err
 	}
 	p := &Promotion{SourceRevision: m.SourceRevision, Installed: installed, Previous: previous, Candidate: candidate, State: "prepared"}
+	manifestReceipt, err := snapshotResource(candidate, ManifestName, "manifest", maxManifestBytes)
+	if err != nil {
+		return nil, err
+	}
+	p.PackageSHA256 = manifestReceipt.SHA256
+	p.ResourceOverrides, err = resourceOverrides(candidate, m)
+	if err != nil {
+		return nil, err
+	}
 	journal := previous + ".transaction.json"
 	if err := writePromotionJournal(journal, p); err != nil {
 		return nil, err
@@ -116,24 +165,24 @@ func Promote(ctx context.Context, candidate, installed, previous string) (*Promo
 		return nil, err
 	}
 	if exists {
-		if err := os.Rename(installed, previous); err != nil {
+		if err := renamePromotionPath(installed, previous); err != nil {
 			return p, err
 		}
 		p.State = "previous-retained"
 		if err := writePromotionJournal(journal, p); err != nil {
-			restoreErr := os.Rename(previous, installed)
+			restoreErr := renamePromotionPath(previous, installed)
 			return p, fmt.Errorf("record retained installation: %v; restore: %v", err, restoreErr)
 		}
 	}
-	if err := os.Rename(candidate, installed); err != nil {
+	if err := renamePromotionPath(candidate, installed); err != nil {
 		if exists {
-			if restoreErr := os.Rename(previous, installed); restoreErr != nil {
+			if restoreErr := renamePromotionPath(previous, installed); restoreErr != nil {
 				return p, fmt.Errorf("candidate promotion: %v; previous tree retained at %s; restore: %v", err, previous, restoreErr)
 			}
 		}
 		p.State = "rolled-back"
 		_ = writePromotionJournal(journal, p)
-		_ = os.Remove(installed + ".pending.json")
+		_ = removePromotionJournal(installed + ".pending.json")
 		return p, fmt.Errorf("candidate promotion refused; original path restored: %w", err)
 	}
 	p.State = "promoted"

@@ -325,6 +325,11 @@ func (s *Server) startTask(restartXray bool, loc *time.Location) {
 	}
 	// Check whether xray is running every second
 	_, _ = s.cron.AddJob(cadenceXrayRunning, job.NewCheckXrayRunningJob())
+	_, _ = s.cron.AddFunc(cadenceXrayRunning, func() {
+		if err := s.xrayService.PublishRuntimeHealth(s.ctx.Err() != nil); err != nil {
+			logger.Warning("publish local runtime health failed:", err)
+		}
+	})
 
 	// Check if xray needs to be restarted every 30 seconds
 	_, _ = s.cron.AddFunc(cadenceXrayRestart, func() {
@@ -792,6 +797,7 @@ func (s *Server) StopPanelOnly() error {
 
 func (s *Server) stop(stopXray bool, stopTgBot bool) error {
 	s.cancel()
+	_ = s.xrayService.PublishRuntimeHealth(true)
 	if stopXray {
 		_ = s.xrayService.StopXray()
 		mtproto.GetManager().StopAll()

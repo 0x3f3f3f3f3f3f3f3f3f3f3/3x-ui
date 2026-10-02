@@ -285,6 +285,16 @@ func (p *process) IsRunning() bool {
 	return true
 }
 
+// PID returns the managed child identity for local activation checks.
+func (p *process) PID() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.cmd == nil || p.cmd.Process == nil {
+		return 0
+	}
+	return p.cmd.Process.Pid
+}
+
 // GetErr returns the last error encountered by the Xray process.
 func (p *process) GetErr() error {
 	p.mu.RLock()

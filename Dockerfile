@@ -8,6 +8,9 @@ RUN test "${#SOURCE_REVISION}" -eq 40 \
 COPY frontend/package.json frontend/package-lock.json ./
 RUN test "$(node --version)" = v26.10.0 && npm ci
 COPY frontend/ ./
+COPY .nvmrc /src/.nvmrc
+COPY tools/frontend-dependencies.mjs /src/tools/frontend-dependencies.mjs
+COPY tools/frontenddepsverify/licenses /src/tools/frontenddepsverify/licenses
 COPY internal/web/translation /src/internal/web/translation
 RUN npm run build
 
@@ -23,9 +26,11 @@ WORKDIR /app
 RUN apk add --no-cache build-base bash curl git
 COPY . .
 COPY --from=frontend /src/internal/web/dist /paired-frontend
+COPY --from=frontend /src/build/frontend-licenses /paired-frontend-licenses
 ENV CGO_ENABLED=1 \
     CGO_CFLAGS="-D_LARGEFILE64_SOURCE" \
     PAIRED_FRONTEND_DIR=/paired-frontend \
+    PAIRED_FRONTEND_LICENSE_DIR=/paired-frontend-licenses \
     PAIRED_NODE_VERSION=v26.10.0
 RUN ./DockerInit.sh "$TARGETOS" "$TARGETARCH" "$TARGETVARIANT" /app/build/paired
 

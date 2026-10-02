@@ -1,6 +1,8 @@
 package distribution
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -9,11 +11,24 @@ import (
 	"path/filepath"
 )
 
-// PreserveResources copies application-owned, undeclared state/resources into
-// the staged candidate. The caller must first stop the old service and finish
-// its traffic settlement. Neither managed executables nor either tree's manifest
-// can be replaced. Rooted file operations never follow links outside the app.
+// PreserveResources copies current application state and customized geodata
+// into a verified candidate. Unchanged distributed geodata uses the new package.
+// The caller must first stop and settle the old service. Neither executables nor
+// either manifest can be replaced; rooted operations contain resource copies.
 func PreserveResources(previous, candidate string, m *Manifest) error {
+	var current *Manifest
+	if _, err := os.Lstat(filepath.Join(previous, ManifestName)); err == nil {
+		current, err = VerifyFiles(previous)
+		if err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	return preserveResources(previous, candidate, m, current, false)
+}
+
+func preserveResources(previous, candidate string, m, current *Manifest, rollback bool) error {
 	for _, directory := range []string{previous, candidate} {
 		info, err := os.Lstat(directory)
 		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
@@ -31,8 +46,19 @@ func PreserveResources(previous, candidate string, m *Manifest) error {
 	}
 	defer target.Close()
 	managed := map[string]bool{ManifestName: true}
-	for _, entry := range m.Files {
-		managed[entry.Path] = true
+	if m != nil {
+		for _, entry := range m.Files {
+			managed[entry.Path] = true
+		}
+	}
+	currentFiles := map[string]File{}
+	if current != nil {
+		for _, entry := range current.Files {
+			currentFiles[entry.Path] = entry
+			if rollback && entry.Role != "geodata" {
+				managed[entry.Path] = true
+			}
+		}
 	}
 	return fs.WalkDir(source.FS(), ".", func(name string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -41,7 +67,10 @@ func PreserveResources(previous, candidate string, m *Manifest) error {
 		if name == "." {
 			return nil
 		}
-		if managed[name] {
+		role, roleErr := packageRole(name, CurrentTarget())
+		geodata := roleErr == nil && role == "geodata"
+		legacyCode := rollback && m == nil && (roleErr == nil || name == "x-ui.service")
+		if !geodata && (managed[name] || legacyCode) {
 			if entry.IsDir() {
 				return fs.SkipDir
 			}
@@ -60,10 +89,28 @@ func PreserveResources(previous, candidate string, m *Manifest) error {
 			return err
 		}
 		if info.IsDir() {
+			if geodata {
+				return fmt.Errorf("current geodata is not a regular file: %s", name)
+			}
 			return target.MkdirAll(name, info.Mode().Perm())
 		}
-		if _, err := target.Lstat(name); !os.IsNotExist(err) {
-			return fmt.Errorf("candidate already contains undeclared resource: %s", name)
+		if geodata {
+			snapshot, err := snapshotResource(previous, name, "geodata", maxFileBytes)
+			if err != nil {
+				return err
+			}
+			original, declared := currentFiles[name]
+			if !rollback && managed[name] && declared && snapshot.Size == original.Size && snapshot.SHA256 == original.SHA256 {
+				return nil
+			}
+		}
+		if existing, err := target.Lstat(name); !os.IsNotExist(err) {
+			if err != nil || !geodata || !(managed[name] || legacyCode) || !existing.Mode().IsRegular() {
+				return fmt.Errorf("candidate already contains undeclared or unsafe resource: %s", name)
+			}
+			if err := target.Remove(name); err != nil {
+				return err
+			}
 		}
 		if err := target.MkdirAll(filepath.Dir(name), 0700); err != nil {
 			return err
@@ -100,4 +147,66 @@ func PreserveResources(previous, candidate string, m *Manifest) error {
 		}
 		return nil
 	})
+}
+
+func snapshotResource(root, name, role string, limit int64) (File, error) {
+	filename, info, err := regularFile(root, name)
+	if err != nil {
+		return File{}, err
+	}
+	if info.Size() <= 0 || info.Size() > limit {
+		return File{}, fmt.Errorf("resource receipt size is invalid: %s", name)
+	}
+	f, err := os.Open(filename)
+	if err != nil {
+		return File{}, err
+	}
+	opened, err := f.Stat()
+	if err != nil || !os.SameFile(info, opened) {
+		_ = f.Close()
+		return File{}, fmt.Errorf("resource changed while opening: %s", name)
+	}
+	h := sha256.New()
+	n, copyErr := io.Copy(h, io.LimitReader(f, info.Size()+1))
+	closeErr := f.Close()
+	if copyErr != nil || closeErr != nil || n != info.Size() {
+		return File{}, fmt.Errorf("resource changed while hashing: %s", name)
+	}
+	return File{Path: name, Role: role, Size: n, SHA256: hex.EncodeToString(h.Sum(nil))}, nil
+}
+
+func resourceOverrides(root string, m *Manifest) ([]File, error) {
+	distributed := map[string]File{}
+	if m != nil {
+		for _, f := range m.Files {
+			distributed[f.Path] = f
+		}
+	}
+	var overrides []File
+	err := filepath.WalkDir(filepath.Join(root, "bin"), func(name string, e fs.DirEntry, walkErr error) error {
+		if os.IsNotExist(walkErr) && name == filepath.Join(root, "bin") {
+			return nil // Legacy installations may not have a bin directory.
+		}
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(root, name)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		role, err := packageRole(rel, CurrentTarget())
+		if err != nil || role != "geodata" {
+			return nil
+		}
+		snapshot, err := snapshotResource(root, rel, role, maxFileBytes)
+		if err != nil {
+			return err
+		}
+		if original, ok := distributed[rel]; !ok || original.Size != snapshot.Size || original.SHA256 != snapshot.SHA256 {
+			overrides = append(overrides, snapshot)
+		}
+		return nil
+	})
+	return overrides, err
 }

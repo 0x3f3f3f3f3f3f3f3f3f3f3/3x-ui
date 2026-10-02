@@ -25,8 +25,12 @@ if [[ -n "${PAIRED_FRONTEND_DIR:-}" ]]; then
   [[ "${PAIRED_NODE_VERSION:-}" == v26.10.0 && -d "$PAIRED_FRONTEND_DIR" && ! -L "$PAIRED_FRONTEND_DIR" ]] || { echo "prebuilt frontend requires Node 26.10.0 and a directory without a link" >&2; exit 1; }
   [[ -s "$PAIRED_FRONTEND_DIR/index.html" && -d "$PAIRED_FRONTEND_DIR/assets" ]] || { echo "prebuilt frontend is incomplete" >&2; exit 1; }
   [[ -z "$(find "$PAIRED_FRONTEND_DIR" -mindepth 1 ! -type f ! -type d -print -quit)" ]] || { echo "prebuilt frontend contains a link or special file" >&2; exit 1; }
+  frontend_license_dir="${PAIRED_FRONTEND_LICENSE_DIR:?prebuilt frontend requires its accompanying locked source/notice closure}"
+  [[ -d "$frontend_license_dir" && ! -L "$frontend_license_dir" ]] || { echo "frontend source/notice closure must be a directory without a link" >&2; exit 1; }
 else
   [[ "$(node --version)" == v26.10.0 ]] || { echo "Node 26.10.0 is required" >&2; exit 1; }
+  [[ -z "${PAIRED_FRONTEND_LICENSE_DIR:-}" ]] || { echo "external frontend closure requires accompanying prebuilt assets" >&2; exit 1; }
+  frontend_license_dir="$repo_root/build/frontend-licenses"
 fi
 os_name="${GOOS:-$(go env GOHOSTOS)}"
 arch="${GOARCH:-$(go env GOHOSTARCH)}"
@@ -50,8 +54,14 @@ if [[ -n "${PAIRED_FRONTEND_DIR:-}" ]]; then
 else
   (cd frontend && npm ci && npm run build)
 fi
+host_os="$(go env GOHOSTOS)"
+host_arch="$(go env GOHOSTARCH)"
+GOOS="$host_os" GOARCH="$host_arch" GOARM= CGO_ENABLED=0 \
+  go run ./tools/frontenddepsverify "$frontend_license_dir" frontend/package-lock.json internal/web/dist
 mkdir -- "$output"
 mkdir -- "$output/bin" "$output/licenses"
+mkdir -- "$output/licenses/frontend"
+cp -a -- "$frontend_license_dir/." "$output/licenses/frontend/"
 compiler="${CC:-$(go env CC)}"
 command -v "$compiler" > "$output/licenses/c-compiler.txt"
 "$compiler" --version >> "$output/licenses/c-compiler.txt"
@@ -101,8 +111,6 @@ else
 fi
 printf '{"sourceRevision":"%s","sourceRepository":"https://github.com/0x3f3f3f3f3f3f3f3f3f3f3/3x-ui","compatibility":"traffic-control-v1"}\n' "$revision" > "$output/licenses/package-origin.json"
 # Generate metadata on the build host, including when the pair is cross-built.
-host_os="$(go env GOHOSTOS)"
-host_arch="$(go env GOHOSTARCH)"
 GOOS="$host_os" GOARCH="$host_arch" GOARM= CGO_ENABLED=0 \
   go run ./tools/packagedeps "$output/licenses" "$output/x-ui" "$output/bin/xray-linux-$binary_arch"
 GOOS="$host_os" GOARCH="$host_arch" GOARM= CGO_ENABLED=0 \

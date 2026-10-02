@@ -285,6 +285,9 @@ jobs:
             -ldflags "-s -w -X github.com/xtls/xray-core/core.build=$GITHUB_SHA" \
             -o ../../build/windows/xray-windows-amd64.exe ./main)
           mkdir -p build/windows/licenses
+          CGO_ENABLED=0 go run ./tools/frontenddepsverify build/frontend-licenses frontend/package-lock.json internal/web/dist
+          mkdir build/windows/licenses/frontend
+          cp -a build/frontend-licenses/. build/windows/licenses/frontend/
           git archive --format=tar.gz HEAD > build/windows/licenses/corresponding-source.tar.gz
           cp LICENSE build/windows/licenses/panel-GPL-3.0.txt
           cp core/xray/LICENSE build/windows/licenses/xray-MPL-2.0.txt
