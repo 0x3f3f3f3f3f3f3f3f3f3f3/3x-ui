@@ -20,7 +20,7 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 		}
 	}
 	var meta metadata
-	if err := get(tx, "metadata", "state", &meta); err != nil || meta.Schema != 4 {
+	if err := get(tx, "metadata", "state", &meta); err != nil || meta.Schema != 4 && meta.Schema != 5 {
 		return ErrJournal
 	}
 	if meta.Identity != j.id {
@@ -32,6 +32,9 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 		}
 	}
 	if err := validateMigrationRecords(tx, meta.MigrationDigest); err != nil {
+		return err
+	}
+	if err := j.validateResetOperations(tx, meta); err != nil {
 		return err
 	}
 	accounts := make(map[string]Account)
