@@ -329,3 +329,244 @@ func TestAuthorityMigrationHistoryRestoresCalendarAndOriginalZeroTimestamp(t *te
 		t.Fatalf("old calendar included a new client: %+v/%v", resolved, err)
 	}
 }
+
+func TestAuthorityMigrationHistoryRestoresExistingHourlyCalendar(t *testing.T) {
+	path, _, _ := authorityMigrationFixture(t)
+	db, ctx := database.GetDB(), context.Background()
+	now := time.Date(2026, 9, 30, 12, 35, 0, 0, time.UTC)
+	operation, err := captureScheduledTrafficReset(ctx, "hourly", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := MigrateLocalClientPolicyAuthority(ctx, filepath.Dir(path)); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Where("request_id = ?", operation.RequestID).Delete(&model.ClientTrafficResetBatch{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	config := &conf.ClientPolicyConfig{InstanceID: "migration-source", StateFile: path}
+	if err := recoverAuthorityDesiredState(ctx, config); err != nil {
+		t.Fatalf("existing hourly calendar blocked authority recovery: %v", err)
+	}
+	retry, err := captureScheduledTrafficReset(ctx, "hourly", now)
+	if err != nil || retry != operation {
+		t.Fatalf("hourly calendar was recaptured after recovery: %+v/%v", retry, err)
+	}
+}
+
+func TestAuthorityHistoryRejectsRepeatedOlderCalendar(t *testing.T) {
+	for _, source := range []string{"migration-stamp", "later-reset-missing-row", "later-reset-retained-row", "sql-time-already-ahead"} {
+		t.Run(source, func(t *testing.T) {
+			path, clientID, _ := authorityMigrationFixture(t)
+			db, ctx := database.GetDB(), context.Background()
+			oldAt := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC).UnixMilli()
+			calendarAt := time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC).UnixMilli()
+			if err := db.Table("client_policy_resets").Where("client_id = ?", clientID).UpdateColumn("created_at", oldAt).Error; err != nil {
+				t.Fatal(err)
+			}
+			migrationAt := oldAt
+			if source == "migration-stamp" {
+				migrationAt = calendarAt + 3600000
+			}
+			if err := db.Table("client_traffic_reset_times").Where("client_id = ?", clientID).UpdateColumn("effective_at", migrationAt).Error; err != nil {
+				t.Fatal(err)
+			}
+			if _, err := MigrateLocalClientPolicyAuthority(ctx, filepath.Dir(path)); err != nil {
+				t.Fatal(err)
+			}
+			state, err := openAuthorityState(filepath.Join(filepath.Dir(path), "authority"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			account, err := state.Journal.Account(clientID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			config := conf.ClientPolicyConfig{InstanceID: "migration-source", StateFile: path}
+			wantAt := migrationAt
+			if source != "migration-stamp" {
+				policy, err := PrepareClientPolicyReset(config.InstanceID, clientID, "later-reset-time-proof")
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Use the production policy reconciler to commit the reset evidence;
+				// no business core or test-only journal grant is involved.
+				owner := &managedAuthority{config: config, db: db, state: state}
+				if err := owner.reconcilePolicy(ctx, policy, account); err != nil {
+					t.Fatal(err)
+				}
+				var reset model.ClientPolicyReset
+				if err := db.First(&reset, "client_id = ? AND request_id = ?", clientID, "later-reset-time-proof").Error; err != nil {
+					t.Fatal(err)
+				}
+				wantAt = reset.CreatedAt
+				if wantAt <= calendarAt {
+					t.Fatal("fixture reset did not cover the older calendar")
+				}
+				if source != "later-reset-retained-row" {
+					if err := db.Where("client_id = ? AND request_id = ?", clientID, reset.RequestID).Delete(&model.ClientPolicyReset{}).Error; err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			before, err := state.Journal.Account(clientID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := state.Journal.Close(); err != nil {
+				t.Fatal(err)
+			}
+			restoredAt := oldAt
+			if source == "sql-time-already-ahead" {
+				wantAt += 86400000
+				restoredAt = wantAt
+			}
+			if err := db.Table("client_traffic_reset_times").Where("client_id = ?", clientID).UpdateColumn("effective_at", restoredAt).Error; err != nil {
+				t.Fatal(err)
+			}
+			var client model.ClientRecord
+			if err := db.First(&client, "stable_id = ?", clientID).Error; err != nil {
+				t.Fatal(err)
+			}
+			operation := model.ClientTrafficResetBatch{ScheduledAt: calendarAt, TargetsJSON: `[{"clientId":"` + clientID + `","email":"migration-owner"}]`}
+			eligible, err := scheduledResetEligibleClients(db, []model.ClientRecord{client}, operation, nil)
+			if err != nil || (source != "sql-time-already-ahead" && len(eligible) != 1) {
+				t.Fatalf("restored stale timestamp did not reproduce older-calendar eligibility: count %d/%v", len(eligible), err)
+			}
+			if err := recoverAuthorityDesiredState(ctx, &config); err != nil {
+				t.Fatal(err)
+			}
+			eligible, err = scheduledResetEligibleClients(db, []model.ClientRecord{client}, operation, nil)
+			if err != nil || len(eligible) != 0 {
+				t.Fatalf("already covered older calendar became eligible after restore: count %d/%v", len(eligible), err)
+			}
+			var stamp model.ClientTrafficResetTime
+			if err := db.First(&stamp, "client_id = ?", clientID).Error; err != nil || stamp.EffectiveAt != wantAt {
+				t.Fatalf("recovery recaptured or regressed the original effective time: %+v, want %d/%v", stamp, wantAt, err)
+			}
+			state, err = openAuthorityState(filepath.Join(filepath.Dir(path), "authority"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer state.Journal.Close()
+			after, err := state.Journal.Account(clientID)
+			if err != nil || !reflect.DeepEqual(before, after) || currentXrayProcess() != nil {
+				t.Fatalf("timestamp repair changed protected accounting/window or activated traffic: %+v/%+v/%v", before, after, err)
+			}
+		})
+	}
+}
+
+func TestAuthorityHistoryRejectsNegativeResetTimestamp(t *testing.T) {
+	config, _, _, before := authorityHistoryMigrationFixture(t)
+	db := database.GetDB()
+	var reset model.ClientPolicyReset
+	if err := db.First(&reset, "client_id = ?", before.Seed.ClientID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Where("id = ?", reset.Id).Delete(&model.ClientPolicyReset{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	reset.CreatedAt = -1
+	err := runSerializedTx(func(tx *gorm.DB) error { return recoverAuthorityResetTx(tx, before, config.InstanceID, &reset) })
+	if !errors.Is(err, ErrClientPolicyLedger) {
+		t.Fatalf("invalid historical reset timestamp was projected: %v", err)
+	}
+	var count int64
+	if err := db.Model(&model.ClientPolicyReset{}).Where("client_id = ? AND request_id = ?", reset.ClientID, reset.RequestID).Count(&count).Error; err != nil || count != 0 {
+		t.Fatalf("invalid reset recovery committed metadata: %d/%v", count, err)
+	}
+}
+
+func TestAuthorityHistoryPreservesOriginalZeroResetTimestamp(t *testing.T) {
+	path, clientID, _ := authorityMigrationFixture(t)
+	db, ctx := database.GetDB(), context.Background()
+	if err := db.Table("client_policy_resets").Where("client_id = ?", clientID).UpdateColumn("created_at", 0).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Table("client_traffic_reset_times").Where("client_id = ?", clientID).UpdateColumn("effective_at", 0).Error; err != nil {
+		t.Fatal(err)
+	}
+	var original model.ClientPolicyReset
+	if err := db.First(&original, "client_id = ?", clientID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := MigrateLocalClientPolicyAuthority(ctx, filepath.Dir(path)); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Where("client_id = ?", clientID).Delete(&model.ClientPolicyReset{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	config := &conf.ClientPolicyConfig{InstanceID: "migration-source", StateFile: path}
+	if err := recoverAuthorityDesiredState(ctx, config); err != nil {
+		t.Fatal(err)
+	}
+	var restored model.ClientPolicyReset
+	if err := db.First(&restored, "client_id = ? AND request_id = ?", clientID, original.RequestID).Error; err != nil {
+		t.Fatal(err)
+	}
+	// SQL surrogate IDs are regenerated; the protected boundary and original
+	// creation timestamp must otherwise remain exact through retries.
+	restored.Id = original.Id
+	if restored != original {
+		t.Fatalf("recovery substituted today's clock for an original zero timestamp: %+v", restored)
+	}
+	if err := recoverAuthorityDesiredState(ctx, config); err != nil {
+		t.Fatalf("zero timestamp recovery was not idempotent: %v", err)
+	}
+}
+
+func TestAuthorityHistoryTimestampFailureRollsBackResetProjection(t *testing.T) {
+	for _, missingReset := range []bool{false, true} {
+		t.Run(map[bool]string{false: "existing-reset", true: "missing-reset"}[missingReset], func(t *testing.T) {
+			config, _, _, account := authorityHistoryMigrationFixture(t)
+			db := database.GetDB()
+			var reset model.ClientPolicyReset
+			if err := db.First(&reset, "client_id = ?", account.Seed.ClientID).Error; err != nil {
+				t.Fatal(err)
+			}
+			if missingReset {
+				if err := db.Where("id = ?", reset.Id).Delete(&model.ClientPolicyReset{}).Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := db.Where("client_id = ?", reset.ClientID).Delete(&model.ClientTrafficResetTime{}).Error; err != nil {
+				t.Fatal(err)
+			}
+			injected := errors.New("reset timestamp projection failure")
+			const hook = "test:reset-time-projection"
+			if err := db.Callback().Create().Before("gorm:create").Register(hook, func(tx *gorm.DB) {
+				if tx.Statement.Table == "client_traffic_reset_times" {
+					tx.AddError(injected)
+				}
+			}); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = db.Callback().Create().Remove(hook) })
+			project := func() error {
+				return runSerializedTx(func(tx *gorm.DB) error { return recoverAuthorityResetTx(tx, account, config.InstanceID, &reset) })
+			}
+			if err := project(); !errors.Is(err, injected) {
+				t.Fatalf("reset projection hid timestamp failure: %v", err)
+			}
+			var count int64
+			wantCount := int64(1)
+			if missingReset {
+				wantCount = 0
+			}
+			if err := db.Model(&model.ClientPolicyReset{}).Where("client_id = ? AND request_id = ?", reset.ClientID, reset.RequestID).Count(&count).Error; err != nil || count != wantCount {
+				t.Fatalf("timestamp failure committed a partial reset projection: %d/%v", count, err)
+			}
+			if err := db.Callback().Create().Remove(hook); err != nil {
+				t.Fatal(err)
+			}
+			if err := project(); err != nil {
+				t.Fatal(err)
+			}
+			var stamp model.ClientTrafficResetTime
+			if err := db.First(&stamp, "client_id = ?", reset.ClientID).Error; err != nil || stamp.EffectiveAt != reset.CreatedAt {
+				t.Fatalf("timestamp retry lost original reset time: %+v/%v", stamp, err)
+			}
+		})
+	}
+}

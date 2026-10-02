@@ -80,7 +80,7 @@ func validAuthorityResetBatch(operation model.ClientTrafficResetBatch) bool {
 	}
 	if operation.ScheduledAt > 0 {
 		parts := strings.Split(operation.Scope, ":")
-		if len(parts) != 3 || parts[0] != "calendar" || parts[1] != "daily" && parts[1] != "weekly" && parts[1] != "monthly" || operation.SelectionHash != "" {
+		if len(parts) != 3 || parts[0] != "calendar" || parts[1] != "hourly" && parts[1] != "daily" && parts[1] != "weekly" && parts[1] != "monthly" || operation.SelectionHash != "" {
 			return false
 		}
 		zone, err := hex.DecodeString(parts[2])

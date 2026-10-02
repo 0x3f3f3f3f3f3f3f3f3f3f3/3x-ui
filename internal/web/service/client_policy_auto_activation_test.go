@@ -196,3 +196,10 @@ func TestClientPolicyAutomaticEditReportsUnmeteredLegacyRefusal(t *testing.T) {
 		t.Fatalf("unapplied policy state not preserved: %+v %v", stored, err)
 	}
 }
+
+func TestClientPolicyAutomaticEditReportsUnmeteredLegacyRefusalAfterMigrationFixture(t *testing.T) {
+	t.Run("completed-migration", func(t *testing.T) {
+		authorityHistoryMigrationFixture(t)
+	})
+	t.Run("fresh-live-unmetered-core", TestClientPolicyAutomaticEditReportsUnmeteredLegacyRefusal)
+}

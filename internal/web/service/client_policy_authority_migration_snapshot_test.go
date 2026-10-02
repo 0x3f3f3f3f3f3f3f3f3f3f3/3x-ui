@@ -25,6 +25,11 @@ import (
 
 func authorityMigrationFixture(t *testing.T) (string, string, string) {
 	t.Helper()
+	previousManual, previousRestart := isManuallyStopped.Load(), isNeedXrayRestart.Load()
+	t.Cleanup(func() {
+		isManuallyStopped.Store(previousManual)
+		isNeedXrayRestart.Store(previousRestart)
+	})
 	setupPolicyLedgerDB(t)
 	prior, _ := xrayState.snapshot()
 	xrayState.replace(nil)

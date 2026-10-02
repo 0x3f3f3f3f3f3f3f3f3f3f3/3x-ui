@@ -333,22 +333,33 @@ func recoverAuthorityResetHistoryTx(tx *gorm.DB, journal *policyauthority.Journa
 }
 
 func recoverAuthorityResetTx(tx *gorm.DB, account policyauthority.Account, source string, reset *model.ClientPolicyReset) error {
-	if reset == nil || validateClientPolicyReset(reset) != nil || reset.ClientID != account.Seed.ClientID || reset.InstanceID != source || reset.PolicyVersion <= 0 || uint64(reset.PolicyVersion) > account.Policy.Version || uint64(reset.RawUpload) > account.Usage.RawUpload || uint64(reset.RawDownload) > account.Usage.RawDownload || uint64(reset.BilledBytes) > account.Usage.BilledBytes || uint64(reset.BilledBytes) == account.Usage.BilledBytes && uint64(reset.Remainder) > account.Usage.Remainder {
+	if reset == nil || validateClientPolicyReset(reset) != nil || reset.CreatedAt < 0 || reset.ClientID != account.Seed.ClientID || reset.InstanceID != source || reset.PolicyVersion <= 0 || uint64(reset.PolicyVersion) > account.Policy.Version || uint64(reset.RawUpload) > account.Usage.RawUpload || uint64(reset.RawDownload) > account.Usage.RawDownload || uint64(reset.BilledBytes) > account.Usage.BilledBytes || uint64(reset.BilledBytes) == account.Usage.BilledBytes && uint64(reset.Remainder) > account.Usage.Remainder {
 		return ErrClientPolicyLedger
 	}
 	var existing model.ClientPolicyReset
 	err := tx.Where("client_id = ? AND request_id = ?", reset.ClientID, reset.RequestID).First(&existing).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		copy := *reset
-		copy.Id = 0
-		return tx.Create(&copy).Error
-	}
-	if err != nil {
+		// Surrogate IDs may change after SQL restoration. Preserve every other
+		// original field, including a zero timestamp that struct creation would
+		// replace with recovery's wall clock.
+		if err := tx.Table("client_policy_resets").Create(map[string]any{
+			"client_id": reset.ClientID, "request_id": reset.RequestID, "instance_id": reset.InstanceID,
+			"epoch": reset.Epoch, "sequence": reset.Sequence, "raw_upload": reset.RawUpload,
+			"raw_download": reset.RawDownload, "billed_bytes": reset.BilledBytes, "remainder": reset.Remainder,
+			"uncertain_bytes": reset.UncertainBytes, "policy_version": reset.PolicyVersion, "created_at": reset.CreatedAt,
+		}).Error; err != nil {
+			return err
+		}
+	} else if err != nil {
 		return err
+	} else {
+		existing.Id = reset.Id
+		if existing != *reset {
+			return ErrClientPolicyLedger
+		}
 	}
-	existing.Id = reset.Id
-	if existing != *reset {
-		return ErrClientPolicyLedger
-	}
-	return nil
+	// A retained stale stamp suppresses the calendar's reset-history fallback.
+	// Raise it in the same projection transaction using validated evidence;
+	// the monotone upsert preserves any later acknowledged SQL timestamp.
+	return recordClientTrafficResetTimes(tx, []string{reset.ClientID}, reset.CreatedAt)
 }
