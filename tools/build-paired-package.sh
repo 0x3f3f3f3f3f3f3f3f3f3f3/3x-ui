@@ -52,6 +52,9 @@ else
 fi
 mkdir -- "$output"
 mkdir -- "$output/bin" "$output/licenses"
+compiler="${CC:-$(go env CC)}"
+command -v "$compiler" > "$output/licenses/c-compiler.txt"
+"$compiler" --version >> "$output/licenses/c-compiler.txt"
 export GOOS="$os_name" GOARCH="$arch"
 [[ -z "$arm" ]] || export GOARM="$arm"
 panel_flags="-s -w -X github.com/mhsanaei/3x-ui/v3/internal/distribution.PanelSourceRevision=$revision"
