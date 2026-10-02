@@ -163,6 +163,9 @@ func recoverAuthorityDesiredState(ctx context.Context, config *conf.ClientPolicy
 		return ErrClientPolicyLedger
 	}
 	expected := database.GetDB()
+	if err := recoverAuthorityMigrationHistory(ctx, expected, state.Journal); err != nil {
+		return err
+	}
 	after := ""
 	for {
 		accounts, err := state.Journal.AccountPage(after, 1000)
