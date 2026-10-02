@@ -257,7 +257,10 @@ func (c *authorityController) handleRequestLocked(ctx context.Context, r *comman
 			if previous.Request.Binding.NodeBoot != c.execution.boot || previous.Request.Binding.ClientID != r.ClientId {
 				return policyauthority.ErrRequest
 			}
-			if err := c.execution.Settle(ctx, previous.GrantID, true, false); err != nil {
+			if err := c.rememberPendingLocked(r); err != nil {
+				return err
+			}
+			if err := c.execution.Settle(ctx, previous.GrantID, true, true); err != nil {
 				return err
 			}
 			delete(c.active, r.ClientId)
@@ -274,10 +277,9 @@ func (c *authorityController) handleRequestLocked(ctx context.Context, r *comman
 	} else {
 		return err
 	}
-	if c.pending[r.RequestId] == nil && len(c.pending) >= 128 {
-		return policyauthority.ErrCapacity
+	if err := c.rememberPendingLocked(r); err != nil {
+		return err
 	}
-	c.pending[r.RequestId] = proto.Clone(r).(*command.AuthorityRequest)
 	grant, err := c.execution.Authorize(ctx, intent)
 	if err != nil {
 		return err
@@ -286,6 +288,20 @@ func (c *authorityController) handleRequestLocked(ctx context.Context, r *comman
 		c.active[r.ClientId] = &controllerGrant{grantID: grant.GrantID}
 	}
 	delete(c.pending, r.RequestId)
+	return nil
+}
+
+func (c *authorityController) rememberPendingLocked(request *command.AuthorityRequest) error {
+	if prior := c.pending[request.RequestId]; prior != nil {
+		if !proto.Equal(prior, request) {
+			return policyauthority.ErrRequest
+		}
+		return nil
+	}
+	if len(c.pending) >= 128 {
+		return policyauthority.ErrCapacity
+	}
+	c.pending[request.RequestId] = proto.Clone(request).(*command.AuthorityRequest)
 	return nil
 }
 func (c *authorityController) SettleAndRenew(ctx context.Context) error {

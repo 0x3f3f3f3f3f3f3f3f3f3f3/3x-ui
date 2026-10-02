@@ -76,6 +76,16 @@ type authorityDemandFault struct {
 	authorityDemandAPI
 	page         *command.AuthorityRequests
 	installFault error
+	pauseFault   error
+}
+
+func (f *authorityDemandFault) PauseAuthorityGrant(ctx context.Context, client, grant string) (*command.ExecutionGrantState, error) {
+	state, err := f.authorityDemandAPI.PauseAuthorityGrant(ctx, client, grant)
+	if err == nil && f.pauseFault != nil {
+		err, f.pauseFault = f.pauseFault, nil
+		return nil, err
+	}
+	return state, err
 }
 
 func (f *authorityDemandFault) ReadAuthorityRequests(ctx context.Context, binding *command.AuthorityBinding, limit uint32) (*command.AuthorityRequests, error) {
@@ -239,5 +249,66 @@ func TestAuthorityControllerStopRecoversLostInstallWithoutAnotherAllocation(t *t
 	}
 	if err := controller.SettleAndRenew(ctx); err == nil {
 		t.Fatal("stopped controller renewed a lease")
+	}
+}
+
+func TestAuthorityControllerLiveRefillSurvivesLostPauseAndInstallReplies(t *testing.T) {
+	for _, lost := range []string{"none", "pause", "install", "both"} {
+		t.Run(lost, func(t *testing.T) {
+			journal, client := authorityExecutionFixture(t)
+			api, address := authorityExecutionCore(t, "lost-refill-source", client)
+			fault := &authorityDemandFault{authorityDemandAPI: api}
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer cancel()
+			controller, err := newAuthorityController(ctx, database.GetDB(), journal, "local", fault)
+			if err != nil {
+				t.Fatal(err)
+			}
+			share := policyauthority.Direction{Rate: 8192, Burst: 128}
+			grant, err := controller.execution.Authorize(ctx, authorityAllocation{ClientID: client, RequestID: "initial-small-allocation", Capacity: 30, Upload: share, Download: share, LeaseDuration: policyauthority.MaxLeaseDuration})
+			if err != nil {
+				t.Fatal(err)
+			}
+			controller.active[client] = &controllerGrant{grantID: grant.GrantID}
+			if lost == "pause" || lost == "both" {
+				fault.pauseFault = errors.New("lost successful pause reply")
+			}
+			if lost == "install" || lost == "both" {
+				fault.installFault = errors.New("lost successful refill install reply")
+			}
+			if err := controller.Start(); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				stop, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+				_ = controller.Stop(stop)
+			})
+			conn, err := net.DialTimeout("tcp4", address, time.Second)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.Close()
+			if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			for _, size := range []int{8, 5} {
+				payload := bytes.Repeat([]byte{0x68}, size)
+				if _, err := conn.Write(payload); err != nil {
+					t.Fatal(err)
+				}
+				reply := make([]byte, size)
+				if _, err := io.ReadFull(conn, reply); err != nil || !bytes.Equal(payload, reply) {
+					t.Fatalf("live refill %s: %v", lost, err)
+				}
+			}
+			if err := controller.Stop(ctx); err != nil {
+				t.Fatal(err)
+			}
+			a, err := journal.Account(client)
+			if err != nil || a.Usage != (policyauthority.Usage{RawUpload: 16, RawDownload: 15, BilledBytes: 49, Remainder: 100000}) || a.HeldCapacity != 0 {
+				t.Fatalf("lost refill reply changed accounting: %+v/%v", a, err)
+			}
+		})
 	}
 }

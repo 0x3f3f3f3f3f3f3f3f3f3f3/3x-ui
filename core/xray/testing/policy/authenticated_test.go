@@ -14,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/app/proxyman/command"
 	"github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/proxy"
+	"github.com/xtls/xray-core/testing/testauthority"
 )
 
 func TestAuthenticatedProtocolsShareTunnelIdentityAndDisconnect(t *testing.T) {
@@ -112,7 +113,7 @@ func TestAuthenticatedProtocolsShareTunnelIdentityAndDisconnect(t *testing.T) {
 			}
 			policy.Version++
 			policy.UploadRate = 1
-			if err := engine.Apply(policy); err != nil {
+			if err := testauthority.Apply(t, engine, policy); err != nil {
 				t.Fatal(err)
 			}
 			exchange(t, first, bytes.Repeat([]byte{5}, 65536))
@@ -140,7 +141,7 @@ func TestAuthenticatedProtocolsShareTunnelIdentityAndDisconnect(t *testing.T) {
 			policy.UploadRate = 0
 			policy.Multiplier = 500000
 			changed := time.Now()
-			if err := engine.Apply(policy); err != nil {
+			if err := testauthority.Apply(t, engine, policy); err != nil {
 				t.Fatal(err)
 			}
 			select {
@@ -201,7 +202,7 @@ func TestAuthenticatedProtocolsShareTunnelIdentityAndDisconnect(t *testing.T) {
 				t.Fatalf("disabled UDP session returned payload: n=%d err=%v", n, err)
 			}
 			snap, err = engine.Snapshot("owner")
-			if err != nil || snap.ActiveSessions != 0 || snap.Reasons != clientpolicy.ReasonDisabled || snap.Usage.BilledBytes != 197583 {
+			if err != nil || snap.ActiveSessions != 0 || snap.Reasons != clientpolicy.ReasonDisabled|clientpolicy.ReasonAuthority || snap.Usage.BilledBytes != 197583 {
 				t.Fatalf("disable altered shared accounting or retained sessions: %+v, %v", snap, err)
 			}
 		})
