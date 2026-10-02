@@ -349,12 +349,31 @@ type reverseWriter struct {
 }
 
 func (w *reverseWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
-	defer buf.ReleaseMulti(mb)
-	for _, b := range mb {
-		if err := w.session.Admit(w.direction, uint64(b.Len())); err != nil {
+	for len(mb) > 0 {
+		limit, err := w.session.StreamChunkSize(w.direction)
+		if err != nil {
+			buf.ReleaseMulti(mb)
 			return err
 		}
-		if err := buf.WriteAllBytes(w.writer, b.Bytes(), nil); err != nil {
+		var part buf.MultiBuffer
+		mb, part = buf.SplitSize(mb, int32(limit))
+		if err := w.session.Admit(w.direction, uint64(part.Len())); err != nil {
+			if errors.Is(err, clientpolicy.ErrPacketTooLarge) {
+				mb = append(part, mb...)
+				continue
+			}
+			buf.ReleaseMulti(part)
+			buf.ReleaseMulti(mb)
+			return err
+		}
+		for _, b := range part {
+			if err = buf.WriteAllBytes(w.writer, b.Bytes(), nil); err != nil {
+				break
+			}
+		}
+		buf.ReleaseMulti(part)
+		if err != nil {
+			buf.ReleaseMulti(mb)
 			return err
 		}
 	}

@@ -18,6 +18,10 @@ type Manager interface {
 	ApplyBatch([]Policy) error
 	Capabilities() Capabilities
 	BeginAuthorityChallenge(string) (AuthorityChallenge, error)
+	BindAuthority(string, AuthorityBinding) error
+	InstallAuthorityGrant(ExecutionGrant) (ExecutionGrantState, error)
+	GetAuthorityGrant(string) (ExecutionGrantState, error)
+	SealAuthorityGrant(string, string) (ExecutionGrantState, error)
 	GetClient(string) (Policy, Snapshot, error)
 	Connections(string) ([]Connection, error)
 	CloseConnections(string) (int, error)
@@ -29,13 +33,12 @@ type Manager interface {
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(_ context.Context, raw interface{}) (interface{}, error) {
 		config := raw.(*Config)
-		e, err := OpenPersistentEngine(config.StateFile, config.InstanceId)
+		bootID, err := freshAuthorityNonce()
 		if err != nil {
 			return nil, err
 		}
-		e.bootID, err = freshAuthorityNonce()
+		e, err := openPersistentEngine(config.StateFile, config.InstanceId, bootID)
 		if err != nil {
-			_ = e.Close()
 			return nil, err
 		}
 		policies := make([]Policy, 0, len(config.Policies))

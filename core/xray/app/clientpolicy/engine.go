@@ -11,24 +11,28 @@ import (
 const maxClientSessions = 4096
 
 type Engine struct {
-	bootID      string
-	authorityMu sync.Mutex
-	challenges  map[string]time.Time
-	ready       atomic.Bool
-	initial     []Policy
-	startOnce   sync.Once
-	startErr    error
-	store       stateStore
-	instanceID  string
-	epoch       uint64
-	failed      atomic.Bool
-	mu          sync.Mutex
-	clients     map[string]*clientState
-	closed      bool
-	nextID      atomic.Uint64
+	bootID           string
+	authorityMu      sync.Mutex
+	challenges       map[string]time.Time
+	authorityBinding AuthorityBinding
+	ready            atomic.Bool
+	initial          []Policy
+	startOnce        sync.Once
+	startErr         error
+	store            stateStore
+	instanceID       string
+	epoch            uint64
+	failed           atomic.Bool
+	mu               sync.Mutex
+	clients          map[string]*clientState
+	closed           bool
+	nextID           atomic.Uint64
 }
 
 type clientState struct {
+	grant              *runtimeAuthorityGrant
+	previousGrant      *storedAuthorityGrant
+	grantExpiry        *time.Timer
 	firstUsedAt        int64
 	initializationHash string
 	engine             *Engine
@@ -138,6 +142,9 @@ func (e *Engine) RemoveVersion(id string, version uint64) error {
 	if c.expiry != nil {
 		c.expiry.Stop()
 	}
+	if c.grantExpiry != nil {
+		c.grantExpiry.Stop()
+	}
 	sessions := c.sessionsLocked()
 	c.mu.Unlock()
 	closeSessions(sessions)
@@ -170,6 +177,9 @@ func (e *Engine) Close() error {
 		c.notifyLocked()
 		if c.expiry != nil {
 			c.expiry.Stop()
+		}
+		if c.grantExpiry != nil {
+			c.grantExpiry.Stop()
 		}
 		sessions := c.sessionsLocked()
 		c.mu.Unlock()
@@ -301,9 +311,19 @@ func (s *Session) Admit(direction Direction, n uint64) error {
 			c.mu.Unlock()
 			return err
 		}
-		if c.policy.exceedsQuota(next, c.uncertain) {
+		if c.policy.exceedsQuota(next, c.uncertain) || !c.withinAuthorityGrantLocked(next) {
 			c.mu.Unlock()
 			return ErrRestricted
+		}
+		if c.engine.bootID != "" {
+			share := c.grant.Grant.Upload
+			if direction == Download {
+				share = c.grant.Grant.Download
+			}
+			if !share.Unlimited && share.Rate == 0 {
+				c.mu.Unlock()
+				return ErrRestricted
+			}
 		}
 		delay, err := b.delay(n, now)
 		if err != nil {

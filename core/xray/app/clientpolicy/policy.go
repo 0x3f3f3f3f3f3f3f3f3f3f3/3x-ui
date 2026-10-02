@@ -51,6 +51,7 @@ const (
 	ReasonQuota
 	ReasonRevoked
 	ReasonStorage
+	ReasonAuthority
 )
 
 func (p Policy) reasons(u Usage, revoked bool, now time.Time) Reason {

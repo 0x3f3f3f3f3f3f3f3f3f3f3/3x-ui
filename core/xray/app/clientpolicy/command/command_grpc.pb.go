@@ -21,6 +21,10 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	ClientPolicyService_GetCapabilities_FullMethodName       = "/xray.app.clientpolicy.command.v1.ClientPolicyService/GetCapabilities"
 	ClientPolicyService_GetAuthorityChallenge_FullMethodName = "/xray.app.clientpolicy.command.v1.ClientPolicyService/GetAuthorityChallenge"
+	ClientPolicyService_BindAuthority_FullMethodName         = "/xray.app.clientpolicy.command.v1.ClientPolicyService/BindAuthority"
+	ClientPolicyService_InstallAuthorityGrant_FullMethodName = "/xray.app.clientpolicy.command.v1.ClientPolicyService/InstallAuthorityGrant"
+	ClientPolicyService_GetAuthorityGrant_FullMethodName     = "/xray.app.clientpolicy.command.v1.ClientPolicyService/GetAuthorityGrant"
+	ClientPolicyService_SealAuthorityGrant_FullMethodName    = "/xray.app.clientpolicy.command.v1.ClientPolicyService/SealAuthorityGrant"
 	ClientPolicyService_GetClient_FullMethodName             = "/xray.app.clientpolicy.command.v1.ClientPolicyService/GetClient"
 	ClientPolicyService_ApplyPolicies_FullMethodName         = "/xray.app.clientpolicy.command.v1.ClientPolicyService/ApplyPolicies"
 	ClientPolicyService_InitializeClient_FullMethodName      = "/xray.app.clientpolicy.command.v1.ClientPolicyService/InitializeClient"
@@ -37,6 +41,10 @@ const (
 type ClientPolicyServiceClient interface {
 	GetCapabilities(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Capabilities, error)
 	GetAuthorityChallenge(ctx context.Context, in *AuthorityChallengeRequest, opts ...grpc.CallOption) (*AuthorityChallenge, error)
+	BindAuthority(ctx context.Context, in *AuthorityBindRequest, opts ...grpc.CallOption) (*Empty, error)
+	InstallAuthorityGrant(ctx context.Context, in *ExecutionGrant, opts ...grpc.CallOption) (*ExecutionGrantState, error)
+	GetAuthorityGrant(ctx context.Context, in *AuthorityGrantRequest, opts ...grpc.CallOption) (*ExecutionGrantState, error)
+	SealAuthorityGrant(ctx context.Context, in *AuthorityGrantRequest, opts ...grpc.CallOption) (*ExecutionGrantState, error)
 	GetClient(ctx context.Context, in *ClientRequest, opts ...grpc.CallOption) (*ClientState, error)
 	ApplyPolicies(ctx context.Context, in *ApplyRequest, opts ...grpc.CallOption) (*Empty, error)
 	InitializeClient(ctx context.Context, in *InitializeRequest, opts ...grpc.CallOption) (*Empty, error)
@@ -69,6 +77,46 @@ func (c *clientPolicyServiceClient) GetAuthorityChallenge(ctx context.Context, i
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AuthorityChallenge)
 	err := c.cc.Invoke(ctx, ClientPolicyService_GetAuthorityChallenge_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *clientPolicyServiceClient) BindAuthority(ctx context.Context, in *AuthorityBindRequest, opts ...grpc.CallOption) (*Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, ClientPolicyService_BindAuthority_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *clientPolicyServiceClient) InstallAuthorityGrant(ctx context.Context, in *ExecutionGrant, opts ...grpc.CallOption) (*ExecutionGrantState, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExecutionGrantState)
+	err := c.cc.Invoke(ctx, ClientPolicyService_InstallAuthorityGrant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *clientPolicyServiceClient) GetAuthorityGrant(ctx context.Context, in *AuthorityGrantRequest, opts ...grpc.CallOption) (*ExecutionGrantState, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExecutionGrantState)
+	err := c.cc.Invoke(ctx, ClientPolicyService_GetAuthorityGrant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *clientPolicyServiceClient) SealAuthorityGrant(ctx context.Context, in *AuthorityGrantRequest, opts ...grpc.CallOption) (*ExecutionGrantState, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExecutionGrantState)
+	err := c.cc.Invoke(ctx, ClientPolicyService_SealAuthorityGrant_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -161,6 +209,10 @@ func (c *clientPolicyServiceClient) ReadLedger(ctx context.Context, in *LedgerRe
 type ClientPolicyServiceServer interface {
 	GetCapabilities(context.Context, *Empty) (*Capabilities, error)
 	GetAuthorityChallenge(context.Context, *AuthorityChallengeRequest) (*AuthorityChallenge, error)
+	BindAuthority(context.Context, *AuthorityBindRequest) (*Empty, error)
+	InstallAuthorityGrant(context.Context, *ExecutionGrant) (*ExecutionGrantState, error)
+	GetAuthorityGrant(context.Context, *AuthorityGrantRequest) (*ExecutionGrantState, error)
+	SealAuthorityGrant(context.Context, *AuthorityGrantRequest) (*ExecutionGrantState, error)
 	GetClient(context.Context, *ClientRequest) (*ClientState, error)
 	ApplyPolicies(context.Context, *ApplyRequest) (*Empty, error)
 	InitializeClient(context.Context, *InitializeRequest) (*Empty, error)
@@ -184,6 +236,18 @@ func (UnimplementedClientPolicyServiceServer) GetCapabilities(context.Context, *
 }
 func (UnimplementedClientPolicyServiceServer) GetAuthorityChallenge(context.Context, *AuthorityChallengeRequest) (*AuthorityChallenge, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetAuthorityChallenge not implemented")
+}
+func (UnimplementedClientPolicyServiceServer) BindAuthority(context.Context, *AuthorityBindRequest) (*Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method BindAuthority not implemented")
+}
+func (UnimplementedClientPolicyServiceServer) InstallAuthorityGrant(context.Context, *ExecutionGrant) (*ExecutionGrantState, error) {
+	return nil, status.Error(codes.Unimplemented, "method InstallAuthorityGrant not implemented")
+}
+func (UnimplementedClientPolicyServiceServer) GetAuthorityGrant(context.Context, *AuthorityGrantRequest) (*ExecutionGrantState, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetAuthorityGrant not implemented")
+}
+func (UnimplementedClientPolicyServiceServer) SealAuthorityGrant(context.Context, *AuthorityGrantRequest) (*ExecutionGrantState, error) {
+	return nil, status.Error(codes.Unimplemented, "method SealAuthorityGrant not implemented")
 }
 func (UnimplementedClientPolicyServiceServer) GetClient(context.Context, *ClientRequest) (*ClientState, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetClient not implemented")
@@ -262,6 +326,78 @@ func _ClientPolicyService_GetAuthorityChallenge_Handler(srv interface{}, ctx con
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ClientPolicyServiceServer).GetAuthorityChallenge(ctx, req.(*AuthorityChallengeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ClientPolicyService_BindAuthority_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AuthorityBindRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ClientPolicyServiceServer).BindAuthority(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ClientPolicyService_BindAuthority_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ClientPolicyServiceServer).BindAuthority(ctx, req.(*AuthorityBindRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ClientPolicyService_InstallAuthorityGrant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExecutionGrant)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ClientPolicyServiceServer).InstallAuthorityGrant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ClientPolicyService_InstallAuthorityGrant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ClientPolicyServiceServer).InstallAuthorityGrant(ctx, req.(*ExecutionGrant))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ClientPolicyService_GetAuthorityGrant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AuthorityGrantRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ClientPolicyServiceServer).GetAuthorityGrant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ClientPolicyService_GetAuthorityGrant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ClientPolicyServiceServer).GetAuthorityGrant(ctx, req.(*AuthorityGrantRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ClientPolicyService_SealAuthorityGrant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AuthorityGrantRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ClientPolicyServiceServer).SealAuthorityGrant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ClientPolicyService_SealAuthorityGrant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ClientPolicyServiceServer).SealAuthorityGrant(ctx, req.(*AuthorityGrantRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -424,6 +560,22 @@ var ClientPolicyService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetAuthorityChallenge",
 			Handler:    _ClientPolicyService_GetAuthorityChallenge_Handler,
+		},
+		{
+			MethodName: "BindAuthority",
+			Handler:    _ClientPolicyService_BindAuthority_Handler,
+		},
+		{
+			MethodName: "InstallAuthorityGrant",
+			Handler:    _ClientPolicyService_InstallAuthorityGrant_Handler,
+		},
+		{
+			MethodName: "GetAuthorityGrant",
+			Handler:    _ClientPolicyService_GetAuthorityGrant_Handler,
+		},
+		{
+			MethodName: "SealAuthorityGrant",
+			Handler:    _ClientPolicyService_SealAuthorityGrant_Handler,
 		},
 		{
 			MethodName: "GetClient",

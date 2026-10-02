@@ -78,6 +78,9 @@ func (s *service) GetCapabilities(ctx context.Context, _ *Empty) (*Capabilities,
 	if c.Persistent {
 		features = append(features, "local-durable-reservations-v1", "committed-cumulative-ledger-v1", "create-only-usage-seed-v1", "durable-first-use-expiry-v1")
 	}
+	if c.Persistent && c.BootID != "" {
+		features = append(features, "boot-bound-execution-grants-v1")
+	}
 	return &Capabilities{ApiVersion: 1, CoreVersion: core.VersionStatement()[0], InstanceId: c.InstanceID, Epoch: c.Epoch, Capabilities: features, ReservationRawBytes: c.ReservationRawBytes, BootId: c.BootID}, nil
 }
 

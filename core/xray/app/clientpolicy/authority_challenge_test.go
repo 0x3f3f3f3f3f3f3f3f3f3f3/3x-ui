@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -119,5 +120,39 @@ func TestAuthorityChallengeBacklogIsBoundedAndUnbilled(t *testing.T) {
 	after, err := e.Snapshot("owner")
 	if err != nil || after.Usage != before.Usage || after.Sequence != before.Sequence {
 		t.Fatalf("control challenge changed committed traffic: %+v/%v", after, err)
+	}
+}
+
+func TestConfiguredExpiredSnapshotsPublishNonceBeforeTimers(t *testing.T) {
+	seed, path := persistentEngine(t)
+	p := testPolicy("expired-owner")
+	p.ExpiresAt = time.Now().Add(-time.Second).UnixMilli()
+	if err := seed.Apply(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := seed.Close(); err != nil {
+		t.Fatal(err)
+	}
+	image, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	for i := 0; i < 32; i++ {
+		copyPath := filepath.Join(dir, fmt.Sprintf("expired-%d.db", i))
+		if err := os.WriteFile(copyPath, image, 0600); err != nil {
+			t.Fatal(err)
+		}
+		object, err := common.CreateObject(context.Background(), &Config{StateFile: copyPath, InstanceId: "node-1"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		e := object.(*Engine)
+		if len(e.Capabilities().BootID) != 32 {
+			t.Fatal("restored expired snapshot omitted nonce")
+		}
+		if err := e.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

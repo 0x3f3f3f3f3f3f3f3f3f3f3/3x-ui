@@ -25,15 +25,16 @@ var (
 )
 
 type storedClient struct {
-	FirstUsedAt        int64  `json:"firstUsedAt,omitempty"`
-	InitializationHash string `json:"initializationHash,omitempty"`
-	Policy             Policy `json:"policy"`
-	Usage              Usage  `json:"usage"`
-	UncertainBytes     uint64 `json:"uncertainBytes"`
-	ReservedBytes      uint64 `json:"reservedBytes"`
-	Revoked            bool   `json:"revoked"`
-	Sequence           uint64 `json:"sequence"`
-	Epoch              uint64 `json:"epoch"`
+	AuthorityGrant     *storedAuthorityGrant `json:"authorityGrant,omitempty"`
+	FirstUsedAt        int64                 `json:"firstUsedAt,omitempty"`
+	InitializationHash string                `json:"initializationHash,omitempty"`
+	Policy             Policy                `json:"policy"`
+	Usage              Usage                 `json:"usage"`
+	UncertainBytes     uint64                `json:"uncertainBytes"`
+	ReservedBytes      uint64                `json:"reservedBytes"`
+	Revoked            bool                  `json:"revoked"`
+	Sequence           uint64                `json:"sequence"`
+	Epoch              uint64                `json:"epoch"`
 }
 
 type stateStore interface {
@@ -99,6 +100,10 @@ func putNumber(b *bolt.Bucket, key string, n uint64) error {
 }
 
 func OpenPersistentEngine(path, instanceID string) (*Engine, error) {
+	return openPersistentEngine(path, instanceID, "")
+}
+
+func openPersistentEngine(path, instanceID, bootID string) (*Engine, error) {
 	if !validInstanceID(instanceID) {
 		return nil, ErrInvalidPolicy
 	}
@@ -145,6 +150,9 @@ func OpenPersistentEngine(path, instanceID string) (*Engine, error) {
 			if _, err := r.Policy.quotaUsage(r.Usage, r.UncertainBytes); err != nil {
 				return err
 			}
+			if err := validateStoredAuthorityGrant(r, instanceID); err != nil {
+				return err
+			}
 			records = append(records, r)
 			return nil
 		}); err != nil {
@@ -170,12 +178,15 @@ func OpenPersistentEngine(path, instanceID string) (*Engine, error) {
 		return nil, fmt.Errorf("%w: recover: %w", ErrStorage, err)
 	}
 	e := NewEngine()
+	// Incarnation is immutable before any recovered expiry callback can run.
+	e.bootID = bootID
 	e.store, e.instanceID, e.epoch = &boltStore{db: db, epoch: epoch}, instanceID, epoch
 	now := time.Now()
 	for _, r := range records {
 		c := newClientState(e)
 		c.policy, c.usage, c.uncertain, c.revoked, c.sequence = r.Policy, r.Usage, r.UncertainBytes, r.Revoked, r.Sequence
 		c.initializationHash, c.firstUsedAt = r.InitializationHash, r.FirstUsedAt
+		c.previousGrant = r.AuthorityGrant
 		c.buckets[Upload].update(c.policy.UploadRate, c.policy.BurstBytes, now)
 		c.buckets[Download].update(c.policy.DownloadRate, c.policy.BurstBytes, now)
 		e.clients[c.policy.ClientID] = c
@@ -230,7 +241,7 @@ func (c *clientState) persistLocked(p Policy, revoked bool, reserved uint64) err
 	if c.engine.store == nil {
 		return nil
 	}
-	seq, err := c.engine.store.save(storedClient{FirstUsedAt: c.firstUsedAt, Policy: p, Usage: c.usage, UncertainBytes: c.uncertain, ReservedBytes: reserved, Revoked: revoked, InitializationHash: c.initializationHash})
+	seq, err := c.engine.store.save(storedClient{AuthorityGrant: c.authorityRecordLocked(reserved), FirstUsedAt: c.firstUsedAt, Policy: p, Usage: c.usage, UncertainBytes: c.uncertain, ReservedBytes: reserved, Revoked: revoked, InitializationHash: c.initializationHash})
 	if err != nil {
 		return fmt.Errorf("%w: commit: %w", ErrStorage, err)
 	}
@@ -249,7 +260,7 @@ func (c *clientState) reserveLocked(n uint64) error {
 	raw := uint64(reservationRawBytes)
 	affordable := func(raw uint64) bool {
 		u, err := charge(c.usage, Upload, raw, c.policy.Multiplier)
-		return err == nil && !c.policy.exceedsQuota(u, c.uncertain) && !(u.BilledBytes == math.MaxUint64-c.uncertain && u.Remainder != 0)
+		return err == nil && !c.policy.exceedsQuota(u, c.uncertain) && c.withinAuthorityGrantLocked(u) && !(u.BilledBytes == math.MaxUint64-c.uncertain && u.Remainder != 0)
 	}
 	if !affordable(raw) {
 		lo, hi := n, raw
@@ -277,6 +288,13 @@ func (c *clientState) reserveLocked(n uint64) error {
 	if c.uncertain > math.MaxUint64-reserved || c.usage.BilledBytes > math.MaxUint64-c.uncertain-reserved {
 		return ErrOverflow
 	}
+	if c.grant != nil {
+		spent, err := grantUsage(upper, c.grant.StartUsage)
+		if err != nil {
+			return err
+		}
+		c.grant.ReservedBilledBytes, c.grant.ReservedRemainder = spent.BilledBytes, spent.Remainder
+	}
 	if err := c.persistLocked(c.policy, c.revoked, reserved); err != nil {
 		return err
 	}
@@ -301,6 +319,16 @@ func (c *clientState) reasonsLocked(now time.Time) Reason {
 	r |= policy.reasons(u, c.revoked, now)
 	if c.engine.failed.Load() {
 		r |= ReasonStorage
+	}
+	if c.engine.bootID != "" {
+		if c.grant == nil || c.grant.Sealed || c.grant.Grant.BootID != c.engine.bootID || c.grant.Grant.PolicyVersion != c.policy.Version || !now.Before(c.grant.deadline) {
+			r |= ReasonAuthority
+		} else {
+			next, err := charge(c.usage, Upload, 1, c.policy.Multiplier)
+			if err != nil || !c.withinAuthorityGrantLocked(next) {
+				r |= ReasonAuthority
+			}
+		}
 	}
 	return r
 }

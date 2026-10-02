@@ -21,6 +21,26 @@ message AuthorityChallenge {
  string challenge_id = 3;
  uint64 max_duration_millis = 4;
 }
+message AuthorityBinding { string authority_id = 1; uint64 generation = 2; string node_id = 3; }
+message AuthorityShare { bool unlimited = 1; uint64 rate = 2; uint64 burst = 3; }
+message AuthorityBindRequest { string expected_boot_id = 1; AuthorityBinding authority = 2; }
+message ExecutionGrant {
+ AuthorityBinding authority = 1;
+ string instance_id = 2;
+ string boot_id = 3;
+ string client_id = 4;
+ string window_id = 5;
+ uint64 policy_version = 6;
+ string grant_id = 7;
+ uint64 sequence = 8;
+ string challenge_id = 9;
+ uint64 capacity = 10;
+ AuthorityShare upload = 11;
+ AuthorityShare download = 12;
+ uint64 lease_duration_millis = 13;
+}
+message AuthorityGrantRequest { string expected_boot_id = 1; string client_id = 2; string grant_id = 3; }
+message ExecutionGrantState { ExecutionGrant grant = 1; Usage usage = 2; uint64 sequence = 3; bool sealed = 4; }
 message Usage {
  uint64 raw_upload = 1;
  uint64 raw_download = 2;
@@ -64,6 +84,10 @@ message LedgerPage { repeated LedgerRecord records = 1; uint64 next_sequence = 2
 service ClientPolicyService {
  rpc GetCapabilities(Empty) returns (Capabilities);
  rpc GetAuthorityChallenge(AuthorityChallengeRequest) returns (AuthorityChallenge);
+ rpc BindAuthority(AuthorityBindRequest) returns (Empty);
+ rpc InstallAuthorityGrant(ExecutionGrant) returns (ExecutionGrantState);
+ rpc GetAuthorityGrant(AuthorityGrantRequest) returns (ExecutionGrantState);
+ rpc SealAuthorityGrant(AuthorityGrantRequest) returns (ExecutionGrantState);
  rpc GetClient(ClientRequest) returns (ClientState);
  rpc ApplyPolicies(ApplyRequest) returns (Empty);
  rpc InitializeClient(InitializeRequest) returns (Empty);
