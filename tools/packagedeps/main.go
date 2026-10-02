@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -31,6 +32,9 @@ type dependency struct {
 
 func moduleDependency(m *debug.Module) dependency {
 	d := dependency{Path: m.Path, Version: m.Version, Sum: m.Sum}
+	if (m.Version == "" || m.Version == "(devel)") && (strings.HasPrefix(m.Path, "./") || strings.HasPrefix(m.Path, "../")) {
+		d.ManagedSource = true
+	}
 	if m.Replace != nil {
 		r := moduleDependency(m.Replace)
 		d.Replacement = &r
@@ -78,10 +82,12 @@ func run(root, panel, core string) error {
 		if d.Replacement != nil {
 			effective = d.Replacement
 		}
-		if effective.Version == "" {
-			effective.ManagedSource = true
+		if effective.ManagedSource {
 			result = append(result, d)
 			continue
+		}
+		if effective.Version == "" || effective.Version == "(devel)" {
+			return errors.New("unstamped dependency is not a managed relative source")
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		output, err := exec.CommandContext(ctx, "go", "mod", "download", "-json", effective.Path+"@"+effective.Version).Output()
