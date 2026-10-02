@@ -17,12 +17,15 @@ import (
 // Instance and epoch checks reject stale replies; Runtime releases its RPC mutex before settlement.
 func pollLocalClientPolicyLedger(ctx context.Context, process *xray.Process) error {
 	sourceDB := database.GetDB()
+	if authority := managedAuthorityForProcess(process); authority != nil {
+		sourceDB = authority.db
+	}
 	var config conf.ClientPolicyConfig
 	if err := json.Unmarshal(process.GetConfig().ClientPolicy, &config); err != nil {
 		return err
 	}
 	var source model.ClientPolicySource
-	if err := sourceDB.Where("node_key = ? AND instance_id = ?", "local", config.InstanceID).First(&source).Error; err != nil {
+	if err := sourceDB.WithContext(ctx).Where("node_key = ? AND instance_id = ?", "local", config.InstanceID).First(&source).Error; err != nil {
 		return err
 	}
 	if source.Sequence < 0 || source.Epoch <= 0 {

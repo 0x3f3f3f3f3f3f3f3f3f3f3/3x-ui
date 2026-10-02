@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
+	"github.com/mhsanaei/3x-ui/v3/internal/policyauthority"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
 
@@ -27,9 +29,10 @@ type clientPolicyAccountingRow struct {
 	TotalDownload  int64
 	TotalBilled    int64
 	TotalUncertain int64
-	Reset          model.ClientPolicyReset `gorm:"embedded;embeddedPrefix:reset_"`
-	LatestReset    model.ClientPolicyReset `gorm:"embedded;embeddedPrefix:latest_reset_"`
-	DesiredClient  model.ClientRecord      `gorm:"embedded;embeddedPrefix:desired_"`
+	Reset          model.ClientPolicyReset               `gorm:"embedded;embeddedPrefix:reset_"`
+	LatestReset    model.ClientPolicyReset               `gorm:"embedded;embeddedPrefix:latest_reset_"`
+	DesiredClient  model.ClientRecord                    `gorm:"embedded;embeddedPrefix:desired_"`
+	Authority      model.ClientPolicyAuthorityProjection `gorm:"embedded;embeddedPrefix:authority_"`
 }
 
 const clientPolicyAccountingQuery = `
@@ -54,6 +57,8 @@ SELECT p.*, c.email, c.desired_policy_version AS desired_version, c.total_gb AS 
  latest.sequence AS latest_reset_sequence, latest.raw_upload AS latest_reset_raw_upload,
  latest.raw_download AS latest_reset_raw_download, latest.billed_bytes AS latest_reset_billed_bytes,
  latest.remainder AS latest_reset_remainder, latest.uncertain_bytes AS latest_reset_uncertain_bytes,
+ a.client_id AS authority_client_id, a.authority_id AS authority_authority_id,
+ a.generation AS authority_generation, a.revision AS authority_revision, a.account_json AS authority_account_json,
  (SELECT COUNT(*) FROM client_policy_receipts other WHERE other.client_id = p.client_id) AS source_count,
  EXISTS (SELECT 1 FROM client_inbounds ci JOIN inbounds i ON i.id = ci.inbound_id
   WHERE ci.client_id = c.id AND i.node_id IS NOT NULL) AS has_remote
@@ -61,6 +66,7 @@ FROM clients c
 JOIN client_policy_receipts p ON p.client_id = c.stable_id
 JOIN client_policy_sources s ON s.instance_id = p.instance_id AND s.node_key = 'local'
 LEFT JOIN client_policy_totals t ON t.client_id = p.client_id
+LEFT JOIN client_policy_authority_projections a ON a.client_id = p.client_id
 LEFT JOIN client_policy_resets r ON r.id = (
  SELECT MAX(id) FROM client_policy_resets WHERE client_id = p.client_id AND policy_version <= p.policy_version
 )
@@ -159,14 +165,67 @@ func projectClientPolicyAccounting(row clientPolicyAccountingRow) (*xray.ClientP
 	}
 	_, fingerprint, desiredErr := fingerprintClientPolicy(row.DesiredClient, latestReset)
 	policyPending := desiredErr != nil || fingerprint != row.DesiredClient.PolicyFingerprint || row.PolicyVersion != row.DesiredVersion
+	budget, err := projectClientPolicyBudget(row)
+	if err != nil {
+		return nil, err
+	}
 	return &xray.ClientPolicyAccounting{
 		ClientID:   row.ClientID,
 		Lifetime:   formatClientPolicyUsage(row.RawUpload, row.RawDownload, row.BilledBytes, row.Remainder, row.UncertainBytes),
 		Period:     formatClientPolicyUsage(row.RawUpload-base.RawUpload, row.RawDownload-base.RawDownload, billed, remainder, uncertain),
 		QuotaBytes: strconv.FormatInt(row.QuotaBytes, 10), Remaining: remaining,
+		Budget:         budget,
 		AppliedVersion: strconv.FormatInt(row.PolicyVersion, 10), DesiredVersion: strconv.FormatInt(row.DesiredVersion, 10),
 		ResetPending: row.LatestReset.Id > row.Reset.Id, PolicyPending: policyPending,
 	}, nil
+}
+
+func projectClientPolicyBudget(row clientPolicyAccountingRow) (*xray.ClientPolicyBudget, error) {
+	projection := row.Authority
+	if projection == (model.ClientPolicyAuthorityProjection{}) {
+		return nil, nil
+	}
+	var account policyauthority.Account
+	if projection.ClientID != row.ClientID || !validPolicySourceKey(projection.AuthorityID) || projection.Generation <= 0 || projection.Revision <= 0 || json.Unmarshal([]byte(projection.AccountJSON), &account) != nil || account.Seed.ClientID != row.ClientID || account.Revision != uint64(projection.Revision) || account.Deleted || account.Policy.Version == 0 || account.Policy.Version > uint64(row.DesiredVersion) || account.Policy.QuotaUnlimited && account.Policy.QuotaBytes != 0 {
+		return nil, ErrClientPolicyLedger
+	}
+	for _, n := range []uint64{account.Policy.QuotaBytes, account.WindowUsed, account.FrozenBilled, account.HeldCapacity} {
+		if n > math.MaxInt64 {
+			return nil, ErrClientPolicyLedger
+		}
+	}
+	if account.WindowRemainder >= clientpolicy.MultiplierScale || account.HeldRemainder >= clientpolicy.MultiplierScale {
+		return nil, ErrClientPolicyLedger
+	}
+	budget := &xray.ClientPolicyBudget{
+		Allocated: formatClientPolicyBilled(int64(account.HeldCapacity), int64(account.HeldRemainder)),
+		Frozen:    strconv.FormatUint(account.FrozenBilled, 10),
+	}
+	if account.Policy.QuotaUnlimited {
+		return budget, nil
+	}
+	left := account.Policy.QuotaBytes
+	for _, used := range []uint64{account.WindowUsed, account.FrozenBilled, account.HeldCapacity} {
+		if used >= left {
+			amount := "0"
+			budget.Unallocated = &amount
+			return budget, nil
+		}
+		left -= used
+	}
+	fraction := account.WindowRemainder + account.HeldRemainder
+	carry, remainder := fraction/clientpolicy.MultiplierScale, fraction%clientpolicy.MultiplierScale
+	amount := "0"
+	if carry < left {
+		left -= carry
+		if remainder != 0 {
+			left--
+			remainder = clientpolicy.MultiplierScale - remainder
+		}
+		amount = formatClientPolicyBilled(int64(left), int64(remainder))
+	}
+	budget.Unallocated = &amount
+	return budget, nil
 }
 
 func formatClientPolicyUsage(upload, download, billed, remainder, uncertain int64) xray.ClientPolicyUsage {

@@ -789,6 +789,9 @@
         "lifetimeDownload": "Lifetime download",
         "lifetimeBilled": "Lifetime billed usage",
         "lifetimeUncertain": "Lifetime uncertain usage",
+        "allocated": "Allocated or awaiting confirmation",
+        "frozen": "Frozen budget",
+        "unallocated": "Unallocated budget",
         "policyVersion": "Applied / desired policy",
         "resetPending": "Reset awaiting core confirmation",
         "policyPending": "Policy awaiting core confirmation"

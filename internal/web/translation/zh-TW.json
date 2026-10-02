@@ -789,6 +789,9 @@
         "lifetimeDownload": "累計下載",
         "lifetimeBilled": "累計計費用量",
         "lifetimeUncertain": "累計不確定用量",
+        "allocated": "已分配或待確認額度",
+        "frozen": "凍結額度",
+        "unallocated": "未分配額度",
         "policyVersion": "已套用 / 目標策略版本",
         "resetPending": "重設等待核心確認",
         "policyPending": "策略等待核心確認"

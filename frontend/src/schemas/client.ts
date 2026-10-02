@@ -38,6 +38,14 @@ export const ClientPolicyAccountingSchema = z.object({
   period: ClientPolicyUsageSchema,
   quotaBytes: policyWholeBytes,
   remaining: policyBilledBytes.nullable(),
+  budget: z
+    .object({
+      allocated: policyBilledBytes,
+      frozen: policyWholeBytes,
+      unallocated: policyBilledBytes.nullable(),
+    })
+    .nullable()
+    .optional(),
   appliedVersion: policyWholeBytes,
   desiredVersion: policyWholeBytes,
   policyPending: z.boolean().optional().default(false),

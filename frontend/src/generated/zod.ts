@@ -489,6 +489,7 @@ export type ClientPageResponse = z.infer<typeof ClientPageResponseSchema>;
 
 export const ClientPolicyAccountingSchema = z.object({
   appliedVersion: z.string(),
+  budget: z.lazy(() => ClientPolicyBudgetSchema).nullable().optional(),
   clientId: z.string(),
   desiredVersion: z.string(),
   lifetime: z.lazy(() => ClientPolicyUsageSchema),
@@ -499,6 +500,13 @@ export const ClientPolicyAccountingSchema = z.object({
   resetPending: z.boolean(),
 });
 export type ClientPolicyAccounting = z.infer<typeof ClientPolicyAccountingSchema>;
+
+export const ClientPolicyBudgetSchema = z.object({
+  allocated: z.string(),
+  frozen: z.string(),
+  unallocated: z.string().nullable().optional(),
+});
+export type ClientPolicyBudget = z.infer<typeof ClientPolicyBudgetSchema>;
 
 export const ClientPolicyOptionsSchema = z.object({
   downloadBytesPerSecond: z.number().int(),

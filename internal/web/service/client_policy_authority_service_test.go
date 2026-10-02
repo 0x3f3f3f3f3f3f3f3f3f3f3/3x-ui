@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -15,6 +16,7 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/policyauthority"
 	"github.com/xtls/xray-core/infra/conf"
+	"gorm.io/gorm"
 )
 
 func TestManagedAuthorityOrdinaryRestartAndStopUseDurableController(t *testing.T) {
@@ -325,6 +327,171 @@ func TestManagedAuthorityOrdinaryResetPreservesLifetimeAndReusesWindow(t *testin
 	a, err := state.Journal.Account(client.StableID)
 	if err != nil || a.Usage != (policyauthority.Usage{RawUpload: 108, RawDownload: 208, BilledBytes: 332}) || a.WindowUsed != 16 || a.WindowBaseline != 316 || a.HeldCapacity != 0 {
 		t.Fatalf("reset lost lifetime usage or recreated its window: %+v/%v", a, err)
+	}
+}
+
+func TestManagedAuthorityPollingRetriesCommittedMultiplierWithoutResettingUsage(t *testing.T) {
+	svc, tunnel, client, _ := setupManagedActivationService(t)
+	if err := svc.RestartXray(true); err != nil {
+		t.Fatal(err)
+	}
+	process := currentXrayProcess()
+	conn, err := net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", tunnel.Port), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	managedActivationEcho(t, conn, "warm")
+	if _, _, err := svc.GetXrayTraffic(); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a committed SQL change whose normal hot-application reply was
+	// lost. Ordinary polling must reconcile both enforcement and authority.
+	if err := database.GetDB().Model(client).Update("policy_multiplier", "0.5").Error; err != nil {
+		t.Fatal(err)
+	}
+	policies, err := PrepareClientPolicies([]string{client.StableID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.GetXrayTraffic(); err != nil {
+		t.Fatal(err)
+	}
+	account, err := managedAuthorityForProcess(process).state.Journal.Account(client.StableID)
+	if err != nil || account.Policy.Version != policies[0].Version {
+		t.Fatalf("polling left committed authority version behind: %+v/%v", account, err)
+	}
+	managedActivationEcho(t, conn, "next")
+	if _, _, err := svc.GetXrayTraffic(); err != nil {
+		t.Fatal(err)
+	}
+	if currentXrayProcess() != process {
+		t.Fatal("pending policy reconciliation restarted the core")
+	}
+	if err := svc.StopXray(); err != nil {
+		t.Fatal(err)
+	}
+	state, err := openAuthorityState(filepath.Join(config.GetDBFolderPath(), "client-policy", "authority"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer state.Journal.Close()
+	account, err = state.Journal.Account(client.StableID)
+	if err != nil || account.Usage != (policyauthority.Usage{RawUpload: 108, RawDownload: 208, BilledBytes: 320}) || account.WindowUsed != 320 || account.HeldCapacity != 0 {
+		t.Fatalf("pending multiplier changed previous accounting or left capacity held: %+v/%v", account, err)
+	}
+}
+
+func TestManagedAuthorityPollingProjectionFailureStopsAndReplaysCommittedChange(t *testing.T) {
+	svc, tunnel, client, _ := setupManagedActivationService(t)
+	if err := svc.RestartXray(true); err != nil {
+		t.Fatal(err)
+	}
+	process := currentXrayProcess()
+	conn, err := net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", tunnel.Port), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	managedActivationEcho(t, conn, "warm")
+	db := database.GetDB()
+	if err := db.Model(client).Update("policy_multiplier", "0.5").Error; err != nil {
+		t.Fatal(err)
+	}
+	policies, err := PrepareClientPolicies([]string{client.StableID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	injected := errors.New("pending authority projection failed")
+	const callback = "test:pending-authority-projection"
+	if err := db.Callback().Update().Before("gorm:update").Register(callback, func(tx *gorm.DB) {
+		if tx.Statement.Table != "client_policy_authority_projections" {
+			return
+		}
+		authority := managedAuthorityForProcess(process)
+		if authority == nil {
+			return
+		}
+		account, err := authority.state.Journal.Account(client.StableID)
+		if err == nil && account.Policy.Version == policies[0].Version {
+			tx.AddError(injected)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Callback().Update().Remove(callback) })
+	if _, _, err := svc.GetXrayTraffic(); !errors.Is(err, injected) {
+		t.Fatalf("pending projection failure hidden: %v", err)
+	}
+	if process.IsRunning() {
+		t.Fatal("failed authority application retained outdated access")
+	}
+	if err := db.Callback().Update().Remove(callback); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RestartXray(true); err != nil {
+		t.Fatal(err)
+	}
+	conn, err = net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", tunnel.Port), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	managedActivationEcho(t, conn, "next")
+	if err := svc.StopXray(); err != nil {
+		t.Fatal(err)
+	}
+	state, err := openAuthorityState(filepath.Join(config.GetDBFolderPath(), "client-policy", "authority"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer state.Journal.Close()
+	account, err := state.Journal.Account(client.StableID)
+	if err != nil || account.Policy.Version != policies[0].Version || account.Usage != (policyauthority.Usage{RawUpload: 108, RawDownload: 208, BilledBytes: 320}) || account.HeldCapacity != 0 {
+		t.Fatalf("pending change replay lost or recreated committed usage: %+v/%v", account, err)
+	}
+}
+
+func TestManagedAuthorityAccountingSeparatesAllocatedBudgetFromDeliveredUsage(t *testing.T) {
+	svc, tunnel, client, _ := setupManagedActivationService(t)
+	if err := svc.RestartXray(true); err != nil {
+		t.Fatal(err)
+	}
+	conn, err := net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", tunnel.Port), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	managedActivationEcho(t, conn, "warm")
+	authority := managedAuthorityForProcess(currentXrayProcess())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := authority.controller.SettleAndRenew(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := authority.controller.join(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.GetXrayTraffic(); err != nil {
+		t.Fatal(err)
+	}
+	traffic, err := (&InboundService{}).GetClientTrafficByEmail(client.Email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(traffic.Accounting)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var view struct {
+		Lifetime struct{ Upload, Download, Billed string }
+		Budget   *struct{ Allocated, Frozen, Unallocated string }
+	}
+	if err := json.Unmarshal(raw, &view); err != nil {
+		t.Fatal(err)
+	}
+	if view.Lifetime.Upload != "104" || view.Lifetime.Download != "204" || view.Lifetime.Billed != "316" || view.Budget == nil || view.Budget.Allocated != "9684" || view.Budget.Frozen != "0" || view.Budget.Unallocated != "0" {
+		t.Fatalf("allocated budget was omitted or counted as delivered traffic: %s", raw)
 	}
 }
 

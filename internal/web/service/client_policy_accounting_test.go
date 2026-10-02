@@ -14,8 +14,45 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
+	"github.com/mhsanaei/3x-ui/v3/internal/policyauthority"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
+
+func TestClientPolicyAccountingBudgetPreservesFractionsAndConservativeBounds(t *testing.T) {
+	amount := func(value string) *string { return &value }
+	for _, test := range []struct {
+		name                                                    string
+		quota, used, usedRemainder, held, heldRemainder, frozen uint64
+		unlimited                                               bool
+		allocated                                               string
+		unallocated                                             *string
+	}{
+		{"fractional-carry", 100, 10, 700000, 35, 800000, 7, false, "35.8", amount("46.5")},
+		{"signed-limit", math.MaxInt64, math.MaxInt64 - 10, 999999, 5, 999999, 2, false, "5.999999", amount("1.000002")},
+		{"lowered-quota", 20, 30, 0, 35, 0, 0, false, "35", amount("0")},
+		{"exact-zero", 100, 10, 100000, 89, 900000, 0, false, "89.9", amount("0")},
+		{"unlimited-with-holds", 0, 10, 100000, 35, 800000, 7, true, "35.8", nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			account := policyauthority.Account{Revision: 2, Seed: policyauthority.Seed{ClientID: "owner"}, Policy: policyauthority.Policy{Version: 1, QuotaBytes: test.quota, QuotaUnlimited: test.unlimited}, WindowUsed: test.used, WindowRemainder: test.usedRemainder, HeldCapacity: test.held, HeldRemainder: test.heldRemainder, FrozenBilled: test.frozen}
+			raw, err := json.Marshal(account)
+			if err != nil {
+				t.Fatal(err)
+			}
+			row := clientPolicyAccountingRow{ClientPolicyReceipt: model.ClientPolicyReceipt{ClientID: "owner"}, DesiredVersion: 1, Authority: model.ClientPolicyAuthorityProjection{ClientID: "owner", AuthorityID: "issuer", Generation: 1, Revision: 2, AccountJSON: string(raw)}}
+			budget, err := projectClientPolicyBudget(row)
+			if err != nil || budget == nil || budget.Allocated != test.allocated || budget.Frozen != fmt.Sprint(test.frozen) || !reflect.DeepEqual(budget.Unallocated, test.unallocated) {
+				t.Fatalf("incorrect exact budget: %+v/%v", budget, err)
+			}
+			account.HeldRemainder = 1000000
+			raw, _ = json.Marshal(account)
+			row.Authority.AccountJSON = string(raw)
+			if _, err := projectClientPolicyBudget(row); !errors.Is(err, ErrClientPolicyLedger) {
+				t.Fatalf("corrupt fractional hold accepted: %v", err)
+			}
+		})
+	}
+}
 
 func TestClientPolicyAccountingIncludesEverySnapshotBatch(t *testing.T) {
 	setupPolicyLedgerDB(t)

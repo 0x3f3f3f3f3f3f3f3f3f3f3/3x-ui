@@ -1932,6 +1932,14 @@ export const SCHEMAS: Record<string, unknown> = {
         "example": "2",
         "type": "string"
       },
+      "budget": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ClientPolicyBudget"
+          }
+        ],
+        "nullable": true
+      },
       "clientId": {
         "example": "e18c9a96-71bf-48d4-933f-8b9a46d4290c",
         "type": "string"
@@ -1973,6 +1981,29 @@ export const SCHEMAS: Record<string, unknown> = {
       "policyPending",
       "quotaBytes",
       "resetPending"
+    ],
+    "type": "object"
+  },
+  "ClientPolicyBudget": {
+    "description": "Allocations remain distinct from confirmed delivered usage. Unallocated is\nnull for an unlimited quota; held grants are still shown in that case.",
+    "properties": {
+      "allocated": {
+        "example": "65536",
+        "type": "string"
+      },
+      "frozen": {
+        "example": "0",
+        "type": "string"
+      },
+      "unallocated": {
+        "example": "1.5",
+        "nullable": true,
+        "type": "string"
+      }
+    },
+    "required": [
+      "allocated",
+      "frozen"
     ],
     "type": "object"
   },

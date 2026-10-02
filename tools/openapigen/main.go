@@ -76,6 +76,7 @@ func run(root, outDir string) error {
 				"ClientTraffic",
 				"ClientPolicyAccounting",
 				"ClientPolicyUsage",
+				"ClientPolicyBudget",
 				"Traffic",
 			),
 		},

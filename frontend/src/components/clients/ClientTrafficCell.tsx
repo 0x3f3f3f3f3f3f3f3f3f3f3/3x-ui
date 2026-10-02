@@ -52,6 +52,15 @@ const ClientTrafficCell = memo(function ClientTrafficCell({
         [t('pages.clients.accounting.lifetimeDownload'), accounting.lifetime.download],
         [t('pages.clients.accounting.lifetimeBilled'), accounting.lifetime.billed],
         [t('pages.clients.accounting.lifetimeUncertain'), accounting.lifetime.uncertain],
+        ...(accounting.budget
+          ? [
+              [t('pages.clients.accounting.allocated'), accounting.budget.allocated],
+              [t('pages.clients.accounting.frozen'), accounting.budget.frozen],
+              ...(accounting.budget.unallocated !== null
+                ? [[t('pages.clients.accounting.unallocated'), accounting.budget.unallocated]]
+                : []),
+            ]
+          : []),
       ]
     : [];
 

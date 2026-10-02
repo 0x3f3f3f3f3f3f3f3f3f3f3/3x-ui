@@ -119,7 +119,7 @@ func applyLocalClientPolicyReset(ctx context.Context, ids []string, prepare func
 	return nil
 }
 
-func reconcileLocalClientPolicies(ctx context.Context, process *xray.Process) error {
+func reconcileLocalClientPolicies(ctx context.Context, process *xray.Process) (resultErr error) {
 	lock.Lock()
 	defer lock.Unlock()
 	if err := checkDatabaseRestoreRestart(nil); err != nil {
@@ -139,24 +139,51 @@ func reconcileLocalClientPolicies(ctx context.Context, process *xray.Process) er
 	if err != nil {
 		return err
 	}
+	sourceDB := database.GetDB()
+	authority := managedAuthorityForProcess(process)
+	if authority != nil {
+		sourceDB = authority.db
+		defer func() {
+			if resultErr != nil {
+				stop, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				resultErr = errors.Join(resultErr, stopManagedProcess(stop, process))
+				(&XrayService{}).SetToNeedRestart()
+			}
+		}()
+	}
 	changed := false
 	for start := 0; start < len(config.Policies); start += 1000 {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		batch := config.Policies[start:min(start+1000, len(config.Policies))]
-		pending, err := pendingClientPolicyIDs(database.GetDB().WithContext(ctx), config.InstanceID, batch)
+		pending, err := pendingClientPolicyIDs(sourceDB.WithContext(ctx), config.InstanceID, batch)
 		if err != nil {
 			return err
 		}
 		if len(pending) == 0 {
 			continue
 		}
-		policies, err := PrepareClientPolicies(pending)
+		if authority != nil {
+			if err := authority.SuspendClients(ctx, pending); err != nil {
+				return err
+			}
+			if err := pollLocalClientPolicyLedger(ctx, process); err != nil {
+				return fmt.Errorf("checkpoint before pending policies: %w", err)
+			}
+		}
+		policies, err := prepareClientPoliciesContextForDatabase(ctx, sourceDB, pending, nil)
 		if err != nil {
 			return err
 		}
-		if err := managed.ApplyManagedPolicies(ctx, process, policies); err != nil {
+		apply := managed.ApplyManagedPolicies
+		if authority != nil {
+			apply = func(ctx context.Context, _ *xray.Process, policies []clientpolicy.Policy) error {
+				return authority.ApplyPolicies(ctx, managed, policies)
+			}
+		}
+		if err := apply(ctx, process, policies); err != nil {
 			return fmt.Errorf("retry pending client policies: %w", err)
 		}
 		changed = true

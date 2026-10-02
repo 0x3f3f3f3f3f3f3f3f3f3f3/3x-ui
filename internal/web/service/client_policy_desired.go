@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -25,6 +26,10 @@ func prepareClientPolicies(clientIDs []string, compiled map[string]model.ClientR
 }
 
 func prepareClientPoliciesForDatabase(expected *gorm.DB, clientIDs []string, compiled map[string]model.ClientRecord) ([]clientpolicy.Policy, error) {
+	return prepareClientPoliciesContextForDatabase(context.Background(), expected, clientIDs, compiled)
+}
+
+func prepareClientPoliciesContextForDatabase(ctx context.Context, expected *gorm.DB, clientIDs []string, compiled map[string]model.ClientRecord) ([]clientpolicy.Policy, error) {
 	if len(clientIDs) == 0 || len(clientIDs) > 1000 {
 		return nil, clientpolicy.ErrInvalidPolicy
 	}
@@ -36,7 +41,7 @@ func prepareClientPoliciesForDatabase(expected *gorm.DB, clientIDs []string, com
 		seen[id] = true
 	}
 	var policies []clientpolicy.Policy
-	err := runSerializedTxForDatabase(expected, func(tx *gorm.DB) error {
+	err := runSerializedTxContextForDatabase(ctx, expected, func(tx *gorm.DB) error {
 		var clients []model.ClientRecord
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("stable_id IN ?", clientIDs).Order("stable_id").Find(&clients).Error; err != nil {
 			return err

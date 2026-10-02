@@ -37,13 +37,22 @@ type ClientPolicyUsage struct {
 }
 
 type ClientPolicyAccounting struct {
-	ClientID       string            `json:"clientId" example:"e18c9a96-71bf-48d4-933f-8b9a46d4290c"`
-	Lifetime       ClientPolicyUsage `json:"lifetime"`
-	Period         ClientPolicyUsage `json:"period"`
-	QuotaBytes     string            `json:"quotaBytes" example:"10737418240"`
-	Remaining      *string           `json:"remaining" example:"1.5"`
-	AppliedVersion string            `json:"appliedVersion" example:"2"`
-	DesiredVersion string            `json:"desiredVersion" example:"2"`
-	PolicyPending  bool              `json:"policyPending" example:"false"`
-	ResetPending   bool              `json:"resetPending" example:"false"`
+	ClientID       string              `json:"clientId" example:"e18c9a96-71bf-48d4-933f-8b9a46d4290c"`
+	Lifetime       ClientPolicyUsage   `json:"lifetime"`
+	Period         ClientPolicyUsage   `json:"period"`
+	QuotaBytes     string              `json:"quotaBytes" example:"10737418240"`
+	Remaining      *string             `json:"remaining" example:"1.5"`
+	Budget         *ClientPolicyBudget `json:"budget,omitempty"`
+	AppliedVersion string              `json:"appliedVersion" example:"2"`
+	DesiredVersion string              `json:"desiredVersion" example:"2"`
+	PolicyPending  bool                `json:"policyPending" example:"false"`
+	ResetPending   bool                `json:"resetPending" example:"false"`
+}
+
+// Allocations remain distinct from confirmed delivered usage. Unallocated is
+// null for an unlimited quota; held grants are still shown in that case.
+type ClientPolicyBudget struct {
+	Allocated   string  `json:"allocated" example:"65536"`
+	Frozen      string  `json:"frozen" example:"0"`
+	Unallocated *string `json:"unallocated" example:"1.5"`
 }

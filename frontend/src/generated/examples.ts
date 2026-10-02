@@ -508,6 +508,7 @@ export const EXAMPLES: Record<string, unknown> = {
   },
   "ClientPolicyAccounting": {
     "appliedVersion": "2",
+    "budget": null,
     "clientId": "e18c9a96-71bf-48d4-933f-8b9a46d4290c",
     "desiredVersion": "2",
     "lifetime": {
@@ -526,6 +527,11 @@ export const EXAMPLES: Record<string, unknown> = {
     "quotaBytes": "10737418240",
     "remaining": "1.5",
     "resetPending": false
+  },
+  "ClientPolicyBudget": {
+    "allocated": "65536",
+    "frozen": "0",
+    "unallocated": "1.5"
   },
   "ClientPolicyOptions": {
     "downloadBytesPerSecond": 0,

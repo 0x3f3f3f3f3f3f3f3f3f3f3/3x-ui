@@ -465,6 +465,7 @@ export interface ClientPageResponse {
 
 export interface ClientPolicyAccounting {
   appliedVersion: string;
+  budget?: ClientPolicyBudget | null;
   clientId: string;
   desiredVersion: string;
   lifetime: ClientPolicyUsage;
@@ -473,6 +474,12 @@ export interface ClientPolicyAccounting {
   quotaBytes: string;
   remaining?: string | null;
   resetPending: boolean;
+}
+
+export interface ClientPolicyBudget {
+  allocated: string;
+  frozen: string;
+  unallocated?: string | null;
 }
 
 export interface ClientPolicyOptions {

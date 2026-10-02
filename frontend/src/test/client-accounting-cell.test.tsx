@@ -8,6 +8,32 @@ import InboundInfoModal from '@/pages/inbounds/info/InboundInfoModal';
 import { acknowledgedAccounting, pendingAccounting } from './fixtures/client-policy-accounting';
 
 describe('confirmed client accounting', () => {
+  it('shows allocated and unallocated budget separately from confirmed billing', async () => {
+    render(
+      <ThemeProvider>
+        <ClientTrafficCell
+          accounting={ClientPolicyAccountingSchema.parse({
+            ...pendingAccounting,
+            budget: { allocated: '40.2', frozen: '7', unallocated: '42.5' },
+          })}
+        />
+      </ThemeProvider>,
+    );
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('20');
+    fireEvent.click(document.querySelector('.client-traffic-cell')!);
+    await waitFor(() =>
+      expect(screen.getByText('Allocated or awaiting confirmation')).toBeTruthy(),
+    );
+    for (const [label, exact] of [
+      ['Allocated or awaiting confirmation', '40.2 B'],
+      ['Frozen budget', '7 B'],
+      ['Unallocated budget', '42.5 B'],
+    ]) {
+      const row = screen.getByText(label).closest('tr')!;
+      expect(within(row).getByTitle(exact)).toBeTruthy();
+    }
+  });
+
   it('shows saved policy changes awaiting compilation even when version numbers match', () => {
     const cell = (policyPending: boolean) => (
       <ThemeProvider>
