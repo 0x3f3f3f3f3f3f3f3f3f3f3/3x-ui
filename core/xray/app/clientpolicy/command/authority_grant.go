@@ -2,12 +2,53 @@ package command
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/xtls/xray-core/app/clientpolicy"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+func (s *service) EnableAuthorityRequests(ctx context.Context, r *AuthorityBindRequest) (*Empty, error) {
+	if err := s.authorize(ctx); err != nil {
+		return nil, err
+	}
+	if r == nil || r.Authority == nil {
+		return nil, status.Error(codes.InvalidArgument, "authority request binding is required")
+	}
+	if err := s.engine.EnableAuthorityRequests(r.ExpectedBootId, authorityBinding(r.Authority)); err != nil {
+		return nil, rpcError(err)
+	}
+	return &Empty{}, nil
+}
+
+func (s *service) ReadAuthorityRequests(ctx context.Context, r *AuthorityRequestsRequest) (*AuthorityRequests, error) {
+	if err := s.authorize(ctx); err != nil {
+		return nil, err
+	}
+	if r == nil || r.Authority == nil || r.Limit == 0 || r.Limit > 128 {
+		return nil, status.Error(codes.InvalidArgument, "a bound authority request page of at most 128 is required")
+	}
+	wait, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	requests, err := s.engine.WaitAuthorityRequests(wait, r.ExpectedBootId, authorityBinding(r.Authority), int(r.Limit))
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+			requests = nil
+		} else if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, status.FromContextError(err).Err()
+		} else {
+			return nil, rpcError(err)
+		}
+	}
+	caps := s.engine.Capabilities()
+	page := &AuthorityRequests{InstanceId: caps.InstanceID, BootId: caps.BootID}
+	for _, request := range requests {
+		page.Requests = append(page.Requests, &AuthorityRequest{RequestId: request.RequestID, ClientId: request.ClientID, PolicyVersion: request.PolicyVersion, PreviousGrantId: request.PreviousGrantID})
+	}
+	return page, nil
+}
 
 func authorityBinding(p *AuthorityBinding) clientpolicy.AuthorityBinding {
 	return clientpolicy.AuthorityBinding{AuthorityID: p.GetAuthorityId(), Generation: p.GetGeneration(), NodeID: p.GetNodeId()}

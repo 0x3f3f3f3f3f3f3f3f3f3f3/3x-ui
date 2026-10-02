@@ -13,6 +13,62 @@ type authorityAdapterProbe struct {
 	command.ClientPolicyServiceClient
 	boot  string
 	calls int
+	page  *command.AuthorityRequests
+}
+
+func (p *authorityAdapterProbe) EnableAuthorityRequests(_ context.Context, r *command.AuthorityBindRequest, _ ...grpc.CallOption) (*command.Empty, error) {
+	p.boot = r.ExpectedBootId
+	p.calls++
+	return &command.Empty{}, nil
+}
+
+func (p *authorityAdapterProbe) ReadAuthorityRequests(_ context.Context, r *command.AuthorityRequestsRequest, _ ...grpc.CallOption) (*command.AuthorityRequests, error) {
+	p.boot = r.ExpectedBootId
+	p.calls++
+	if p.page != nil {
+		return p.page, nil
+	}
+	return &command.AuthorityRequests{InstanceId: "source", BootId: p.boot, Requests: []*command.AuthorityRequest{{RequestId: "0123456789abcdef0123456789abcdef", ClientId: "owner", PolicyVersion: 1}}}, nil
+}
+
+func TestAuthorityDemandAdapterBindsCurrentBootAndRejectsContradictoryReplies(t *testing.T) {
+	boot := "0123456789abcdef0123456789abcdef"
+	p := &authorityAdapterProbe{}
+	api := &ClientPolicyAPI{client: p, capabilities: &command.Capabilities{InstanceId: "source", BootId: boot, Capabilities: []string{"fresh-core-incarnation-v1", "monotonic-authority-challenge-v1", "boot-bound-execution-grants-v1", "on-demand-authority-requests-v1"}}}
+	binding := &command.AuthorityBinding{AuthorityId: "issuer", Generation: 1, NodeId: "node"}
+	if err := api.EnableAuthorityRequests(context.Background(), binding); err != nil {
+		t.Fatal(err)
+	}
+	page, err := api.ReadAuthorityRequests(context.Background(), binding, 128)
+	if err != nil || page.GetBootId() != boot || p.calls != 2 || p.boot != boot {
+		t.Fatalf("demand adapter lost boot binding: %+v/%v/%d", page, err, p.calls)
+	}
+	for _, fault := range []string{"boot", "source", "duplicates", "version", "request-id"} {
+		p.page = &command.AuthorityRequests{InstanceId: "source", BootId: boot, Requests: []*command.AuthorityRequest{{RequestId: "0123456789abcdef0123456789abcdef", ClientId: "owner", PolicyVersion: 1}}}
+		switch fault {
+		case "boot":
+			p.page.BootId = "copied-boot"
+		case "source":
+			p.page.InstanceId = "another-source"
+		case "duplicates":
+			p.page.Requests = append(p.page.Requests, p.page.Requests[0])
+		case "version":
+			p.page.Requests[0].PolicyVersion = 0
+		case "request-id":
+			p.page.Requests[0].RequestId = "malformed"
+		}
+		if page, err := api.ReadAuthorityRequests(context.Background(), binding, 128); !errors.Is(err, ErrClientPolicyCapability) || page != nil {
+			t.Fatalf("%s contradictory demand reply passed: %+v/%v", fault, page, err)
+		}
+	}
+	calls := p.calls
+	if _, err := api.ReadAuthorityRequests(context.Background(), binding, 129); !errors.Is(err, ErrClientPolicyCapability) || p.calls != calls {
+		t.Fatalf("unbounded demand reached core: %v/%d", err, p.calls)
+	}
+	api.capabilities.Capabilities = api.capabilities.Capabilities[:3]
+	if err := api.EnableAuthorityRequests(context.Background(), binding); !errors.Is(err, ErrClientPolicyCapability) || p.calls != calls {
+		t.Fatalf("unsupported core enabled demand: %v/%d", err, p.calls)
+	}
 }
 
 func (p *authorityAdapterProbe) BindAuthority(_ context.Context, r *command.AuthorityBindRequest, _ ...grpc.CallOption) (*command.Empty, error) {

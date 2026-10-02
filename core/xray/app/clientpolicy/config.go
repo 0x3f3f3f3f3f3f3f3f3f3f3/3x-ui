@@ -20,6 +20,8 @@ type Manager interface {
 	Capabilities() Capabilities
 	BeginAuthorityChallenge(string) (AuthorityChallenge, error)
 	BindAuthority(string, AuthorityBinding) error
+	EnableAuthorityRequests(string, AuthorityBinding) error
+	WaitAuthorityRequests(context.Context, string, AuthorityBinding, int) ([]AuthorityRequest, error)
 	InstallAuthorityGrant(ExecutionGrant) (ExecutionGrantState, error)
 	GetAuthorityGrant(string) (ExecutionGrantState, error)
 	SealAuthorityGrant(string, string) (ExecutionGrantState, error)

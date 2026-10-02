@@ -15,6 +15,12 @@ type Engine struct {
 	authorityMu      sync.Mutex
 	challenges       map[string]time.Time
 	authorityBinding AuthorityBinding
+	demandMu         sync.Mutex
+	demandEnabled    bool
+	demandRequests   map[string]*queuedAuthorityRequest
+	demandChanged    chan struct{}
+	demandWaiters    int
+	demandReaders    int
 	ready            atomic.Bool
 	initial          []Policy
 	startOnce        sync.Once
@@ -34,6 +40,7 @@ type clientState struct {
 	previousGrant      *storedAuthorityGrant
 	grantExpiry        *time.Timer
 	pendingOpens       int
+	demandRequest      *AuthorityRequest
 	firstUsedAt        int64
 	initializationHash string
 	engine             *Engine
@@ -161,6 +168,9 @@ func (e *Engine) Close() error {
 	}
 	e.closed = true
 	e.ready.Store(false)
+	e.demandMu.Lock()
+	e.notifyDemandLocked()
+	e.demandMu.Unlock()
 	clients := make([]*clientState, 0, len(e.clients))
 	for _, c := range e.clients {
 		clients = append(clients, c)
@@ -220,6 +230,10 @@ func (e *Engine) Open(ctx context.Context, metadata Metadata, closeFn func()) (*
 	}
 	c.mu.Lock()
 	if err := c.awaitOpenTransitionLocked(ctx); err != nil {
+		c.mu.Unlock()
+		return nil, err
+	}
+	if err := c.awaitAuthorityRequestLocked(ctx); err != nil {
 		c.mu.Unlock()
 		return nil, err
 	}

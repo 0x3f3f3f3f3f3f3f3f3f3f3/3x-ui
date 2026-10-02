@@ -4,10 +4,63 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"slices"
 
 	command "github.com/xtls/xray-core/app/clientpolicy/command"
 )
+
+func (c *ClientPolicyAPI) EnableAuthorityRequests(ctx context.Context, binding *command.AuthorityBinding) error {
+	if err := c.requireAuthorityRequests(ctx, binding); err != nil {
+		return err
+	}
+	_, err := c.client.EnableAuthorityRequests(ctx, &command.AuthorityBindRequest{ExpectedBootId: c.capabilities.BootId, Authority: binding})
+	return err
+}
+
+func (c *ClientPolicyAPI) ReadAuthorityRequests(ctx context.Context, binding *command.AuthorityBinding, limit uint32) (*command.AuthorityRequests, error) {
+	if err := c.requireAuthorityRequests(ctx, binding); err != nil {
+		return nil, err
+	}
+	if limit == 0 || limit > 128 {
+		return nil, ErrClientPolicyCapability
+	}
+	page, err := c.client.ReadAuthorityRequests(ctx, &command.AuthorityRequestsRequest{ExpectedBootId: c.capabilities.BootId, Authority: binding, Limit: limit})
+	if err != nil {
+		return nil, err
+	}
+	if page == nil || page.InstanceId != c.capabilities.InstanceId || page.BootId != c.capabilities.BootId || len(page.Requests) > int(limit) {
+		return nil, ErrClientPolicyCapability
+	}
+	clients, requests := make(map[string]bool), make(map[string]bool)
+	for _, r := range page.Requests {
+		if r == nil || r.ClientId == "" || len(r.ClientId) > 128 || r.PolicyVersion == 0 || r.PolicyVersion > math.MaxInt64 || clients[r.ClientId] || requests[r.RequestId] {
+			return nil, ErrClientPolicyCapability
+		}
+		nonce, err := hex.DecodeString(r.RequestId)
+		if err != nil || len(nonce) != 16 {
+			return nil, ErrClientPolicyCapability
+		}
+		clients[r.ClientId], requests[r.RequestId] = true, true
+	}
+	return page, nil
+}
+
+func (c *ClientPolicyAPI) requireAuthorityRequests(ctx context.Context, binding *command.AuthorityBinding) error {
+	if ctx == nil || binding == nil || binding.AuthorityId == "" || binding.NodeId == "" || binding.Generation == 0 || binding.Generation > math.MaxInt64 {
+		return ErrClientPolicyCapability
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := c.requireAuthorityCapabilities(); err != nil {
+		return err
+	}
+	if !slices.Contains(c.capabilities.Capabilities, "on-demand-authority-requests-v1") {
+		return ErrClientPolicyCapability
+	}
+	return nil
+}
 
 func (c *ClientPolicyAPI) requireAuthorityCapabilities() error {
 	if c == nil || c.capabilities == nil || c.capabilities.InstanceId == "" {

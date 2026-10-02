@@ -329,6 +329,9 @@ func (c *clientState) reasonsLocked(now time.Time) Reason {
 
 func (e *Engine) storageFailed(err error) error {
 	if e.failed.CompareAndSwap(false, true) {
+		e.demandMu.Lock()
+		e.notifyDemandLocked()
+		e.demandMu.Unlock()
 		e.mu.Lock()
 		clients := make([]*clientState, 0, len(e.clients))
 		for _, c := range e.clients {
