@@ -156,3 +156,21 @@ func TestVerifyFilesRejectsAmbiguousAndUnboundedManifest(t *testing.T) {
 		})
 	}
 }
+
+func TestVerifyFilesRejectsDisguisedRuntimeState(t *testing.T) {
+	for _, name := range []string{"x-ui.db", "business-ssh-host-key", "bin/config.json"} {
+		t.Run(name, func(t *testing.T) {
+			root, m := manifestFixture(t)
+			content := []byte("existing execution state")
+			if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(name)), content, 0600); err != nil {
+				t.Fatal(err)
+			}
+			h := sha256.Sum256(content)
+			m.Files = append(m.Files, File{Path: name, Role: "license", Size: int64(len(content)), SHA256: hex.EncodeToString(h[:])})
+			writeManifestFixture(t, root, m)
+			if _, err := VerifyFiles(root); err == nil {
+				t.Fatal("manifest allowed runtime state to be replaced as a packaged resource")
+			}
+		})
+	}
+}

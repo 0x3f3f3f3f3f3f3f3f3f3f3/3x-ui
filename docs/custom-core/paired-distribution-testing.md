@@ -69,3 +69,31 @@ The 41 existing top-level executable checksum receipts were verified unchanged
 in `paired-distribution-prior-artifact-preservation.json`. New intermediate
 packages and the staging helper use distinct paths. No private management/Git
 key was read or packaged, and no default branch, release or deployment changed.
+
+## Resource preservation and promotion foundation
+
+The replacement foundation is implemented but not yet wired into the shell
+installer/updater or service lifecycle. `PreserveResources` uses rooted file
+operations, retains unknown app resources and symlinks without following them
+outside the application, and keeps both members of the incoming pair. The
+manifest now binds each resource role to its allowed path; an installation
+cannot replace a database or host key by labeling it as a license.
+
+`Promote` verifies first, retains the previous tree, writes a synchronized recovery
+journal and restores the previous path if the candidate rename fails. Its caller
+must stop the old service and finish settlement before copying state. Linux
+kernel locking rejects simultaneous replacements and releases ownership after
+process exit; lock files are retained to avoid unlink/recreate races. This does
+not by itself implement post-start rollback or interrupted-run recovery.
+
+`paired-distribution-promotion-lock-green.log` and
+`paired-distribution-promotion-vet.log` prove the path/rejection, resource
+preservation, role binding and concurrent ownership checks. The actual Task 1
+archive was promoted into a temporary prefix by a distinct dirty review helper
+in `paired-distribution-real-promotion-proof.json`; old-tree hashes, a real
+SQLite **test** table/record, business-key sentinel and custom-resource hashes
+were preserved, and the journal was present. That test table is not the full
+3x-ui schema, and no service was started. Real protocol/SQL acceptance remains
+the separate 11-case SQLite/PostgreSQL record above. The promotion review helper
+was built before the subsequent source-level lock addition; final clean helper,
+installer, interruption and rollback acceptance still remain.

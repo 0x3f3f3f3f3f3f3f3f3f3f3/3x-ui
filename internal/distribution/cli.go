@@ -52,5 +52,12 @@ func RunCommand(ctx context.Context, args []string, output io.Writer) error {
 		}
 		return json.NewEncoder(output).Encode(m)
 	}
-	return errors.New("usage: x-ui package info | x-ui package verify DIRECTORY | x-ui package stage ARCHIVE NEW_DIRECTORY")
+	if len(args) == 4 && args[0] == "promote" {
+		p, err := Promote(ctx, args[1], args[2], args[3])
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(output).Encode(p)
+	}
+	return errors.New("usage: x-ui package info | x-ui package verify DIRECTORY | x-ui package stage ARCHIVE NEW_DIRECTORY | x-ui package promote CANDIDATE INSTALLED PREVIOUS")
 }

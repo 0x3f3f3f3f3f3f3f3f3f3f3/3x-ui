@@ -150,6 +150,10 @@ func VerifyFiles(root string) (*Manifest, error) {
 		if paths[entry.Path] || entry.Size <= 0 || entry.Size > maxFileBytes || !hashPattern.MatchString(entry.SHA256) {
 			return nil, fmt.Errorf("invalid or duplicate package entry %s", entry.Path)
 		}
+		expectedRole, roleErr := packageRole(entry.Path, m.Target)
+		if roleErr != nil || expectedRole != entry.Role {
+			return nil, fmt.Errorf("package resource role does not match path: %s", entry.Path)
+		}
 		paths[entry.Path] = true
 		switch entry.Role {
 		case "panel":
