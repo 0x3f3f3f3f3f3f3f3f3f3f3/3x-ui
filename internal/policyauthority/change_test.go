@@ -1,6 +1,7 @@
 package policyauthority
 
 import (
+	"encoding/json"
 	"errors"
 	"math"
 	"path/filepath"
@@ -11,6 +12,163 @@ import (
 
 func changeRequest(id Identity, policy Policy, requestID string, reset bool) ChangeRequest {
 	return ChangeRequest{Identity: id, ClientID: "canonical-client", RequestID: requestID, ExpectedVersion: policy.Version - 1, Policy: policy, Reset: reset}
+}
+
+func TestCommittedResetBaselinePreservesFractionalUsageAndFiniteCapacityAcrossReopen(t *testing.T) {
+	j, id, boot, path := journalFixture(t)
+	grant, err := j.Issue(issueRequest(id, boot, "before-delayed-reset", 20))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Report(Report{Binding: grant.Request.Binding, GrantID: grant.GrantID, Sequence: 1, Usage: Usage{RawUpload: 2, BilledBytes: 3, Remainder: 250000}, Seal: true}); err != nil {
+		t.Fatal(err)
+	}
+	account, err := j.Account("canonical-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := account.Policy
+	next.Version++
+	next.WindowID = "delayed-fraction-window"
+	next.QuotaBytes = 5
+	request := changeRequest(id, next, "delayed-fraction-reset", true)
+	request.HasResetBaseline = true
+	request.ResetBaseline = Usage{RawUpload: 6, RawDownload: 5, BilledBytes: 12, Remainder: 900000}
+	first, err := j.ChangePolicy(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(path, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if retry, err := reopened.ChangePolicy(request); err != nil || retry != first {
+		t.Fatalf("reset retry changed committed boundary: %+v/%v", retry, err)
+	}
+	account, err = reopened.Account("canonical-client")
+	if err != nil || account.Usage.BilledBytes != 13 || account.Usage.Remainder != 250000 || account.WindowUsed != 0 || account.WindowRemainder != 350000 {
+		t.Fatalf("delayed reset lost/repriced fractional usage: %+v/%v", account, err)
+	}
+	issued := issueRequest(id, boot, "after-delayed-reset", 4)
+	issued.Binding.WindowID, issued.Binding.PolicyVersion = next.WindowID, next.Version
+	if _, err := reopened.Issue(issued); err != nil {
+		t.Fatal(err)
+	}
+	issued.RequestID, issued.ChallengeID, issued.Capacity = "extra-after-reset", "extra-challenge", 1
+	if _, err := reopened.Issue(issued); !errors.Is(err, ErrCapacity) {
+		t.Fatalf("delayed reset refunded consumed fraction: %v", err)
+	}
+}
+
+func TestChangeHistoryPagesAreBoundedAndIsolateCanonicalClient(t *testing.T) {
+	j, id, _, _ := journalFixture(t)
+	account, err := j.Account("canonical-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := account.Seed
+	other.ClientID = "canonical-client-extra"
+	if err := j.AddAccount(other); err != nil {
+		t.Fatal(err)
+	}
+	for i, requestID := range []string{"event-a", "event-b", "event-c"} {
+		next := account.Policy
+		next.Version = uint64(i + 2)
+		next.WindowID = requestID
+		if _, err := j.ChangePolicy(changeRequest(id, next, requestID, true)); err != nil {
+			t.Fatal(err)
+		}
+		account.Policy = next
+	}
+	next := other.Policy
+	next.Version++
+	request := changeRequest(id, next, "other-event", false)
+	request.ClientID = other.ClientID
+	if _, err := j.ChangePolicy(request); err != nil {
+		t.Fatal(err)
+	}
+	pager, ok := any(j).(interface {
+		ChangePage(string, string, int) ([]Change, error)
+	})
+	if !ok {
+		t.Fatal("retained policy/reset history cannot be read in bounded per-client pages")
+	}
+	after := ""
+	for _, wanted := range []string{"event-a", "event-b", "event-c"} {
+		page, err := pager.ChangePage("canonical-client", after, 1)
+		if err != nil || len(page) != 1 || page[0].Request.RequestID != wanted || page[0].Request.ClientID != "canonical-client" {
+			t.Fatalf("history page crossed client or lost ordering: %+v/%v", page, err)
+		}
+		after = page[0].Request.RequestID
+	}
+	page, err := pager.ChangePage("canonical-client", after, 1)
+	if err != nil || len(page) != 0 {
+		t.Fatalf("history page did not terminate at client boundary: %+v/%v", page, err)
+	}
+}
+
+func TestChangePolicyEvidenceSurvivesLostRepliesAndReopen(t *testing.T) {
+	j, id, _, path := journalFixture(t)
+	a, err := j.Account("canonical-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := a.Policy
+	next.Version, next.WindowID = 2, "window-evidence"
+	request := changeRequest(id, next, "reset-evidence", true)
+	decodeEvidence := func(value string) ChangeRequest {
+		t.Helper()
+		raw, _ := json.Marshal(request)
+		var fields map[string]any
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			t.Fatal(err)
+		}
+		fields["evidence"] = value
+		raw, _ = json.Marshal(fields)
+		var decoded ChangeRequest
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		return decoded
+	}
+	evidence := `{"sourceId":"retained-source","resetRequestId":"original-request","billedBytes":10,"remainder":0}`
+	request = decodeEvidence(evidence)
+	first, err := j.ChangePolicy(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(first.Request)
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if fields["evidence"] != evidence {
+		t.Fatalf("committed change discarded recovery evidence: %s", raw)
+	}
+	if err := j.Close(); err != nil {
+		t.Fatal(err)
+	}
+	j, err = Open(path, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer j.Close()
+	if retained, err := j.LookupChange(request.ClientID, request.RequestID); err != nil || retained != first {
+		t.Fatalf("exact change lookup lost its committed evidence: %+v/%v", retained, err)
+	}
+	if retry, err := j.ChangePolicy(request); err != nil || retry != first {
+		t.Fatalf("reopen lost exact evidence: %+v/%v", retry, err)
+	}
+	if _, err := j.ChangePolicy(decodeEvidence(`{"sourceId":"another-source"}`)); !errors.Is(err, ErrRequest) {
+		t.Fatalf("conflicting recovery evidence accepted: %v", err)
+	}
+	if _, err := j.ChangePolicy(decodeEvidence("{invalid")); !errors.Is(err, ErrRequest) {
+		t.Fatalf("invalid evidence accepted: %v", err)
+	}
 }
 
 func TestResetBoundarySurvivesLateReportsAndLostReply(t *testing.T) {

@@ -22,6 +22,38 @@ func migrationFixture(t *testing.T) (string, []Seed, []MigrationRecord) {
 	return filepath.Join(dir, "journal.db"), seeds, records
 }
 
+func TestMigrationHistoryPagesRetainExactResetRecordsAndClientBoundary(t *testing.T) {
+	path, seeds, records := migrationFixture(t)
+	records = append(records, MigrationRecord{Kind: "resets", Key: "retained/second-reset", Value: []byte(`{"requestId":"second-reset","billedBytes":8}`)}, MigrationRecord{Kind: "resets", Key: "retained-extra/unrelated-reset", Value: []byte(`{"requestId":"unrelated-reset"}`)})
+	j, _, err := CreateWithMigration(path, seeds, nil, records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer j.Close()
+	pager, ok := any(j).(interface {
+		MigrationPage(string, string, string, int) ([]MigrationRecord, error)
+	})
+	if !ok {
+		t.Fatal("original migration reset history cannot be read in bounded client pages")
+	}
+	after := ""
+	for _, wanted := range []string{"retained/original-reset", "retained/second-reset"} {
+		page, err := pager.MigrationPage("resets", "retained/", after, 1)
+		if err != nil || len(page) != 1 || page[0].Key != wanted {
+			t.Fatalf("migration reset page: %+v/%v", page, err)
+		}
+		exact, err := j.MigrationRecord("resets", wanted)
+		if err != nil || !bytes.Equal(exact.Value, page[0].Value) {
+			t.Fatalf("migration reset was altered: %+v/%v", page, err)
+		}
+		after = page[0].Key
+	}
+	page, err := pager.MigrationPage("resets", "retained/", after, 1)
+	if err != nil || len(page) != 0 {
+		t.Fatalf("migration prefix crossed client boundary: %+v/%v", page, err)
+	}
+}
+
 func TestMigrationPreservesLargeResetMembershipRecord(t *testing.T) {
 	path, seeds, records := migrationFixture(t)
 	// Existing bulk reset rows exceed the normal per-account journal limit.

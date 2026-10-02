@@ -4,9 +4,78 @@ import (
 	"encoding/json"
 	"errors"
 	bolt "go.etcd.io/bbolt"
+	"strings"
 )
 
 var ErrNotFound = errors.New("authority record not found")
+
+func (j *Journal) ChangePage(clientID, after string, limit int) ([]Change, error) {
+	if j == nil || j.closed.Load() || !key(clientID) || after != "" && !key(after) || limit < 1 || limit > 1000 {
+		return nil, ErrRequest
+	}
+	var changes []Change
+	prefix := compound(clientID)
+	prefix = prefix[:len(prefix)-1] + ","
+	err := j.db.View(func(tx *bolt.Tx) error {
+		cursor := tx.Bucket([]byte("changes")).Cursor()
+		seek := prefix
+		if after != "" {
+			seek = compound(clientID, after)
+		}
+		k, v := cursor.Seek([]byte(seek))
+		if after != "" && string(k) == seek {
+			k, v = cursor.Next()
+		}
+		for ; k != nil && strings.HasPrefix(string(k), prefix) && len(changes) < limit; k, v = cursor.Next() {
+			var change Change
+			if len(v) > maxRecordBytes || json.Unmarshal(v, &change) != nil || change.Request.Identity != j.id || change.Request.ClientID != clientID || !key(change.Request.RequestID) || string(k) != compound(clientID, change.Request.RequestID) || !validChangeEvidence(change.Request.Evidence) || !validResetBaseline(change.Request) {
+				return ErrJournal
+			}
+			changes = append(changes, change)
+		}
+		return nil
+	})
+	return changes, err
+}
+
+// Migration rows can contain large original bulk membership. Bound both the
+// number and encoded bytes of each page without scanning other kinds/clients.
+func (j *Journal) MigrationPage(kind, keyPrefix, after string, limit int) ([]MigrationRecord, error) {
+	if j == nil || j.closed.Load() || !validMigrationRecord(MigrationRecord{Kind: kind, Key: "probe", Value: json.RawMessage(`{}`)}) || len(keyPrefix) > 512 || after != "" && !strings.HasPrefix(after, keyPrefix) || limit < 1 || limit > 1000 {
+		return nil, ErrRequest
+	}
+	var records []MigrationRecord
+	prefix := compound(kind, keyPrefix)
+	prefix = prefix[:len(prefix)-2]
+	err := j.db.View(func(tx *bolt.Tx) error {
+		cursor := tx.Bucket([]byte("migration")).Cursor()
+		seek := prefix
+		if after != "" {
+			seek = compound(kind, after)
+		}
+		k, v := cursor.Seek([]byte(seek))
+		if after != "" && string(k) == seek {
+			k, v = cursor.Next()
+		}
+		encodedBytes := 0
+		for ; k != nil && strings.HasPrefix(string(k), prefix) && len(records) < limit; k, v = cursor.Next() {
+			if len(v) > maxMigrationRecordBytes+4096 {
+				return ErrJournal
+			}
+			if encodedBytes+len(v) > maxMigrationRecordBytes+4096 {
+				break
+			}
+			var record MigrationRecord
+			if json.Unmarshal(v, &record) != nil || !validMigrationRecord(record) || record.Kind != kind || !strings.HasPrefix(record.Key, keyPrefix) || string(k) != compound(kind, record.Key) {
+				return ErrJournal
+			}
+			records = append(records, record)
+			encodedBytes += len(v)
+		}
+		return nil
+	})
+	return records, err
+}
 
 // LookupAccount distinguishes an unprovisioned identity from corrupt state.
 func (j *Journal) LookupAccount(id string) (Account, error) {
@@ -47,6 +116,27 @@ func (j *Journal) AccountPage(after string, limit int) ([]Account, error) {
 		return nil, err
 	}
 	return accounts, nil
+}
+
+func (j *Journal) LookupChange(clientID, requestID string) (Change, error) {
+	var change Change
+	if j == nil || j.closed.Load() || !key(clientID) || !key(requestID) {
+		return change, ErrJournal
+	}
+	err := j.db.View(func(tx *bolt.Tx) error {
+		requestKey := compound(clientID, requestID)
+		if tx.Bucket([]byte("changes")).Get([]byte(requestKey)) == nil {
+			return ErrNotFound
+		}
+		if err := get(tx, "changes", requestKey, &change); err != nil {
+			return err
+		}
+		if change.Request.ClientID != clientID || change.Request.RequestID != requestID || change.Request.Identity != j.id || !validChangeEvidence(change.Request.Evidence) || !validResetBaseline(change.Request) {
+			return ErrJournal
+		}
+		return nil
+	})
+	return change, err
 }
 
 func (j *Journal) Grant(id string) (Grant, error) {

@@ -4,6 +4,7 @@
 package policyauthority
 
 import (
+	"encoding/json"
 	"errors"
 	"math"
 	"strings"
@@ -130,12 +131,34 @@ type Account struct {
 // A reset opens a new window at the journal's confirmed usage boundary. It
 // credits prior initial uncertainty deliberately, but never outstanding grants.
 type ChangeRequest struct {
-	Identity        Identity `json:"identity"`
-	ClientID        string   `json:"clientId"`
-	RequestID       string   `json:"requestId"`
-	ExpectedVersion uint64   `json:"expectedVersion"`
-	Policy          Policy   `json:"policy"`
-	Reset           bool     `json:"reset"`
+	Identity         Identity `json:"identity"`
+	ClientID         string   `json:"clientId"`
+	RequestID        string   `json:"requestId"`
+	ExpectedVersion  uint64   `json:"expectedVersion"`
+	Policy           Policy   `json:"policy"`
+	Reset            bool     `json:"reset"`
+	HasResetBaseline bool     `json:"hasResetBaseline,omitempty"`
+	ResetBaseline    Usage    `json:"resetBaseline,omitzero"`
+	// Evidence is bounded control-plane metadata committed with the change.
+	// The control-plane owner validates its schema; old records omit it.
+	Evidence string `json:"evidence,omitempty"`
+}
+
+func validResetBaseline(request ChangeRequest) bool {
+	if !request.HasResetBaseline {
+		return request.ResetBaseline == (Usage{})
+	}
+	return request.Reset && validUsage(request.ResetBaseline)
+}
+
+const maxChangeEvidenceBytes = 4 << 10
+
+func validChangeEvidence(value string) bool {
+	if value == "" {
+		return true
+	}
+	trimmed := strings.TrimSpace(value)
+	return len(value) <= maxChangeEvidenceBytes && len(trimmed) != 0 && trimmed[0] == '{' && json.Valid([]byte(value))
 }
 
 type Change struct {

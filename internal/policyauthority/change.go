@@ -6,7 +6,7 @@ func (j *Journal) ChangePolicy(request ChangeRequest) (Change, error) {
 	if j == nil || request.Identity != j.id {
 		return Change{}, ErrIdentity
 	}
-	if !key(request.ClientID) || !key(request.RequestID) || request.ExpectedVersion == 0 || !bounded(request.ExpectedVersion) || !validPolicy(request.Policy) || request.Policy.Version <= request.ExpectedVersion {
+	if !key(request.ClientID) || !key(request.RequestID) || request.ExpectedVersion == 0 || !bounded(request.ExpectedVersion) || !validPolicy(request.Policy) || request.Policy.Version <= request.ExpectedVersion || !validChangeEvidence(request.Evidence) || !validResetBaseline(request) {
 		return Change{}, ErrRequest
 	}
 	var changed Change
@@ -56,8 +56,16 @@ func (j *Journal) ChangePolicy(request ChangeRequest) (Change, error) {
 		}
 		changed = Change{Request: request, PreviousPolicy: account.Policy, UsageBoundary: account.Usage, WindowUsedBefore: account.WindowUsed, WindowRemainderBefore: account.WindowRemainder, FrozenBefore: account.FrozenBilled}
 		if request.Reset {
-			account.WindowBaseline, account.WindowBaseUsed, account.WindowUsed = account.Usage.BilledBytes, 0, 0
-			account.WindowBaselineRemainder, account.WindowBaseRemainder, account.WindowRemainder = account.Usage.Remainder, 0, 0
+			baseline := account.Usage
+			if request.HasResetBaseline {
+				baseline = request.ResetBaseline
+			}
+			used, err := usageDelta(account.Usage, baseline)
+			if err != nil {
+				return err
+			}
+			account.WindowBaseline, account.WindowBaseUsed, account.WindowUsed = baseline.BilledBytes, 0, used.BilledBytes
+			account.WindowBaselineRemainder, account.WindowBaseRemainder, account.WindowRemainder = baseline.Remainder, 0, used.Remainder
 			account.FrozenBilled = 0
 		}
 		account.Policy = request.Policy

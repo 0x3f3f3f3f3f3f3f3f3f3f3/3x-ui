@@ -52,7 +52,7 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 	changes := make(map[string][]Change)
 	if err := tx.Bucket([]byte("changes")).ForEach(func(k, v []byte) error {
 		var change Change
-		if len(v) > maxRecordBytes || json.Unmarshal(v, &change) != nil || change.Request.Identity != j.id || !key(change.Request.RequestID) || string(k) != compound(change.Request.ClientID, change.Request.RequestID) || !validPolicy(change.Request.Policy) || !validPolicy(change.PreviousPolicy) || !validUsage(change.UsageBoundary) || change.WindowRemainderBefore >= fractionScale || !bounded(change.WindowUsedBefore, change.FrozenBefore) {
+		if len(v) > maxRecordBytes || json.Unmarshal(v, &change) != nil || change.Request.Identity != j.id || !key(change.Request.RequestID) || string(k) != compound(change.Request.ClientID, change.Request.RequestID) || !validChangeEvidence(change.Request.Evidence) || !validResetBaseline(change.Request) || !validPolicy(change.Request.Policy) || !validPolicy(change.PreviousPolicy) || !validUsage(change.UsageBoundary) || change.WindowRemainderBefore >= fractionScale || !bounded(change.WindowUsedBefore, change.FrozenBefore) {
 			return ErrJournal
 		}
 		if _, exists := accounts[change.Request.ClientID]; !exists {
@@ -85,8 +85,15 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 				if windows[change.Request.Policy.WindowID] {
 					return ErrJournal
 				}
-				total.WindowBaseline, total.WindowBaseUsed, total.FrozenBilled = change.UsageBoundary.BilledBytes, 0, 0
-				total.WindowBaselineRemainder, total.WindowBaseRemainder = change.UsageBoundary.Remainder, 0
+				baseline := change.UsageBoundary
+				if change.Request.HasResetBaseline {
+					baseline = change.Request.ResetBaseline
+				}
+				if _, err := usageDelta(change.UsageBoundary, baseline); err != nil {
+					return ErrJournal
+				}
+				total.WindowBaseline, total.WindowBaseUsed, total.FrozenBilled = baseline.BilledBytes, 0, 0
+				total.WindowBaselineRemainder, total.WindowBaseRemainder = baseline.Remainder, 0
 			} else if change.Request.Policy.WindowID != total.Policy.WindowID {
 				return ErrJournal
 			}
