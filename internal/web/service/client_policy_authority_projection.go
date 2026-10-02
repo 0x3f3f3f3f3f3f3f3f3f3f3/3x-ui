@@ -86,7 +86,20 @@ func projectClientPolicyAuthorityTx(tx *gorm.DB, journal *policyauthority.Journa
 	if identity.Generation == 0 || identity.Generation > math.MaxInt64 || account.Revision == 0 || account.Revision > math.MaxInt64 {
 		return ErrClientPolicyLedger
 	}
-	encoded, err := json.Marshal(account)
+	reset, err := authorityProtectedReset(journal, account)
+	if err != nil {
+		return err
+	}
+	if reset != nil {
+		var source model.ClientPolicySource
+		if err := tx.Where("node_key = ?", "local").First(&source).Error; err != nil {
+			return err
+		}
+		if source.InstanceID != reset.InstanceID {
+			return ErrClientPolicyLedger
+		}
+	}
+	encoded, err := json.Marshal(authorityAccountProjection{Account: account, ProtectedReset: reset})
 	if err != nil {
 		return err
 	}
@@ -96,7 +109,7 @@ func projectClientPolicyAuthorityTx(tx *gorm.DB, journal *policyauthority.Journa
 		return err
 	}
 	if previous.ClientID != "" {
-		if previous.Revision != row.Revision {
+		if previous.Revision != row.Revision || previous.AccountJSON != row.AccountJSON {
 			result := tx.Model(&model.ClientPolicyAuthorityProjection{}).Where("client_id = ? AND revision = ?", clientID, previous.Revision).Updates(map[string]any{"revision": row.Revision, "account_json": row.AccountJSON})
 			if result.Error != nil {
 				return result.Error

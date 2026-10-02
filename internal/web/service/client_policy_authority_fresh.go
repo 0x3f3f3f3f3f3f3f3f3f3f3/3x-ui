@@ -49,8 +49,11 @@ func initializeFreshAuthorityLocked(ctx context.Context, config *conf.ClientPoli
 		if err := tx.Where("node_key = ?", "local").First(&source).Error; err != nil {
 			return err
 		}
-		if source.InstanceID != config.InstanceID || source.Epoch != 0 || source.Sequence != 0 || source.HandoffBootID != "" {
+		if source.InstanceID != config.InstanceID || source.Epoch != 0 || source.Sequence != 0 {
 			return ErrAuthorityNotInitialized
+		}
+		if source.HandoffBootID != "" {
+			return checkLegacyHandoffReceipt(tx, &source)
 		}
 		return nil
 	})

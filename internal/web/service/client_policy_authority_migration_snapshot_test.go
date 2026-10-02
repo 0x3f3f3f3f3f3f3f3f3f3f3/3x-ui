@@ -120,6 +120,63 @@ func authorityMigrationFixture(t *testing.T) (string, string, string) {
 	return path, c.StableID, deleted
 }
 
+func TestAuthorityMigrationResetHistoryRecoversOlderDesiredSQLWithoutReopeningWindow(t *testing.T) {
+	path, clientID, _ := authorityMigrationFixture(t)
+	owner, err := acquireDatabaseRestore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer owner.release()
+	if err := owner.fenceDatabase(); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := captureAuthorityMigration(context.Background(), owner, path, "migration-source")
+	if err != nil {
+		t.Fatal(err)
+	}
+	j, _, err := policyauthority.CreateWithMigration(filepath.Join(filepath.Dir(path), "recovery-journal.db"), snapshot.Seeds, snapshot.Deleted, snapshot.Records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer j.Close()
+	account, err := j.Account(clientID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var client model.ClientRecord
+	ctx := owner.lease.Context(context.Background())
+	if err := owner.source.WithContext(ctx).First(&client, "stable_id = ?", clientID).Error; err != nil {
+		t.Fatal(err)
+	}
+	_, originalFingerprint, err := fingerprintClientPolicy(client, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runSerializedTxContextForDatabase(ctx, owner.source, func(tx *gorm.DB) error {
+		if err := tx.Where("client_id = ?", clientID).Delete(&model.ClientPolicyReset{}).Error; err != nil {
+			return err
+		}
+		return tx.Table("clients").Where("stable_id = ?", clientID).Updates(map[string]any{"desired_policy_version": 1, "policy_fingerprint": originalFingerprint}).Error
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := recoverAuthorityAccount(ctx, owner.source, j, "migration-source", account); err != nil {
+		t.Fatal(err)
+	}
+	policies, err := prepareClientPoliciesContextForDatabase(ctx, owner.source, []string{clientID}, nil)
+	if err != nil || len(policies) != 1 || policies[0].Version != account.Policy.Version || policies[0].QuotaBaselineBytes != 9 || policies[0].QuotaBaselineRemainder != 500000 {
+		t.Fatalf("original migrated reset was lost or reopened: %+v/%v", policies, err)
+	}
+	reset, err := authorityProtectedReset(j, account)
+	if err != nil || reset == nil || reset.RequestID != "original-reset" {
+		t.Fatalf("original migration reset lacks protected acknowledgement: %+v/%v", reset, err)
+	}
+	after, err := j.Account(clientID)
+	if err != nil || after != account {
+		t.Fatalf("SQL history recovery changed journal usage/window: %+v/%+v/%v", account, after, err)
+	}
+}
+
 func TestAuthorityMigrationFreezesAbruptReservationWithoutInventingDeliveredBytes(t *testing.T) {
 	setupPolicyLedgerDB(t)
 	prior, _ := xrayState.snapshot()
@@ -188,6 +245,84 @@ func TestAuthorityMigrationFreezesAbruptReservationWithoutInventingDeliveredByte
 	request := policyauthority.Request{Binding: policyauthority.Binding{Identity: j.Identity(), NodeBoot: boot, ClientID: c.StableID, WindowID: seed.Policy.WindowID, PolicyVersion: seed.Policy.Version}, RequestID: "after-crash", ChallengeID: "fresh-challenge", Capacity: 1, Upload: policyauthority.Direction{Unlimited: true}, Download: policyauthority.Direction{Unlimited: true}, LeaseDuration: time.Second}
 	if _, err := j.Issue(request); !errors.Is(err, policyauthority.ErrCapacity) {
 		t.Fatalf("unconfirmed crash reservation became available: %v", err)
+	}
+}
+
+func TestAuthorityMigrationRejectsReorderedLegacyResetVersionTie(t *testing.T) {
+	path, clientID, _ := authorityMigrationFixture(t)
+	owner, err := acquireDatabaseRestore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer owner.release()
+	if err := owner.fenceDatabase(); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := captureAuthorityMigration(context.Background(), owner, path, "migration-source")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Older writers allowed two distinct requests at unchanged usage to share a
+	// version. The original journal window identifies the second request, while
+	// key-order insertion into restored SQL would give the first a newer row ID.
+	var earlier policyauthority.MigrationRecord
+	for i, record := range snapshot.Records {
+		if record.Kind != "resets" {
+			continue
+		}
+		var reset model.ClientPolicyReset
+		if err := json.Unmarshal(record.Value, &reset); err != nil {
+			t.Fatal(err)
+		}
+		if reset.ClientID != clientID {
+			continue
+		}
+		reset.Id = 2
+		encoded, err := json.Marshal(reset)
+		if err != nil {
+			t.Fatal(err)
+		}
+		snapshot.Records[i].Value = encoded
+		reset.Id, reset.RequestID = 1, "zz-earlier-idle-reset"
+		encoded, err = json.Marshal(reset)
+		if err != nil {
+			t.Fatal(err)
+		}
+		earlier = policyauthority.MigrationRecord{Kind: "resets", Key: clientID + "/" + reset.RequestID, Value: encoded}
+		break
+	}
+	if earlier.Key == "" {
+		t.Fatal("fixture lacks original reset history")
+	}
+	snapshot.Records = append(snapshot.Records, earlier)
+	j, _, err := policyauthority.CreateWithMigration(filepath.Join(filepath.Dir(path), "legacy-tie-journal.db"), snapshot.Seeds, snapshot.Deleted, snapshot.Records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer j.Close()
+	account, err := j.Account(clientID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := owner.lease.Context(context.Background())
+	if err := runSerializedTxContextForDatabase(ctx, owner.source, func(tx *gorm.DB) error {
+		return tx.Where("client_id = ?", clientID).Delete(&model.ClientPolicyReset{}).Error
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := recoverAuthorityAccount(ctx, owner.source, j, "migration-source", account); !errors.Is(err, ErrClientPolicyLedger) {
+		t.Fatalf("restored SQL row IDs silently selected a different legacy window: %v", err)
+	}
+	var rows []model.ClientPolicyReset
+	if err := owner.source.WithContext(ctx).Where("client_id = ?", clientID).Find(&rows).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("rejected recovery published contradictory reset history: %+v", rows)
+	}
+	after, err := j.Account(clientID)
+	if err != nil || after != account {
+		t.Fatalf("rejected recovery changed protected usage: %+v %v", after, err)
 	}
 }
 

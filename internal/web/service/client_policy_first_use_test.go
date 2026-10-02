@@ -226,8 +226,8 @@ func TestClientPolicyFirstUseCompilerPollingAndChildRestart(t *testing.T) {
 	defer cancel()
 	var process *xray.Process
 	defer func() {
-		if process != nil {
-			_ = process.Stop()
+		if process != nil && process.IsRunning() {
+			_ = stopManagedProcess(context.Background(), process)
 		}
 	}()
 	local := panelruntime.NewLocal(panelruntime.LocalDeps{})
@@ -242,9 +242,9 @@ func TestClientPolicyFirstUseCompilerPollingAndChildRestart(t *testing.T) {
 			t.Fatal(err)
 		}
 		process = xray.NewTestProcess(cfg, filepath.Join(dir, "first-use.json"))
-		if err := local.StartManagedProcess(ctx, process, func(_ context.Context, caps *command.Capabilities) (*panelruntime.ManagedPolicyBootstrap, error) {
-			return PrepareLocalClientPolicyBootstrap(caps, &generated)
-		}); err != nil {
+		authority := openServiceFixtureAuthority(t, process, &generated)
+		retainServiceFixtureAuthority(t, process, authority)
+		if err := local.StartManagedProcess(ctx, process, authority.Prepare); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -303,7 +303,7 @@ func TestClientPolicyFirstUseCompilerPollingAndChildRestart(t *testing.T) {
 		t.Fatalf("polling did not acknowledge activated expiry: %+v %v", acknowledged, err)
 	}
 	_ = api.Close()
-	if err := process.Stop(); err != nil {
+	if err := stopManagedProcess(ctx, process); err != nil {
 		t.Fatal(err)
 	}
 	startChild()
@@ -323,4 +323,5 @@ func TestClientPolicyFirstUseCompilerPollingAndChildRestart(t *testing.T) {
 	if total := policyLedgerTotal(t, owner.StableID); total.BilledBytes != 8 || total.RawUpload != 4 || total.RawDownload != 4 {
 		t.Fatalf("first-use restart repriced traffic: %+v", total)
 	}
+	assertServiceFixtureAuthorityUsage(t, ctx, managedAuthorityForProcess(process), owner.StableID, 4, 4, 8)
 }

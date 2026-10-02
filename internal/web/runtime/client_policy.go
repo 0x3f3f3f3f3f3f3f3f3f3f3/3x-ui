@@ -20,6 +20,7 @@ type ManagedPolicyBootstrap struct {
 	ConfirmAbsentClients func(context.Context, []string) error
 	AfterSequence        uint64
 	Initializations      []*command.InitializeRequest
+	UsageFloors          map[string]*command.Usage
 	// Authorize runs after durable initialization and desired policy application,
 	// before listeners open and without the Runtime mutex. Its API is temporary.
 	Authorize func(context.Context, *xray.ClientPolicyAPI) error
@@ -172,7 +173,13 @@ func initializeManagedClients(ctx context.Context, api *xray.ClientPolicyAPI, bo
 		}
 		current, err := api.GetClient(ctx, request.Policy.ClientId)
 		if status.Code(err) == codes.NotFound {
-			if err := api.Initialize(ctx, request.Policy, request.Usage); err != nil {
+			seed := maxManagedUsage(request.Usage, bootstrap.UsageFloors[request.Policy.ClientId])
+			// A missing execution record cannot prove when a consumed relative
+			// lifetime began. Do not create a fresh first-use clock from usage alone.
+			if request.Policy.ExpiresAt < 0 && (seed.RawUpload != 0 || seed.RawDownload != 0 || seed.BilledBytes != 0 || seed.Remainder != 0) {
+				return fmt.Errorf("%w: historical relative expiry requires the original first-use time", clientpolicy.ErrAuthority)
+			}
+			if err := api.Initialize(ctx, request.Policy, seed); err != nil {
 				return err
 			}
 			continue
@@ -180,9 +187,33 @@ func initializeManagedClients(ctx context.Context, api *xray.ClientPolicyAPI, bo
 		if err != nil {
 			return err
 		}
+		if floor := bootstrap.UsageFloors[request.Policy.ClientId]; floor != nil && !managedUsageAtLeast(current.Usage, floor) {
+			if err := api.ReconcileUsage(ctx, request.Policy.ClientId, floor); err != nil {
+				return err
+			}
+			current, err = api.GetClient(ctx, request.Policy.ClientId)
+			if err != nil {
+				return err
+			}
+		}
 		if current.Usage == nil || current.Usage.RawUpload < request.Usage.RawUpload || current.Usage.RawDownload < request.Usage.RawDownload || current.Usage.BilledBytes < request.Usage.BilledBytes {
 			return errors.New("core usage is behind the historical initialization seed")
 		}
 	}
 	return nil
+}
+
+func managedUsageAtLeast(actual, floor *command.Usage) bool {
+	return actual != nil && floor != nil && actual.RawUpload >= floor.RawUpload && actual.RawDownload >= floor.RawDownload && (actual.BilledBytes > floor.BilledBytes || actual.BilledBytes == floor.BilledBytes && actual.Remainder >= floor.Remainder)
+}
+
+func maxManagedUsage(seed, floor *command.Usage) *command.Usage {
+	result := &command.Usage{RawUpload: seed.RawUpload, RawDownload: seed.RawDownload, BilledBytes: seed.BilledBytes, Remainder: seed.Remainder}
+	if floor != nil {
+		result.RawUpload, result.RawDownload = max(result.RawUpload, floor.RawUpload), max(result.RawDownload, floor.RawDownload)
+		if floor.BilledBytes > result.BilledBytes || floor.BilledBytes == result.BilledBytes && floor.Remainder > result.Remainder {
+			result.BilledBytes, result.Remainder = floor.BilledBytes, floor.Remainder
+		}
+	}
+	return result
 }

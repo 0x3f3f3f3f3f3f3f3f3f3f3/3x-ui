@@ -57,6 +57,7 @@ func migrationModels() []any {
 		&model.ClientPolicyTotal{},
 		&model.ClientPolicyReceipt{},
 		&model.ClientPolicyReset{},
+		&model.ClientPolicyAuthorityProjection{},
 		&model.ClientTrafficResetBatch{},
 		&model.ClientTrafficResetTime{},
 		&model.ClientInbound{},
@@ -120,6 +121,7 @@ func MigrateData(srcPath, dstDSN string) error {
 		return errors.New("source has an incomplete client policy ledger schema")
 	}
 	hasPolicyResets := src.Migrator().HasTable(&model.ClientPolicyReset{})
+	hasAuthorityProjections := src.Migrator().HasTable(&model.ClientPolicyAuthorityProjection{})
 	hasResetBatches := src.Migrator().HasTable(&model.ClientTrafficResetBatch{})
 	hasResetTimes := src.Migrator().HasTable(&model.ClientTrafficResetTime{})
 	hasLegacyTrafficReceipts := src.Migrator().HasTable(&model.LegacyTrafficReceipt{})
@@ -170,6 +172,9 @@ func MigrateData(srcPath, dstDSN string) error {
 		}
 
 		for _, m := range migrationModels() {
+			if _, ok := m.(*model.ClientPolicyAuthorityProjection); ok && !hasAuthorityProjections {
+				continue
+			}
 			if _, ok := m.(*model.ClientPolicyTombstone); ok && !hasPolicyTombstones {
 				continue
 			}
@@ -277,7 +282,7 @@ func copyModelsSnapshot(src, dst *gorm.DB) error {
 	}
 	for _, m := range migrationModels() {
 		switch m.(type) {
-		case *model.LegacyUnassignedTraffic, *model.LegacyTrafficReceipt, *model.LegacyTrafficConfigSource:
+		case *model.LegacyUnassignedTraffic, *model.LegacyTrafficReceipt, *model.LegacyTrafficConfigSource, *model.ClientPolicyAuthorityProjection:
 			if !src.Migrator().HasTable(m) {
 				continue
 			}

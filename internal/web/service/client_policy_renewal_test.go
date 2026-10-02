@@ -18,6 +18,7 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
+	"github.com/mhsanaei/3x-ui/v3/internal/policyauthority"
 	panelruntime "github.com/mhsanaei/3x-ui/v3/internal/web/runtime"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
@@ -40,7 +41,7 @@ func testClientPolicyRenewal(t *testing.T, mode string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	t.Logf("retained renewal fixture: %s", dir)
 	t.Setenv("XUI_BIN_FOLDER", dir)
 	t.Setenv("XUI_LOG_FOLDER", dir)
 	if err := os.Symlink(binary, filepath.Join(dir, xray.GetBinaryName())); err != nil {
@@ -190,6 +191,20 @@ func testClientPolicyRenewal(t *testing.T, mode string) {
 		t.Fatal(err)
 	}
 	defer api.Close()
+	// Supply only a bounded byte of authorization per identity, so the exact
+	// reasons below still prove renewal preserves disabled/expired policy.
+	seeds := make([]policyauthority.Seed, len(ids))
+	for i, id := range ids {
+		seeds[i] = serviceFixtureGrantSeed(t, ctx, api, id)
+	}
+	journal := createServiceFixtureGrantJournal(t, seeds)
+	execution, err := newAuthorityExecution(ctx, db, journal, "local", api)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range ids {
+		authorizeServiceFixtureGrant(t, ctx, execution, id, "inspect-renewed-restrictions", 1)
+	}
 	for i, client := range clients {
 		row := trafficOf(t, client.Email)
 		wantExpiry := client.ExpiryTime

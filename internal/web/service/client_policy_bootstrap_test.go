@@ -36,7 +36,7 @@ func TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	t.Logf("retained Runtime bootstrap fixture: %s", dir)
 	t.Setenv("XUI_BIN_FOLDER", dir)
 	t.Setenv("XUI_LOG_FOLDER", dir)
 	if err := os.Symlink(binary, filepath.Join(dir, xray.GetBinaryName())); err != nil {
@@ -94,7 +94,8 @@ func TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts(t *testi
 		t.Cleanup(func() { _ = process.Stop() })
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		t.Cleanup(cancel)
-		if err := local.StartManagedProcess(ctx, process, func(_ context.Context, caps *command.Capabilities) (*panelruntime.ManagedPolicyBootstrap, error) {
+		authority := openServiceFixtureAuthority(t, process, state)
+		if err := local.StartManagedProcess(ctx, process, func(prepareCtx context.Context, caps *command.Capabilities) (*panelruntime.ManagedPolicyBootstrap, error) {
 			done := make(chan error, 1)
 			go func() { done <- local.DelInbound(ctx, &model.Inbound{Tag: "not-ready", Protocol: model.Tunnel}) }()
 			select {
@@ -105,7 +106,7 @@ func TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts(t *testi
 			case <-time.After(2 * time.Second):
 				return nil, fmt.Errorf("Runtime held its RPC mutex during database preparation")
 			}
-			return PrepareLocalClientPolicyBootstrap(caps, state)
+			return authority.Prepare(prepareCtx, caps)
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -151,6 +152,10 @@ func TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts(t *testi
 			t.Fatalf("bootstrap reset or double-counted usage: %+v", total)
 		}
 		api.Close()
+		assertServiceFixtureAuthorityUsage(t, ctx, authority, client.StableID, uint64(100+round*1024), uint64(200+round*1024), uint64(300+round*4096))
+		if err := authority.Stop(ctx); err != nil {
+			t.Fatal(err)
+		}
 		if err := process.Stop(); err != nil {
 			t.Fatal(err)
 		}
@@ -160,9 +165,9 @@ func TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts(t *testi
 		t.Cleanup(func() { _ = process.Stop() })
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		if err := local.StartManagedProcess(ctx, process, func(_ context.Context, caps *command.Capabilities) (*panelruntime.ManagedPolicyBootstrap, error) {
-			return PrepareLocalClientPolicyBootstrap(caps, state)
-		}); err != nil {
+		authority := openServiceFixtureAuthority(t, process, state)
+		retainServiceFixtureAuthority(t, process, authority)
+		if err := local.StartManagedProcess(ctx, process, authority.Prepare); err != nil {
 			t.Fatal(err)
 		}
 		previousProcess, _ := xrayState.snapshot()
@@ -267,7 +272,7 @@ func TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts(t *testi
 		if err != nil || current.Policy.Enabled || current.Policy.Version != 5 {
 			t.Fatalf("quota change lifted manual disable: %+v, %v", current, err)
 		}
-		if err := process.Stop(); err != nil {
+		if err := stopManagedProcess(ctx, process); err != nil {
 			t.Fatal(err)
 		}
 		var restoredState conf.ClientPolicyConfig
@@ -276,9 +281,9 @@ func TestClientPolicyRuntimeBootstrapPreservesLedgerAcrossChildRestarts(t *testi
 		}
 		restarted := xray.NewTestProcess(process.GetConfig(), filepath.Join(dir, "hot-policy-restart.json"))
 		t.Cleanup(func() { _ = restarted.Stop() })
-		if err := local.StartManagedProcess(ctx, restarted, func(_ context.Context, caps *command.Capabilities) (*panelruntime.ManagedPolicyBootstrap, error) {
-			return PrepareLocalClientPolicyBootstrap(caps, &restoredState)
-		}); err != nil {
+		restartedAuthority := openServiceFixtureAuthority(t, restarted, &restoredState)
+		retainServiceFixtureAuthority(t, restarted, restartedAuthority)
+		if err := local.StartManagedProcess(ctx, restarted, restartedAuthority.Prepare); err != nil {
 			t.Fatalf("restart lost acknowledged hot policies: %v", err)
 		}
 		runtime.GC()

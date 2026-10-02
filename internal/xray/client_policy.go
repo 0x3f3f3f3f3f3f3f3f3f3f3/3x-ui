@@ -92,6 +92,14 @@ func (c *ClientPolicyAPI) Initialize(ctx context.Context, policy *clientpolicy.P
 	return err
 }
 
+func (c *ClientPolicyAPI) ReconcileUsage(ctx context.Context, clientID string, floor *policycommand.Usage) error {
+	if floor == nil || !slices.Contains(c.capabilities.Capabilities, "dormant-monotone-usage-reconciliation-v1") {
+		return ErrClientPolicyCapability
+	}
+	_, err := c.client.ReconcileUsage(ctx, &policycommand.ReconcileUsageRequest{ExpectedBootId: c.capabilities.BootId, ClientId: clientID, Usage: floor})
+	return err
+}
+
 func (c *ClientPolicyAPI) Apply(ctx context.Context, policies []*clientpolicy.PolicyConfig) error {
 	if err := c.requirePolicyCapabilities(policies); err != nil {
 		return err

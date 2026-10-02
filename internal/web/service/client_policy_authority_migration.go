@@ -102,8 +102,13 @@ func migrateAuthorityWithOwner(ctx context.Context, owner *databaseRestoreOwner,
 		if err := owner.source.WithContext(owner.lease.Context(ctx)).Where("node_key = ?", "local").First(&source).Error; err != nil {
 			return nil, err
 		}
-		if source.InstanceID != sourceID || source.Epoch < 0 || source.Sequence < 0 || uint64(source.Epoch) > core.Epoch || uint64(source.Sequence) > core.Sequence || source.HandoffBootID != "" {
+		if source.InstanceID != sourceID || source.Epoch < 0 || source.Sequence < 0 || uint64(source.Epoch) > core.Epoch || uint64(source.Sequence) > core.Sequence {
 			return nil, ErrClientPolicyLedger
+		}
+		if source.HandoffBootID != "" {
+			if err := checkLegacyHandoffReceipt(owner.source.WithContext(owner.lease.Context(ctx)), &source); err != nil {
+				return nil, err
+			}
 		}
 		state, err = resumeAuthorityState(dir, sourceID)
 		if err != nil {

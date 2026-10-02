@@ -24,6 +24,7 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
+	"github.com/mhsanaei/3x-ui/v3/internal/policyauthority"
 	panelruntime "github.com/mhsanaei/3x-ui/v3/internal/web/runtime"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
@@ -38,7 +39,7 @@ func TestClientPolicyPollingRetriesCommittedTraffic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	t.Logf("retained polling fixture: %s", dir)
 	t.Setenv("XUI_BIN_FOLDER", dir)
 	t.Setenv("XUI_LOG_FOLDER", dir)
 	if err := os.Symlink(binary, filepath.Join(dir, xray.GetBinaryName())); err != nil {
@@ -114,6 +115,17 @@ func TestClientPolicyPollingRetriesCommittedTraffic(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	grantAPI, err := xray.DialClientPolicy(ctx, filepath.Join(dir, "control.sock"), state.InstanceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer grantAPI.Close()
+	journal := createServiceFixtureGrantJournal(t, []policyauthority.Seed{serviceFixtureGrantSeed(t, ctx, grantAPI, client.StableID)})
+	execution, err := newAuthorityExecution(ctx, db, journal, "local", grantAPI)
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant := authorizeServiceFixtureGrant(t, ctx, execution, client.StableID, "two-poll-exchanges", 16384)
 	previousProcess, _ := xrayState.snapshot()
 	previousManager := panelruntime.GetManager()
 	xrayState.replace(process)
@@ -206,6 +218,13 @@ func TestClientPolicyPollingRetriesCommittedTraffic(t *testing.T) {
 	}
 	if got := policyLedgerTotal(t, client.StableID); got.RawUpload != 2148 || got.RawDownload != 2248 || got.BilledBytes != 8492 {
 		t.Fatalf("cursor rejection discarded recoverable traffic: %+v", got)
+	}
+	if err := execution.Settle(ctx, grant.GrantID, true, false); err != nil {
+		t.Fatalf("seal both admitted exchanges before reset-only checks: %v", err)
+	}
+	account, err := journal.Account(client.StableID)
+	if err != nil || account.Usage.RawUpload != 2148 || account.Usage.RawDownload != 2248 || account.Usage.BilledBytes != 8492 || account.HeldCapacity != 0 {
+		t.Fatalf("restricted grant charged capacity instead of exact admitted usage: %+v, %v", account, err)
 	}
 	lastID := state.Policies[len(state.Policies)-1].ClientID
 	if err := db.Model(&model.ClientRecord{}).Where("stable_id = ?", lastID).Update("enable", false).Error; err != nil {

@@ -152,6 +152,12 @@ func TestClientPolicyBulkHTTPNativeBindingsAndTunnelAccounting(t *testing.T) {
 	}
 	check(owners[0], updatedRaw, updatedBilled, updatedRaw, updatedBilled)
 	flowOne, packets, other = open(first, "tcp"), open(second, "udp"), open(sibling, "tcp")
+	// TCP connect alone does not establish managed admission. Prove this is
+	// a funded live flow before testing that a reset preserves its connection.
+	sshHTTPEcho(t, flowOne, "ready")
+	updatedRaw += 5
+	updatedBilled += 25000000
+	check(owners[0], updatedRaw, updatedBilled, updatedRaw, updatedBilled)
 	h.api(t, http.MethodPost, "/panel/api/clients/resetTraffic/"+a.Email, service.ClientTrafficResetRequest{ClientID: owners[0].StableID, RequestID: uuid.NewString()})
 	check(owners[0], updatedRaw, updatedBilled, 0, 0)
 	sshHTTPEcho(t, flowOne, "new")

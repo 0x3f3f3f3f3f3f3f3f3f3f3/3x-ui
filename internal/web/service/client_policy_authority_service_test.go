@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -385,18 +386,49 @@ func TestManagedAuthorityPollingRetriesCommittedMultiplierWithoutResettingUsage(
 }
 
 func TestManagedAuthorityPollingProjectionFailureStopsAndReplaysCommittedChange(t *testing.T) {
+	testManagedAuthorityProjectionFailureStopsAndReplays(t, false)
+}
+
+func TestManagedAuthorityDirectPolicyProjectionFailureStopsAndReplaysCommittedChange(t *testing.T) {
+	testManagedAuthorityProjectionFailureStopsAndReplays(t, true)
+}
+
+func testManagedAuthorityProjectionFailureStopsAndReplays(t *testing.T, direct bool) {
+	t.Helper()
 	svc, tunnel, client, _ := setupManagedActivationService(t)
+	db := database.GetDB()
+	injected := errors.New("pending authority projection failed")
+	var failVersion atomic.Uint64
+	var faultAuthority atomic.Pointer[managedAuthority]
+	// Register before the authority worker starts. GORM's callback registry
+	// cannot be changed while a background SQL projection is executing.
+	if err := db.Callback().Update().Before("gorm:update").Register("test:pending-authority-projection", func(tx *gorm.DB) {
+		version := failVersion.Load()
+		if version == 0 || tx.Statement.Table != "client_policy_authority_projections" {
+			return
+		}
+		authority := faultAuthority.Load()
+		if authority == nil {
+			return
+		}
+		account, err := authority.state.Journal.Account(client.StableID)
+		if err == nil && account.Policy.Version == version {
+			tx.AddError(injected)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := svc.RestartXray(true); err != nil {
 		t.Fatal(err)
 	}
 	process := currentXrayProcess()
+	faultAuthority.Store(managedAuthorityForProcess(process))
 	conn, err := net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", tunnel.Port), time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer conn.Close()
 	managedActivationEcho(t, conn, "warm")
-	db := database.GetDB()
 	if err := db.Model(client).Update("policy_multiplier", "0.5").Error; err != nil {
 		t.Fatal(err)
 	}
@@ -404,33 +436,20 @@ func TestManagedAuthorityPollingProjectionFailureStopsAndReplaysCommittedChange(
 	if err != nil {
 		t.Fatal(err)
 	}
-	injected := errors.New("pending authority projection failed")
-	const callback = "test:pending-authority-projection"
-	if err := db.Callback().Update().Before("gorm:update").Register(callback, func(tx *gorm.DB) {
-		if tx.Statement.Table != "client_policy_authority_projections" {
-			return
-		}
-		authority := managedAuthorityForProcess(process)
-		if authority == nil {
-			return
-		}
-		account, err := authority.state.Journal.Account(client.StableID)
-		if err == nil && account.Policy.Version == policies[0].Version {
-			tx.AddError(injected)
-		}
-	}); err != nil {
-		t.Fatal(err)
+	failVersion.Store(policies[0].Version)
+	var applyErr error
+	if direct {
+		applyErr = reconcileLocalClientPolicy(client.StableID)
+	} else {
+		_, _, applyErr = svc.GetXrayTraffic()
 	}
-	t.Cleanup(func() { _ = db.Callback().Update().Remove(callback) })
-	if _, _, err := svc.GetXrayTraffic(); !errors.Is(err, injected) {
-		t.Fatalf("pending projection failure hidden: %v", err)
+	if !errors.Is(applyErr, injected) {
+		t.Fatalf("pending projection failure hidden: %v", applyErr)
 	}
 	if process.IsRunning() {
 		t.Fatal("failed authority application retained outdated access")
 	}
-	if err := db.Callback().Update().Remove(callback); err != nil {
-		t.Fatal(err)
-	}
+	failVersion.Store(0)
 	if err := svc.RestartXray(true); err != nil {
 		t.Fatal(err)
 	}
@@ -498,6 +517,52 @@ func TestManagedAuthorityAccountingSeparatesAllocatedBudgetFromDeliveredUsage(t 
 }
 
 func TestManagedAuthorityPairedOldSnapshotsKeepConfirmedLifetimeVisible(t *testing.T) {
+	testManagedAuthorityPairedOldSnapshots(t, 0)
+}
+
+func TestManagedAuthorityPairedOldSnapshotsRetainAppliedResetWindow(t *testing.T) {
+	testManagedAuthorityPairedOldSnapshots(t, 1)
+}
+
+func TestManagedAuthorityPairedOldSnapshotsRetainEarlierResetRequests(t *testing.T) {
+	testManagedAuthorityPairedOldSnapshots(t, 2)
+}
+
+func TestManagedAuthorityPendingResetChargesTrafficSinceCommittedBoundary(t *testing.T) {
+	svc, tunnel, client, _ := setupManagedActivationService(t)
+	if err := svc.RestartXray(true); err != nil {
+		t.Fatal(err)
+	}
+	conn, err := net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", tunnel.Port), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	managedActivationEcho(t, conn, "warm")
+	if _, _, err := svc.GetXrayTraffic(); err != nil {
+		t.Fatal(err)
+	}
+	owner := managedAuthorityForProcess(currentXrayProcess())
+	policy, err := PrepareClientPolicyReset(owner.config.InstanceID, client.StableID, "delayed-application")
+	if err != nil {
+		t.Fatal(err)
+	}
+	managedActivationEcho(t, conn, "post")
+	if _, _, err := svc.GetXrayTraffic(); err != nil {
+		t.Fatal(err)
+	}
+	account, err := owner.state.Journal.Account(client.StableID)
+	if err != nil || account.Policy.Version != policy.Version || account.WindowUsed != 16 || account.Usage.BilledBytes != 332 {
+		t.Fatalf("pending reset credited traffic after its committed boundary: %+v/%v", account, err)
+	}
+	traffic, err := (&InboundService{}).GetClientTrafficByEmail(client.Email)
+	if err != nil || traffic.Accounting == nil || traffic.Accounting.Period.Billed != "16" {
+		t.Fatalf("pending reset SQL/core boundary disagreed: %+v/%v", traffic, err)
+	}
+}
+
+func testManagedAuthorityPairedOldSnapshots(t *testing.T, resetCount int) {
+	t.Helper()
 	// This acceptance exercises the actual SQLite import route. PostgreSQL
 	// import/reconciliation has its own backend gate, rather than relabeling it.
 	t.Setenv("XUI_DB_TYPE", "sqlite")
@@ -553,6 +618,23 @@ func TestManagedAuthorityPairedOldSnapshotsKeepConfirmedLifetimeVisible(t *testi
 	}
 	managedActivationEcho(t, conn, "warm")
 	_ = conn.Close()
+	for resetIndex := range resetCount {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		requestID := "preserved-reset-window"
+		if resetIndex > 0 {
+			requestID = fmt.Sprintf("preserved-reset-window-%d", resetIndex+1)
+		}
+		if err := ResetLocalClientPolicy(ctx, client.StableID, requestID); err != nil {
+			t.Fatal(err)
+		}
+		conn, err = net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", tunnel.Port), time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		managedActivationEcho(t, conn, "post")
+		_ = conn.Close()
+	}
 	if err := svc.StopXray(); err != nil {
 		t.Fatal(err)
 	}
@@ -579,8 +661,35 @@ func TestManagedAuthorityPairedOldSnapshotsKeepConfirmedLifetimeVisible(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if traffic.Accounting == nil || traffic.Accounting.Lifetime.Upload != "104" || traffic.Accounting.Lifetime.Download != "204" || traffic.Accounting.Lifetime.Billed != "316" {
+	upload, download, billed := fmt.Sprint(104+4*resetCount), fmt.Sprint(204+4*resetCount), fmt.Sprint(316+16*resetCount)
+	if traffic.Accounting == nil || traffic.Accounting.Lifetime.Upload != upload || traffic.Accounting.Lifetime.Download != download || traffic.Accounting.Lifetime.Billed != billed {
 		t.Fatalf("old SQL/core snapshots hid committed lifetime usage: %+v", traffic.Accounting)
+	}
+	if resetCount > 0 && (traffic.Accounting.Period.Billed != "16" || traffic.Accounting.ResetPending) {
+		t.Fatalf("old snapshots reopened an obsolete quota window: %+v", traffic.Accounting)
+	}
+	if resetCount > 1 {
+		var resets []model.ClientPolicyReset
+		if err := database.GetDB().Where("client_id = ?", client.StableID).Order("id").Find(&resets).Error; err != nil {
+			t.Fatal(err)
+		}
+		if len(resets) != resetCount {
+			t.Fatalf("older applied reset request disappeared after snapshot restore: %+v", resets)
+		}
+		owner := managedAuthorityForProcess(currentXrayProcess())
+		before, err := owner.state.Journal.Account(client.StableID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := ResetLocalClientPolicy(ctx, client.StableID, "preserved-reset-window"); err != nil {
+			t.Fatal(err)
+		}
+		after, err := owner.state.Journal.Account(client.StableID)
+		if err != nil || before.Policy != after.Policy || before.Usage != after.Usage || before.WindowUsed != after.WindowUsed {
+			t.Fatalf("old reset retry reopened a retained window: %+v/%+v/%v", before, after, err)
+		}
 	}
 	conn, err = net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", tunnel.Port), time.Second)
 	if err != nil {
@@ -595,8 +704,12 @@ func TestManagedAuthorityPairedOldSnapshotsKeepConfirmedLifetimeVisible(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if traffic.Accounting == nil || traffic.Accounting.Lifetime.Billed != "332" || traffic.Accounting.Lifetime.Upload != "108" || traffic.Accounting.Lifetime.Download != "208" {
+	upload, download, billed = fmt.Sprint(108+4*resetCount), fmt.Sprint(208+4*resetCount), fmt.Sprint(332+16*resetCount)
+	if traffic.Accounting == nil || traffic.Accounting.Lifetime.Billed != billed || traffic.Accounting.Lifetime.Upload != upload || traffic.Accounting.Lifetime.Download != download {
 		t.Fatalf("restored execution failed to preserve and advance known lifetime: %+v", traffic.Accounting)
+	}
+	if resetCount > 0 && traffic.Accounting.Period.Billed != "32" {
+		t.Fatalf("new restored traffic used the wrong retained quota window: %+v", traffic.Accounting)
 	}
 }
 

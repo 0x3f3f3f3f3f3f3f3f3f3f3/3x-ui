@@ -50,6 +50,14 @@ Tests: concurrent issuance cannot overlap quota or rate/burst sums; response los
 
 ## Task 4: Enforce boot-bound grants in Custom Xray
 
+Recovery continuation after the verified same-policy paired-snapshot case:
+
+1. Persist bounded, credential-free policy/reset evidence in the same journal transaction as its policy change. Exact retries retain it; conflicting evidence is rejected. Preserve existing seed/migration hashes and older journal records.
+2. Read committed changes through exact or bounded per-client queries. Before activation, restore acknowledged reset boundaries and tombstones from protected evidence, retain the current journal window, and advance any restored desired version monotonically. Missing or contradictory evidence remains closed.
+3. Reconcile only monotone known local usage into a dormant, current-boot core through its private authenticated control channel. Do not return old held grants or reset the authority window. Preserve any execution usage already ahead of that floor.
+4. Distinguish acknowledged protected reset history from the current disposable execution epoch/cursor in accounting. Full reset, policy change, deletion, response-loss and fault acceptance precede enabling activation from restored snapshots.
+5. Keep node scope guards throughout; the local recovery path does not seed multiple nodes with duplicated global lifetime counters. Bounded batch/reset membership and original migration history must also survive recovery before claiming complete history support.
+
 Files: `core/xray/app/clientpolicy`, protobuf/private control API, `infra/conf`, protected process startup and panel runtime adapter.
 
 Generate a fresh boot nonce independently of persisted execution epoch. Add capability negotiation and a private grant RPC. Bind admission, finite reservation capacity, directional shares and expiry to the current nonce and grant. Existing raw/billed/fraction state remains intact. Do not authorize from the stored policy alone. Grant loss/expiry closes applicable active sessions and rejects reconnection; control traffic remains unbilled.

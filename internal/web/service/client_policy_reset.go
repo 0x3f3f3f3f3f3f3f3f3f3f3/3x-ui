@@ -13,9 +13,12 @@ import (
 )
 
 func latestClientPolicyResets(tx *gorm.DB, clientIDs []string) (map[string]*model.ClientPolicyReset, error) {
-	latest := tx.Model(&model.ClientPolicyReset{}).Select("MAX(id)").Where("client_id IN ?", clientIDs).Group("client_id")
 	var rows []model.ClientPolicyReset
-	if err := tx.Where("id IN (?)", latest).Find(&rows).Error; err != nil {
+	if err := tx.Where(`client_id IN ? AND NOT EXISTS (
+ SELECT 1 FROM client_policy_resets newer
+ WHERE newer.client_id = client_policy_resets.client_id
+ AND (newer.policy_version > client_policy_resets.policy_version
+ OR (newer.policy_version = client_policy_resets.policy_version AND newer.id > client_policy_resets.id)))`, clientIDs).Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	result := make(map[string]*model.ClientPolicyReset, len(rows))
@@ -168,6 +171,17 @@ func prepareClientPolicyResetBatch(tx *gorm.DB, source model.ClientPolicySource,
 			return nil, err
 		}
 		if !retries[client.StableID] {
+			// Window identity changes even when no traffic has arrived since the
+			// previous reset. Fingerprint equality must not reuse its version.
+			if policy.Version == uint64(client.DesiredPolicyVersion) {
+				if client.DesiredPolicyVersion == math.MaxInt64 {
+					return nil, clientpolicy.ErrOverflow
+				}
+				policy.Version++
+				if err := tx.Table("clients").Where("id = ?", client.Id).Update("desired_policy_version", int64(policy.Version)).Error; err != nil {
+					return nil, err
+				}
+			}
 			reset.PolicyVersion = int64(policy.Version)
 			if err := tx.Create(reset).Error; err != nil {
 				return nil, err

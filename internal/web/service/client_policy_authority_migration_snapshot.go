@@ -81,8 +81,13 @@ func captureAuthorityMigrationTx(ctx context.Context, tx *gorm.DB, core clientpo
 			return ErrClientPolicyLedger
 		}
 	}
-	if source == nil || source.InstanceID != core.InstanceID || source.Epoch < 0 || source.Sequence < 0 || core.Epoch > math.MaxInt64 || core.Sequence > math.MaxInt64 || uint64(source.Epoch) > core.Epoch || uint64(source.Sequence) > core.Sequence || source.HandoffBootID != "" {
+	if source == nil || source.InstanceID != core.InstanceID || source.Epoch < 0 || source.Sequence < 0 || core.Epoch > math.MaxInt64 || core.Sequence > math.MaxInt64 || uint64(source.Epoch) > core.Epoch || uint64(source.Sequence) > core.Sequence {
 		return ErrClientPolicyLedger
+	}
+	if source.HandoffBootID != "" {
+		if err := checkLegacyHandoffReceipt(tx, source); err != nil {
+			return err
+		}
 	}
 	var receipts []model.ClientPolicyReceipt
 	if err := tx.Find(&receipts).Error; err != nil {
@@ -184,7 +189,7 @@ func captureAuthorityMigrationTx(ctx context.Context, tx *gorm.DB, core clientpo
 		if err := validateClientPolicyReset(r); err != nil {
 			return err
 		}
-		if old := latest[r.ClientID]; old == nil || old.Id < r.Id {
+		if old := latest[r.ClientID]; old == nil || old.PolicyVersion < r.PolicyVersion || old.PolicyVersion == r.PolicyVersion && old.Id < r.Id {
 			latest[r.ClientID] = r
 		}
 	}

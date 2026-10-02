@@ -140,6 +140,57 @@ func resetLedgerFixture(t *testing.T) string {
 	return id
 }
 
+func TestClientPolicyResetDistinctIdleRequestsAdvanceVersion(t *testing.T) {
+	for _, billed := range []uint64{0, 10} {
+		t.Run(fmt.Sprintf("billed-%d", billed), func(t *testing.T) {
+			setupPolicyLedgerDB(t)
+			if err := BindClientPolicySource("local", "core-a", 1); err != nil {
+				t.Fatal(err)
+			}
+			id := policyLedgerClient(t, "idle-reset", 0, 0)
+			policies, err := PrepareClientPolicies([]string{id})
+			if err != nil {
+				t.Fatal(err)
+			}
+			page := &command.LedgerPage{NextSequence: 1, Records: []*command.LedgerRecord{{InstanceId: "core-a", ClientId: id, Epoch: 1, Sequence: 1, PolicyVersion: policies[0].Version, Usage: &command.Usage{RawUpload: billed, BilledBytes: billed}}}}
+			if err := SettleClientPolicyLedger("core-a", 1, 0, page); err != nil {
+				t.Fatal(err)
+			}
+			first, err := PrepareClientPolicyReset("core-a", id, "idle-first")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if first.Version != 2 {
+				t.Fatalf("fresh reset reused desired version: %+v", first)
+			}
+			second, err := PrepareClientPolicyReset("core-a", id, "idle-second")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if second.Version != 3 || second.QuotaBaselineBytes != billed {
+				t.Fatalf("second distinct reset reused a window version: %+v", second)
+			}
+			for _, request := range []string{"idle-first", "idle-second"} {
+				retry, err := PrepareClientPolicyReset("core-a", id, request)
+				if err != nil || retry != second {
+					t.Fatalf("retry advanced or replaced the current window: %+v %v", retry, err)
+				}
+			}
+			current, err := PrepareClientPolicies([]string{id})
+			if err != nil || len(current) != 1 || current[0] != second {
+				t.Fatalf("ordinary preparation lost reset version: %+v %v", current, err)
+			}
+			var rows []model.ClientPolicyReset
+			if err := database.GetDB().Where("client_id = ?", id).Order("policy_version").Find(&rows).Error; err != nil {
+				t.Fatal(err)
+			}
+			if len(rows) != 2 || rows[0].PolicyVersion != 2 || rows[1].PolicyVersion != 3 {
+				t.Fatalf("reset history reused versions or duplicated retries: %+v", rows)
+			}
+		})
+	}
+}
+
 func TestClientPolicyResetConcurrentRetriesPreserveRestrictions(t *testing.T) {
 	id := resetLedgerFixture(t)
 	expired := time.Now().Add(-time.Hour).UnixMilli()

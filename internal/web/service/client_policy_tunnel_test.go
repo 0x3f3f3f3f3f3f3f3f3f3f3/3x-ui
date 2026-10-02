@@ -20,6 +20,7 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
+	"github.com/mhsanaei/3x-ui/v3/internal/policyauthority"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
 
@@ -29,7 +30,7 @@ func TestClientPolicyLedgerRealTunnelAndRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	t.Logf("retained in-process tunnel fixture: %s", dir)
 	state, socket := filepath.Join(dir, "state.db"), filepath.Join(dir, "core.sock")
 	if err := clientpolicy.CreateStore(state, "core-a"); err != nil {
 		t.Fatal(err)
@@ -64,6 +65,7 @@ func TestClientPolicyLedgerRealTunnelAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw := fmt.Sprintf(`{"log":{"loglevel":"error"},"api":{"tag":"control","listen":%q,"services":["ClientPolicyServiceV1"]},"clientPolicy":{"stateFile":%q,"instanceId":"core-a","policies":[]},"inbounds":[{"tag":"owned","listen":"127.0.0.1","port":%d,"protocol":"tunnel","settings":{"network":"tcp","address":"127.0.0.1","port":%d,"clientId":%q}}],"outbounds":[{"protocol":"freedom","settings":{"finalRules":[{"action":"allow","ip":["127.0.0.1"]}]}}]}`, socket, state, listen, target.Addr().(*net.TCPAddr).Port, client.StableID)
+	var journal *policyauthority.Journal
 	for round := uint64(1); round <= 2; round++ {
 		var cfg conf.Config
 		if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
@@ -103,6 +105,14 @@ func TestClientPolicyLedgerRealTunnelAndRestart(t *testing.T) {
 		if err := api.Initialize(ctx, policy, seed); err != nil {
 			t.Fatal(err)
 		}
+		if journal == nil {
+			journal = createServiceFixtureGrantJournal(t, []policyauthority.Seed{serviceFixtureGrantSeed(t, ctx, api, client.StableID)})
+		}
+		execution, err := newAuthorityExecution(ctx, database.GetDB(), journal, "local", api)
+		if err != nil {
+			t.Fatal(err)
+		}
+		grant := authorizeServiceFixtureGrant(t, ctx, execution, client.StableID, fmt.Sprintf("tunnel-round-%d", round), 8192)
 		conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", listen), time.Second)
 		if err != nil {
 			t.Fatal(err)
@@ -141,6 +151,13 @@ func TestClientPolicyLedgerRealTunnelAndRestart(t *testing.T) {
 		}
 		if err := conn.Close(); err != nil {
 			t.Fatal(err)
+		}
+		if err := execution.Settle(ctx, grant.GrantID, true, false); err != nil {
+			t.Fatalf("seal exact tunnel usage before child restart: %v", err)
+		}
+		account, err := journal.Account(client.StableID)
+		if err != nil || account.Usage.RawUpload != uint64(100+int64(round)*1024) || account.Usage.RawDownload != uint64(200+int64(round)*1024) || account.Usage.BilledBytes != uint64(300+int64(round)*4096) || account.HeldCapacity != 0 {
+			t.Fatalf("restricted grant disagrees with the independently checked ledger: %+v, %v", account, err)
 		}
 		if err := api.Close(); err != nil {
 			t.Fatal(err)

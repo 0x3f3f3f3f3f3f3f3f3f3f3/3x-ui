@@ -119,7 +119,24 @@ func (a *managedAuthority) reconcilePolicy(ctx context.Context, policy clientpol
 		if account.Deleted || next.Version <= account.Policy.Version {
 			return ErrClientPolicyLedger
 		}
-		_, err = a.state.Journal.ChangePolicy(policyauthority.ChangeRequest{Identity: a.state.Journal.Identity(), ClientID: policy.ClientID, RequestID: fmt.Sprintf("desired:%d", next.Version), ExpectedVersion: account.Policy.Version, Policy: next, Reset: window != account.Policy.WindowID})
+		evidence, err := authorityEvidenceTx(tx, a.config.InstanceID, policy)
+		if err != nil {
+			return err
+		}
+		request := policyauthority.ChangeRequest{Identity: a.state.Journal.Identity(), ClientID: policy.ClientID, RequestID: fmt.Sprintf("desired:%d", next.Version), ExpectedVersion: account.Policy.Version, Policy: next, Reset: window != account.Policy.WindowID, Evidence: evidence}
+		if request.Reset {
+			resets, err := latestClientPolicyResets(tx, []string{policy.ClientID})
+			if err != nil {
+				return err
+			}
+			reset := resets[policy.ClientID]
+			if reset == nil {
+				return ErrClientPolicyLedger
+			}
+			request.HasResetBaseline = true
+			request.ResetBaseline = policyauthority.Usage{RawUpload: uint64(reset.RawUpload), RawDownload: uint64(reset.RawDownload), BilledBytes: uint64(reset.BilledBytes), Remainder: uint64(reset.Remainder)}
+		}
+		_, err = a.state.Journal.ChangePolicy(request)
 		if err != nil {
 			return err
 		}

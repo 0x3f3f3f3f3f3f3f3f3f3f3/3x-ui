@@ -32,6 +32,13 @@ func TestCopyAllModelsIntoSQLite(t *testing.T) {
 			t.Fatalf("automigrate src %T: %v", m, err)
 		}
 	}
+	if err := src.AutoMigrate(&model.ClientPolicyAuthorityProjection{}); err != nil {
+		t.Fatal(err)
+	}
+	projection := model.ClientPolicyAuthorityProjection{ClientID: "0957528d-17e2-475a-a1c4-18d3c54b807f", AuthorityID: "retained-authority", Generation: 3, Revision: 17, AccountJSON: `{"usage":{"rawUpload":11,"rawDownload":22,"billedBytes":66,"remainder":500000},"heldCapacity":40}`}
+	if err := src.Create(&projection).Error; err != nil {
+		t.Fatal(err)
+	}
 
 	// Seed a few rows across parent/child tables and a composite-PK table.
 	if err := src.Create(&model.User{Username: "admin", Password: "x"}).Error; err != nil {
@@ -51,6 +58,10 @@ func TestCopyAllModelsIntoSQLite(t *testing.T) {
 	defer closeGorm(dst)
 	if err := copyAllModels(src, dst); err != nil {
 		t.Fatalf("copyAllModels: %v", err)
+	}
+	var copied model.ClientPolicyAuthorityProjection
+	if err := dst.First(&copied, "client_id = ?", projection.ClientID).Error; err != nil || copied != projection {
+		t.Fatalf("export lost independent authority projection identity/usage/holds: %+v %v", copied, err)
 	}
 
 	for _, tc := range []struct {
@@ -123,6 +134,46 @@ func TestDumpAndRestoreSQLiteRoundTrip(t *testing.T) {
 	}
 	if s.Value != "o'brien \"quote\"" {
 		t.Errorf("value mismatch after round-trip: %q", s.Value)
+	}
+}
+
+func TestCopyModelsFromBeforeAuthorityProjectionDoesNotInventAuthority(t *testing.T) {
+	dir := t.TempDir()
+	src, err := gorm.Open(sqlite.Open(filepath.Join(dir, "old-source.db")), &gorm.Config{Logger: logger.Discard})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeGorm(src)
+	for _, m := range migrationModels() {
+		if _, isProjection := m.(*model.ClientPolicyAuthorityProjection); isProjection {
+			continue
+		}
+		if err := src.AutoMigrate(m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	user := model.User{Username: "old-owner", Password: "retained-value"}
+	if err := src.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	dst, err := gorm.Open(sqlite.Open(filepath.Join(dir, "destination.db")), &gorm.Config{Logger: logger.Discard})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeGorm(dst)
+	if err := copyAllModels(src, dst); err != nil {
+		t.Fatalf("old source cannot be exported: %v", err)
+	}
+	var got model.User
+	if err := dst.First(&got, user.Id).Error; err != nil || got != user {
+		t.Fatalf("old-source migration lost existing data: %+v %v", got, err)
+	}
+	var count int64
+	if err := dst.Model(&model.ClientPolicyAuthorityProjection{}).Count(&count).Error; err != nil || count != 0 {
+		t.Fatalf("old-source migration fabricated authority: %d %v", count, err)
+	}
+	if src.Migrator().HasTable(&model.ClientPolicyAuthorityProjection{}) {
+		t.Fatal("export modified the old source schema")
 	}
 }
 

@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	command "github.com/xtls/xray-core/app/clientpolicy/command"
 	"github.com/xtls/xray-core/infra/conf"
 	netproxy "golang.org/x/net/proxy"
 
@@ -158,9 +157,9 @@ func TestPasswordProxyConfigFeedsRealSharedLedger(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	local := panelruntime.NewLocal(panelruntime.LocalDeps{})
-	if err := local.StartManagedProcess(ctx, process, func(_ context.Context, caps *command.Capabilities) (*panelruntime.ManagedPolicyBootstrap, error) {
-		return PrepareLocalClientPolicyBootstrap(caps, &generated)
-	}); err != nil {
+	authority := openServiceFixtureAuthority(t, process, &generated)
+	defer func() { _ = authority.Stop(context.Background()) }()
+	if err := local.StartManagedProcess(ctx, process, authority.Prepare); err != nil {
 		t.Fatal(err)
 	}
 	previousProcess, _ := xrayState.snapshot()
@@ -248,4 +247,7 @@ func TestPasswordProxyConfigFeedsRealSharedLedger(t *testing.T) {
 	if total := policyLedgerTotal(t, first.StableID); total.RawUpload != 130 || total.RawDownload != 230 || total.BilledBytes != 390 {
 		t.Fatalf("native collection replayed managed billing: %+v", total)
 	}
+	assertServiceFixtureAuthorityUsage(t, ctx, authority, first.StableID, 130, 230, 390)
+	assertServiceFixtureAuthorityUsage(t, ctx, authority, second.StableID, 12, 12, 36)
+	assertServiceFixtureAuthorityUsage(t, ctx, authority, disabled.StableID, 0, 0, 0)
 }

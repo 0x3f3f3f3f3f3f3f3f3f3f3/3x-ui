@@ -117,6 +117,14 @@ func (a *managedAuthority) Prepare(ctx context.Context, caps *command.Capabiliti
 		return nil, err
 	}
 	bootstrap.Authorize = a.authorize
+	bootstrap.UsageFloors = make(map[string]*command.Usage, len(a.config.Policies))
+	for _, policy := range a.config.Policies {
+		account, err := a.state.Journal.Account(policy.ClientID)
+		if err != nil {
+			return nil, err
+		}
+		bootstrap.UsageFloors[policy.ClientID] = &command.Usage{RawUpload: account.Usage.RawUpload, RawDownload: account.Usage.RawDownload, BilledBytes: account.Usage.BilledBytes, Remainder: account.Usage.Remainder}
+	}
 	return bootstrap, nil
 }
 

@@ -3,6 +3,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -601,8 +602,14 @@ func TestClientPolicyLiveLegacyHandoffCompletedSurvivesPanelRestart(t *testing.T
 	if receipt.SeedUpload != 105 || receipt.SeedDownload != 205 || receipt.SeedBilled != 310 {
 		t.Fatalf("resumed handoff lost final traffic: %+v", receipt)
 	}
-	if err := currentXrayProcess().Stop(); err != nil {
+	managed := currentXrayProcess()
+	stop, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := stopManagedProcess(stop, managed); err != nil {
 		t.Fatal(err)
+	}
+	if managedAuthorityForProcess(managed) != nil {
+		t.Fatal("completed handoff fixture retained an authority after stopping its child")
 	}
 	xrayState.replace(nil)
 	if err := db.Where("1 = 1").Delete(&model.LegacyTrafficReceipt{}).Error; err != nil {

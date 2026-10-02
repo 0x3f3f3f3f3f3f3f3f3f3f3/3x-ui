@@ -51,6 +51,7 @@ SELECT p.*, c.email, c.desired_policy_version AS desired_version, c.total_gb AS 
  r.raw_upload AS reset_raw_upload, r.raw_download AS reset_raw_download,
  r.billed_bytes AS reset_billed_bytes, r.remainder AS reset_remainder,
  r.uncertain_bytes AS reset_uncertain_bytes, r.policy_version AS reset_policy_version,
+ r.created_at AS reset_created_at,
  latest.id AS latest_reset_id, latest.policy_version AS latest_reset_policy_version,
  latest.instance_id AS latest_reset_instance_id, latest.client_id AS latest_reset_client_id,
  latest.request_id AS latest_reset_request_id, latest.epoch AS latest_reset_epoch,
@@ -68,10 +69,10 @@ JOIN client_policy_sources s ON s.instance_id = p.instance_id AND s.node_key = '
 LEFT JOIN client_policy_totals t ON t.client_id = p.client_id
 LEFT JOIN client_policy_authority_projections a ON a.client_id = p.client_id
 LEFT JOIN client_policy_resets r ON r.id = (
- SELECT MAX(id) FROM client_policy_resets WHERE client_id = p.client_id AND policy_version <= p.policy_version
+ SELECT id FROM client_policy_resets WHERE client_id = p.client_id AND policy_version <= p.policy_version ORDER BY policy_version DESC, id DESC LIMIT 1
 )
 LEFT JOIN client_policy_resets latest ON latest.id = (
- SELECT MAX(id) FROM client_policy_resets WHERE client_id = p.client_id
+ SELECT id FROM client_policy_resets WHERE client_id = p.client_id ORDER BY policy_version DESC, id DESC LIMIT 1
 )
 WHERE c.email IN ? AND p.policy_version > 0`
 
@@ -131,13 +132,16 @@ func projectClientPolicyAccounting(row clientPolicyAccountingRow) (*xray.ClientP
 		if err := validateClientPolicyReset(&row.Reset); err != nil {
 			return nil, err
 		}
-		if row.Reset.ClientID != row.ClientID || row.Reset.InstanceID != row.InstanceID || row.Reset.PolicyVersion > row.PolicyVersion || row.Reset.Epoch > row.Epoch || row.Reset.Sequence > row.Sequence {
+		if row.Reset.ClientID != row.ClientID || row.Reset.InstanceID != row.InstanceID || row.Reset.PolicyVersion > row.PolicyVersion {
 			return nil, ErrClientPolicyLedger
 		}
 	}
 	account, err := accountingAuthority(row)
 	if err != nil {
 		return nil, err
+	}
+	if row.Reset.Id != 0 && (row.Reset.Epoch > row.Epoch || row.Reset.Sequence > row.Sequence) && !protectedAccountingReset(row, account) {
+		return nil, ErrClientPolicyLedger
 	}
 	if account != nil {
 		// Execution and SQL snapshots may be older than already confirmed
@@ -191,7 +195,7 @@ func projectClientPolicyAccounting(row clientPolicyAccountingRow) (*xray.ClientP
 		QuotaBytes: strconv.FormatInt(row.QuotaBytes, 10), Remaining: remaining,
 		Budget:         budget,
 		AppliedVersion: strconv.FormatInt(row.PolicyVersion, 10), DesiredVersion: strconv.FormatInt(row.DesiredVersion, 10),
-		ResetPending: row.LatestReset.Id > row.Reset.Id, PolicyPending: policyPending,
+		ResetPending: row.LatestReset.PolicyVersion > row.Reset.PolicyVersion, PolicyPending: policyPending,
 	}, nil
 }
 

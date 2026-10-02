@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	command "github.com/xtls/xray-core/app/clientpolicy/command"
 	"github.com/xtls/xray-core/infra/conf"
 	"gorm.io/gorm"
 
@@ -157,7 +156,7 @@ func policyConfigState(t *testing.T) *conf.ClientPolicyConfig {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	t.Logf("retained policy config fixture: %s", dir)
 	return &conf.ClientPolicyConfig{InstanceID: "compiler-test", StateFile: filepath.Join(dir, "state.db")}
 }
 
@@ -245,9 +244,9 @@ func TestClientPolicyConfigFeedsRealTunnelLedger(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	local := panelruntime.NewLocal(panelruntime.LocalDeps{})
-	if err := local.StartManagedProcess(ctx, process, func(_ context.Context, caps *command.Capabilities) (*panelruntime.ManagedPolicyBootstrap, error) {
-		return PrepareLocalClientPolicyBootstrap(caps, &generated)
-	}); err != nil {
+	authority := openServiceFixtureAuthority(t, process, &generated)
+	defer func() { _ = authority.Stop(context.Background()) }()
+	if err := local.StartManagedProcess(ctx, process, authority.Prepare); err != nil {
 		t.Fatal(err)
 	}
 	previousProcess, _ := xrayState.snapshot()
@@ -284,6 +283,7 @@ func TestClientPolicyConfigFeedsRealTunnelLedger(t *testing.T) {
 	if total.RawUpload != 185 || total.RawDownload != 285 || total.BilledBytes != 640 {
 		t.Fatalf("generated listener identity lost or duplicated historical/current usage: %+v", total)
 	}
+	assertServiceFixtureAuthorityUsage(t, ctx, authority, owner.StableID, 185, 285, 640)
 }
 
 func policyConfigTemplate(t *testing.T) {

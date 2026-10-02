@@ -155,6 +155,11 @@ func (s *XrayService) restartManagedXrayLocked(isForce bool) error {
 	if err := initializeFreshAuthorityLocked(context.Background(), state); err != nil {
 		return err
 	}
+	if process == nil || !process.IsRunning() {
+		if err := recoverAuthorityDesiredState(context.Background(), state); err != nil {
+			return err
+		}
+	}
 	candidate, err := s.managedConfigCandidate(state)
 	if err != nil {
 		return errors.Join(errManagedCandidateUnavailable, err)

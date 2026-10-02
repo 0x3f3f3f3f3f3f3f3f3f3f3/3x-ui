@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,12 +19,14 @@ import (
 	"github.com/xtls/xray-core/infra/conf"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/dynamicpb"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	panelruntime "github.com/mhsanaei/3x-ui/v3/internal/web/runtime"
+	panelxray "github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
 
 func TestClientPolicyHotGrantCannotReviveRemovedBinding(t *testing.T) {
@@ -59,7 +62,10 @@ func TestClientPolicyHotGrantCannotReviveRemovedBinding(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			granted, resume := make(chan struct{}), make(chan struct{})
+			issuer, binding, window := managedActivationPrivateGrantIssuer(t, process, endpoint, owner.StableID)
+			policyApplied, resume := make(chan struct{}), make(chan struct{})
+			var mutationsMu sync.Mutex
+			var mutations []string
 			resumeOnce := func() {
 				select {
 				case <-resume:
@@ -69,8 +75,14 @@ func TestClientPolicyHotGrantCannotReviveRemovedBinding(t *testing.T) {
 			}
 			defer resumeOnce()
 			socket := managedActivationControlProxy(t, endpoint, func(ctx context.Context, method string) error {
+				switch operation := filepath.Base(method); operation {
+				case "AlterInbound", "CloseConnections", "RemoveInbound", "ApplyPolicies":
+					mutationsMu.Lock()
+					mutations = append(mutations, operation)
+					mutationsMu.Unlock()
+				}
 				if strings.HasSuffix(method, "/ApplyPolicies") {
-					close(granted)
+					close(policyApplied)
 					select {
 					case <-resume:
 					case <-ctx.Done():
@@ -132,11 +144,44 @@ func TestClientPolicyHotGrantCannotReviveRemovedBinding(t *testing.T) {
 				done <- err
 			}()
 			select {
-			case <-granted:
+			case <-policyApplied:
 			case err := <-done:
-				t.Fatalf("application ended before policy grant: %v", err)
+				t.Fatalf("application ended before policy application: %v", err)
 			case <-ctx.Done():
 				t.Fatal(ctx.Err())
+			}
+			wantMutations := []string{"RemoveInbound", "ApplyPolicies"}
+			if removal == "credential" {
+				wantMutations = []string{"AlterInbound", "CloseConnections", "ApplyPolicies"}
+			}
+			mutationsMu.Lock()
+			completedMutations := slices.Clone(mutations)
+			mutationsMu.Unlock()
+			if !slices.Equal(completedMutations, wantMutations) {
+				t.Fatalf("binding removal did not precede policy application: %v", completedMutations)
+			}
+			// ApplyPolicies enables desired policy; execution also requires a finite
+			// grant. Install it while that RPC's reply is still deliberately held.
+			challenge, err := issuer.AuthorityChallenge(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			caps := issuer.Capabilities()
+			grant := &command.ExecutionGrant{
+				Authority: binding, InstanceId: caps.InstanceId, BootId: caps.BootId,
+				ClientId: owner.StableID, WindowId: window, PolicyVersion: policy.Policies[0].Version,
+				GrantId: "activation-order-grant", Sequence: 1, ChallengeId: challenge.ChallengeId,
+				Capacity: 1024, Upload: &command.AuthorityShare{Rate: 4096, Burst: 64},
+				Download: &command.AuthorityShare{Rate: 4096, Burst: 64}, LeaseDurationMillis: 5000,
+			}
+			installed, err := issuer.InstallAuthorityGrant(ctx, grant)
+			if err != nil || installed.GetSealed() || !proto.Equal(installed.GetGrant(), grant) {
+				t.Fatalf("finite execution grant was not installed: %v/%v", installed, err)
+			}
+			select {
+			case err := <-done:
+				t.Fatalf("application ended before releasing the policy reply: %v", err)
+			default:
 			}
 			if removal == "credential" {
 				if flow, err := dialManagedActivationVLESS(t, port, target, owner.UUID); err == nil {
@@ -169,6 +214,37 @@ func TestClientPolicyHotGrantCannotReviveRemovedBinding(t *testing.T) {
 			}
 		})
 	}
+}
+
+// This runtime ordering fixture drives the core's private grant RPCs directly.
+// Join the service-owned worker first: its disabled SQL policy intentionally
+// differs from the enabled hot candidate being tested here.
+func managedActivationPrivateGrantIssuer(t *testing.T, process *panelxray.Process, endpoint, clientID string) (*panelxray.ClientPolicyAPI, *command.AuthorityBinding, string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	authority := managedAuthorityForProcess(process)
+	if authority == nil {
+		t.Fatal("fixture has no bound authority")
+	}
+	identity := authority.state.Journal.Identity()
+	account, err := authority.state.Journal.Account(clientID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stopManagedAuthority(ctx, process); err != nil {
+		t.Fatal(err)
+	}
+	api, err := panelxray.DialClientPolicy(ctx, endpoint, authority.config.InstanceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = api.Close() })
+	binding := &command.AuthorityBinding{AuthorityId: identity.AuthorityID, Generation: identity.Generation, NodeId: "local"}
+	if err := api.BindAuthority(ctx, binding); err != nil {
+		t.Fatal(err)
+	}
+	return api, binding, account.Policy.WindowID
 }
 
 func managedActivationTunnelEcho(port int) error {
