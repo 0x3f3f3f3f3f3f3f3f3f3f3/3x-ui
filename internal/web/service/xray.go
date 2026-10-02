@@ -1707,12 +1707,23 @@ func addOutboundReconciling(api *xray.XrayAPI, outbound []byte) error {
 
 // StopXray stops the running Xray process.
 func (s *XrayService) StopXray() error {
+	if err := checkDatabaseRestoreRestart(nil); err != nil {
+		return err
+	}
 	lock.Lock()
 	defer lock.Unlock()
+	if err := checkDatabaseRestoreRestart(nil); err != nil {
+		return err
+	}
 	isManuallyStopped.Store(true)
 	logger.Debug("Attempting to stop Xray...")
 	process := currentXrayProcess()
 	if process != nil && process.IsRunning() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := stopManagedAuthority(ctx, process); err != nil {
+			return err
+		}
 		return process.Stop()
 	}
 	return errors.New("xray is not running")

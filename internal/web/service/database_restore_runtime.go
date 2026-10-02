@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"gorm.io/gorm"
@@ -37,6 +38,11 @@ func (owner *databaseRestoreOwner) release() {
 	owner.resumeDatabase()
 	lock.Lock()
 	defer lock.Unlock()
+	owner.releaseLocked()
+}
+
+func (owner *databaseRestoreOwner) releaseLocked() {
+	owner.resumeDatabase()
 	if activeDatabaseRestore.Load() == owner {
 		activeDatabaseRestore.Store(nil)
 		databaseRestoreMutex.Unlock()
@@ -90,6 +96,14 @@ func (s *ServerService) stopCoreForDatabaseRestore() error {
 	process := currentXrayProcess()
 	if process == nil || !process.IsRunning() {
 		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if owner := activeDatabaseRestore.Load(); owner != nil && owner.lease != nil {
+		ctx = owner.lease.Context(ctx)
+	}
+	if err := stopManagedAuthority(ctx, process); err != nil {
+		return err
 	}
 	err := process.Stop()
 	if !process.IsRunning() {

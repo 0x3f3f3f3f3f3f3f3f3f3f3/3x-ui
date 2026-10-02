@@ -139,10 +139,13 @@ func (s *XrayService) restartManagedXrayLocked(isForce bool) error {
 			return err
 		}
 		if process.IsRunning() {
-			if err := process.Stop(); err != nil {
+			if err := stopManagedProcess(context.Background(), process); err != nil {
 				return err
 			}
 		}
+	}
+	if err := initializeFreshAuthorityLocked(context.Background(), state); err != nil {
+		return err
 	}
 	candidate, err := s.managedConfigCandidate(state)
 	if err != nil {
@@ -171,7 +174,7 @@ func (s *XrayService) restartManagedXrayLocked(isForce bool) error {
 					return PrepareLocalClientPolicyBootstrap(caps, policy)
 				})
 				if applyErr != nil && (errors.Is(applyErr, panelruntime.ErrManagedConfigPartial) || managedAccessChanged(process.GetConfig(), candidate)) {
-					applyErr = errors.Join(applyErr, process.Stop())
+					applyErr = errors.Join(applyErr, stopManagedProcess(ctx, process))
 					s.SetToNeedRestart()
 				}
 				if applied && applyErr == nil {
@@ -188,12 +191,12 @@ func (s *XrayService) restartManagedXrayLocked(isForce bool) error {
 		cancel()
 		if err != nil {
 			if managedAccessChanged(process.GetConfig(), candidate) {
-				err = errors.Join(err, process.Stop())
+				err = errors.Join(err, stopManagedProcess(context.Background(), process))
 				s.SetToNeedRestart()
 			}
 			return err
 		}
-		if err := process.Stop(); err != nil {
+		if err := stopManagedProcess(context.Background(), process); err != nil {
 			return err
 		}
 		candidate, err = s.managedConfigCandidate(state)
@@ -214,12 +217,23 @@ func (s *XrayService) restartManagedXrayLocked(isForce bool) error {
 	s.xrayAPI.StatsLastValues = nil
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	return managed.StartManagedProcess(ctx, process, func(_ context.Context, caps *command.Capabilities) (*panelruntime.ManagedPolicyBootstrap, error) {
+	authority, err := openManagedAuthority(process, &policy)
+	if err != nil {
+		return err
+	}
+	if err := retainManagedAuthority(process, authority); err != nil {
+		return errors.Join(err, authority.Stop(ctx))
+	}
+	err = managed.StartManagedProcess(ctx, process, func(ctx context.Context, caps *command.Capabilities) (*panelruntime.ManagedPolicyBootstrap, error) {
 		if err := prepareSSHManagedResources(caps, candidate); err != nil {
 			return nil, err
 		}
-		return PrepareLocalClientPolicyBootstrap(caps, &policy)
+		return authority.Prepare(ctx, caps)
 	})
+	if err != nil {
+		return errors.Join(err, stopManagedAuthority(ctx, process))
+	}
+	return nil
 }
 
 func (s *XrayService) managedConfigCandidate(state *conf.ClientPolicyConfig) (*xray.Config, error) {
@@ -264,7 +278,7 @@ func (s *XrayService) ReconcileManagedChange(ctx context.Context) (bool, error) 
 	if err := ctx.Err(); err != nil {
 		s.SetToNeedRestart()
 		if wasManaged {
-			err = errors.Join(err, process.Stop())
+			err = errors.Join(err, stopManagedProcess(context.Background(), process))
 		}
 		return true, err
 	}
@@ -274,7 +288,7 @@ func (s *XrayService) ReconcileManagedChange(ctx context.Context) (bool, error) 
 	}
 	err = s.restartManagedXrayLocked(false)
 	if wasManaged && errors.Is(err, errManagedCandidateUnavailable) {
-		err = errors.Join(err, process.Stop())
+		err = errors.Join(err, stopManagedProcess(context.Background(), process))
 	}
 	if err != nil {
 		s.SetToNeedRestart()

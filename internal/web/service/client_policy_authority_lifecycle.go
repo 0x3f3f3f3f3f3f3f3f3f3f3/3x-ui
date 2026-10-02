@@ -1,0 +1,57 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"sync"
+	"time"
+
+	panelxray "github.com/mhsanaei/3x-ui/v3/internal/xray"
+)
+
+var localAuthority struct {
+	sync.RWMutex
+	process   *panelxray.Process
+	authority *managedAuthority
+}
+
+func retainManagedAuthority(process *panelxray.Process, authority *managedAuthority) error {
+	localAuthority.Lock()
+	defer localAuthority.Unlock()
+	if localAuthority.authority != nil || process == nil || authority == nil {
+		return ErrClientPolicyLedger
+	}
+	localAuthority.process, localAuthority.authority = process, authority
+	return nil
+}
+
+func managedAuthorityForProcess(process *panelxray.Process) *managedAuthority {
+	localAuthority.RLock()
+	defer localAuthority.RUnlock()
+	if localAuthority.process != process {
+		return nil
+	}
+	return localAuthority.authority
+}
+
+func stopManagedAuthority(ctx context.Context, process *panelxray.Process) error {
+	localAuthority.Lock()
+	defer localAuthority.Unlock()
+	if localAuthority.process != process || localAuthority.authority == nil {
+		return nil
+	}
+	if err := localAuthority.authority.Stop(ctx); err != nil {
+		return err
+	}
+	localAuthority.process, localAuthority.authority = nil, nil
+	return nil
+}
+
+func stopManagedProcess(ctx context.Context, process *panelxray.Process) error {
+	if ctx == nil || process == nil {
+		return ErrClientPolicyLedger
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	return errors.Join(stopManagedAuthority(ctx, process), process.Stop())
+}

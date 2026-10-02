@@ -461,7 +461,7 @@ func setupManagedActivationService(t *testing.T) (*XrayService, *model.Inbound, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	t.Logf("retained managed activation fixture: %s", dir)
 	t.Setenv("XUI_BIN_FOLDER", dir)
 	t.Setenv("XUI_DB_FOLDER", dir)
 	t.Setenv("XUI_LOG_FOLDER", dir)
@@ -523,6 +523,9 @@ func setupManagedActivationService(t *testing.T) (*XrayService, *model.Inbound, 
 	panelruntime.SetManager(panelruntime.NewManager(panelruntime.LocalDeps{APIEndpoint: svc.GetXrayAPIEndpoint, SetNeedRestart: svc.SetToNeedRestart, ManagedChange: svc.ReconcileManagedChange}))
 	t.Cleanup(func() {
 		if process := currentXrayProcess(); process != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			_ = stopManagedAuthority(ctx, process)
+			cancel()
 			_ = process.Stop()
 		}
 		restore()
