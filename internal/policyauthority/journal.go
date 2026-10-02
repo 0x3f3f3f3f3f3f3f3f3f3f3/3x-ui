@@ -18,7 +18,7 @@ const maxJournalBytes = 256 << 20
 const maxRecordBytes = 16 << 10
 const maxRecords = 100000
 
-var bucketNames = []string{"metadata", "accounts", "nodes", "boots", "grants", "requests", "changes"}
+var bucketNames = []string{"metadata", "accounts", "nodes", "boots", "grants", "requests", "changes", "migration"}
 var openJournal = bolt.Open
 
 func journalOptions() *bolt.Options {
@@ -30,9 +30,10 @@ func journalOptions() *bolt.Options {
 }
 
 type metadata struct {
-	Schema   uint64   `json:"schema"`
-	Identity Identity `json:"identity"`
-	Sequence uint64   `json:"sequence"`
+	Schema          uint64   `json:"schema"`
+	Identity        Identity `json:"identity"`
+	Sequence        uint64   `json:"sequence"`
+	MigrationDigest string   `json:"migrationDigest"`
 }
 
 type Journal struct {
@@ -53,6 +54,10 @@ func (j *Journal) Identity() Identity {
 }
 
 func Create(path string, seeds []Seed) (*Journal, Identity, error) {
+	return CreateWithMigration(path, seeds, nil, nil)
+}
+
+func createJournal(path string, seeds []Seed, deleted map[string]bool, records []MigrationRecord, digest string) (*Journal, Identity, error) {
 	if len(seeds) > maxRecords {
 		return nil, Identity{}, ErrRequest
 	}
@@ -89,11 +94,23 @@ func Create(path string, seeds []Seed) (*Journal, Identity, error) {
 				return err
 			}
 		}
-		if err := put(tx, "metadata", "state", metadata{Schema: 3, Identity: id}); err != nil {
+		if err := put(tx, "metadata", "state", metadata{Schema: 4, Identity: id, MigrationDigest: digest}); err != nil {
 			return err
 		}
 		for _, seed := range seeds {
-			if err := put(tx, "accounts", seed.ClientID, initialAccount(seed)); err != nil {
+			account := initialAccount(seed)
+			if deleted[seed.ClientID] {
+				account.Deleted = true
+				if err := advanceRevision(&account); err != nil {
+					return err
+				}
+			}
+			if err := put(tx, "accounts", seed.ClientID, account); err != nil {
+				return err
+			}
+		}
+		for _, record := range records {
+			if err := putMigrationRecord(tx, record); err != nil {
 				return err
 			}
 		}

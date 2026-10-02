@@ -11,16 +11,23 @@ import (
 // cumulative history. A restored/corrupt projection is not a new allowance.
 func (j *Journal) validate(tx *bolt.Tx) error {
 	for _, name := range bucketNames {
-		if tx.Bucket([]byte(name)) == nil || tx.Bucket([]byte(name)).Stats().KeyN > maxRecords {
+		limit := maxRecords
+		if name == "migration" {
+			limit = maxMigrationRecords
+		}
+		if tx.Bucket([]byte(name)) == nil || tx.Bucket([]byte(name)).Stats().KeyN > limit {
 			return ErrJournal
 		}
 	}
 	var meta metadata
-	if err := get(tx, "metadata", "state", &meta); err != nil || meta.Schema != 3 {
+	if err := get(tx, "metadata", "state", &meta); err != nil || meta.Schema != 4 {
 		return ErrJournal
 	}
 	if meta.Identity != j.id {
 		return ErrIdentity
+	}
+	if err := validateMigrationRecords(tx, meta.MigrationDigest); err != nil {
+		return err
 	}
 	accounts := make(map[string]Account)
 	calculated := make(map[string]Account)
