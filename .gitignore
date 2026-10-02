@@ -46,3 +46,7 @@ docker-compose.override.yml
 
 # Custom core build artifacts
 /build/
+
+# Python test helper caches
+__pycache__/
+*.py[cod]
