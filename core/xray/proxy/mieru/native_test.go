@@ -27,6 +27,7 @@ import (
 	_ "github.com/xtls/xray-core/main/distro/all"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/mieru"
+	"github.com/xtls/xray-core/testing/testauthority"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -193,7 +194,7 @@ func TestNativeMieruSharesTunnelPolicyAndLiveQuota(t *testing.T) {
 			exchangeNative(t, tunnel, "tunnel-first")
 			manager := instance.GetFeature((*clientpolicy.Manager)(nil)).(clientpolicy.Manager)
 			policy := clientpolicy.Policy{ClientID: nativeClientID, Version: 2, Enabled: true, Multiplier: 2000000, BurstBytes: 65536}
-			if err := manager.Apply(policy); err != nil {
+			if err := testauthority.Apply(t, manager.(*clientpolicy.Engine), policy); err != nil {
 				t.Fatal(err)
 			}
 			exchangeNative(t, conn, "mieru-second")
@@ -206,7 +207,7 @@ func TestNativeMieruSharesTunnelPolicyAndLiveQuota(t *testing.T) {
 				t.Fatalf("shared Tunnel ledger: %v want %v err %v", snapshot.Usage, want, err)
 			}
 			policy.Version, policy.QuotaBytes = 3, want.BilledBytes
-			if err := manager.Apply(policy); err != nil {
+			if err := testauthority.Apply(t, manager.(*clientpolicy.Engine), policy); err != nil {
 				t.Fatal(err)
 			}
 			for _, active := range []net.Conn{conn, tunnel} {
@@ -538,6 +539,10 @@ func nativeCoreConfigured(t *testing.T, port int, transport string, configure fu
 	t.Cleanup(func() { _ = instance.Close() })
 	if err := instance.Start(); err != nil {
 		t.Fatalf("native mieru listener cannot start: %v", err)
+	}
+	engine := instance.GetFeature((*clientpolicy.Manager)(nil)).(*clientpolicy.Engine)
+	for _, policy := range configJSON.ClientPolicy.Policies {
+		testauthority.Grant(t, engine, policy)
 	}
 	return instance
 }

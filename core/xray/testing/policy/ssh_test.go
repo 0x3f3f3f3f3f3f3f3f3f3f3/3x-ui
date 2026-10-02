@@ -30,6 +30,7 @@ import (
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/proxy"
 	coressh "github.com/xtls/xray-core/proxy/ssh"
+	"github.com/xtls/xray-core/testing/testauthority"
 	"golang.org/x/crypto/ssh"
 	netproxy "golang.org/x/net/proxy"
 )
@@ -225,7 +226,7 @@ func TestSSHOpenSSHDirectSharesTunnelLedgerAndDisable(t *testing.T) {
 	}
 	policy.Version++
 	policy.Enabled = false
-	if err := engine.Apply(policy); err != nil {
+	if err := testauthority.Apply(t, engine, policy); err != nil {
 		t.Fatal(err)
 	}
 	for _, c := range []net.Conn{first, second, tunnel} {
@@ -453,7 +454,7 @@ func TestSSHReversePortZeroCancellationAndDisableReleaseOwnedResources(t *testin
 	}
 	p.Version++
 	p.Enabled = false
-	if err := engine.Apply(p); err != nil {
+	if err := testauthority.Apply(t, engine, p); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
@@ -707,7 +708,7 @@ func TestSSHAndTunnelShareLiveDirectionalRates(t *testing.T) {
 			} else {
 				p.DownloadRate = 1
 			}
-			if err := engine.Apply(p); err != nil {
+			if err := testauthority.Apply(t, engine, p); err != nil {
 				t.Fatal(err)
 			}
 			sshExchange(t, flow, bytes.Repeat([]byte{'x'}, 65536))
@@ -741,7 +742,7 @@ func TestSSHAndTunnelShareLiveDirectionalRates(t *testing.T) {
 			p.UploadRate = 0
 			p.DownloadRate = 0
 			p.Multiplier = 500000
-			if err := engine.Apply(p); err != nil {
+			if err := testauthority.Apply(t, engine, p); err != nil {
 				t.Fatal(err)
 			}
 			select {
@@ -862,7 +863,7 @@ func TestSSHVerifiedAuthenticationCannotTransferRevokedOfferToReplacement(t *tes
 	config, m := sshConfig(t, sshPort, port(t), target)
 	instance := start(t, loopbackJSON(t, config))
 	engine := sshEngine(instance)
-	if err := engine.Apply(clientpolicy.Policy{ClientID: "replacement-owner", Version: 1, Enabled: true, Multiplier: 1000000, BurstBytes: 65536}); err != nil {
+	if err := testauthority.Apply(t, engine, clientpolicy.Policy{ClientID: "replacement-owner", Version: 1, Enabled: true, Multiplier: 1000000, BurstBytes: 65536}); err != nil {
 		t.Fatal(err)
 	}
 	manager := instance.GetFeature(inbound.ManagerType()).(inbound.Manager)
@@ -918,7 +919,7 @@ func TestSSHQuotaAndExpiryCloseIdleTransportAndTunnelSibling(t *testing.T) {
 				p.ExpiresAt = time.Now().Add(200 * time.Millisecond).UnixMilli()
 				wantReason = clientpolicy.ReasonExpired
 			}
-			if err := engine.Apply(p); err != nil {
+			if err := testauthority.Apply(t, engine, p); err != nil {
 				t.Fatal(err)
 			}
 			for _, c := range []*ssh.Client{client, idle} {

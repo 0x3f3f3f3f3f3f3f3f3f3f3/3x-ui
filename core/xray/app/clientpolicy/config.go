@@ -2,6 +2,7 @@ package clientpolicy
 
 import (
 	"context"
+	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/features"
@@ -22,6 +23,8 @@ type Manager interface {
 	InstallAuthorityGrant(ExecutionGrant) (ExecutionGrantState, error)
 	GetAuthorityGrant(string) (ExecutionGrantState, error)
 	SealAuthorityGrant(string, string) (ExecutionGrantState, error)
+	PauseAuthorityGrant(string, string) (ExecutionGrantState, error)
+	RenewAuthorityGrant(AuthorityGrantRenewal) (time.Time, error)
 	GetClient(string) (Policy, Snapshot, error)
 	Connections(string) ([]Connection, error)
 	CloseConnections(string) (int, error)

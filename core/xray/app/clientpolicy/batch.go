@@ -102,11 +102,13 @@ func (e *Engine) applyBatch(policies []Policy, commit bool) error {
 		c.firstUsedAt = c.firstUseForPolicyLocked(p)
 		c.policy = p
 		e.clients[p.ClientID] = c
-		c.buckets[Upload].update(p.UploadRate, p.BurstBytes, now)
-		c.buckets[Download].update(p.DownloadRate, p.BurstBytes, now)
+		if e.bootID == "" || c.grant == nil {
+			c.buckets[Upload].update(p.UploadRate, p.BurstBytes, now)
+			c.buckets[Download].update(p.DownloadRate, p.BurstBytes, now)
+		}
 		c.notifyLocked()
 		c.armExpiryLocked()
-		if c.reasonsLocked(now) != 0 {
+		if c.reasonsLocked(now) != 0 && !c.transitionPendingLocked(now) {
 			closeList = append(closeList, c.sessionsLocked()...)
 		}
 	}

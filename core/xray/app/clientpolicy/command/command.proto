@@ -39,7 +39,8 @@ message ExecutionGrant {
  AuthorityShare download = 12;
  uint64 lease_duration_millis = 13;
 }
-message AuthorityGrantRequest { string expected_boot_id = 1; string client_id = 2; string grant_id = 3; }
+message AuthorityGrantRequest { string expected_boot_id = 1; string client_id = 2; string grant_id = 3; bool preserve_sessions = 4; }
+message AuthorityRenewalRequest { string expected_boot_id = 1; string client_id = 2; string grant_id = 3; string challenge_id = 4; uint64 sequence = 5; uint64 lease_duration_millis = 6; }
 message ExecutionGrantState { ExecutionGrant grant = 1; Usage usage = 2; uint64 sequence = 3; bool sealed = 4; }
 message Usage {
  uint64 raw_upload = 1;
@@ -88,6 +89,7 @@ service ClientPolicyService {
  rpc InstallAuthorityGrant(ExecutionGrant) returns (ExecutionGrantState);
  rpc GetAuthorityGrant(AuthorityGrantRequest) returns (ExecutionGrantState);
  rpc SealAuthorityGrant(AuthorityGrantRequest) returns (ExecutionGrantState);
+ rpc RenewAuthorityGrant(AuthorityRenewalRequest) returns (Empty);
  rpc GetClient(ClientRequest) returns (ClientState);
  rpc ApplyPolicies(ApplyRequest) returns (Empty);
  rpc InitializeClient(InitializeRequest) returns (Empty);

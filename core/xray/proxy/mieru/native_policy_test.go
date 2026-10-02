@@ -11,6 +11,7 @@ import (
 
 	miCommon "github.com/enfein/mieru/v3/apis/common"
 	"github.com/xtls/xray-core/app/clientpolicy"
+	"github.com/xtls/xray-core/testing/testauthority"
 )
 
 func TestNativeMieruDisableAndExpiryCloseTCPAndUDP(t *testing.T) {
@@ -53,7 +54,7 @@ func TestNativeMieruDisableAndExpiryCloseTCPAndUDP(t *testing.T) {
 						policy.ExpiresAt = time.Now().Add(120 * time.Millisecond).UnixMilli()
 						wantReason = clientpolicy.ReasonExpired
 					}
-					if err := manager.Apply(policy); err != nil {
+					if err := testauthority.Apply(t, manager.(*clientpolicy.Engine), policy); err != nil {
 						t.Fatal(err)
 					}
 					_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
@@ -100,22 +101,29 @@ func TestNativeMieruAndTunnelShareUploadAndDownloadRate(t *testing.T) {
 					policy.Version++
 					policy.UploadRate, policy.DownloadRate = 0, 32768
 				}
-				if err := manager.Apply(policy); err != nil {
+				if err := testauthority.Apply(t, manager.(*clientpolicy.Engine), policy); err != nil {
 					t.Fatal(err)
 				}
 				results := make(chan error, 2)
 				start := time.Now()
 				for _, active := range []net.Conn{conn, tunnel} {
 					go func(active net.Conn) {
+						role := "Tunnel"
+						if active == conn {
+							role = "mieru"
+						}
 						_ = active.SetDeadline(time.Now().Add(5 * time.Second))
 						if _, err := active.Write(payload); err != nil {
-							results <- err
+							results <- fmt.Errorf("%s/%s write: %w", role, direction, err)
 							return
 						}
 						result := make([]byte, len(payload))
 						_, err := io.ReadFull(active, result)
 						if err == nil && !bytes.Equal(result, payload) {
 							err = fmt.Errorf("rate-limited payload corruption")
+						}
+						if err != nil {
+							err = fmt.Errorf("%s/%s reply: %w", role, direction, err)
 						}
 						results <- err
 					}(active)

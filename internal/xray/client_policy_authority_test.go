@@ -41,6 +41,31 @@ func (p *authorityAdapterProbe) SealAuthorityGrant(_ context.Context, r *command
 	return state, err
 }
 
+func (p *authorityAdapterProbe) RenewAuthorityGrant(_ context.Context, r *command.AuthorityRenewalRequest, _ ...grpc.CallOption) (*command.Empty, error) {
+	p.boot = r.ExpectedBootId
+	p.calls++
+	return &command.Empty{}, nil
+}
+
+func TestAuthorityAdapterRenewsOnlyCurrentCapableBoot(t *testing.T) {
+	boot := "0123456789abcdef0123456789abcdef"
+	p := &authorityAdapterProbe{}
+	c := &ClientPolicyAPI{client: p, capabilities: &command.Capabilities{InstanceId: "source", BootId: boot, Capabilities: []string{"fresh-core-incarnation-v1", "monotonic-authority-challenge-v1", "boot-bound-execution-grants-v1", "monotonic-grant-renewal-v1"}}}
+	r := &command.AuthorityRenewalRequest{ExpectedBootId: boot, ClientId: "owner", GrantId: "grant", ChallengeId: "challenge", Sequence: 1, LeaseDurationMillis: 1000}
+	if err := c.RenewAuthorityGrant(context.Background(), r); err != nil || p.calls != 1 || p.boot != boot {
+		t.Fatalf("renewal: %v/%+v", err, p)
+	}
+	r.ExpectedBootId = "retired"
+	if err := c.RenewAuthorityGrant(context.Background(), r); !errors.Is(err, ErrClientPolicyCapability) || p.calls != 1 {
+		t.Fatalf("retired renewal sent: %v/%d", err, p.calls)
+	}
+	r.ExpectedBootId = boot
+	c.capabilities.Capabilities = c.capabilities.Capabilities[:3]
+	if err := c.RenewAuthorityGrant(context.Background(), r); !errors.Is(err, ErrClientPolicyCapability) || p.calls != 1 {
+		t.Fatalf("unsupported renewal sent: %v/%d", err, p.calls)
+	}
+}
+
 func TestAuthorityAdapterCarriesNegotiatedBootAndRejectsUnsupportedCalls(t *testing.T) {
 	boot := "0123456789abcdef0123456789abcdef"
 	probe := &authorityAdapterProbe{}

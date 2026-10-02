@@ -25,6 +25,7 @@ const (
 	ClientPolicyService_InstallAuthorityGrant_FullMethodName = "/xray.app.clientpolicy.command.v1.ClientPolicyService/InstallAuthorityGrant"
 	ClientPolicyService_GetAuthorityGrant_FullMethodName     = "/xray.app.clientpolicy.command.v1.ClientPolicyService/GetAuthorityGrant"
 	ClientPolicyService_SealAuthorityGrant_FullMethodName    = "/xray.app.clientpolicy.command.v1.ClientPolicyService/SealAuthorityGrant"
+	ClientPolicyService_RenewAuthorityGrant_FullMethodName   = "/xray.app.clientpolicy.command.v1.ClientPolicyService/RenewAuthorityGrant"
 	ClientPolicyService_GetClient_FullMethodName             = "/xray.app.clientpolicy.command.v1.ClientPolicyService/GetClient"
 	ClientPolicyService_ApplyPolicies_FullMethodName         = "/xray.app.clientpolicy.command.v1.ClientPolicyService/ApplyPolicies"
 	ClientPolicyService_InitializeClient_FullMethodName      = "/xray.app.clientpolicy.command.v1.ClientPolicyService/InitializeClient"
@@ -45,6 +46,7 @@ type ClientPolicyServiceClient interface {
 	InstallAuthorityGrant(ctx context.Context, in *ExecutionGrant, opts ...grpc.CallOption) (*ExecutionGrantState, error)
 	GetAuthorityGrant(ctx context.Context, in *AuthorityGrantRequest, opts ...grpc.CallOption) (*ExecutionGrantState, error)
 	SealAuthorityGrant(ctx context.Context, in *AuthorityGrantRequest, opts ...grpc.CallOption) (*ExecutionGrantState, error)
+	RenewAuthorityGrant(ctx context.Context, in *AuthorityRenewalRequest, opts ...grpc.CallOption) (*Empty, error)
 	GetClient(ctx context.Context, in *ClientRequest, opts ...grpc.CallOption) (*ClientState, error)
 	ApplyPolicies(ctx context.Context, in *ApplyRequest, opts ...grpc.CallOption) (*Empty, error)
 	InitializeClient(ctx context.Context, in *InitializeRequest, opts ...grpc.CallOption) (*Empty, error)
@@ -117,6 +119,16 @@ func (c *clientPolicyServiceClient) SealAuthorityGrant(ctx context.Context, in *
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ExecutionGrantState)
 	err := c.cc.Invoke(ctx, ClientPolicyService_SealAuthorityGrant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *clientPolicyServiceClient) RenewAuthorityGrant(ctx context.Context, in *AuthorityRenewalRequest, opts ...grpc.CallOption) (*Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, ClientPolicyService_RenewAuthorityGrant_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -213,6 +225,7 @@ type ClientPolicyServiceServer interface {
 	InstallAuthorityGrant(context.Context, *ExecutionGrant) (*ExecutionGrantState, error)
 	GetAuthorityGrant(context.Context, *AuthorityGrantRequest) (*ExecutionGrantState, error)
 	SealAuthorityGrant(context.Context, *AuthorityGrantRequest) (*ExecutionGrantState, error)
+	RenewAuthorityGrant(context.Context, *AuthorityRenewalRequest) (*Empty, error)
 	GetClient(context.Context, *ClientRequest) (*ClientState, error)
 	ApplyPolicies(context.Context, *ApplyRequest) (*Empty, error)
 	InitializeClient(context.Context, *InitializeRequest) (*Empty, error)
@@ -248,6 +261,9 @@ func (UnimplementedClientPolicyServiceServer) GetAuthorityGrant(context.Context,
 }
 func (UnimplementedClientPolicyServiceServer) SealAuthorityGrant(context.Context, *AuthorityGrantRequest) (*ExecutionGrantState, error) {
 	return nil, status.Error(codes.Unimplemented, "method SealAuthorityGrant not implemented")
+}
+func (UnimplementedClientPolicyServiceServer) RenewAuthorityGrant(context.Context, *AuthorityRenewalRequest) (*Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method RenewAuthorityGrant not implemented")
 }
 func (UnimplementedClientPolicyServiceServer) GetClient(context.Context, *ClientRequest) (*ClientState, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetClient not implemented")
@@ -398,6 +414,24 @@ func _ClientPolicyService_SealAuthorityGrant_Handler(srv interface{}, ctx contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ClientPolicyServiceServer).SealAuthorityGrant(ctx, req.(*AuthorityGrantRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ClientPolicyService_RenewAuthorityGrant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AuthorityRenewalRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ClientPolicyServiceServer).RenewAuthorityGrant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ClientPolicyService_RenewAuthorityGrant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ClientPolicyServiceServer).RenewAuthorityGrant(ctx, req.(*AuthorityRenewalRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -576,6 +610,10 @@ var ClientPolicyService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SealAuthorityGrant",
 			Handler:    _ClientPolicyService_SealAuthorityGrant_Handler,
+		},
+		{
+			MethodName: "RenewAuthorityGrant",
+			Handler:    _ClientPolicyService_RenewAuthorityGrant_Handler,
 		},
 		{
 			MethodName: "GetClient",

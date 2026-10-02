@@ -47,6 +47,16 @@ func TestPrivateAuthorityGrantRPCCommitsUsageAndSeal(t *testing.T) {
 	if err != nil || state.GetUsage().GetRawUpload() != 3 || state.GetUsage().GetBilledBytes() != 4 || state.GetUsage().GetRemainder() != 500000 || state.GetSequence() == 0 {
 		t.Fatalf("checkpoint: %+v/%v", state, err)
 	}
+	renewChallenge, err := s.GetAuthorityChallenge(ctx, &AuthorityChallengeRequest{ExpectedBootId: caps.BootId})
+	if err != nil {
+		t.Fatal(err)
+	}
+	renewal := &AuthorityRenewalRequest{ExpectedBootId: caps.BootId, ClientId: p.ClientID, GrantId: g.GrantId, ChallengeId: renewChallenge.ChallengeId, Sequence: 1, LeaseDurationMillis: 2000}
+	for range 2 {
+		if _, err := s.RenewAuthorityGrant(ctx, renewal); err != nil {
+			t.Fatalf("private renewal: %v", err)
+		}
+	}
 	sealed, err := s.SealAuthorityGrant(ctx, request)
 	if err != nil || !sealed.GetSealed() || !proto.Equal(sealed.GetUsage(), state.GetUsage()) {
 		t.Fatalf("seal: %+v/%v", sealed, err)
@@ -71,6 +81,7 @@ func TestAuthorityGrantRPCRejectsNonprivateAndMalformedCalls(t *testing.T) {
 		func(ctx context.Context) error { _, err := s.InstallAuthorityGrant(ctx, nil); return err },
 		func(ctx context.Context) error { _, err := s.GetAuthorityGrant(ctx, nil); return err },
 		func(ctx context.Context) error { _, err := s.SealAuthorityGrant(ctx, nil); return err },
+		func(ctx context.Context) error { _, err := s.RenewAuthorityGrant(ctx, nil); return err },
 	}
 	for i, check := range checks {
 		if err := check(context.Background()); status.Code(err) != codes.PermissionDenied {

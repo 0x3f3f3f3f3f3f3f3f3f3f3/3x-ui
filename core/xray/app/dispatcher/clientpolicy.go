@@ -105,7 +105,9 @@ func (r *managedReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	if r.pending.IsEmpty() {
 		r.pending, r.pendingErr = r.Reader.ReadMultiBuffer()
 		if r.pending.IsEmpty() {
-			return r.pending, r.pendingErr
+			buf.ReleaseMulti(r.pending)
+			r.pending = nil
+			return nil, r.pendingErr
 		}
 	}
 	for {

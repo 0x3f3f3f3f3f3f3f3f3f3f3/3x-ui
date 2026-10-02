@@ -85,9 +85,29 @@ func (s *service) SealAuthorityGrant(ctx context.Context, r *AuthorityGrantReque
 	if err := s.authorizeGrantRequest(ctx, r); err != nil {
 		return nil, err
 	}
-	state, err := s.engine.SealAuthorityGrant(r.ClientId, r.GrantId)
+	var state clientpolicy.ExecutionGrantState
+	var err error
+	if r.PreserveSessions {
+		state, err = s.engine.PauseAuthorityGrant(r.ClientId, r.GrantId)
+	} else {
+		state, err = s.engine.SealAuthorityGrant(r.ClientId, r.GrantId)
+	}
 	if err != nil {
 		return nil, rpcError(err)
 	}
 	return executionGrantState(state), nil
+}
+
+func (s *service) RenewAuthorityGrant(ctx context.Context, r *AuthorityRenewalRequest) (*Empty, error) {
+	if err := s.authorize(ctx); err != nil {
+		return nil, err
+	}
+	if r == nil || r.ClientId == "" || r.GrantId == "" || r.ChallengeId == "" || r.Sequence == 0 || r.LeaseDurationMillis == 0 || r.LeaseDurationMillis > uint64(clientpolicy.MaxAuthorityLeaseDuration.Milliseconds()) {
+		return nil, status.Error(codes.InvalidArgument, "a complete bounded grant renewal is required")
+	}
+	_, err := s.engine.RenewAuthorityGrant(clientpolicy.AuthorityGrantRenewal{BootID: r.ExpectedBootId, ClientID: r.ClientId, GrantID: r.GrantId, ChallengeID: r.ChallengeId, Sequence: r.Sequence, LeaseDuration: time.Duration(r.LeaseDurationMillis) * time.Millisecond})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &Empty{}, nil
 }

@@ -72,3 +72,24 @@ func (c *ClientPolicyAPI) SealAuthorityGrant(ctx context.Context, clientID, gran
 	}
 	return c.client.SealAuthorityGrant(ctx, &command.AuthorityGrantRequest{ExpectedBootId: c.capabilities.BootId, ClientId: clientID, GrantId: grantID})
 }
+
+func (c *ClientPolicyAPI) RenewAuthorityGrant(ctx context.Context, request *command.AuthorityRenewalRequest) error {
+	if err := c.requireAuthorityCapabilities(); err != nil {
+		return err
+	}
+	if !slices.Contains(c.capabilities.Capabilities, "monotonic-grant-renewal-v1") || request == nil || request.ExpectedBootId != c.capabilities.BootId {
+		return ErrClientPolicyCapability
+	}
+	_, err := c.client.RenewAuthorityGrant(ctx, request)
+	return err
+}
+
+func (c *ClientPolicyAPI) PauseAuthorityGrant(ctx context.Context, clientID, grantID string) (*command.ExecutionGrantState, error) {
+	if err := c.requireAuthorityCapabilities(); err != nil {
+		return nil, err
+	}
+	if !slices.Contains(c.capabilities.Capabilities, "bounded-grant-handoff-v1") || clientID == "" || grantID == "" {
+		return nil, ErrClientPolicyCapability
+	}
+	return c.client.SealAuthorityGrant(ctx, &command.AuthorityGrantRequest{ExpectedBootId: c.capabilities.BootId, ClientId: clientID, GrantId: grantID, PreserveSessions: true})
+}

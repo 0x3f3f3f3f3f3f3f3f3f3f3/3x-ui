@@ -13,8 +13,22 @@ func (s *Session) StreamChunkSize(direction Direction) (uint64, error) {
 	}
 	c := s.client
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	var closed []*Session
+	defer func() { c.mu.Unlock(); closeSessions(closed) }()
+	for {
+		if s.closed.Load() || s.ctx.Err() != nil {
+			return 0, ErrSessionClosed
+		}
+		waiting, err := s.awaitGrantTransitionLocked(time.Now())
+		if err != nil {
+			return 0, err
+		}
+		if !waiting {
+			break
+		}
+	}
 	if c.reasonsLocked(time.Now()) != 0 {
+		closed = c.sessionsLocked()
 		return 0, ErrRestricted
 	}
 	if c.engine.bootID != "" {

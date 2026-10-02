@@ -3,6 +3,7 @@ package dispatcher_test
 import (
 	"bytes"
 	"context"
+	"io"
 	"path/filepath"
 	"testing"
 	"time"
@@ -67,5 +68,37 @@ func TestGrantedStreamUsesDirectionalShareSmallerThanBuffer(t *testing.T) {
 	snapshot, err := e.Snapshot(p.ClientID)
 	if err != nil || snapshot.Usage.RawUpload != uint64(len(payload)) || snapshot.Usage.RawDownload != uint64(len(payload)) || snapshot.Usage.BilledBytes != uint64(len(payload))*4 {
 		t.Fatalf("split grant stream changed accounting: %+v/%v", snapshot, err)
+	}
+}
+
+type emptyOwnedReader struct{}
+
+func (emptyOwnedReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	return buf.MultiBuffer{buf.New()}, io.EOF
+}
+
+func TestManagedEmptyReadDoesNotRetainReturnedBufferOwnership(t *testing.T) {
+	e := clientpolicy.NewEngine()
+	defer e.Close()
+	if err := e.Apply(clientpolicy.Policy{ClientID: "owner", Version: 1, Enabled: true, Multiplier: 1000000, BurstBytes: 65536}); err != nil {
+		t.Fatal(err)
+	}
+	link := &transport.Link{Reader: emptyOwnedReader{}, Writer: buf.NewWriter(io.Discard)}
+	ctx := session.ContextWithInbound(context.Background(), &session.Inbound{User: &protocol.MemoryUser{ClientID: "owner"}})
+	_, release, err := dispatcher.ManageLinkForTest(e, ctx, net.TCPDestination(net.LocalHostIP, 1234), link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	mb, err := link.Reader.ReadMultiBuffer()
+	defer buf.ReleaseMulti(mb)
+	if err != io.EOF {
+		t.Fatalf("empty read error: %v", err)
+	}
+	common.Interrupt(link.Reader)
+	for _, b := range mb {
+		if b == nil {
+			t.Fatal("interrupt reclaimed an already returned buffer")
+		}
 	}
 }

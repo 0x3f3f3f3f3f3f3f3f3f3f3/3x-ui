@@ -23,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/proxy"
 	coreSnell "github.com/xtls/xray-core/proxy/snell"
+	"github.com/xtls/xray-core/testing/testauthority"
 )
 
 const (
@@ -205,7 +206,7 @@ func TestNativeSnellQuotaExpiryAndMissingPolicy(t *testing.T) {
 					b := make([]byte, 256)
 					_, _ = flow.Read(b)
 					snap, err := engine.Snapshot(snellOwner)
-					if err != nil || snap.Usage.BilledBytes != 1536 || snap.Usage.RawUpload+snap.Usage.RawDownload != 768 || snap.Reasons != clientpolicy.ReasonQuota {
+					if err != nil || snap.Usage.BilledBytes != 1536 || snap.Usage.RawUpload+snap.Usage.RawDownload != 768 || snap.Reasons != (clientpolicy.ReasonQuota|clientpolicy.ReasonAuthority) {
 						t.Fatalf("native quota exceeded/failed: %+v err=%v", snap, err)
 					}
 				} else {
@@ -215,7 +216,7 @@ func TestNativeSnellQuotaExpiryAndMissingPolicy(t *testing.T) {
 					}
 					p.Version++
 					p.ExpiresAt = time.Now().Add(-time.Second).UnixMilli()
-					if err := engine.Apply(p); err != nil {
+					if err := testauthority.Apply(t, engine, p); err != nil {
 						t.Fatal(err)
 					}
 					assertPasswordProxyClosed(t, flow)
@@ -369,7 +370,7 @@ func TestNativeSnellUDPDisableExpiryQuotaAndCredentialCleanup(t *testing.T) {
 					} else {
 						p.ExpiresAt = time.Now().Add(-time.Second).UnixMilli()
 					}
-					if err := engine.Apply(p); err != nil {
+					if err := testauthority.Apply(t, engine, p); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -383,7 +384,7 @@ func TestNativeSnellUDPDisableExpiryQuotaAndCredentialCleanup(t *testing.T) {
 				if err != nil || snap.ActiveSessions != 0 {
 					t.Fatalf("UDP association retained policy resources: %+v err=%v", snap, err)
 				}
-				if mode == "quota" && (snap.Usage.BilledBytes != 36 || snap.Reasons != clientpolicy.ReasonQuota) {
+				if mode == "quota" && (snap.Usage.BilledBytes != 36 || snap.Reasons != (clientpolicy.ReasonQuota|clientpolicy.ReasonAuthority)) {
 					t.Fatalf("UDP exceeded canonical quota: %+v", snap)
 				}
 			})
@@ -622,7 +623,7 @@ func TestNativeSnellTCPVersionsPolicyAndRouteDeny(t *testing.T) {
 			}
 			policy.Version++
 			policy.Enabled = false
-			if err := engine.Apply(policy); err != nil {
+			if err := testauthority.Apply(t, engine, policy); err != nil {
 				t.Fatal(err)
 			}
 			assertPasswordProxyClosed(t, flow)

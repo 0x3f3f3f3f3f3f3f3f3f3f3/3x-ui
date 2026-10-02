@@ -33,6 +33,7 @@ type clientState struct {
 	grant              *runtimeAuthorityGrant
 	previousGrant      *storedAuthorityGrant
 	grantExpiry        *time.Timer
+	pendingOpens       int
 	firstUsedAt        int64
 	initializationHash string
 	engine             *Engine
@@ -95,7 +96,8 @@ func closeSessions(sessions []*Session) {
 func (c *clientState) expire() {
 	c.mu.Lock()
 	var sessions []*Session
-	if c.reasonsLocked(time.Now()) != 0 {
+	now := time.Now()
+	if c.reasonsLocked(now) != 0 && !c.transitionPendingLocked(now) {
 		sessions = c.sessionsLocked()
 		c.notifyLocked()
 	}
@@ -217,6 +219,10 @@ func (e *Engine) Open(ctx context.Context, metadata Metadata, closeFn func()) (*
 		return nil, ctx.Err()
 	}
 	c.mu.Lock()
+	if err := c.awaitOpenTransitionLocked(ctx); err != nil {
+		c.mu.Unlock()
+		return nil, err
+	}
 	if c.closed {
 		c.mu.Unlock()
 		return nil, ErrEngineClosed
@@ -300,6 +306,13 @@ func (s *Session) Admit(direction Direction, n uint64) error {
 			return ErrSessionClosed
 		}
 		now := time.Now()
+		if waiting, err := s.awaitGrantTransitionLocked(now); waiting {
+			c.mu.Unlock()
+			if err != nil {
+				return err
+			}
+			continue
+		}
 		if c.reasonsLocked(now) != 0 {
 			sessions := c.sessionsLocked()
 			c.mu.Unlock()

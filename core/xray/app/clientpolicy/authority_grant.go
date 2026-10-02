@@ -52,7 +52,9 @@ type storedAuthorityGrant struct {
 
 type runtimeAuthorityGrant struct {
 	storedAuthorityGrant
-	deadline time.Time
+	deadline         time.Time
+	renewal          AuthorityGrantRenewal
+	preserveSessions bool
 }
 
 func validAuthorityBinding(binding AuthorityBinding) bool {
@@ -172,6 +174,12 @@ func (e *Engine) InstallAuthorityGrant(grant ExecutionGrant) (ExecutionGrantStat
 			c.mu.Unlock()
 			return ExecutionGrantState{}, ErrAuthority
 		}
+		if c.checkpointDirty {
+			if err := c.persistLocked(c.policy, c.revoked, 0); err != nil {
+				c.mu.Unlock()
+				return ExecutionGrantState{}, e.storageFailed(err)
+			}
+		}
 		state, err := c.authorityStateLocked()
 		c.mu.Unlock()
 		return state, err
@@ -212,6 +220,10 @@ func (e *Engine) InstallAuthorityGrant(grant ExecutionGrant) (ExecutionGrantStat
 }
 
 func (e *Engine) SealAuthorityGrant(clientID, grantID string) (ExecutionGrantState, error) {
+	return e.sealAuthorityGrant(clientID, grantID, false)
+}
+
+func (e *Engine) sealAuthorityGrant(clientID, grantID string, preserveSessions bool) (ExecutionGrantState, error) {
 	c, err := e.state(clientID)
 	if err != nil {
 		return ExecutionGrantState{}, err
@@ -227,17 +239,21 @@ func (e *Engine) SealAuthorityGrant(clientID, grantID string) (ExecutionGrantSta
 	}
 	if !c.grant.Sealed {
 		c.grant.Sealed = true
+		c.grant.preserveSessions = preserveSessions
 		if err := c.persistLocked(c.policy, c.revoked, 0); err != nil {
 			c.mu.Unlock()
 			return ExecutionGrantState{}, e.storageFailed(err)
 		}
 		c.notifyLocked()
-		if c.grantExpiry != nil {
+		if c.grantExpiry != nil && !preserveSessions {
 			c.grantExpiry.Stop()
 		}
 	}
 	state, err := c.authorityStateLocked()
-	sessions := c.sessionsLocked()
+	var sessions []*Session
+	if !preserveSessions || !c.transitionPendingLocked(time.Now()) {
+		sessions = c.sessionsLocked()
+	}
 	c.mu.Unlock()
 	closeSessions(sessions)
 	return state, err

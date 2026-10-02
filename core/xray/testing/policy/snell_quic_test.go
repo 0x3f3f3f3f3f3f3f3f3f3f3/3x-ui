@@ -19,6 +19,7 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/features/inbound"
 	coreSnell "github.com/xtls/xray-core/proxy/snell"
+	"github.com/xtls/xray-core/testing/testauthority"
 )
 
 func snellQUICClient(t *testing.T, listen int) net.Conn {
@@ -144,7 +145,7 @@ func TestNativeSnellV5QUICDisableExpiryQuotaRemovalAndHandlerCleanup(t *testing.
 				} else {
 					p.ExpiresAt = time.Now().Add(-time.Second).UnixMilli()
 				}
-				if err := engine.Apply(p); err != nil {
+				if err := testauthority.Apply(t, engine, p); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -155,7 +156,7 @@ func TestNativeSnellV5QUICDisableExpiryQuotaRemovalAndHandlerCleanup(t *testing.
 					t.Fatal(err)
 				}
 				if snap.ActiveSessions == 0 {
-					if mode == "quota" && (snap.Usage.BilledBytes != 3072 || snap.Reasons != clientpolicy.ReasonQuota) {
+					if mode == "quota" && (snap.Usage.BilledBytes != 3072 || snap.Reasons != (clientpolicy.ReasonQuota|clientpolicy.ReasonAuthority)) {
 						t.Fatalf("native QUIC exceeded quota: %+v", snap)
 					}
 					break
@@ -483,7 +484,7 @@ func TestNativeSnellV5QUICInboundEnvelopeRawRepeatedCanonicalLedger(t *testing.T
 	}
 	policy.Enabled = false
 	policy.Version++
-	if err = engine.Apply(policy); err != nil {
+	if err = testauthority.Apply(t, engine, policy); err != nil {
 		t.Fatal(err)
 	}
 	client.SetDeadline(time.Now().Add(150 * time.Millisecond))

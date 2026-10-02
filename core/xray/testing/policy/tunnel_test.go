@@ -15,6 +15,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/infra/conf"
 	_ "github.com/xtls/xray-core/main/distro/all"
+	"github.com/xtls/xray-core/testing/testauthority"
 )
 
 func tcpEcho(t *testing.T) net.Listener {
@@ -191,6 +192,14 @@ func port(t *testing.T) int {
 }
 
 func start(t *testing.T, config string) *core.Instance {
+	return startCore(t, config, true)
+}
+
+func startWithoutAuthority(t *testing.T, config string) *core.Instance {
+	return startCore(t, config, false)
+}
+
+func startCore(t *testing.T, config string, grantFixture bool) *core.Instance {
 	t.Helper()
 	var raw map[string]interface{}
 	if err := json.Unmarshal([]byte(config), &raw); err != nil {
@@ -222,6 +231,12 @@ func start(t *testing.T, config string) *core.Instance {
 	t.Cleanup(func() { s.Close() })
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
+	}
+	if grantFixture && c.ClientPolicy != nil {
+		engine := s.GetFeature((*clientpolicy.Manager)(nil)).(*clientpolicy.Engine)
+		for _, policy := range c.ClientPolicy.Policies {
+			testauthority.Grant(t, engine, policy)
+		}
 	}
 	return s
 }
