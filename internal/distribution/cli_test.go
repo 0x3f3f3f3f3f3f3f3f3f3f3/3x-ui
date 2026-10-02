@@ -1,0 +1,48 @@
+package distribution
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestPackageCommandInfoAndFailedVerifyLeaveConfiguredStateUntouched(t *testing.T) {
+	root := t.TempDir()
+	key, state := filepath.Join(root, "business-key"), filepath.Join(root, "accounting-state")
+	for _, name := range []string{key, state} {
+		if err := os.WriteFile(name, []byte("preserved"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("XUI_DB_DSN", "unreachable-configured-database")
+	t.Setenv("XUI_NODE_TOKEN_KEY_FILE", key)
+	t.Setenv("XUI_CUSTOM_CORE_POLICY_STATE_DIR", state)
+	var output bytes.Buffer
+	if err := RunCommand(context.Background(), []string{"info"}, &output); err != nil {
+		t.Fatal(err)
+	}
+	var report BinaryReport
+	if err := json.Unmarshal(output.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Target != CurrentTarget() || report.Compatibility != "traffic-control-v1" {
+		t.Fatalf("bad panel report: %+v", report)
+	}
+	if err := RunCommand(context.Background(), []string{"verify", root}, &output); err == nil {
+		t.Fatal("missing package accepted")
+	}
+	for _, name := range []string{key, state} {
+		b, err := os.ReadFile(name)
+		if err != nil || string(b) != "preserved" {
+			t.Fatalf("changed state: %s %v", name, err)
+		}
+	}
+	for _, args := range [][]string{nil, {"info", "extra"}, {"verify"}, {"unknown"}} {
+		if err := RunCommand(context.Background(), args, &output); err == nil {
+			t.Fatalf("accepted invalid command %v", args)
+		}
+	}
+}

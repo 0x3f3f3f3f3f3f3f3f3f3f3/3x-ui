@@ -57,6 +57,9 @@ func init() {
 	}
 }
 
+// BuildRevision returns the injected source identity, including any dirty marker.
+func BuildRevision() string { return build }
+
 // Version returns Xray's version as a string, in the form of "x.y.z" where x, y and z are numbers.
 // ".z" part may be omitted in regular releases.
 func Version() string {

@@ -55,11 +55,9 @@ func rpcError(err error) error {
 	return status.Error(code, err.Error())
 }
 
-func (s *service) GetCapabilities(ctx context.Context, _ *Empty) (*Capabilities, error) {
-	if err := s.authorize(ctx); err != nil {
-		return nil, err
-	}
-	c := s.engine.Capabilities()
+// BuiltinCapabilities reports compiled data-path features. Configured-instance
+// durability remains exclusive to the authorized live service response.
+func BuiltinCapabilities() []string {
 	features := []string{"trusted-tunnel-client-id-v1", "trusted-vless-client-id-v1", "trusted-vmess-client-id-v1", "trusted-trojan-client-id-v1", "trusted-shadowsocks-aead-client-id-v1", "shared-directional-rate-v1", "fixed-point-billing-v1", "quota-window-baseline-v1", "live-session-control-v1", "inbound-scoped-session-close-v1", "authenticated-credential-revocation-v1"}
 	features = append(features, "tunnel-source-acl-v1")
 	features = append(features, "tunnel-fixed-outbound-v1")
@@ -67,6 +65,15 @@ func (s *service) GetCapabilities(ctx context.Context, _ *Empty) (*Capabilities,
 	features = append(features, "trusted-mieru-client-id-v1")
 	features = append(features, "trusted-ssh-client-id-v1")
 	features = append(features, "trusted-snell-client-id-v1")
+	return features
+}
+
+func (s *service) GetCapabilities(ctx context.Context, _ *Empty) (*Capabilities, error) {
+	if err := s.authorize(ctx); err != nil {
+		return nil, err
+	}
+	c := s.engine.Capabilities()
+	features := BuiltinCapabilities()
 	if c.Persistent {
 		features = append(features, "local-durable-reservations-v1", "committed-cumulative-ledger-v1", "create-only-usage-seed-v1", "durable-first-use-expiry-v1")
 	}
