@@ -1094,3 +1094,25 @@ SQLite/PostgreSQL checks;56 core race parents and1807 frontend tests pass.
 All34 preceding artifacts are unchanged. See native-snell-panel-testing.md for
 hashes, negative evidence and boundaries. Continue Task13 installation/upgrade/
 distribution for this core; the remaining original requirements stay open.
+
+## Shared policy and Tunnel local checkpoint — 2026-10-02
+
+After the native Snell/mieru/SSH panel checkpoints and published official-update
+guard, source `7d96018973b756c68a4f967151b9e4c0da45f638` completes the bulk policy
+form and repaired local Tunnel forwarding acceptance. The one whole-stage
+review's three Important issues and stale status note were addressed in one
+correction batch; full regression also caught and fixed Snell source-socket
+cancellation and a controlled test-port collision.
+
+Fresh evidence: 1819 frontend tests, root Go regression, 98 core test packages,
+114 complete pinned-fixture Snell/policy race parents, 121 policy/listener/mieru
+race parents, 77 named required core cases, actual SQLite/PostgreSQL native HTTP
+acceptance and all six independent rate cases. Clean paired artifacts preserve
+37 prior hashes. See `policy-tunnel-testing.md` for exact source provenance,
+billing fractions, quotas, rate windows, failures retained and scope boundaries.
+
+This closes the scoped local billing/rates/Tunnel vertical. It does not complete
+the original distribution, coordinated nodes/global budgets, restore fencing,
+existing sidecar migrations or commercial-device/other-platform requirements.
+Continue those original requirements without revisiting legacy/password work
+unrelated to making the requested architecture usable.

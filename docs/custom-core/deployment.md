@@ -375,3 +375,15 @@ binaries and exact-artifact native checks are recorded in
 [native-snell-panel-testing.md](native-snell-panel-testing.md). Source publication
 is verified on the fork feature branch. Custom-core installation, upgrade and
 Docker packaging remain pending; no deployment or release was performed.
+
+### Clean-source shared policy and Tunnel checkpoint
+
+Source `7d96018973b756c68a4f967151b9e4c0da45f638` builds a paired panel and
+Custom Xray-core with the three native protocols, bulk exact policy controls,
+full Tunnel UDP and selected SOCKS/HTTP/HTTP2 FIN propagation. Both versions and
+compiled native dependencies were checked; all 37 older artifacts were retained.
+The final core passed actual native HTTP/SQL acceptance on SQLite/PostgreSQL
+and six independent shared directional-rate measurements. Checksums, limitations
+and reproduction are in [policy-tunnel-testing.md](policy-tunnel-testing.md).
+Installer, Docker and release distribution remain open; these clean local builds
+do not by themselves update the existing official-core distribution paths.
