@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -35,9 +36,13 @@ type metadata struct {
 }
 
 type Journal struct {
-	db     *bolt.DB
-	id     Identity
-	closed atomic.Bool
+	db                *bolt.DB
+	id                Identity
+	closed            atomic.Bool
+	retirementElapsed func(time.Time) time.Duration
+	retirementMu      sync.Mutex
+	openedAt          time.Time
+	retiredAt         map[NodeBoot]time.Time
 }
 
 func (j *Journal) Identity() Identity {
@@ -84,7 +89,7 @@ func Create(path string, seeds []Seed) (*Journal, Identity, error) {
 				return err
 			}
 		}
-		if err := put(tx, "metadata", "state", metadata{Schema: 2, Identity: id}); err != nil {
+		if err := put(tx, "metadata", "state", metadata{Schema: 3, Identity: id}); err != nil {
 			return err
 		}
 		for _, seed := range seeds {
@@ -108,7 +113,7 @@ func Create(path string, seeds []Seed) (*Journal, Identity, error) {
 		_ = db.Close()
 		return nil, Identity{}, fmt.Errorf("%w: persist directory: %v", ErrJournal, err)
 	}
-	return &Journal{db: db, id: id}, id, nil
+	return &Journal{db: db, id: id, openedAt: time.Now(), retiredAt: make(map[NodeBoot]time.Time)}, id, nil
 }
 
 func Open(path string, expected Identity) (*Journal, error) {
@@ -122,11 +127,12 @@ func Open(path string, expected Identity) (*Journal, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: open: %v", ErrJournal, err)
 	}
-	j := &Journal{db: db, id: expected}
+	j := &Journal{db: db, id: expected, retiredAt: make(map[NodeBoot]time.Time)}
 	if err := db.View(j.validate); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
+	j.openedAt = time.Now()
 	return j, nil
 }
 
@@ -193,10 +199,16 @@ func get(tx *bolt.Tx, bucket, key string, value any) error {
 func compound(parts ...string) string { raw, _ := json.Marshal(parts); return string(raw) }
 
 func (j *Journal) RegisterBoot(boot NodeBoot) error {
+	if j == nil || j.closed.Load() {
+		return ErrJournal
+	}
 	if !validBoot(boot) {
 		return ErrRequest
 	}
-	return j.update(func(tx *bolt.Tx) error {
+	j.retirementMu.Lock()
+	defer j.retirementMu.Unlock()
+	var replaced NodeBoot
+	err := j.update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("nodes"))
 		history := tx.Bucket([]byte("boots"))
 		if b.Get([]byte(boot.NodeID)) != nil {
@@ -210,6 +222,7 @@ func (j *Journal) RegisterBoot(boot NodeBoot) error {
 			if prior == boot {
 				return nil
 			}
+			replaced = prior
 		} else if b.Stats().KeyN >= maxRecords {
 			return ErrJournal
 		}
@@ -223,9 +236,15 @@ func (j *Journal) RegisterBoot(boot NodeBoot) error {
 		if err := put(tx, "boots", historyKey, boot); err != nil {
 			return err
 		}
-		// A replacement boot never releases the old boot's allocations.
+		// A replacement boot never immediately releases old allocations.
 		return put(tx, "nodes", boot.NodeID, boot)
 	})
+	if err == nil && replaced != (NodeBoot{}) {
+		// Start after the durable boundary. Any previously authorized renewal
+		// was challenged before this point and lasts at most MaxLeaseDuration.
+		j.retiredAt[replaced] = time.Now()
+	}
+	return err
 }
 
 func (j *Journal) checkBinding(tx *bolt.Tx, b Binding) error {
@@ -401,24 +420,8 @@ func (j *Journal) Report(report Report) error {
 			if held, err = subtractAmounts(held, remaining); err != nil {
 				return ErrJournal
 			}
-			if account.UploadHeld.Rate < grant.Request.Upload.Rate || account.UploadHeld.Burst < grant.Request.Upload.Burst || account.DownloadHeld.Rate < grant.Request.Download.Rate || account.DownloadHeld.Burst < grant.Request.Download.Burst {
-				return ErrJournal
-			}
-			account.UploadHeld.Rate -= grant.Request.Upload.Rate
-			account.UploadHeld.Burst -= grant.Request.Upload.Burst
-			account.DownloadHeld.Rate -= grant.Request.Download.Rate
-			account.DownloadHeld.Burst -= grant.Request.Download.Burst
-			if grant.Request.Upload.Unlimited {
-				if account.UploadUnlimitedHeld == 0 {
-					return ErrJournal
-				}
-				account.UploadUnlimitedHeld--
-			}
-			if grant.Request.Download.Unlimited {
-				if account.DownloadUnlimitedHeld == 0 {
-					return ErrJournal
-				}
-				account.DownloadUnlimitedHeld--
+			if err := releaseGrantRates(&account, grant.Request); err != nil {
+				return err
 			}
 		}
 		account.HeldCapacity, account.HeldRemainder = held.whole, held.fraction

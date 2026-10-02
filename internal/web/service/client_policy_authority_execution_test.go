@@ -357,3 +357,86 @@ func TestAuthorityExecutionTwoCoresShareQuotaRatesAndExactBilling(t *testing.T) 
 		t.Fatalf("SQL projection lost global allocation: %+v/%+v/%v", projection, account, err)
 	}
 }
+
+func TestAuthorityExecutionRetiredCoreExpiresBeforeRateReuse(t *testing.T) {
+	j, client := authorityExecutionFixture(t)
+	apiA, addressA := authorityExecutionCore(t, "same-node", client)
+	apiB, addressB := authorityExecutionCore(t, "same-node", client)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	a, err := newAuthorityExecution(ctx, database.GetDB(), j, "same-node", apiA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	share := policyauthority.Direction{Rate: 8192, Burst: 128}
+	intent := authorityAllocation{ClientID: client, RequestID: "old", Capacity: 40, Upload: share, Download: share, LeaseDuration: 3 * time.Second}
+	old, err := a.Authorize(ctx, intent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authorityEndpointExchange(t, addressA, 5)
+	b, err := newAuthorityExecution(ctx, database.GetDB(), j, "same-node", apiB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.boot.BootID == b.boot.BootID || a.boot.SourceID != b.boot.SourceID {
+		t.Fatal("actual cores did not have distinct boots for one source")
+	}
+	if err := a.Renew(ctx, old.GrantID, 1, 3*time.Second); !errors.Is(err, policyauthority.ErrIncarnation) {
+		t.Fatalf("retired core renewed: %v", err)
+	}
+	intent.RequestID = "new"
+	if _, err := b.Authorize(ctx, intent); !errors.Is(err, policyauthority.ErrCapacity) {
+		t.Fatalf("new boot overlapped retired rates: %v", err)
+	}
+	if err := j.ReleaseRetiredRates(a.boot); !errors.Is(err, policyauthority.ErrCapacity) {
+		t.Fatalf("retired interval was shortened: %v", err)
+	}
+	timer := time.NewTimer(policyauthority.MaxLeaseDuration)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	conn, err := net.Dial("tcp4", addressA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.SetDeadline(time.Now().Add(250 * time.Millisecond)); err != nil {
+		_ = conn.Close()
+		t.Fatal(err)
+	}
+	_, writeErr := conn.Write([]byte{0x39})
+	var payload [1]byte
+	n, readErr := conn.Read(payload[:])
+	_ = conn.Close()
+	if writeErr == nil && readErr == nil && n > 0 {
+		t.Fatal("retired core still admitted payload after its maximum execution lease")
+	}
+	if err := j.ReleaseRetiredRates(a.boot); err != nil {
+		t.Fatal(err)
+	}
+	intent.Capacity = 50
+	if _, err := b.Authorize(ctx, intent); !errors.Is(err, policyauthority.ErrCapacity) {
+		t.Fatalf("retired execution recreated uncertain quota: %v", err)
+	}
+	intent.Capacity = 40
+	grant, err := b.Authorize(ctx, intent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authorityEndpointExchange(t, addressB, 5)
+	if err := b.Settle(ctx, grant.GrantID, false, false); err != nil {
+		t.Fatal(err)
+	}
+	retained, err := j.Grant(old.GrantID)
+	if err != nil || retained.Sealed || !retained.RatesReleased || retained.Usage != (policyauthority.Usage{}) {
+		t.Fatalf("retirement fabricated an old-core seal: %+v/%v", retained, err)
+	}
+	after, err := j.Account(client)
+	_, projection := authorityProjection(t, client)
+	if err != nil || projection != after || after.HeldCapacity != 65 || after.Usage != (policyauthority.Usage{RawUpload: 8, RawDownload: 7, BilledBytes: 25, Remainder: 100000}) || after.UploadHeld != share {
+		t.Fatalf("new boot lost uncertain capacity/aggregate bounds: %+v/%+v/%v", after, projection, err)
+	}
+}

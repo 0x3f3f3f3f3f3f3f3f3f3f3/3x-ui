@@ -16,7 +16,7 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 		}
 	}
 	var meta metadata
-	if err := get(tx, "metadata", "state", &meta); err != nil || meta.Schema != 2 {
+	if err := get(tx, "metadata", "state", &meta); err != nil || meta.Schema != 3 {
 		return ErrJournal
 	}
 	if meta.Identity != j.id {
@@ -131,7 +131,7 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 		account, exists := accounts[grant.Request.Binding.ClientID]
 		node := nodes[grant.Request.Binding.NodeBoot.NodeID]
 		historical, knownPolicy := policies[compound(grant.Request.Binding.ClientID, fmt.Sprint(grant.Request.Binding.PolicyVersion))]
-		if !exists || !knownPolicy || node.SourceID != grant.Request.Binding.NodeBoot.SourceID || historical.WindowID != grant.Request.Binding.WindowID {
+		if !exists || !knownPolicy || node.SourceID != grant.Request.Binding.NodeBoot.SourceID || historical.WindowID != grant.Request.Binding.WindowID || grant.RatesReleased && (grant.Sealed || node == grant.Request.Binding.NodeBoot) {
 			return ErrJournal
 		}
 		if _, err := allocateDirection(historical.Upload, Direction{}, grant.Request.Upload); err != nil {
@@ -153,6 +153,11 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 		if total.Revision, err = sum(total.Revision, 1, grant.ReportCount); err != nil {
 			return ErrJournal
 		}
+		if grant.RatesReleased {
+			if err := advanceRevision(&total); err != nil {
+				return err
+			}
+		}
 		if total.Usage, err = addUsage(total.Usage, grant.Usage); err != nil {
 			return ErrJournal
 		}
@@ -166,6 +171,8 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 				return ErrJournal
 			}
 			total.HeldCapacity, total.HeldRemainder = held.whole, held.fraction
+		}
+		if !grant.Sealed && !grant.RatesReleased {
 			if total.UploadHeld, err = allocateDirection(Direction{Unlimited: true}, total.UploadHeld, grant.Request.Upload); err != nil {
 				return ErrJournal
 			}

@@ -93,6 +93,9 @@ type Grant struct {
 	ReportSequence uint64  `json:"reportSequence"`
 	ReportCount    uint64  `json:"reportCount"`
 	Sealed         bool    `json:"sealed"`
+	// RatesReleased records expiration of a retired boot's quarantine. Its
+	// unsealed billed capacity remains held independently.
+	RatesReleased bool `json:"ratesReleased"`
 }
 
 type Report struct {
