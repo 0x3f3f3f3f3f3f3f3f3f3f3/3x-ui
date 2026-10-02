@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -99,6 +100,14 @@ func MigrateData(srcPath, dstDSN string) error {
 		return err
 	}
 	defer srcSQL.Close()
+	// Keep schema detection and every table/batch on the same source view.
+	// SQLite pins its WAL snapshot at the first read; PostgreSQL exports below
+	// need repeatable read rather than the default per-statement snapshot.
+	src = src.Begin(&sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	if src.Error != nil {
+		return fmt.Errorf("begin source snapshot: %w", src.Error)
+	}
+	defer src.Rollback()
 	hasPolicyTombstones := src.Migrator().HasTable(&model.ClientPolicyTombstone{})
 	policyTables := []any{&model.ClientPolicySource{}, &model.ClientPolicyTotal{}, &model.ClientPolicyReceipt{}}
 	policyTableCount := 0
@@ -255,6 +264,12 @@ func ExportPostgresToSQLite(srcDSN, dstPath string) error {
 // copyAllModels (re)creates the schema on dst and copies every migrated table
 // from src to dst in FK-safe order. src/dst may be any gorm backend.
 func copyAllModels(src, dst *gorm.DB) error {
+	return src.Transaction(func(snapshot *gorm.DB) error {
+		return copyModelsSnapshot(snapshot, dst)
+	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+}
+
+func copyModelsSnapshot(src, dst *gorm.DB) error {
 	for _, m := range migrationModels() {
 		if err := dst.AutoMigrate(m); err != nil {
 			return fmt.Errorf("AutoMigrate %T: %w", m, err)

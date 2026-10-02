@@ -126,8 +126,17 @@ func runTrafficWriter(ctx context.Context, queue chan *trafficWriteRequest, done
 // remote node call would stall all traffic accounting for up to the remote
 // timeout. Apply runtime changes after this returns.
 func runSerializedTx(fn func(tx *gorm.DB) error) error {
+	return runSerializedTxForDatabase(database.GetDB(), fn)
+}
+
+var ErrDatabaseReplaced = errors.New("database was replaced before the operation could commit; retry from the current database")
+
+func runSerializedTxForDatabase(expected *gorm.DB, fn func(tx *gorm.DB) error) error {
 	return submitTrafficWrite(func() error {
-		return database.GetDB().Transaction(func(tx *gorm.DB) error {
+		if expected == nil || database.GetDB() != expected {
+			return ErrDatabaseReplaced
+		}
+		return expected.Transaction(func(tx *gorm.DB) error {
 			ctx := context.WithValue(tx.Statement.Context, serializedTxContextKey{}, true)
 			return fn(tx.WithContext(ctx))
 		})

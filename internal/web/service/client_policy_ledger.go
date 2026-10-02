@@ -143,10 +143,14 @@ func validateLedgerPage(instanceID string, epoch, after uint64, page *command.Le
 }
 
 func SettleClientPolicyLedger(instanceID string, epoch, after uint64, page *command.LedgerPage) error {
+	return settleClientPolicyLedgerForDatabase(database.GetDB(), instanceID, epoch, after, page)
+}
+
+func settleClientPolicyLedgerForDatabase(expected *gorm.DB, instanceID string, epoch, after uint64, page *command.LedgerPage) error {
 	if err := validateLedgerPage(instanceID, epoch, after, page); err != nil {
 		return err
 	}
-	return runSerializedTx(func(tx *gorm.DB) error {
+	return runSerializedTxForDatabase(expected, func(tx *gorm.DB) error {
 		var source model.ClientPolicySource
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&source, "instance_id = ?", instanceID).Error; err != nil {
 			return err

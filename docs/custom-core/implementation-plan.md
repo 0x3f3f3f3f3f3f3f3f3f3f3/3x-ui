@@ -1116,3 +1116,10 @@ the original distribution, coordinated nodes/global budgets, restore fencing,
 existing sidecar migrations or commercial-device/other-platform requirements.
 Continue those original requirements without revisiting legacy/password work
 unrelated to making the requested architecture usable.
+
+
+## Execution checkpoint — 2026-10-02 restore consistency
+
+The native Snell/mieru/SSH and shared multiplier/rate/Tunnel checkpoint, paired distribution and its single review correction batch are integrated and pushed at d1ca3626. Source artifacts identify 2b36bc23; all retained hashes and limitations remain in paired-distribution-acceptance.md. Seven-target feature review passed; missing geodata and cumulative PostgreSQL CI timeout corrections are in progress.
+
+Task 11 now repairs consistent source backup reads, unconfirmed-stop restore continuation, queued writes and delayed managed ledger replies crossing SQL replacement. Each reproduced behavior has a RED→GREEN regression. Full root regression passed 50 tested packages, and current source passed eleven required native/shared-Tunnel HTTP cases per SQLite/PostgreSQL backend with zero skips. These do not complete snapshot rollback/cloning safety or task 12. Continue with an import-wide barrier and an authority/grant contract that cannot silently recreate spent or outstanding allocation from restored SQL/bbolt files; retain canonical identities, business credentials, committed usage, reset history, receipts/tombstones and unknown-resource evidence. Do not remove managed remote-scope guards until coordinated budget/rate issuance and expiration are enforced in the one core per node. Legacy MTProto/TUIC/AmneziaWG movement and remaining platform/device acceptance stay open.

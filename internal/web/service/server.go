@@ -1483,6 +1483,9 @@ var lazilyMintedSettingKeys = map[string]bool{
 	"nodeMtlsClientCAPem":   true,
 }
 
+var stopXrayBeforeDatabaseRestore = (*ServerService).stopCoreForDatabaseRestore
+var restartXrayAfterDatabaseRestore = (*ServerService).RestartXrayService
+
 func (s *ServerService) ImportDB(file multipart.File, keepHostSettings bool) error {
 	if database.IsPostgres() {
 		return s.importPostgresDB(file, keepHostSettings)
@@ -1525,17 +1528,17 @@ func (s *ServerService) ImportDB(file multipart.File, keepHostSettings bool) err
 		return common.NewErrorf("This file cannot be imported: %v", err)
 	}
 
+	if errStop := stopXrayBeforeDatabaseRestore(s); errStop != nil {
+		return common.NewErrorf("Database import aborted because Xray termination could not be confirmed: %v", errStop)
+	}
 	xrayStopped := true
 	defer func() {
 		if xrayStopped {
-			if errR := s.RestartXrayService(); errR != nil {
+			if errR := restartXrayAfterDatabaseRestore(s); errR != nil {
 				logger.Warningf("Failed to restart Xray after DB import error: %v", errR)
 			}
 		}
 	}()
-	if errStop := s.StopXrayService(); errStop != nil {
-		logger.Warningf("Failed to stop Xray before DB import: %v", errStop)
-	}
 
 	var keptSettings hostBoundSnapshot
 	if keepHostSettings {
@@ -1602,7 +1605,7 @@ func (s *ServerService) ImportDB(file multipart.File, keepHostSettings bool) err
 	s.inboundService.MigrateDB()
 
 	xrayStopped = false
-	if err = s.RestartXrayService(); err != nil {
+	if err = restartXrayAfterDatabaseRestore(s); err != nil {
 		return common.NewErrorf("Imported DB but failed to start Xray: %v; the previous database was kept at %s", err, fallbackPath)
 	}
 
@@ -1798,17 +1801,17 @@ func (s *ServerService) restorePostgresDump(file multipart.File, keepHostSetting
 		return err
 	}
 
+	if errStop := stopXrayBeforeDatabaseRestore(s); errStop != nil {
+		return common.NewErrorf("Database restore aborted because Xray termination could not be confirmed: %v", errStop)
+	}
 	xrayStopped := true
 	defer func() {
 		if xrayStopped {
-			if errR := s.RestartXrayService(); errR != nil {
+			if errR := restartXrayAfterDatabaseRestore(s); errR != nil {
 				logger.Warningf("Failed to restart Xray after DB restore error: %v", errR)
 			}
 		}
 	}()
-	if errStop := s.StopXrayService(); errStop != nil {
-		logger.Warningf("Failed to stop Xray before DB restore: %v", errStop)
-	}
 
 	var keptSettings hostBoundSnapshot
 	if keepHostSettings {
@@ -1840,7 +1843,7 @@ func (s *ServerService) restorePostgresDump(file multipart.File, keepHostSetting
 	}
 
 	xrayStopped = false
-	if err := s.RestartXrayService(); err != nil {
+	if err := restartXrayAfterDatabaseRestore(s); err != nil {
 		return common.NewErrorf("Restored DB but failed to start Xray: %v", err)
 	}
 	return nil
@@ -1875,17 +1878,17 @@ func (s *ServerService) migrateSQLiteIntoPostgres(file multipart.File, isSQLDump
 		return common.NewErrorf("This file cannot be imported: %v", err)
 	}
 
+	if errStop := stopXrayBeforeDatabaseRestore(s); errStop != nil {
+		return common.NewErrorf("Database restore aborted because Xray termination could not be confirmed: %v", errStop)
+	}
 	xrayStopped := true
 	defer func() {
 		if xrayStopped {
-			if errR := s.RestartXrayService(); errR != nil {
+			if errR := restartXrayAfterDatabaseRestore(s); errR != nil {
 				logger.Warningf("Failed to restart Xray after DB restore error: %v", errR)
 			}
 		}
 	}()
-	if errStop := s.StopXrayService(); errStop != nil {
-		logger.Warningf("Failed to stop Xray before DB restore: %v", errStop)
-	}
 
 	if errClose := database.CloseDB(); errClose != nil {
 		logger.Warningf("Failed to close existing DB before restore: %v", errClose)
@@ -1903,7 +1906,7 @@ func (s *ServerService) migrateSQLiteIntoPostgres(file multipart.File, isSQLDump
 	}
 
 	xrayStopped = false
-	if err := s.RestartXrayService(); err != nil {
+	if err := restartXrayAfterDatabaseRestore(s); err != nil {
 		return common.NewErrorf("Restored DB but failed to start Xray: %v", err)
 	}
 	return nil

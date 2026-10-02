@@ -43,7 +43,15 @@ func DumpSQLiteToBytes(srcPath string) ([]byte, error) {
 		return nil, err
 	}
 	defer sqlDB.Close()
+	return dumpSQLiteDatabase(sqlDB)
+}
 
+func dumpSQLiteDatabase(sqlDB *sql.DB) ([]byte, error) {
+	snapshot, err := sqlDB.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, fmt.Errorf("begin SQLite dump snapshot: %w", err)
+	}
+	defer snapshot.Rollback()
 	var b strings.Builder
 	b.WriteString("PRAGMA foreign_keys=OFF;\n")
 	b.WriteString("BEGIN TRANSACTION;\n")
@@ -51,7 +59,7 @@ func DumpSQLiteToBytes(srcPath string) ([]byte, error) {
 	// Tables in creation order, each followed by its data.
 	type object struct{ name, ddl string }
 	var tables []object
-	rows, err := sqlDB.QueryContext(context.Background(), `SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND sql IS NOT NULL ORDER BY rowid`)
+	rows, err := snapshot.QueryContext(context.Background(), `SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND sql IS NOT NULL ORDER BY rowid`)
 	if err != nil {
 		return nil, err
 	}
@@ -70,21 +78,21 @@ func DumpSQLiteToBytes(srcPath string) ([]byte, error) {
 	for _, t := range tables {
 		b.WriteString(t.ddl)
 		b.WriteString(";\n")
-		if err := dumpTableData(sqlDB, t.name, &b); err != nil {
+		if err := dumpTableData(snapshot, t.name, &b); err != nil {
 			return nil, err
 		}
 	}
 
 	// AUTOINCREMENT bookkeeping, restored verbatim like the sqlite3 CLI does.
-	if sqliteTableExists(sqlDB, "sqlite_sequence") {
+	if sqliteTableExists(snapshot, "sqlite_sequence") {
 		b.WriteString("DELETE FROM sqlite_sequence;\n")
-		if err := dumpTableData(sqlDB, "sqlite_sequence", &b); err != nil {
+		if err := dumpTableData(snapshot, "sqlite_sequence", &b); err != nil {
 			return nil, err
 		}
 	}
 
 	// Indexes, triggers and views after the data is in place.
-	rows2, err := sqlDB.QueryContext(context.Background(), `SELECT sql FROM sqlite_master WHERE type IN ('index','trigger','view') AND sql IS NOT NULL ORDER BY rowid`)
+	rows2, err := snapshot.QueryContext(context.Background(), `SELECT sql FROM sqlite_master WHERE type IN ('index','trigger','view') AND sql IS NOT NULL ORDER BY rowid`)
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +111,9 @@ func DumpSQLiteToBytes(srcPath string) ([]byte, error) {
 
 	b.WriteString("COMMIT;\n")
 
+	if err := snapshot.Commit(); err != nil {
+		return nil, fmt.Errorf("finish SQLite dump snapshot: %w", err)
+	}
 	return []byte(b.String()), nil
 }
 
@@ -137,7 +148,12 @@ func RestoreSQLite(dumpPath, dstPath string) error {
 }
 
 // dumpTableData appends one INSERT statement per row of table to b.
-func dumpTableData(db *sql.DB, table string, b *strings.Builder) error {
+type sqliteSnapshotReader interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func dumpTableData(db sqliteSnapshotReader, table string, b *strings.Builder) error {
 	rows, err := db.QueryContext(context.Background(), `SELECT * FROM "`+table+`"`)
 	if err != nil {
 		return err
@@ -208,7 +224,7 @@ func quoteSQLiteText(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
 
-func sqliteTableExists(db *sql.DB, name string) bool {
+func sqliteTableExists(db sqliteSnapshotReader, name string) bool {
 	var found string
 	err := db.QueryRowContext(context.Background(), `SELECT name FROM sqlite_master WHERE type='table' AND name=?`, name).Scan(&found)
 	return err == nil
