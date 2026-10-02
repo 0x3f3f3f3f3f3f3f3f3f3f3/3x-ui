@@ -50,7 +50,7 @@ func (e *Engine) GetClient(id string) (Policy, Snapshot, error) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.policy, Snapshot{FirstUsedAt: c.firstUsedAt, InstanceID: e.instanceID, Epoch: e.epoch, Sequence: c.sequence, Usage: c.usage, UncertainBytes: c.uncertain, PolicyVersion: c.policy.Version, Reasons: c.reasonsLocked(time.Now()), ActiveSessions: len(c.sessions)}, nil
+	return c.policy, Snapshot{FirstUsedAt: c.firstUsedAt, InstanceID: e.instanceID, Epoch: e.epoch, Sequence: c.sequence, Usage: c.usage, UncertainBytes: c.uncertain, PolicyVersion: c.policy.Version, Reasons: c.reasonsLocked(time.Now()), ActiveSessions: c.activeSessionsLocked()}, nil
 }
 
 func (e *Engine) Connections(id string) ([]Connection, error) {
@@ -62,6 +62,9 @@ func (e *Engine) Connections(id string) ([]Connection, error) {
 	defer c.mu.Unlock()
 	out := make([]Connection, 0, len(c.sessions))
 	for _, s := range c.sessions {
+		if s.closed.Load() {
+			continue
+		}
 		out = append(out, Connection{Metadata: s.metadata, PolicyVersion: c.policy.Version})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].SessionID < out[j].SessionID })

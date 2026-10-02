@@ -31,6 +31,7 @@ const (
 	ClientPolicyService_GetClient_FullMethodName               = "/xray.app.clientpolicy.command.v1.ClientPolicyService/GetClient"
 	ClientPolicyService_ApplyPolicies_FullMethodName           = "/xray.app.clientpolicy.command.v1.ClientPolicyService/ApplyPolicies"
 	ClientPolicyService_InitializeClient_FullMethodName        = "/xray.app.clientpolicy.command.v1.ClientPolicyService/InitializeClient"
+	ClientPolicyService_ReconcileUsage_FullMethodName          = "/xray.app.clientpolicy.command.v1.ClientPolicyService/ReconcileUsage"
 	ClientPolicyService_RevokeClient_FullMethodName            = "/xray.app.clientpolicy.command.v1.ClientPolicyService/RevokeClient"
 	ClientPolicyService_ListConnections_FullMethodName         = "/xray.app.clientpolicy.command.v1.ClientPolicyService/ListConnections"
 	ClientPolicyService_CloseConnections_FullMethodName        = "/xray.app.clientpolicy.command.v1.ClientPolicyService/CloseConnections"
@@ -54,6 +55,7 @@ type ClientPolicyServiceClient interface {
 	GetClient(ctx context.Context, in *ClientRequest, opts ...grpc.CallOption) (*ClientState, error)
 	ApplyPolicies(ctx context.Context, in *ApplyRequest, opts ...grpc.CallOption) (*Empty, error)
 	InitializeClient(ctx context.Context, in *InitializeRequest, opts ...grpc.CallOption) (*Empty, error)
+	ReconcileUsage(ctx context.Context, in *ReconcileUsageRequest, opts ...grpc.CallOption) (*Empty, error)
 	RevokeClient(ctx context.Context, in *ClientRequest, opts ...grpc.CallOption) (*Empty, error)
 	ListConnections(ctx context.Context, in *ClientRequest, opts ...grpc.CallOption) (*Connections, error)
 	CloseConnections(ctx context.Context, in *ClientRequest, opts ...grpc.CallOption) (*CloseResult, error)
@@ -189,6 +191,16 @@ func (c *clientPolicyServiceClient) InitializeClient(ctx context.Context, in *In
 	return out, nil
 }
 
+func (c *clientPolicyServiceClient) ReconcileUsage(ctx context.Context, in *ReconcileUsageRequest, opts ...grpc.CallOption) (*Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, ClientPolicyService_ReconcileUsage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *clientPolicyServiceClient) RevokeClient(ctx context.Context, in *ClientRequest, opts ...grpc.CallOption) (*Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Empty)
@@ -255,6 +267,7 @@ type ClientPolicyServiceServer interface {
 	GetClient(context.Context, *ClientRequest) (*ClientState, error)
 	ApplyPolicies(context.Context, *ApplyRequest) (*Empty, error)
 	InitializeClient(context.Context, *InitializeRequest) (*Empty, error)
+	ReconcileUsage(context.Context, *ReconcileUsageRequest) (*Empty, error)
 	RevokeClient(context.Context, *ClientRequest) (*Empty, error)
 	ListConnections(context.Context, *ClientRequest) (*Connections, error)
 	CloseConnections(context.Context, *ClientRequest) (*CloseResult, error)
@@ -305,6 +318,9 @@ func (UnimplementedClientPolicyServiceServer) ApplyPolicies(context.Context, *Ap
 }
 func (UnimplementedClientPolicyServiceServer) InitializeClient(context.Context, *InitializeRequest) (*Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method InitializeClient not implemented")
+}
+func (UnimplementedClientPolicyServiceServer) ReconcileUsage(context.Context, *ReconcileUsageRequest) (*Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReconcileUsage not implemented")
 }
 func (UnimplementedClientPolicyServiceServer) RevokeClient(context.Context, *ClientRequest) (*Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method RevokeClient not implemented")
@@ -558,6 +574,24 @@ func _ClientPolicyService_InitializeClient_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ClientPolicyService_ReconcileUsage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReconcileUsageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ClientPolicyServiceServer).ReconcileUsage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ClientPolicyService_ReconcileUsage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ClientPolicyServiceServer).ReconcileUsage(ctx, req.(*ReconcileUsageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ClientPolicyService_RevokeClient_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ClientRequest)
 	if err := dec(in); err != nil {
@@ -702,6 +736,10 @@ var ClientPolicyService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "InitializeClient",
 			Handler:    _ClientPolicyService_InitializeClient_Handler,
+		},
+		{
+			MethodName: "ReconcileUsage",
+			Handler:    _ClientPolicyService_ReconcileUsage_Handler,
 		},
 		{
 			MethodName: "RevokeClient",

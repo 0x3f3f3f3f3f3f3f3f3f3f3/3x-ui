@@ -12,6 +12,7 @@ type Manager interface {
 	features.Feature
 	Apply(Policy) error
 	Initialize(Policy, Usage) error
+	ReconcileUsageFloor(string, string, Usage) error
 	Open(context.Context, Metadata, func()) (*Session, error)
 	Snapshot(string) (Snapshot, error)
 	Remove(string) error

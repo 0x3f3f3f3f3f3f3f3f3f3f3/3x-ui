@@ -61,6 +61,7 @@ message ClientState {
 }
 message ApplyRequest { repeated xray.app.clientpolicy.PolicyConfig policies = 1; }
 message InitializeRequest { xray.app.clientpolicy.PolicyConfig policy = 1; Usage usage = 2; }
+message ReconcileUsageRequest { string expected_boot_id = 1; string client_id = 2; Usage usage = 3; }
 message Connection {
  uint64 session_id = 1;
  string inbound_tag = 2;
@@ -98,6 +99,7 @@ service ClientPolicyService {
  rpc GetClient(ClientRequest) returns (ClientState);
  rpc ApplyPolicies(ApplyRequest) returns (Empty);
  rpc InitializeClient(InitializeRequest) returns (Empty);
+ rpc ReconcileUsage(ReconcileUsageRequest) returns (Empty);
  rpc RevokeClient(ClientRequest) returns (Empty);
  rpc ListConnections(ClientRequest) returns (Connections);
  rpc CloseConnections(ClientRequest) returns (CloseResult);

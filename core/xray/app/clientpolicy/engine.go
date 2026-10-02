@@ -94,6 +94,16 @@ func (c *clientState) sessionsLocked() []*Session {
 	return out
 }
 
+func (c *clientState) activeSessionsLocked() int {
+	count := 0
+	for _, session := range c.sessions {
+		if !session.closed.Load() {
+			count++
+		}
+	}
+	return count
+}
+
 func closeSessions(sessions []*Session) {
 	for _, s := range sessions {
 		s.Close()
@@ -119,7 +129,7 @@ func (e *Engine) Snapshot(id string) (Snapshot, error) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return Snapshot{FirstUsedAt: c.firstUsedAt, InstanceID: e.instanceID, Epoch: e.epoch, Sequence: c.sequence, UncertainBytes: c.uncertain, Usage: c.usage, PolicyVersion: c.policy.Version, Reasons: c.reasonsLocked(time.Now()), ActiveSessions: len(c.sessions)}, nil
+	return Snapshot{FirstUsedAt: c.firstUsedAt, InstanceID: e.instanceID, Epoch: e.epoch, Sequence: c.sequence, UncertainBytes: c.uncertain, Usage: c.usage, PolicyVersion: c.policy.Version, Reasons: c.reasonsLocked(time.Now()), ActiveSessions: c.activeSessionsLocked()}, nil
 }
 
 func (e *Engine) Remove(id string) error { return e.RemoveVersion(id, 0) }

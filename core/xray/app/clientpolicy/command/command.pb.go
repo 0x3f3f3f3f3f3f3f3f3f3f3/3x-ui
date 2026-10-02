@@ -1290,6 +1290,66 @@ func (x *InitializeRequest) GetUsage() *Usage {
 	return nil
 }
 
+type ReconcileUsageRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ExpectedBootId string                 `protobuf:"bytes,1,opt,name=expected_boot_id,json=expectedBootId,proto3" json:"expected_boot_id,omitempty"`
+	ClientId       string                 `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	Usage          *Usage                 `protobuf:"bytes,3,opt,name=usage,proto3" json:"usage,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ReconcileUsageRequest) Reset() {
+	*x = ReconcileUsageRequest{}
+	mi := &file_app_clientpolicy_command_command_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReconcileUsageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReconcileUsageRequest) ProtoMessage() {}
+
+func (x *ReconcileUsageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_app_clientpolicy_command_command_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReconcileUsageRequest.ProtoReflect.Descriptor instead.
+func (*ReconcileUsageRequest) Descriptor() ([]byte, []int) {
+	return file_app_clientpolicy_command_command_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ReconcileUsageRequest) GetExpectedBootId() string {
+	if x != nil {
+		return x.ExpectedBootId
+	}
+	return ""
+}
+
+func (x *ReconcileUsageRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *ReconcileUsageRequest) GetUsage() *Usage {
+	if x != nil {
+		return x.Usage
+	}
+	return nil
+}
+
 type Connection struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
 	SessionId            uint64                 `protobuf:"varint,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
@@ -1304,7 +1364,7 @@ type Connection struct {
 
 func (x *Connection) Reset() {
 	*x = Connection{}
-	mi := &file_app_clientpolicy_command_command_proto_msgTypes[19]
+	mi := &file_app_clientpolicy_command_command_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1316,7 +1376,7 @@ func (x *Connection) String() string {
 func (*Connection) ProtoMessage() {}
 
 func (x *Connection) ProtoReflect() protoreflect.Message {
-	mi := &file_app_clientpolicy_command_command_proto_msgTypes[19]
+	mi := &file_app_clientpolicy_command_command_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1329,7 +1389,7 @@ func (x *Connection) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Connection.ProtoReflect.Descriptor instead.
 func (*Connection) Descriptor() ([]byte, []int) {
-	return file_app_clientpolicy_command_command_proto_rawDescGZIP(), []int{19}
+	return file_app_clientpolicy_command_command_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *Connection) GetSessionId() uint64 {
@@ -1383,7 +1443,7 @@ type Connections struct {
 
 func (x *Connections) Reset() {
 	*x = Connections{}
-	mi := &file_app_clientpolicy_command_command_proto_msgTypes[20]
+	mi := &file_app_clientpolicy_command_command_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1395,7 +1455,7 @@ func (x *Connections) String() string {
 func (*Connections) ProtoMessage() {}
 
 func (x *Connections) ProtoReflect() protoreflect.Message {
-	mi := &file_app_clientpolicy_command_command_proto_msgTypes[20]
+	mi := &file_app_clientpolicy_command_command_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1408,7 +1468,7 @@ func (x *Connections) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Connections.ProtoReflect.Descriptor instead.
 func (*Connections) Descriptor() ([]byte, []int) {
-	return file_app_clientpolicy_command_command_proto_rawDescGZIP(), []int{20}
+	return file_app_clientpolicy_command_command_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *Connections) GetConnections() []*Connection {
@@ -1427,7 +1487,7 @@ type CloseResult struct {
 
 func (x *CloseResult) Reset() {
 	*x = CloseResult{}
-	mi := &file_app_clientpolicy_command_command_proto_msgTypes[21]
+	mi := &file_app_clientpolicy_command_command_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1439,7 +1499,7 @@ func (x *CloseResult) String() string {
 func (*CloseResult) ProtoMessage() {}
 
 func (x *CloseResult) ProtoReflect() protoreflect.Message {
-	mi := &file_app_clientpolicy_command_command_proto_msgTypes[21]
+	mi := &file_app_clientpolicy_command_command_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1452,7 +1512,7 @@ func (x *CloseResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseResult.ProtoReflect.Descriptor instead.
 func (*CloseResult) Descriptor() ([]byte, []int) {
-	return file_app_clientpolicy_command_command_proto_rawDescGZIP(), []int{21}
+	return file_app_clientpolicy_command_command_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *CloseResult) GetClosed() uint32 {
@@ -1472,7 +1532,7 @@ type LedgerRequest struct {
 
 func (x *LedgerRequest) Reset() {
 	*x = LedgerRequest{}
-	mi := &file_app_clientpolicy_command_command_proto_msgTypes[22]
+	mi := &file_app_clientpolicy_command_command_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1484,7 +1544,7 @@ func (x *LedgerRequest) String() string {
 func (*LedgerRequest) ProtoMessage() {}
 
 func (x *LedgerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_app_clientpolicy_command_command_proto_msgTypes[22]
+	mi := &file_app_clientpolicy_command_command_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1497,7 +1557,7 @@ func (x *LedgerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LedgerRequest.ProtoReflect.Descriptor instead.
 func (*LedgerRequest) Descriptor() ([]byte, []int) {
-	return file_app_clientpolicy_command_command_proto_rawDescGZIP(), []int{22}
+	return file_app_clientpolicy_command_command_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *LedgerRequest) GetAfterSequence() uint64 {
@@ -1532,7 +1592,7 @@ type LedgerRecord struct {
 
 func (x *LedgerRecord) Reset() {
 	*x = LedgerRecord{}
-	mi := &file_app_clientpolicy_command_command_proto_msgTypes[23]
+	mi := &file_app_clientpolicy_command_command_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1544,7 +1604,7 @@ func (x *LedgerRecord) String() string {
 func (*LedgerRecord) ProtoMessage() {}
 
 func (x *LedgerRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_app_clientpolicy_command_command_proto_msgTypes[23]
+	mi := &file_app_clientpolicy_command_command_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1557,7 +1617,7 @@ func (x *LedgerRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LedgerRecord.ProtoReflect.Descriptor instead.
 func (*LedgerRecord) Descriptor() ([]byte, []int) {
-	return file_app_clientpolicy_command_command_proto_rawDescGZIP(), []int{23}
+	return file_app_clientpolicy_command_command_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *LedgerRecord) GetInstanceId() string {
@@ -1640,7 +1700,7 @@ type LedgerPage struct {
 
 func (x *LedgerPage) Reset() {
 	*x = LedgerPage{}
-	mi := &file_app_clientpolicy_command_command_proto_msgTypes[24]
+	mi := &file_app_clientpolicy_command_command_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1652,7 +1712,7 @@ func (x *LedgerPage) String() string {
 func (*LedgerPage) ProtoMessage() {}
 
 func (x *LedgerPage) ProtoReflect() protoreflect.Message {
-	mi := &file_app_clientpolicy_command_command_proto_msgTypes[24]
+	mi := &file_app_clientpolicy_command_command_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1665,7 +1725,7 @@ func (x *LedgerPage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LedgerPage.ProtoReflect.Descriptor instead.
 func (*LedgerPage) Descriptor() ([]byte, []int) {
-	return file_app_clientpolicy_command_command_proto_rawDescGZIP(), []int{24}
+	return file_app_clientpolicy_command_command_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *LedgerPage) GetRecords() []*LedgerRecord {
@@ -1690,7 +1750,7 @@ type Config struct {
 
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_app_clientpolicy_command_command_proto_msgTypes[25]
+	mi := &file_app_clientpolicy_command_command_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1702,7 +1762,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_app_clientpolicy_command_command_proto_msgTypes[25]
+	mi := &file_app_clientpolicy_command_command_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1715,7 +1775,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_app_clientpolicy_command_command_proto_rawDescGZIP(), []int{25}
+	return file_app_clientpolicy_command_command_proto_rawDescGZIP(), []int{26}
 }
 
 var File_app_clientpolicy_command_command_proto protoreflect.FileDescriptor
@@ -1825,7 +1885,11 @@ const file_app_clientpolicy_command_command_proto_rawDesc = "" +
 	"\bpolicies\x18\x01 \x03(\v2#.xray.app.clientpolicy.PolicyConfigR\bpolicies\"\x8f\x01\n" +
 	"\x11InitializeRequest\x12;\n" +
 	"\x06policy\x18\x01 \x01(\v2#.xray.app.clientpolicy.PolicyConfigR\x06policy\x12=\n" +
-	"\x05usage\x18\x02 \x01(\v2'.xray.app.clientpolicy.command.v1.UsageR\x05usage\"\xf6\x01\n" +
+	"\x05usage\x18\x02 \x01(\v2'.xray.app.clientpolicy.command.v1.UsageR\x05usage\"\x9d\x01\n" +
+	"\x15ReconcileUsageRequest\x12(\n" +
+	"\x10expected_boot_id\x18\x01 \x01(\tR\x0eexpectedBootId\x12\x1b\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\x12=\n" +
+	"\x05usage\x18\x03 \x01(\v2'.xray.app.clientpolicy.command.v1.UsageR\x05usage\"\xf6\x01\n" +
 	"\n" +
 	"Connection\x12\x1d\n" +
 	"\n" +
@@ -1860,7 +1924,7 @@ const file_app_clientpolicy_command_command_proto_rawDesc = "" +
 	"LedgerPage\x12H\n" +
 	"\arecords\x18\x01 \x03(\v2..xray.app.clientpolicy.command.v1.LedgerRecordR\arecords\x12#\n" +
 	"\rnext_sequence\x18\x02 \x01(\x04R\fnextSequence\"\b\n" +
-	"\x06Config2\xfe\x0f\n" +
+	"\x06Config2\xf2\x10\n" +
 	"\x13ClientPolicyService\x12j\n" +
 	"\x0fGetCapabilities\x12'.xray.app.clientpolicy.command.v1.Empty\x1a..xray.app.clientpolicy.command.v1.Capabilities\x12\x8a\x01\n" +
 	"\x15GetAuthorityChallenge\x12;.xray.app.clientpolicy.command.v1.AuthorityChallengeRequest\x1a4.xray.app.clientpolicy.command.v1.AuthorityChallenge\x12p\n" +
@@ -1873,7 +1937,8 @@ const file_app_clientpolicy_command_command_proto_rawDesc = "" +
 	"\x13RenewAuthorityGrant\x129.xray.app.clientpolicy.command.v1.AuthorityRenewalRequest\x1a'.xray.app.clientpolicy.command.v1.Empty\x12k\n" +
 	"\tGetClient\x12/.xray.app.clientpolicy.command.v1.ClientRequest\x1a-.xray.app.clientpolicy.command.v1.ClientState\x12h\n" +
 	"\rApplyPolicies\x12..xray.app.clientpolicy.command.v1.ApplyRequest\x1a'.xray.app.clientpolicy.command.v1.Empty\x12p\n" +
-	"\x10InitializeClient\x123.xray.app.clientpolicy.command.v1.InitializeRequest\x1a'.xray.app.clientpolicy.command.v1.Empty\x12h\n" +
+	"\x10InitializeClient\x123.xray.app.clientpolicy.command.v1.InitializeRequest\x1a'.xray.app.clientpolicy.command.v1.Empty\x12r\n" +
+	"\x0eReconcileUsage\x127.xray.app.clientpolicy.command.v1.ReconcileUsageRequest\x1a'.xray.app.clientpolicy.command.v1.Empty\x12h\n" +
 	"\fRevokeClient\x12/.xray.app.clientpolicy.command.v1.ClientRequest\x1a'.xray.app.clientpolicy.command.v1.Empty\x12q\n" +
 	"\x0fListConnections\x12/.xray.app.clientpolicy.command.v1.ClientRequest\x1a-.xray.app.clientpolicy.command.v1.Connections\x12r\n" +
 	"\x10CloseConnections\x12/.xray.app.clientpolicy.command.v1.ClientRequest\x1a-.xray.app.clientpolicy.command.v1.CloseResult\x12c\n" +
@@ -1893,7 +1958,7 @@ func file_app_clientpolicy_command_command_proto_rawDescGZIP() []byte {
 	return file_app_clientpolicy_command_command_proto_rawDescData
 }
 
-var file_app_clientpolicy_command_command_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_app_clientpolicy_command_command_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_app_clientpolicy_command_command_proto_goTypes = []any{
 	(*Empty)(nil),                     // 0: xray.app.clientpolicy.command.v1.Empty
 	(*ClientRequest)(nil),             // 1: xray.app.clientpolicy.command.v1.ClientRequest
@@ -1914,14 +1979,15 @@ var file_app_clientpolicy_command_command_proto_goTypes = []any{
 	(*ClientState)(nil),               // 16: xray.app.clientpolicy.command.v1.ClientState
 	(*ApplyRequest)(nil),              // 17: xray.app.clientpolicy.command.v1.ApplyRequest
 	(*InitializeRequest)(nil),         // 18: xray.app.clientpolicy.command.v1.InitializeRequest
-	(*Connection)(nil),                // 19: xray.app.clientpolicy.command.v1.Connection
-	(*Connections)(nil),               // 20: xray.app.clientpolicy.command.v1.Connections
-	(*CloseResult)(nil),               // 21: xray.app.clientpolicy.command.v1.CloseResult
-	(*LedgerRequest)(nil),             // 22: xray.app.clientpolicy.command.v1.LedgerRequest
-	(*LedgerRecord)(nil),              // 23: xray.app.clientpolicy.command.v1.LedgerRecord
-	(*LedgerPage)(nil),                // 24: xray.app.clientpolicy.command.v1.LedgerPage
-	(*Config)(nil),                    // 25: xray.app.clientpolicy.command.v1.Config
-	(*clientpolicy.PolicyConfig)(nil), // 26: xray.app.clientpolicy.PolicyConfig
+	(*ReconcileUsageRequest)(nil),     // 19: xray.app.clientpolicy.command.v1.ReconcileUsageRequest
+	(*Connection)(nil),                // 20: xray.app.clientpolicy.command.v1.Connection
+	(*Connections)(nil),               // 21: xray.app.clientpolicy.command.v1.Connections
+	(*CloseResult)(nil),               // 22: xray.app.clientpolicy.command.v1.CloseResult
+	(*LedgerRequest)(nil),             // 23: xray.app.clientpolicy.command.v1.LedgerRequest
+	(*LedgerRecord)(nil),              // 24: xray.app.clientpolicy.command.v1.LedgerRecord
+	(*LedgerPage)(nil),                // 25: xray.app.clientpolicy.command.v1.LedgerPage
+	(*Config)(nil),                    // 26: xray.app.clientpolicy.command.v1.Config
+	(*clientpolicy.PolicyConfig)(nil), // 27: xray.app.clientpolicy.PolicyConfig
 }
 var file_app_clientpolicy_command_command_proto_depIdxs = []int32{
 	5,  // 0: xray.app.clientpolicy.command.v1.AuthorityBindRequest.authority:type_name -> xray.app.clientpolicy.command.v1.AuthorityBinding
@@ -1932,53 +1998,56 @@ var file_app_clientpolicy_command_command_proto_depIdxs = []int32{
 	6,  // 5: xray.app.clientpolicy.command.v1.ExecutionGrant.download:type_name -> xray.app.clientpolicy.command.v1.AuthorityShare
 	11, // 6: xray.app.clientpolicy.command.v1.ExecutionGrantState.grant:type_name -> xray.app.clientpolicy.command.v1.ExecutionGrant
 	15, // 7: xray.app.clientpolicy.command.v1.ExecutionGrantState.usage:type_name -> xray.app.clientpolicy.command.v1.Usage
-	26, // 8: xray.app.clientpolicy.command.v1.ClientState.policy:type_name -> xray.app.clientpolicy.PolicyConfig
+	27, // 8: xray.app.clientpolicy.command.v1.ClientState.policy:type_name -> xray.app.clientpolicy.PolicyConfig
 	15, // 9: xray.app.clientpolicy.command.v1.ClientState.usage:type_name -> xray.app.clientpolicy.command.v1.Usage
-	26, // 10: xray.app.clientpolicy.command.v1.ApplyRequest.policies:type_name -> xray.app.clientpolicy.PolicyConfig
-	26, // 11: xray.app.clientpolicy.command.v1.InitializeRequest.policy:type_name -> xray.app.clientpolicy.PolicyConfig
+	27, // 10: xray.app.clientpolicy.command.v1.ApplyRequest.policies:type_name -> xray.app.clientpolicy.PolicyConfig
+	27, // 11: xray.app.clientpolicy.command.v1.InitializeRequest.policy:type_name -> xray.app.clientpolicy.PolicyConfig
 	15, // 12: xray.app.clientpolicy.command.v1.InitializeRequest.usage:type_name -> xray.app.clientpolicy.command.v1.Usage
-	19, // 13: xray.app.clientpolicy.command.v1.Connections.connections:type_name -> xray.app.clientpolicy.command.v1.Connection
-	15, // 14: xray.app.clientpolicy.command.v1.LedgerRecord.usage:type_name -> xray.app.clientpolicy.command.v1.Usage
-	23, // 15: xray.app.clientpolicy.command.v1.LedgerPage.records:type_name -> xray.app.clientpolicy.command.v1.LedgerRecord
-	0,  // 16: xray.app.clientpolicy.command.v1.ClientPolicyService.GetCapabilities:input_type -> xray.app.clientpolicy.command.v1.Empty
-	3,  // 17: xray.app.clientpolicy.command.v1.ClientPolicyService.GetAuthorityChallenge:input_type -> xray.app.clientpolicy.command.v1.AuthorityChallengeRequest
-	7,  // 18: xray.app.clientpolicy.command.v1.ClientPolicyService.BindAuthority:input_type -> xray.app.clientpolicy.command.v1.AuthorityBindRequest
-	7,  // 19: xray.app.clientpolicy.command.v1.ClientPolicyService.EnableAuthorityRequests:input_type -> xray.app.clientpolicy.command.v1.AuthorityBindRequest
-	8,  // 20: xray.app.clientpolicy.command.v1.ClientPolicyService.ReadAuthorityRequests:input_type -> xray.app.clientpolicy.command.v1.AuthorityRequestsRequest
-	11, // 21: xray.app.clientpolicy.command.v1.ClientPolicyService.InstallAuthorityGrant:input_type -> xray.app.clientpolicy.command.v1.ExecutionGrant
-	12, // 22: xray.app.clientpolicy.command.v1.ClientPolicyService.GetAuthorityGrant:input_type -> xray.app.clientpolicy.command.v1.AuthorityGrantRequest
-	12, // 23: xray.app.clientpolicy.command.v1.ClientPolicyService.SealAuthorityGrant:input_type -> xray.app.clientpolicy.command.v1.AuthorityGrantRequest
-	13, // 24: xray.app.clientpolicy.command.v1.ClientPolicyService.RenewAuthorityGrant:input_type -> xray.app.clientpolicy.command.v1.AuthorityRenewalRequest
-	1,  // 25: xray.app.clientpolicy.command.v1.ClientPolicyService.GetClient:input_type -> xray.app.clientpolicy.command.v1.ClientRequest
-	17, // 26: xray.app.clientpolicy.command.v1.ClientPolicyService.ApplyPolicies:input_type -> xray.app.clientpolicy.command.v1.ApplyRequest
-	18, // 27: xray.app.clientpolicy.command.v1.ClientPolicyService.InitializeClient:input_type -> xray.app.clientpolicy.command.v1.InitializeRequest
-	1,  // 28: xray.app.clientpolicy.command.v1.ClientPolicyService.RevokeClient:input_type -> xray.app.clientpolicy.command.v1.ClientRequest
-	1,  // 29: xray.app.clientpolicy.command.v1.ClientPolicyService.ListConnections:input_type -> xray.app.clientpolicy.command.v1.ClientRequest
-	1,  // 30: xray.app.clientpolicy.command.v1.ClientPolicyService.CloseConnections:input_type -> xray.app.clientpolicy.command.v1.ClientRequest
-	0,  // 31: xray.app.clientpolicy.command.v1.ClientPolicyService.CheckpointUsage:input_type -> xray.app.clientpolicy.command.v1.Empty
-	22, // 32: xray.app.clientpolicy.command.v1.ClientPolicyService.ReadLedger:input_type -> xray.app.clientpolicy.command.v1.LedgerRequest
-	2,  // 33: xray.app.clientpolicy.command.v1.ClientPolicyService.GetCapabilities:output_type -> xray.app.clientpolicy.command.v1.Capabilities
-	4,  // 34: xray.app.clientpolicy.command.v1.ClientPolicyService.GetAuthorityChallenge:output_type -> xray.app.clientpolicy.command.v1.AuthorityChallenge
-	0,  // 35: xray.app.clientpolicy.command.v1.ClientPolicyService.BindAuthority:output_type -> xray.app.clientpolicy.command.v1.Empty
-	0,  // 36: xray.app.clientpolicy.command.v1.ClientPolicyService.EnableAuthorityRequests:output_type -> xray.app.clientpolicy.command.v1.Empty
-	10, // 37: xray.app.clientpolicy.command.v1.ClientPolicyService.ReadAuthorityRequests:output_type -> xray.app.clientpolicy.command.v1.AuthorityRequests
-	14, // 38: xray.app.clientpolicy.command.v1.ClientPolicyService.InstallAuthorityGrant:output_type -> xray.app.clientpolicy.command.v1.ExecutionGrantState
-	14, // 39: xray.app.clientpolicy.command.v1.ClientPolicyService.GetAuthorityGrant:output_type -> xray.app.clientpolicy.command.v1.ExecutionGrantState
-	14, // 40: xray.app.clientpolicy.command.v1.ClientPolicyService.SealAuthorityGrant:output_type -> xray.app.clientpolicy.command.v1.ExecutionGrantState
-	0,  // 41: xray.app.clientpolicy.command.v1.ClientPolicyService.RenewAuthorityGrant:output_type -> xray.app.clientpolicy.command.v1.Empty
-	16, // 42: xray.app.clientpolicy.command.v1.ClientPolicyService.GetClient:output_type -> xray.app.clientpolicy.command.v1.ClientState
-	0,  // 43: xray.app.clientpolicy.command.v1.ClientPolicyService.ApplyPolicies:output_type -> xray.app.clientpolicy.command.v1.Empty
-	0,  // 44: xray.app.clientpolicy.command.v1.ClientPolicyService.InitializeClient:output_type -> xray.app.clientpolicy.command.v1.Empty
-	0,  // 45: xray.app.clientpolicy.command.v1.ClientPolicyService.RevokeClient:output_type -> xray.app.clientpolicy.command.v1.Empty
-	20, // 46: xray.app.clientpolicy.command.v1.ClientPolicyService.ListConnections:output_type -> xray.app.clientpolicy.command.v1.Connections
-	21, // 47: xray.app.clientpolicy.command.v1.ClientPolicyService.CloseConnections:output_type -> xray.app.clientpolicy.command.v1.CloseResult
-	0,  // 48: xray.app.clientpolicy.command.v1.ClientPolicyService.CheckpointUsage:output_type -> xray.app.clientpolicy.command.v1.Empty
-	24, // 49: xray.app.clientpolicy.command.v1.ClientPolicyService.ReadLedger:output_type -> xray.app.clientpolicy.command.v1.LedgerPage
-	33, // [33:50] is the sub-list for method output_type
-	16, // [16:33] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	15, // 13: xray.app.clientpolicy.command.v1.ReconcileUsageRequest.usage:type_name -> xray.app.clientpolicy.command.v1.Usage
+	20, // 14: xray.app.clientpolicy.command.v1.Connections.connections:type_name -> xray.app.clientpolicy.command.v1.Connection
+	15, // 15: xray.app.clientpolicy.command.v1.LedgerRecord.usage:type_name -> xray.app.clientpolicy.command.v1.Usage
+	24, // 16: xray.app.clientpolicy.command.v1.LedgerPage.records:type_name -> xray.app.clientpolicy.command.v1.LedgerRecord
+	0,  // 17: xray.app.clientpolicy.command.v1.ClientPolicyService.GetCapabilities:input_type -> xray.app.clientpolicy.command.v1.Empty
+	3,  // 18: xray.app.clientpolicy.command.v1.ClientPolicyService.GetAuthorityChallenge:input_type -> xray.app.clientpolicy.command.v1.AuthorityChallengeRequest
+	7,  // 19: xray.app.clientpolicy.command.v1.ClientPolicyService.BindAuthority:input_type -> xray.app.clientpolicy.command.v1.AuthorityBindRequest
+	7,  // 20: xray.app.clientpolicy.command.v1.ClientPolicyService.EnableAuthorityRequests:input_type -> xray.app.clientpolicy.command.v1.AuthorityBindRequest
+	8,  // 21: xray.app.clientpolicy.command.v1.ClientPolicyService.ReadAuthorityRequests:input_type -> xray.app.clientpolicy.command.v1.AuthorityRequestsRequest
+	11, // 22: xray.app.clientpolicy.command.v1.ClientPolicyService.InstallAuthorityGrant:input_type -> xray.app.clientpolicy.command.v1.ExecutionGrant
+	12, // 23: xray.app.clientpolicy.command.v1.ClientPolicyService.GetAuthorityGrant:input_type -> xray.app.clientpolicy.command.v1.AuthorityGrantRequest
+	12, // 24: xray.app.clientpolicy.command.v1.ClientPolicyService.SealAuthorityGrant:input_type -> xray.app.clientpolicy.command.v1.AuthorityGrantRequest
+	13, // 25: xray.app.clientpolicy.command.v1.ClientPolicyService.RenewAuthorityGrant:input_type -> xray.app.clientpolicy.command.v1.AuthorityRenewalRequest
+	1,  // 26: xray.app.clientpolicy.command.v1.ClientPolicyService.GetClient:input_type -> xray.app.clientpolicy.command.v1.ClientRequest
+	17, // 27: xray.app.clientpolicy.command.v1.ClientPolicyService.ApplyPolicies:input_type -> xray.app.clientpolicy.command.v1.ApplyRequest
+	18, // 28: xray.app.clientpolicy.command.v1.ClientPolicyService.InitializeClient:input_type -> xray.app.clientpolicy.command.v1.InitializeRequest
+	19, // 29: xray.app.clientpolicy.command.v1.ClientPolicyService.ReconcileUsage:input_type -> xray.app.clientpolicy.command.v1.ReconcileUsageRequest
+	1,  // 30: xray.app.clientpolicy.command.v1.ClientPolicyService.RevokeClient:input_type -> xray.app.clientpolicy.command.v1.ClientRequest
+	1,  // 31: xray.app.clientpolicy.command.v1.ClientPolicyService.ListConnections:input_type -> xray.app.clientpolicy.command.v1.ClientRequest
+	1,  // 32: xray.app.clientpolicy.command.v1.ClientPolicyService.CloseConnections:input_type -> xray.app.clientpolicy.command.v1.ClientRequest
+	0,  // 33: xray.app.clientpolicy.command.v1.ClientPolicyService.CheckpointUsage:input_type -> xray.app.clientpolicy.command.v1.Empty
+	23, // 34: xray.app.clientpolicy.command.v1.ClientPolicyService.ReadLedger:input_type -> xray.app.clientpolicy.command.v1.LedgerRequest
+	2,  // 35: xray.app.clientpolicy.command.v1.ClientPolicyService.GetCapabilities:output_type -> xray.app.clientpolicy.command.v1.Capabilities
+	4,  // 36: xray.app.clientpolicy.command.v1.ClientPolicyService.GetAuthorityChallenge:output_type -> xray.app.clientpolicy.command.v1.AuthorityChallenge
+	0,  // 37: xray.app.clientpolicy.command.v1.ClientPolicyService.BindAuthority:output_type -> xray.app.clientpolicy.command.v1.Empty
+	0,  // 38: xray.app.clientpolicy.command.v1.ClientPolicyService.EnableAuthorityRequests:output_type -> xray.app.clientpolicy.command.v1.Empty
+	10, // 39: xray.app.clientpolicy.command.v1.ClientPolicyService.ReadAuthorityRequests:output_type -> xray.app.clientpolicy.command.v1.AuthorityRequests
+	14, // 40: xray.app.clientpolicy.command.v1.ClientPolicyService.InstallAuthorityGrant:output_type -> xray.app.clientpolicy.command.v1.ExecutionGrantState
+	14, // 41: xray.app.clientpolicy.command.v1.ClientPolicyService.GetAuthorityGrant:output_type -> xray.app.clientpolicy.command.v1.ExecutionGrantState
+	14, // 42: xray.app.clientpolicy.command.v1.ClientPolicyService.SealAuthorityGrant:output_type -> xray.app.clientpolicy.command.v1.ExecutionGrantState
+	0,  // 43: xray.app.clientpolicy.command.v1.ClientPolicyService.RenewAuthorityGrant:output_type -> xray.app.clientpolicy.command.v1.Empty
+	16, // 44: xray.app.clientpolicy.command.v1.ClientPolicyService.GetClient:output_type -> xray.app.clientpolicy.command.v1.ClientState
+	0,  // 45: xray.app.clientpolicy.command.v1.ClientPolicyService.ApplyPolicies:output_type -> xray.app.clientpolicy.command.v1.Empty
+	0,  // 46: xray.app.clientpolicy.command.v1.ClientPolicyService.InitializeClient:output_type -> xray.app.clientpolicy.command.v1.Empty
+	0,  // 47: xray.app.clientpolicy.command.v1.ClientPolicyService.ReconcileUsage:output_type -> xray.app.clientpolicy.command.v1.Empty
+	0,  // 48: xray.app.clientpolicy.command.v1.ClientPolicyService.RevokeClient:output_type -> xray.app.clientpolicy.command.v1.Empty
+	21, // 49: xray.app.clientpolicy.command.v1.ClientPolicyService.ListConnections:output_type -> xray.app.clientpolicy.command.v1.Connections
+	22, // 50: xray.app.clientpolicy.command.v1.ClientPolicyService.CloseConnections:output_type -> xray.app.clientpolicy.command.v1.CloseResult
+	0,  // 51: xray.app.clientpolicy.command.v1.ClientPolicyService.CheckpointUsage:output_type -> xray.app.clientpolicy.command.v1.Empty
+	25, // 52: xray.app.clientpolicy.command.v1.ClientPolicyService.ReadLedger:output_type -> xray.app.clientpolicy.command.v1.LedgerPage
+	35, // [35:53] is the sub-list for method output_type
+	17, // [17:35] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_app_clientpolicy_command_command_proto_init() }
@@ -1992,7 +2061,7 @@ func file_app_clientpolicy_command_command_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_clientpolicy_command_command_proto_rawDesc), len(file_app_clientpolicy_command_command_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   26,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

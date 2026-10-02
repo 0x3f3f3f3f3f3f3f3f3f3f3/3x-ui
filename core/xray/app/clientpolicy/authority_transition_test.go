@@ -110,6 +110,115 @@ func TestOpenDuringControlledGrantHandoffWaitsForReplacement(t *testing.T) {
 	}
 }
 
+func TestOpenQueuedDuringControlledHandoffSurvivesPolicyVersionChange(t *testing.T) {
+	for _, count := range []int{1, 8} {
+		t.Run(map[int]string{1: "one-connection", 8: "concurrent-connections"}[count], func(t *testing.T) {
+			testOpenQueuedDuringControlledHandoffSurvivesPolicyVersionChange(t, count)
+		})
+	}
+}
+
+func testOpenQueuedDuringControlledHandoffSurvivesPolicyVersionChange(t *testing.T, count int) {
+	p := testPolicy("queued-policy-handoff")
+	e, g := authorityExecutionFixture(t, p, 100, 2*time.Second)
+	if err := e.EnableAuthorityRequests(g.BootID, g.Authority); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.InstallAuthorityGrant(g); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.PauseAuthorityGrant(g.ClientID, g.GrantID); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	type result struct {
+		s   *Session
+		err error
+	}
+	done := make(chan result, count)
+	for range count {
+		go func() {
+			s, err := e.Open(ctx, Metadata{ClientID: g.ClientID}, nil)
+			done <- result{s, err}
+		}()
+	}
+	requests, err := e.WaitAuthorityRequests(ctx, g.BootID, g.Authority, 128)
+	if err != nil || len(requests) != 1 || requests[0].PolicyVersion != 1 {
+		t.Fatalf("original paused admission was not queued: %+v/%v", requests, err)
+	}
+	for {
+		e.demandMu.Lock()
+		waiters := e.demandWaiters
+		e.demandMu.Unlock()
+		if waiters == count {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("queued connections did not reach the version boundary: %d", waiters)
+		case <-time.After(time.Millisecond):
+		}
+	}
+	p.Version, p.Multiplier = 2, 2500000
+	if err := e.Apply(p); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		select {
+		case got := <-done:
+			if got.s != nil {
+				got.s.Release()
+			}
+			t.Fatalf("controlled policy change ended pending connection: %v", got.err)
+		default:
+		}
+		requests, err = e.WaitAuthorityRequests(ctx, g.BootID, g.Authority, 128)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(requests) == 1 && requests[0].PolicyVersion == 2 {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal("pending connection never requested the current policy")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	state, err := e.Snapshot(g.ClientID)
+	if err != nil || state.ActiveSessions != 0 || state.Usage != (Usage{}) {
+		t.Fatalf("unfunded transition admitted or billed: %+v/%v", state, err)
+	}
+	challenge, err := e.BeginAuthorityChallenge(g.BootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.GrantID, g.Sequence, g.PolicyVersion, g.ChallengeID = "queued-policy-grant-2", 2, 2, challenge.ChallengeID
+	if _, err := e.InstallAuthorityGrant(g); err != nil {
+		t.Fatal(err)
+	}
+	for range count {
+		select {
+		case got := <-done:
+			if got.err != nil || got.s == nil {
+				t.Fatalf("current finite grant failed to resume connection: %v", got.err)
+			}
+			defer got.s.Release()
+			if err := got.s.Admit(Upload, 3); err != nil {
+				t.Fatal(err)
+			}
+		case <-ctx.Done():
+			t.Fatal("funded connection did not resume")
+		}
+	}
+	state, err = e.Snapshot(g.ClientID)
+	wantMicros := uint64(3 * count * 2500000)
+	if err != nil || state.Usage != (Usage{RawUpload: uint64(3 * count), BilledBytes: wantMicros / MultiplierScale, Remainder: wantMicros % MultiplierScale}) {
+		t.Fatalf("resumed connection lost the new multiplier: %+v/%v", state, err)
+	}
+}
+
 func TestOpenDuringControlledGrantHandoffHonorsCancellation(t *testing.T) {
 	e, g := authorityExecutionFixture(t, testPolicy("owner"), 100, time.Second)
 	if _, err := e.InstallAuthorityGrant(g); err != nil {

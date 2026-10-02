@@ -204,7 +204,10 @@ func (c *clientState) waitAuthorityRequestLocked(ctx context.Context, refill boo
 	}
 	request := *c.demandRequest
 	pending := e.demandRequests[request.ClientID]
-	if pending == nil {
+	if pending == nil || pending.request.PolicyVersion < request.PolicyVersion {
+		// Old-version waiters retain their own queue entry until they unwind.
+		// Replacing its map slot lets a controlled handoff request the new
+		// policy without waiting for every old waiter to reacquire this mutex.
 		pending = &queuedAuthorityRequest{request: request}
 		e.demandRequests[request.ClientID] = pending
 		e.notifyDemandLocked()

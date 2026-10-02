@@ -57,6 +57,9 @@ func (c *clientState) awaitOpenTransitionLocked(ctx context.Context) error {
 	defer func() { c.pendingOpens-- }()
 	for c.transitionPendingLocked(time.Now()) {
 		if waiting, err := c.refillAuthorityLocked(ctx); waiting {
+			if errors.Is(err, ErrPolicyVersion) && (c.transitionPendingLocked(time.Now()) || c.reasonsLocked(time.Now()) == 0) {
+				continue
+			}
 			if err != nil {
 				return err
 			}

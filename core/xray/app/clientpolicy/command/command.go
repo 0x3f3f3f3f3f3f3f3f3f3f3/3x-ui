@@ -80,6 +80,7 @@ func (s *service) GetCapabilities(ctx context.Context, _ *Empty) (*Capabilities,
 	}
 	if c.Persistent && c.BootID != "" {
 		features = append(features, "boot-bound-execution-grants-v1", "monotonic-grant-renewal-v1", "bounded-grant-handoff-v1", "on-demand-authority-requests-v1")
+		features = append(features, "dormant-monotone-usage-reconciliation-v1")
 	}
 	return &Capabilities{ApiVersion: 1, CoreVersion: core.VersionStatement()[0], InstanceId: c.InstanceID, Epoch: c.Epoch, Capabilities: features, ReservationRawBytes: c.ReservationRawBytes, BootId: c.BootID}, nil
 }
@@ -119,6 +120,20 @@ func (s *service) InitializeClient(ctx context.Context, r *InitializeRequest) (*
 
 func usage(u clientpolicy.Usage) *Usage {
 	return &Usage{RawUpload: u.RawUpload, RawDownload: u.RawDownload, BilledBytes: u.BilledBytes, Remainder: u.Remainder}
+}
+
+func (s *service) ReconcileUsage(ctx context.Context, r *ReconcileUsageRequest) (*Empty, error) {
+	if err := s.authorize(ctx); err != nil {
+		return nil, err
+	}
+	if r == nil || r.Usage == nil {
+		return nil, status.Error(codes.InvalidArgument, "known cumulative usage is required")
+	}
+	u := clientpolicy.Usage{RawUpload: r.Usage.RawUpload, RawDownload: r.Usage.RawDownload, BilledBytes: r.Usage.BilledBytes, Remainder: r.Usage.Remainder}
+	if err := s.engine.ReconcileUsageFloor(r.ExpectedBootId, r.ClientId, u); err != nil {
+		return nil, rpcError(err)
+	}
+	return &Empty{}, nil
 }
 
 func (s *service) GetClient(ctx context.Context, r *ClientRequest) (*ClientState, error) {
