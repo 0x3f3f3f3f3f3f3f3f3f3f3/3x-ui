@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -38,6 +40,205 @@ func resetCaptureFixture(t *testing.T) (*Journal, Identity, Grant, string) {
 		t.Fatal(err)
 	}
 	return j, id, grant, path
+}
+
+func retainedResetFixture(t *testing.T, path, phase string) string {
+	t.Helper()
+	root := os.Getenv("RESET_OPERATION_FIXTURE_DIR")
+	if root == "" {
+		root = t.TempDir()
+	}
+	if err := os.MkdirAll(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Lstat(root)
+	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+		t.Fatalf("fixture directory is not private: %v", err)
+	}
+	dir, err := os.MkdirTemp(root, "reset-operation-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copyPath := filepath.Join(dir, phase+".db")
+	if err := os.WriteFile(copyPath, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("retained closed fixture: %s", copyPath)
+	return copyPath
+}
+
+func originalResetWriter(t *testing.T, probe, path string, id Identity, wantOpen bool) {
+	t.Helper()
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(probe, path, id.AuthorityID, strconv.FormatUint(id.Generation, 10)).CombinedOutput()
+	if wantOpen {
+		if err != nil || string(output) != "OPENED\n" {
+			t.Fatalf("original writer did not open schema4: %v/%s", err, output)
+		}
+	} else {
+		var exited *exec.ExitError
+		if !errors.As(err, &exited) || exited.ExitCode() != 3 || string(output) != "REJECTED_JOURNAL\n" {
+			t.Fatalf("original writer did not reject schema5: %v/%s", err, output)
+		}
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatalf("original writer changed fixture bytes: %v", err)
+	}
+}
+
+func TestResetOperationCaptureActualOldWriter(t *testing.T) {
+	probe := os.Getenv("RESET_OPERATION_OLD_WRITER_PROBE")
+	if probe == "" {
+		t.Skip("set RESET_OPERATION_OLD_WRITER_PROBE to the retained pre-change original-source executable")
+	}
+	j, id, grant, path := resetCaptureFixture(t)
+	account, err := j.Account("canonical-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := ResetOperationCapture{Identity: id, SourceID: "reset-source", RequestID: "original-request", CalendarKey: strings.Repeat("a", 64), Snapshot: `{"targets":"` + strings.Repeat("原始,", 6000) + `"}`}
+	if err := j.Close(); err != nil {
+		t.Fatal(err)
+	}
+	originalResetWriter(t, probe, retainedResetFixture(t, path, "uncaptured-schema4"), id, true)
+	j, err = Open(path, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalid := r
+	invalid.Snapshot = "{"
+	if err := j.CaptureResetOperation(invalid); !errors.Is(err, ErrRequest) {
+		t.Fatalf("invalid first capture accepted: %v", err)
+	}
+	if err := j.Close(); err != nil {
+		t.Fatal(err)
+	}
+	originalResetWriter(t, probe, retainedResetFixture(t, path, "rejected-schema4"), id, true)
+	originalOpen := openJournal
+	openJournal = func(path string, mode os.FileMode, options *bolt.Options) (*bolt.DB, error) {
+		copyOptions := *options
+		copyOptions.OpenFile = func(path string, _ int, _ os.FileMode) (*os.File, error) { return os.Open(path) }
+		return originalOpen(path, mode, &copyOptions)
+	}
+	readOnly, err := Open(path, id)
+	openJournal = originalOpen
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := readOnly.CaptureResetOperation(r); !errors.Is(err, ErrJournal) {
+		t.Fatalf("read-only FD first capture committed: %v", err)
+	}
+	if err := readOnly.Close(); err != nil {
+		t.Fatal(err)
+	}
+	originalResetWriter(t, probe, retainedResetFixture(t, path, "write-failed-schema4"), id, true)
+	j, err = Open(path, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := j.CaptureResetOperation(r); err != nil {
+		_ = j.Close()
+		t.Fatal(err)
+	}
+	if err := j.Close(); err != nil {
+		t.Fatal(err)
+	}
+	committed := retainedResetFixture(t, path, "committed-schema5")
+	originalResetWriter(t, probe, committed, id, false)
+	j, err = Open(committed, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer j.Close()
+	got, err := j.LookupResetCalendar(r.CalendarKey)
+	if err != nil || got != r {
+		t.Fatalf("new reader lost protected original: exact=%v err=%v", got == r, err)
+	}
+	if err := j.CaptureResetOperation(r); err != nil {
+		t.Fatalf("new writer exact retry: %v", err)
+	}
+	after, err := j.Account("canonical-client")
+	if err != nil || after != account {
+		t.Fatalf("writer fence changed account: exact=%v err=%v", after == account, err)
+	}
+	retained, err := j.Grant(grant.GrantID)
+	if err != nil || retained != grant {
+		t.Fatalf("writer fence changed funded grant: exact=%v err=%v", retained == grant, err)
+	}
+}
+
+func TestResetOperationCaptureCommitReplyHelper(t *testing.T) {
+	path := os.Getenv("RESET_OPERATION_COMMIT_HELPER_PATH")
+	if path == "" {
+		return
+	}
+	id := Identity{AuthorityID: "reset-capture-authority", Generation: 1}
+	j, err := Open(path, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := ResetOperationCapture{Identity: id, SourceID: "reset-source", RequestID: "lost-reply", CalendarKey: strings.Repeat("d", 64), Snapshot: `{"targets":["original-client"]}`}
+	if err := j.CaptureResetOperation(r); err != nil {
+		t.Fatal(err)
+	}
+	// Exit before replying or closing the journal. The parent retains the file
+	// and must determine the committed result by reopening, never recreation.
+	os.Exit(23)
+}
+
+func TestResetOperationCaptureLostReplyRetainsCompleteWriterFence(t *testing.T) {
+	probe := os.Getenv("RESET_OPERATION_OLD_WRITER_PROBE")
+	if probe == "" {
+		t.Skip("set RESET_OPERATION_OLD_WRITER_PROBE to verify the lost-reply fixture against its actual old writer")
+	}
+	j, id, grant, path := resetCaptureFixture(t)
+	account, err := j.Account("canonical-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Close(); err != nil {
+		t.Fatal(err)
+	}
+	uncaptured := retainedResetFixture(t, path, "before-lost-reply-schema4")
+	originalResetWriter(t, probe, uncaptured, id, true)
+	child := exec.Command(os.Args[0], "-test.run=^TestResetOperationCaptureCommitReplyHelper$")
+	child.Env = append(os.Environ(), "RESET_OPERATION_COMMIT_HELPER_PATH="+path)
+	output, err := child.CombinedOutput()
+	var exited *exec.ExitError
+	if !errors.As(err, &exited) || exited.ExitCode() != 23 {
+		t.Fatalf("capture did not reach lost-reply boundary: %v/%s", err, output)
+	}
+	committed := retainedResetFixture(t, path, "lost-reply-schema5")
+	originalResetWriter(t, probe, committed, id, false)
+	j, err = Open(committed, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer j.Close()
+	r := ResetOperationCapture{Identity: id, SourceID: "reset-source", RequestID: "lost-reply", CalendarKey: strings.Repeat("d", 64), Snapshot: `{"targets":["original-client"]}`}
+	got, err := j.LookupResetOperation(r.RequestID)
+	if err != nil || got != r {
+		t.Fatalf("lost reply left incomplete original capture: exact=%v err=%v", got == r, err)
+	}
+	if err := j.CaptureResetOperation(r); err != nil {
+		t.Fatalf("lost-reply exact retry: %v", err)
+	}
+	after, err := j.Account("canonical-client")
+	if err != nil || after != account {
+		t.Fatalf("lost reply changed account: exact=%v err=%v", after == account, err)
+	}
+	retained, err := j.Grant(grant.GrantID)
+	if err != nil || retained != grant {
+		t.Fatalf("lost reply changed grant: exact=%v err=%v", retained == grant, err)
+	}
 }
 
 func TestResetOperationCaptureFailureLeavesOldJournalUnchanged(t *testing.T) {
