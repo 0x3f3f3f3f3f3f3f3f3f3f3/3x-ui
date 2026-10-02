@@ -26,6 +26,11 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 	if meta.Identity != j.id {
 		return ErrIdentity
 	}
+	if meta.MigrationSource != "" || meta.SnapshotDigest != "" {
+		if !key(meta.MigrationSource) || !validSnapshotDigest(meta.SnapshotDigest) {
+			return ErrJournal
+		}
+	}
 	if err := validateMigrationRecords(tx, meta.MigrationDigest); err != nil {
 		return err
 	}

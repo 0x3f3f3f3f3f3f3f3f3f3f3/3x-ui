@@ -20,7 +20,73 @@ type MigrationRecord struct {
 	Value json.RawMessage `json:"value"`
 }
 
+func CreateWithMigrationIdentity(path string, identity Identity, seeds []Seed, deleted []string, records []MigrationRecord) (*Journal, error) {
+	if !key(identity.AuthorityID) || identity.Generation != 1 {
+		return nil, ErrIdentity
+	}
+	j, _, err := createWithMigrationIdentity(path, identity, seeds, deleted, records, "", "")
+	return j, err
+}
+
 func CreateWithMigration(path string, seeds []Seed, deleted []string, records []MigrationRecord) (*Journal, Identity, error) {
+	return createWithMigrationIdentity(path, Identity{}, seeds, deleted, records, "", "")
+}
+
+func CreateWithMigrationSourceIdentity(path string, identity Identity, sourceID string, seeds []Seed, deleted []string, records []MigrationRecord) (*Journal, error) {
+	if !key(identity.AuthorityID) || identity.Generation != 1 || !key(sourceID) {
+		return nil, ErrIdentity
+	}
+	digest, err := MigrationSnapshotDigest(seeds, deleted, records)
+	if err != nil {
+		return nil, err
+	}
+	j, _, err := createWithMigrationIdentity(path, identity, seeds, deleted, records, sourceID, digest)
+	return j, err
+}
+
+func MigrationSnapshotDigest(seeds []Seed, deleted []string, records []MigrationRecord) (string, error) {
+	seeds = append([]Seed(nil), seeds...)
+	deleted = append([]string(nil), deleted...)
+	records = append([]MigrationRecord(nil), records...)
+	sort.Slice(seeds, func(i, j int) bool { return seeds[i].ClientID < seeds[j].ClientID })
+	sort.Strings(deleted)
+	sort.Slice(records, func(i, j int) bool {
+		if records[i].Kind == records[j].Kind {
+			return records[i].Key < records[j].Key
+		}
+		return records[i].Kind < records[j].Kind
+	})
+	hash := sha256.New()
+	for _, collection := range []any{seeds, deleted, records} {
+		if err := json.NewEncoder(hash).Encode(collection); err != nil {
+			return "", err
+		}
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func (j *Journal) CheckMigrationSource(sourceID, snapshotDigest string) error {
+	if j == nil || j.closed.Load() {
+		return ErrJournal
+	}
+	return j.db.View(func(tx *bolt.Tx) error {
+		var meta metadata
+		if err := get(tx, "metadata", "state", &meta); err != nil {
+			return err
+		}
+		if !key(sourceID) || !validSnapshotDigest(snapshotDigest) || meta.MigrationSource != sourceID || meta.SnapshotDigest != snapshotDigest {
+			return ErrIdentity
+		}
+		return nil
+	})
+}
+
+func validSnapshotDigest(digest string) bool {
+	decoded, err := hex.DecodeString(digest)
+	return err == nil && len(decoded) == sha256.Size
+}
+
+func createWithMigrationIdentity(path string, identity Identity, seeds []Seed, deleted []string, records []MigrationRecord, sourceID, snapshotDigest string) (*Journal, Identity, error) {
 	if len(records) > maxMigrationRecords || len(deleted) > len(seeds) {
 		return nil, Identity{}, ErrRequest
 	}
@@ -64,7 +130,7 @@ func CreateWithMigration(path string, seeds []Seed, deleted []string, records []
 		hash.Write(raw)
 		hash.Write([]byte{0})
 	}
-	return createJournal(path, seeds, terminal, ordered, hex.EncodeToString(hash.Sum(nil)))
+	return createJournal(path, seeds, terminal, ordered, hex.EncodeToString(hash.Sum(nil)), identity, sourceID, snapshotDigest)
 }
 
 func (j *Journal) MigrationRecord(kind, key string) (MigrationRecord, error) {

@@ -34,6 +34,8 @@ type metadata struct {
 	Identity        Identity `json:"identity"`
 	Sequence        uint64   `json:"sequence"`
 	MigrationDigest string   `json:"migrationDigest"`
+	MigrationSource string   `json:"migrationSource,omitempty"`
+	SnapshotDigest  string   `json:"snapshotDigest,omitempty"`
 }
 
 type Journal struct {
@@ -57,7 +59,7 @@ func Create(path string, seeds []Seed) (*Journal, Identity, error) {
 	return CreateWithMigration(path, seeds, nil, nil)
 }
 
-func createJournal(path string, seeds []Seed, deleted map[string]bool, records []MigrationRecord, digest string) (*Journal, Identity, error) {
+func createJournal(path string, seeds []Seed, deleted map[string]bool, records []MigrationRecord, digest string, prepared Identity, sourceID, snapshotDigest string) (*Journal, Identity, error) {
 	if len(seeds) > maxRecords {
 		return nil, Identity{}, ErrRequest
 	}
@@ -82,19 +84,22 @@ func createJournal(path string, seeds []Seed, deleted map[string]bool, records [
 	if err != nil {
 		return nil, Identity{}, fmt.Errorf("%w: open: %v", ErrJournal, err)
 	}
-	random := make([]byte, 16)
-	if _, err := rand.Read(random); err != nil {
-		_ = db.Close()
-		return nil, Identity{}, err
+	id := prepared
+	if id == (Identity{}) {
+		random := make([]byte, 16)
+		if _, err := rand.Read(random); err != nil {
+			_ = db.Close()
+			return nil, Identity{}, err
+		}
+		id = Identity{AuthorityID: hex.EncodeToString(random), Generation: 1}
 	}
-	id := Identity{AuthorityID: hex.EncodeToString(random), Generation: 1}
 	err = db.Update(func(tx *bolt.Tx) error {
 		for _, name := range bucketNames {
 			if _, err := tx.CreateBucket([]byte(name)); err != nil {
 				return err
 			}
 		}
-		if err := put(tx, "metadata", "state", metadata{Schema: 4, Identity: id, MigrationDigest: digest}); err != nil {
+		if err := put(tx, "metadata", "state", metadata{Schema: 4, Identity: id, MigrationDigest: digest, MigrationSource: sourceID, SnapshotDigest: snapshotDigest}); err != nil {
 			return err
 		}
 		for _, seed := range seeds {

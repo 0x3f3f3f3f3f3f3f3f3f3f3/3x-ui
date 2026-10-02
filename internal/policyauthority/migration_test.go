@@ -115,6 +115,52 @@ func TestMigrationCreatesSeedsDeletionAndOriginalEvidenceAtomically(t *testing.T
 	}
 }
 
+func TestMigrationPreparedIdentitySurvivesReopenAndRejectsWrongManifest(t *testing.T) {
+	path, seeds, records := migrationFixture(t)
+	id := Identity{AuthorityID: "a3e5ddbd913729c9afb7ed580e078d20", Generation: 1}
+	j, err := CreateWithMigrationIdentity(path, id, seeds, []string{"deleted"}, records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j.Identity() != id {
+		_ = j.Close()
+		t.Fatalf("migration replaced prepared identity: %+v", j.Identity())
+	}
+	if err := j.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(path, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reopened.Close(); err != nil {
+		t.Fatal(err)
+	}
+	wrong := id
+	wrong.AuthorityID = "another-prepared-authority"
+	if opened, err := Open(path, wrong); !errors.Is(err, ErrIdentity) {
+		if opened != nil {
+			_ = opened.Close()
+		}
+		t.Fatalf("mismatched migration manifest opened authority: %v", err)
+	}
+}
+
+func TestMigrationIdentityPreflightNeverCreatesUnpreparedOrNewGenerationAuthority(t *testing.T) {
+	for _, id := range []Identity{{}, {AuthorityID: "prepared", Generation: 0}, {AuthorityID: "prepared", Generation: 2}} {
+		path, seeds, records := migrationFixture(t)
+		if j, err := CreateWithMigrationIdentity(path, id, seeds, nil, records); !errors.Is(err, ErrIdentity) {
+			if j != nil {
+				_ = j.Close()
+			}
+			t.Fatalf("invalid initial identity created authority: %+v/%v", id, err)
+		}
+		if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("identity preflight left state: %v", err)
+		}
+	}
+}
+
 func TestMigrationInvalidMembershipAndEvidenceLeavesNoAuthority(t *testing.T) {
 	for _, fault := range []string{"unknown-deletion", "duplicate-deletion", "duplicate-record", "invalid-json", "unknown-kind"} {
 		t.Run(fault, func(t *testing.T) {
