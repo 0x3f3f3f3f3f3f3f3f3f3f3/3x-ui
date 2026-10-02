@@ -43,6 +43,48 @@ func TestManagedAuthorityOrdinaryRestartAndStopUseDurableController(t *testing.T
 	}
 }
 
+func TestManagedAuthorityUncertainCloseRequiresStoppedCoreAndRetainsHolds(t *testing.T) {
+	svc, tunnel, client, _ := setupManagedActivationService(t)
+	if err := svc.RestartXray(true); err != nil {
+		t.Fatal(err)
+	}
+	process := currentXrayProcess()
+	authority := managedAuthorityForProcess(process)
+	conn, err := net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", tunnel.Port), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	managedActivationEcho(t, conn, "hold")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := authority.controller.join(ctx); err != nil {
+		t.Fatal(err)
+	}
+	before, err := authority.state.Journal.Account(client.StableID)
+	if err != nil || before.HeldCapacity == 0 {
+		t.Fatalf("missing outstanding allocation: %+v/%v", before, err)
+	}
+	if closed, err := authority.closeStopped(ctx); closed || !errors.Is(err, ErrClientPolicyLedger) {
+		t.Fatalf("live core lost its authority owner: %v/%v", closed, err)
+	}
+	if err := process.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	if closed, err := authority.closeStopped(ctx); !closed || err != nil {
+		t.Fatalf("stopped core retained its owner: %v/%v", closed, err)
+	}
+	state, err := openAuthorityState(filepath.Join(config.GetDBFolderPath(), "client-policy", "authority"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer state.Journal.Close()
+	after, err := state.Journal.Account(client.StableID)
+	if err != nil || after != before {
+		t.Fatalf("uncertain close credited an unsealed allocation: %+v/%v", after, err)
+	}
+}
+
 func TestManagedAuthorityForcedRestartPreservesSettledAllowance(t *testing.T) {
 	svc, tunnel, _, _ := setupManagedActivationService(t)
 	if err := svc.RestartXray(true); err != nil {
@@ -104,6 +146,44 @@ func TestManagedAuthorityActivatedMissingStateIsNeverFirstInstall(t *testing.T) 
 	}
 	if _, err := os.Lstat(dir); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("rejected first-install created files: %v", err)
+	}
+}
+
+func TestManagedAuthorityOrdinaryResetPreservesLifetimeAndReusesWindow(t *testing.T) {
+	svc, tunnel, client, _ := setupManagedActivationService(t)
+	if err := svc.RestartXray(true); err != nil {
+		t.Fatal(err)
+	}
+	process := currentXrayProcess()
+	conn, err := net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", tunnel.Port), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	managedActivationEcho(t, conn, "warm")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := ResetLocalClientPolicy(ctx, client.StableID, "ordinary-reset"); err != nil {
+		t.Fatal(err)
+	}
+	managedActivationEcho(t, conn, "next")
+	if err := ResetLocalClientPolicy(ctx, client.StableID, "ordinary-reset"); err != nil {
+		t.Fatal(err)
+	}
+	if currentXrayProcess() != process {
+		t.Fatal("reset restarted the business core")
+	}
+	if err := svc.StopXray(); err != nil {
+		t.Fatal(err)
+	}
+	state, err := openAuthorityState(filepath.Join(config.GetDBFolderPath(), "client-policy", "authority"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer state.Journal.Close()
+	a, err := state.Journal.Account(client.StableID)
+	if err != nil || a.Usage != (policyauthority.Usage{RawUpload: 108, RawDownload: 208, BilledBytes: 332}) || a.WindowUsed != 16 || a.WindowBaseline != 316 || a.HeldCapacity != 0 {
+		t.Fatalf("reset lost lifetime usage or recreated its window: %+v/%v", a, err)
 	}
 }
 

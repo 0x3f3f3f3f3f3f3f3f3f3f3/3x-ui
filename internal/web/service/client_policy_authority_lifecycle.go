@@ -53,5 +53,21 @@ func stopManagedProcess(ctx context.Context, process *panelxray.Process) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	return errors.Join(stopManagedAuthority(ctx, process), process.Stop())
+	authorityErr := stopManagedAuthority(ctx, process)
+	processErr := process.Stop()
+	var closeErr error
+	if authorityErr != nil && !process.IsRunning() {
+		closeCtx, closeCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer closeCancel()
+		localAuthority.Lock()
+		if localAuthority.process == process && localAuthority.authority != nil {
+			var closed bool
+			closed, closeErr = localAuthority.authority.closeStopped(closeCtx)
+			if closed {
+				localAuthority.process, localAuthority.authority = nil, nil
+			}
+		}
+		localAuthority.Unlock()
+	}
+	return errors.Join(authorityErr, processErr, closeErr)
 }

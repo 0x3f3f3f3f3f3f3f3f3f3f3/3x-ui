@@ -32,6 +32,7 @@ type authorityController struct {
 	api       authorityDemandAPI
 	active    map[string]*controllerGrant
 	pending   map[string]*command.AuthorityRequest
+	suspended map[string]bool
 	stateMu   sync.Mutex
 	cancel    context.CancelFunc
 	done      chan struct{}
@@ -78,7 +79,7 @@ func (c *authorityController) run(ctx context.Context, done chan struct{}) {
 		}
 	}
 }
-func (c *authorityController) Stop(ctx context.Context) error {
+func (c *authorityController) join(ctx context.Context) error {
 	if c == nil || ctx == nil {
 		return ErrClientPolicyLedger
 	}
@@ -93,6 +94,13 @@ func (c *authorityController) Stop(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		}
+	}
+	return nil
+}
+
+func (c *authorityController) Stop(ctx context.Context) error {
+	if err := c.join(ctx); err != nil {
+		return err
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -154,7 +162,7 @@ func newAuthorityController(ctx context.Context, db *gorm.DB, journal *policyaut
 	if err := api.EnableAuthorityRequests(ctx, &command.AuthorityBinding{AuthorityId: id.AuthorityID, Generation: id.Generation, NodeId: nodeID}); err != nil {
 		return nil, err
 	}
-	return &authorityController{execution: execution, api: api, active: make(map[string]*controllerGrant), pending: make(map[string]*command.AuthorityRequest)}, nil
+	return &authorityController{execution: execution, api: api, active: make(map[string]*controllerGrant), pending: make(map[string]*command.AuthorityRequest), suspended: make(map[string]bool)}, nil
 }
 
 func controllerCapacity(account policyauthority.Account) uint64 {
@@ -233,6 +241,9 @@ func (c *authorityController) HandleRequests(ctx context.Context, page *command.
 func (c *authorityController) handleRequestLocked(ctx context.Context, r *command.AuthorityRequest) error {
 	if r == nil || len(r.RequestId) != 32 || r.ClientId == "" || r.PolicyVersion == 0 {
 		return ErrClientPolicyLedger
+	}
+	if c.suspended[r.ClientId] {
+		return policyauthority.ErrRequest
 	}
 	account, err := c.execution.journal.Account(r.ClientId)
 	if err != nil {

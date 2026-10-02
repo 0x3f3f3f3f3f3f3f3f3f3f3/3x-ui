@@ -59,21 +59,11 @@ func (a *managedAuthority) Prepare(ctx context.Context, caps *command.Capabiliti
 	if err := runSerializedTxContextForDatabase(ctx, a.db, func(tx *gorm.DB) error { return nil }); err != nil {
 		return nil, err
 	}
+	if err := a.reconcileDeletionsLocked(ctx, nil); err != nil {
+		return nil, err
+	}
 	ids := make([]string, 0, len(a.config.Policies))
 	for _, policy := range a.config.Policies {
-		account, err := a.state.Journal.Account(policy.ClientID)
-		if err != nil {
-			return nil, err
-		}
-		direction := func(rate uint64) policyauthority.Direction {
-			if rate == 0 {
-				return policyauthority.Direction{Unlimited: true}
-			}
-			return policyauthority.Direction{Rate: rate, Burst: policy.BurstBytes}
-		}
-		if account.Deleted || account.Policy.Version != policy.Version || account.Policy.QuotaBytes != policy.QuotaBytes || account.Policy.QuotaUnlimited != (policy.QuotaBytes == 0) || account.Policy.Upload != direction(policy.UploadRate) || account.Policy.Download != direction(policy.DownloadRate) {
-			return nil, ErrClientPolicyLedger
-		}
 		ids = append(ids, policy.ClientID)
 	}
 	for start := 0; start < len(ids); start += 1000 {
@@ -86,6 +76,36 @@ func (a *managedAuthority) Prepare(ctx context.Context, caps *command.Capabiliti
 			if !slices.Contains(current, policy) {
 				return nil, ErrManagedConfigStale
 			}
+		}
+	}
+	for _, policy := range a.config.Policies {
+		account, err := a.state.Journal.LookupAccount(policy.ClientID)
+		if errors.Is(err, policyauthority.ErrNotFound) {
+			if err := a.provisionPolicy(ctx, policy); err != nil {
+				return nil, err
+			}
+			account, err = a.state.Journal.Account(policy.ClientID)
+			if err != nil {
+				return nil, err
+			}
+		} else if err != nil {
+			return nil, err
+		}
+		if err := a.reconcilePolicy(ctx, policy, account); err != nil {
+			return nil, err
+		}
+		account, err = a.state.Journal.Account(policy.ClientID)
+		if err != nil {
+			return nil, err
+		}
+		direction := func(rate uint64) policyauthority.Direction {
+			if rate == 0 {
+				return policyauthority.Direction{Unlimited: true}
+			}
+			return policyauthority.Direction{Rate: rate, Burst: policy.BurstBytes}
+		}
+		if account.Deleted || account.Policy.Version != policy.Version || account.Policy.QuotaBytes != policy.QuotaBytes || account.Policy.QuotaUnlimited != (policy.QuotaBytes == 0) || account.Policy.Upload != direction(policy.UploadRate) || account.Policy.Download != direction(policy.DownloadRate) {
+			return nil, ErrClientPolicyLedger
 		}
 	}
 	bootstrap, err := PrepareLocalClientPolicyBootstrap(caps, &a.config)
@@ -142,4 +162,29 @@ func (a *managedAuthority) Stop(ctx context.Context) error {
 	result = errors.Join(result, a.state.Journal.Close())
 	a.closed = true
 	return result
+}
+
+// A confirmed stopped core cannot spend its grants. Closing its owner leaves
+// every unsealed capacity/rate hold in the journal for conservative recovery.
+func (a *managedAuthority) closeStopped(ctx context.Context) (bool, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.closed {
+		return true, nil
+	}
+	if a.process == nil || a.process.IsRunning() {
+		return false, ErrClientPolicyLedger
+	}
+	if a.controller != nil {
+		if err := a.controller.join(ctx); err != nil {
+			return false, err
+		}
+	}
+	var result error
+	if a.api != nil {
+		result = a.api.Close()
+	}
+	result = errors.Join(result, a.state.Journal.Close())
+	a.closed = true
+	return true, result
 }

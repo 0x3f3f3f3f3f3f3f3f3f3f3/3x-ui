@@ -1721,10 +1721,7 @@ func (s *XrayService) StopXray() error {
 	if process != nil && process.IsRunning() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := stopManagedAuthority(ctx, process); err != nil {
-			return err
-		}
-		return process.Stop()
+		return stopManagedProcess(ctx, process)
 	}
 	return errors.New("xray is not running")
 }

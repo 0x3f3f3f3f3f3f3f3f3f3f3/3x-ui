@@ -139,6 +139,19 @@ func (l *Local) ApplyManagedConfig(ctx context.Context, process *xray.Process, n
 			return false, err
 		}
 	}
+	if bootstrap != nil && bootstrap.Authorize != nil {
+		authorize := func() error {
+			l.mu.Unlock()
+			defer l.mu.Lock()
+			return bootstrap.Authorize(ctx, policyAPI)
+		}
+		if err := authorize(); err != nil {
+			return false, err
+		}
+		if process.GetConfig() != current {
+			return false, errors.New("managed configuration changed during authorization")
+		}
+	}
 	for _, outbound := range diff.AddedOutbounds {
 		if err := api.AddOutbound(outbound); err != nil {
 			return false, err

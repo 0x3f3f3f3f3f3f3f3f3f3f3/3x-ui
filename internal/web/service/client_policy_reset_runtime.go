@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/xtls/xray-core/app/clientpolicy"
 	"github.com/xtls/xray-core/infra/conf"
@@ -50,7 +51,7 @@ func ResetLocalClientPolicies(ctx context.Context, clientIDs []string, requestID
 	})
 }
 
-func applyLocalClientPolicyReset(ctx context.Context, ids []string, prepare func(string) ([]clientpolicy.Policy, error)) error {
+func applyLocalClientPolicyReset(ctx context.Context, ids []string, prepare func(string) ([]clientpolicy.Policy, error)) (resultErr error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -83,12 +84,32 @@ func applyLocalClientPolicyReset(ctx context.Context, ids []string, prepare func
 	if err != nil {
 		return err
 	}
+	authority := managedAuthorityForProcess(process)
+	if authority != nil {
+		defer func() {
+			if resultErr != nil {
+				stop, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				resultErr = errors.Join(resultErr, stopManagedProcess(stop, process))
+				(&XrayService{}).SetToNeedRestart()
+			}
+		}()
+		if err := authority.SuspendClients(ctx, ids); err != nil {
+			return err
+		}
+	}
 	if err := pollLocalClientPolicyLedger(ctx, process); err != nil {
 		return fmt.Errorf("checkpoint before reset: %w", err)
 	}
 	policies, err := prepare(config.InstanceID)
 	if err != nil {
 		return err
+	}
+	if authority != nil {
+		if err := authority.ApplyPolicies(ctx, managed, policies); err != nil {
+			return fmt.Errorf("reset saved but authority application failed: %w", err)
+		}
+		return nil
 	}
 	for start := 0; start < len(policies); start += 1000 {
 		if err := managed.ApplyManagedPolicies(ctx, process, policies[start:min(start+1000, len(policies))]); err != nil {

@@ -171,6 +171,13 @@ func (s *XrayService) restartManagedXrayLocked(isForce bool) error {
 					if err := prepareSSHManagedResources(caps, candidate); err != nil {
 						return nil, err
 					}
+					if authority := managedAuthorityForProcess(process); authority != nil {
+						var full conf.ClientPolicyConfig
+						if err := json.Unmarshal(candidate.ClientPolicy, &full); err != nil {
+							return nil, err
+						}
+						return authority.PrepareUpdate(ctx, caps, &full, policy)
+					}
 					return PrepareLocalClientPolicyBootstrap(caps, policy)
 				})
 				if applyErr != nil && (errors.Is(applyErr, panelruntime.ErrManagedConfigPartial) || managedAccessChanged(process.GetConfig(), candidate)) {

@@ -8,6 +8,21 @@ import (
 
 var ErrNotFound = errors.New("authority record not found")
 
+// LookupAccount distinguishes an unprovisioned identity from corrupt state.
+func (j *Journal) LookupAccount(id string) (Account, error) {
+	var account Account
+	if j == nil || j.closed.Load() || !key(id) {
+		return account, ErrJournal
+	}
+	err := j.db.View(func(tx *bolt.Tx) error {
+		if tx.Bucket([]byte("accounts")).Get([]byte(id)) == nil {
+			return ErrNotFound
+		}
+		return get(tx, "accounts", id, &account)
+	})
+	return account, err
+}
+
 func (j *Journal) AccountPage(after string, limit int) ([]Account, error) {
 	if j == nil || j.closed.Load() || limit < 1 || limit > 1000 || after != "" && !key(after) {
 		return nil, ErrRequest

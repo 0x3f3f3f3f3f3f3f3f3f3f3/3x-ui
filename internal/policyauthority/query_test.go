@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+
+	bolt "go.etcd.io/bbolt"
 )
 
 func TestGrantQueriesRecoverCommittedRequestAndCurrentReceipt(t *testing.T) {
@@ -46,6 +48,29 @@ func TestGrantQueriesRecoverCommittedRequestAndCurrentReceipt(t *testing.T) {
 	grant, err := reopened.LookupRequest(boot.NodeID, r.Binding.ClientID, r.RequestID)
 	if err != nil || !grant.Sealed || grant.Usage != usage || grant.ReportSequence != 2 || grant.Request != r {
 		t.Fatalf("query lost immutable request/current receipt: %+v/%v", grant, err)
+	}
+}
+
+func TestAccountLookupDistinguishesMissingFromCorruptAuthority(t *testing.T) {
+	j, _, _, _ := journalFixture(t)
+	if _, err := j.LookupAccount("missing-account"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing account was not distinguished: %v", err)
+	}
+	accounts, err := j.AccountPage("", 1)
+	if err != nil || len(accounts) != 1 {
+		t.Fatalf("initial account: %+v/%v", accounts, err)
+	}
+	id := accounts[0].Seed.ClientID
+	if account, err := j.LookupAccount(id); err != nil || account != accounts[0] {
+		t.Fatalf("existing account: %+v/%v", account, err)
+	}
+	if err := j.db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket([]byte("accounts")).Put([]byte(id), []byte("{"))
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := j.LookupAccount(id); err == nil || errors.Is(err, ErrNotFound) {
+		t.Fatalf("corrupt account was treated as unprovisioned: %v", err)
 	}
 }
 

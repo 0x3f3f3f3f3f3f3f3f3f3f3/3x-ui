@@ -13,11 +13,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mhsanaei/3x-ui/v3/internal/config"
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/policyauthority"
 	panelruntime "github.com/mhsanaei/3x-ui/v3/internal/web/runtime"
 	panelxray "github.com/mhsanaei/3x-ui/v3/internal/xray"
+	command "github.com/xtls/xray-core/app/clientpolicy/command"
 	"github.com/xtls/xray-core/infra/conf"
 )
 
@@ -83,7 +85,7 @@ func authorityFactoryProcess(t *testing.T, path, client string) (*panelxray.Proc
 	}
 	address, port := probe.Addr().String(), probe.Addr().(*net.TCPAddr).Port
 	_ = probe.Close()
-	raw := fmt.Sprintf(`{"log":{"loglevel":"error"},"api":{"tag":"control","listen":%q,"services":["ClientPolicyServiceV1","HandlerService"]},"clientPolicy":%s,"inbounds":[{"tag":"owned","listen":"127.0.0.1","port":%d,"protocol":"tunnel","settings":{"network":"tcp","address":"127.0.0.1","port":%d,"clientId":%q}}],"outbounds":[{"protocol":"freedom","settings":{"finalRules":[{"action":"allow","ip":["127.0.0.1"]}]}}]}`, filepath.Join(dir, "control.sock"), policyRaw, port, echo.Addr().(*net.TCPAddr).Port, client)
+	raw := fmt.Sprintf(`{"log":{"loglevel":"error"},"api":{"tag":"control","listen":%q,"services":["ClientPolicyServiceV1","HandlerService"]},"clientPolicy":%s,"inbounds":[{"tag":"owned","listen":"127.0.0.1","port":%d,"protocol":"tunnel","settings":{"network":"tcp","address":"127.0.0.1","port":%d,"clientId":%q}}],"outbounds":[{"tag":"direct","protocol":"freedom","settings":{"finalRules":[{"action":"allow","ip":["127.0.0.1"]}]}}]}`, filepath.Join(dir, "control.sock"), policyRaw, port, echo.Addr().(*net.TCPAddr).Port, client)
 	var cfg panelxray.Config
 	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
 		t.Fatal(err)
@@ -143,6 +145,70 @@ func TestManagedAuthorityMissingStateAndWrongSourceNeverReinitialize(t *testing.
 	}
 	if _, err := os.Lstat(dir); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("ordinary startup recreated authority: %v", err)
+	}
+}
+
+func TestManagedAuthorityDeletionSkipsNeverAuthorizedIdentity(t *testing.T) {
+	path, client := migratedAuthorityFixture(t)
+	state, err := openAuthorityState(filepath.Join(filepath.Dir(path), "authority"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer state.Journal.Close()
+	db := database.GetDB()
+	unissued := model.ClientRecord{Email: "deleted-without-authority", Enable: true}
+	if err := db.Create(&unissued).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&model.ClientPolicyTombstone{ClientID: unissued.StableID}).Error; err != nil {
+		t.Fatal(err)
+	}
+	a := &managedAuthority{db: db, state: state, config: conf.ClientPolicyConfig{InstanceID: "migration-source"}}
+	before, err := state.Journal.Account(client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.ReconcileDeletions(context.Background(), nil); err != nil {
+		t.Fatalf("unissued SQL tombstone blocked existing authority: %v", err)
+	}
+	if _, err := state.Journal.Account(unissued.StableID); err == nil {
+		t.Fatal("deletion provisioned an unknown identity")
+	}
+	after, err := state.Journal.Account(client)
+	if err != nil || after != before {
+		t.Fatalf("unissued deletion changed another account: %+v/%v", after, err)
+	}
+}
+
+func TestManagedAuthorityProvisionCannotWriteToReplacementDatabase(t *testing.T) {
+	path, _ := migratedAuthorityFixture(t)
+	state, err := openAuthorityState(filepath.Join(filepath.Dir(path), "authority"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer state.Journal.Close()
+	db := database.GetDB()
+	client := model.ClientRecord{Email: "delayed-authority-provision", Enable: true}
+	if err := db.Create(&client).Error; err != nil {
+		t.Fatal(err)
+	}
+	policies, err := PrepareClientPolicies([]string{client.StableID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &managedAuthority{db: db, state: state, config: conf.ClientPolicyConfig{InstanceID: "migration-source"}}
+	if err := database.InitDB(config.GetDBPath()); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.provisionPolicy(context.Background(), policies[0]); !errors.Is(err, ErrDatabaseReplaced) {
+		t.Fatalf("old authority wrote into replacement database: %v", err)
+	}
+	var count int64
+	if err := database.GetDB().Model(&model.ClientPolicyReceipt{}).Where("client_id = ?", client.StableID).Count(&count).Error; err != nil || count != 0 {
+		t.Fatalf("rejected provision seeded replacement SQL: %d/%v", count, err)
+	}
+	if _, err := state.Journal.Account(client.StableID); err == nil {
+		t.Fatal("rejected provision created an authority account")
 	}
 }
 
@@ -227,4 +293,51 @@ func TestManagedAuthorityContinuousTCPRefillsAcrossFiniteGrants(t *testing.T) {
 	if err != nil || a.Usage != (policyauthority.Usage{RawUpload: 6 + 3<<20, RawDownload: 4 + 3<<20, BilledBytes: 12 + 9<<20, Remainder: 500000}) || a.HeldCapacity != 0 || a.UploadHeld.Rate != 0 || a.DownloadHeld.Rate != 0 {
 		t.Fatalf("continuous refill accounting: %+v/%v", a, err)
 	}
+}
+
+func TestManagedAuthorityHotAuthorizationRunsOutsideRuntimeMutex(t *testing.T) {
+	path, client := migratedAuthorityFixture(t)
+	process, config, address := authorityFactoryProcess(t, path, client)
+	authority, err := openManagedAuthority(process, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	t.Cleanup(func() {
+		stop, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = authority.Stop(stop)
+	})
+	local := panelruntime.NewLocal(panelruntime.LocalDeps{})
+	if err := local.StartManagedProcess(ctx, process, authority.Prepare); err != nil {
+		t.Fatal(err)
+	}
+	next := *process.GetConfig()
+	called := false
+	applied, err := local.ApplyManagedConfig(ctx, process, &next, func(caps *command.Capabilities, initial *conf.ClientPolicyConfig) (*panelruntime.ManagedPolicyBootstrap, error) {
+		bootstrap, err := PrepareLocalClientPolicyBootstrap(caps, initial)
+		if err != nil {
+			return nil, err
+		}
+		bootstrap.Authorize = func(ctx context.Context, _ *panelxray.ClientPolicyAPI) error {
+			called = true
+			done := make(chan error, 1)
+			go func() {
+				_, _, err := local.ReadManagedLedger(ctx, process, 0, false)
+				done <- err
+			}()
+			select {
+			case err := <-done:
+				return err
+			case <-time.After(300 * time.Millisecond):
+				return errors.New("Runtime mutex held across hot authorization callback")
+			}
+		}
+		return bootstrap, nil
+	})
+	if err != nil || !applied || !called {
+		t.Fatalf("hot callback: %v/%v/%v", applied, called, err)
+	}
+	authorityEndpointExchange(t, address, 5)
 }

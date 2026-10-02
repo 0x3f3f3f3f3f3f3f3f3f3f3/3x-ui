@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -61,8 +62,12 @@ func ClientPolicyLedgerCursor(instanceID string) (uint64, error) {
 
 // Prepare stores the legacy baseline once. Core initialization must use this exact seed before activation.
 func PrepareClientPolicyLedger(instanceID, clientID string) (*command.Usage, error) {
+	return prepareClientPolicyLedgerForDatabase(context.Background(), database.GetDB(), instanceID, clientID)
+}
+
+func prepareClientPolicyLedgerForDatabase(ctx context.Context, expected *gorm.DB, instanceID, clientID string) (*command.Usage, error) {
 	var seed *command.Usage
-	err := runSerializedTx(func(tx *gorm.DB) error {
+	err := runSerializedTxContextForDatabase(ctx, expected, func(tx *gorm.DB) error {
 		var source model.ClientPolicySource
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&source, "instance_id = ?", instanceID).Error; err != nil {
 			return err

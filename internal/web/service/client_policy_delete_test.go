@@ -96,6 +96,14 @@ func TestClientPolicyPermanentDeletionRevokesIdentityAndPreservesUsage(t *testin
 					if total := policyLedgerTotal(t, owner.StableID); total != before {
 						t.Fatalf("deletion changed lifetime usage: before=%+v after=%+v", before, total)
 					}
+					authority := managedAuthorityForProcess(process)
+					if authority == nil {
+						t.Fatal("deletion recovery lost its issuance authority")
+					}
+					account, err := authority.state.Journal.Account(owner.StableID)
+					if err != nil || !account.Deleted || account.HeldCapacity != 0 || account.Usage.RawUpload != uint64(before.RawUpload) || account.Usage.RawDownload != uint64(before.RawDownload) || account.Usage.BilledBytes != uint64(before.BilledBytes) {
+						t.Fatalf("deletion failed to preserve a sealed durable tombstone: %+v/%v", account, err)
+					}
 					stale := proto.Clone(state.Policy).(*clientpolicy.PolicyConfig)
 					stale.Version++
 					stale.Enabled = true
@@ -424,8 +432,17 @@ func TestClientPolicyPermanentDeletionBootstrapTraversesHistory(t *testing.T) {
 func TestClientPolicyPermanentDeletionRetriesSQLFailureWithoutRebilling(t *testing.T) {
 	for _, stage := range []string{"pending-read", "receipt-write"} {
 		t.Run(stage, func(t *testing.T) {
-			svc, _, owner, _ := setupManagedActivationService(t)
+			svc, tunnel, owner, _ := setupManagedActivationService(t)
 			if err := svc.RestartXray(true); err != nil {
+				t.Fatal(err)
+			}
+			flow, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", tunnel.Port), time.Second)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer flow.Close()
+			managedActivationEcho(t, flow, "warm")
+			if _, _, err := svc.GetXrayTraffic(); err != nil {
 				t.Fatal(err)
 			}
 			before := policyLedgerTotal(t, owner.StableID)
@@ -462,7 +479,7 @@ func TestClientPolicyPermanentDeletionRetriesSQLFailureWithoutRebilling(t *testi
 				_ = db.Callback().Update().Remove(callback)
 			}
 			t.Cleanup(remove)
-			_, err := (&ClientService{}).Delete(&InboundService{}, owner.Id, false)
+			_, err = (&ClientService{}).Delete(&InboundService{}, owner.Id, false)
 			if !injected.Load() || !errors.Is(err, panelruntime.ErrManagedApply) || !errors.Is(err, fault) {
 				t.Fatalf("deletion hid SQL failure: injected=%t err=%v", injected.Load(), err)
 			}

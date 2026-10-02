@@ -124,7 +124,9 @@ func reconcileDeletedClientPolicies(clientIDs []string) (resultErr error) {
 	}
 	defer func() {
 		if resultErr != nil {
-			resultErr = errors.Join(panelruntime.ErrManagedApply, resultErr, process.Stop())
+			stop, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			resultErr = errors.Join(panelruntime.ErrManagedApply, resultErr, stopManagedProcess(stop, process))
 			(&XrayService{}).SetToNeedRestart()
 		}
 	}()
@@ -163,6 +165,11 @@ func reconcileDeletedClientPolicies(clientIDs []string) (resultErr error) {
 		return errors.New("Runtime does not support permanent managed identity deletion")
 	}
 	for _, batch := range chunkStrings(ids, 1000) {
+		if authority := managedAuthorityForProcess(process); authority != nil {
+			if err = authority.ReconcileDeletions(ctx, batch); err != nil {
+				break
+			}
+		}
 		var absent []string
 		absent, err = runtime.RevokeManagedClients(ctx, process, batch)
 		if err == nil && len(absent) > 0 {
