@@ -26,6 +26,7 @@ func (s *Session) StreamChunkSize(direction Direction) (uint64, error) {
 		if !waiting {
 			if c.reasonsLocked(time.Now()) == ReasonAuthority {
 				refilled, err := c.refillAuthorityLocked(s.ctx)
+				err = s.normalizeRefillErrorLocked(err)
 				if err != nil {
 					closed = c.failedRefillSessionsLocked()
 					return 0, err

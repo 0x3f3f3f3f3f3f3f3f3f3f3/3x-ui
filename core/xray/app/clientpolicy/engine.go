@@ -329,6 +329,7 @@ func (s *Session) Admit(direction Direction, n uint64) error {
 		}
 		if c.reasonsLocked(now) == ReasonAuthority {
 			if waiting, err := s.refillAdmissionLocked(direction, n); waiting {
+				err = s.normalizeRefillErrorLocked(err)
 				var closed []*Session
 				if err != nil {
 					closed = c.failedRefillSessionsLocked()
@@ -358,6 +359,7 @@ func (s *Session) Admit(direction Direction, n uint64) error {
 		}
 		if !c.withinAuthorityGrantLocked(next) {
 			if waiting, err := s.refillAdmissionLocked(direction, n); waiting {
+				err = s.normalizeRefillErrorLocked(err)
 				var closed []*Session
 				if err != nil {
 					closed = c.failedRefillSessionsLocked()

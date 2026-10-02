@@ -8,6 +8,58 @@ import (
 	"time"
 )
 
+func TestDemandPolicyHandoffRequestsNewVersionAndPreservesLiveSession(t *testing.T) {
+	p := testPolicy("policy-demand-handoff")
+	p.Multiplier, p.QuotaBytes = 1500000, 100
+	e, g := authorityExecutionFixture(t, p, 40, 2*time.Second)
+	if err := e.EnableAuthorityRequests(g.BootID, g.Authority); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.InstallAuthorityGrant(g); err != nil {
+		t.Fatal(err)
+	}
+	s := openSession(t, e, p.ClientID, nil)
+	defer s.Close()
+	if err := s.Admit(Upload, 3); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.PauseAuthorityGrant(p.ClientID, g.GrantID); err != nil {
+		t.Fatal(err)
+	}
+	p.Version, p.Multiplier = 2, 500000
+	if err := e.Apply(p); err != nil {
+		t.Fatal(err)
+	}
+	admitted := make(chan error, 1)
+	go func() { admitted <- s.Admit(Download, 3) }()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	requests, err := e.WaitAuthorityRequests(ctx, g.BootID, g.Authority, 128)
+	if err != nil || len(requests) != 1 || requests[0].PolicyVersion != 2 || requests[0].PreviousGrantID != g.GrantID {
+		t.Fatalf("new policy handoff demand: %+v/%v", requests, err)
+	}
+	challenge, err := e.BeginAuthorityChallenge(g.BootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.GrantID, g.Sequence, g.PolicyVersion, g.ChallengeID = "policy-grant-2", 2, 2, challenge.ChallengeID
+	if _, err := e.InstallAuthorityGrant(g); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-admitted:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal("new policy grant failed to resume live stream")
+	}
+	state, err := e.Snapshot(p.ClientID)
+	if err != nil || state.ActiveSessions != 1 || state.Usage != (Usage{RawUpload: 3, RawDownload: 3, BilledBytes: 6}) {
+		t.Fatalf("policy handoff repriced old usage: %+v/%v", state, err)
+	}
+}
+
 func TestOpenDuringControlledGrantHandoffWaitsForReplacement(t *testing.T) {
 	e, g := authorityExecutionFixture(t, testPolicy("owner"), 100, time.Second)
 	if _, err := e.InstallAuthorityGrant(g); err != nil {

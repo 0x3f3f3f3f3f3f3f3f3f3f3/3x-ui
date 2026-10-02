@@ -2,6 +2,7 @@ package clientpolicy
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -20,6 +21,9 @@ func (s *Session) awaitGrantTransitionLocked(now time.Time) (bool, error) {
 	if !c.transitionPendingLocked(now) {
 		return false, nil
 	}
+	if waiting, err := c.refillAuthorityLocked(s.ctx); waiting {
+		return true, s.normalizeRefillErrorLocked(err)
+	}
 	changed := c.changed
 	timer := time.NewTimer(time.Until(c.grant.deadline))
 	c.mu.Unlock()
@@ -35,6 +39,13 @@ func (s *Session) awaitGrantTransitionLocked(now time.Time) (bool, error) {
 	return true, err
 }
 
+func (s *Session) normalizeRefillErrorLocked(err error) error {
+	if errors.Is(err, ErrPolicyVersion) && !s.closed.Load() && s.client.transitionPendingLocked(time.Now()) {
+		return nil
+	}
+	return err
+}
+
 func (c *clientState) awaitOpenTransitionLocked(ctx context.Context) error {
 	if !c.transitionPendingLocked(time.Now()) {
 		return nil
@@ -45,6 +56,12 @@ func (c *clientState) awaitOpenTransitionLocked(ctx context.Context) error {
 	c.pendingOpens++
 	defer func() { c.pendingOpens-- }()
 	for c.transitionPendingLocked(time.Now()) {
+		if waiting, err := c.refillAuthorityLocked(ctx); waiting {
+			if err != nil {
+				return err
+			}
+			continue
+		}
 		changed := c.changed
 		timer := time.NewTimer(time.Until(c.grant.deadline))
 		c.mu.Unlock()

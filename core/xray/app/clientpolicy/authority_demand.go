@@ -136,7 +136,7 @@ func (c *clientState) awaitAuthorityRequestLocked(ctx context.Context) error {
 }
 
 func (c *clientState) canRefillAuthorityLocked(now time.Time) bool {
-	if c.grant == nil || c.grant.Sealed && !c.grant.preserveSessions || c.grant.Grant.BootID != c.engine.bootID || c.grant.Grant.PolicyVersion != c.policy.Version || !now.Before(c.grant.deadline) || c.reasonsLocked(now) & ^ReasonAuthority != 0 {
+	if c.grant == nil || c.grant.Sealed && !c.grant.preserveSessions || c.grant.Grant.BootID != c.engine.bootID || c.grant.Grant.PolicyVersion != c.policy.Version && !c.grant.preserveSessions || !now.Before(c.grant.deadline) || c.reasonsLocked(now) & ^ReasonAuthority != 0 {
 		return false
 	}
 	c.engine.demandMu.Lock()
