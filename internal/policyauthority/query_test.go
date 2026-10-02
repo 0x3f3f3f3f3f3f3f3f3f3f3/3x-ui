@@ -1,0 +1,113 @@
+package policyauthority
+
+import (
+	"errors"
+	"testing"
+)
+
+func TestGrantQueriesRecoverCommittedRequestAndCurrentReceipt(t *testing.T) {
+	j, id, boot, path := journalFixture(t)
+	r := issueRequest(id, boot, "query-request", 60)
+	issued, err := j.Issue(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if grant, err := j.Grant(issued.GrantID); err != nil || grant != issued {
+		t.Fatalf("committed grant lookup: %+v/%v", grant, err)
+	}
+	if grant, err := j.LookupRequest(boot.NodeID, r.Binding.ClientID, r.RequestID); err != nil || grant != issued {
+		t.Fatalf("lost-reply request lookup: %+v/%v", grant, err)
+	}
+	if _, err := j.LookupRequest(boot.NodeID, r.Binding.ClientID, "missing"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing request: %v", err)
+	}
+	usage := Usage{RawUpload: 1, BilledBytes: 2, Remainder: 500000}
+	if err := j.Report(Report{Binding: r.Binding, GrantID: issued.GrantID, Sequence: 1, Usage: usage}); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.CheckActiveGrant(issued.GrantID, boot); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Report(Report{Binding: r.Binding, GrantID: issued.GrantID, Sequence: 2, Usage: usage, Seal: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.CheckActiveGrant(issued.GrantID, boot); !errors.Is(err, ErrRequest) {
+		t.Fatalf("sealed grant authorized renewal: %v", err)
+	}
+	if err := j.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(path, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	grant, err := reopened.LookupRequest(boot.NodeID, r.Binding.ClientID, r.RequestID)
+	if err != nil || !grant.Sealed || grant.Usage != usage || grant.ReportSequence != 2 || grant.Request != r {
+		t.Fatalf("query lost immutable request/current receipt: %+v/%v", grant, err)
+	}
+}
+
+func TestGrantRenewalQueryRejectsRetiredBootAndDeletedAccount(t *testing.T) {
+	for _, action := range []string{"retire", "delete"} {
+		t.Run(action, func(t *testing.T) {
+			j, id, boot, _ := journalFixture(t)
+			grant, err := j.Issue(issueRequest(id, boot, "active-request", 60))
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := ErrIncarnation
+			if action == "retire" {
+				next := boot
+				next.BootID = "fresh-boot-b"
+				if err := j.RegisterBoot(next); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				want = ErrDeleted
+				if err := j.Tombstone(grant.Request.Binding.ClientID); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := j.CheckActiveGrant(grant.GrantID, boot); !errors.Is(err, want) {
+				t.Fatalf("%s grant authorized renewal: %v", action, err)
+			}
+			if retained, err := j.Grant(grant.GrantID); err != nil || retained != grant {
+				t.Fatalf("query erased retained allocation: %+v/%v", retained, err)
+			}
+		})
+	}
+}
+
+func TestGrantRenewalQueryRejectsSupersededPolicyAndWindow(t *testing.T) {
+	for _, reset := range []bool{false, true} {
+		t.Run(map[bool]string{false: "policy", true: "window"}[reset], func(t *testing.T) {
+			j, id, boot, _ := journalFixture(t)
+			grant, err := j.Issue(issueRequest(id, boot, "before-change", 60))
+			if err != nil {
+				t.Fatal(err)
+			}
+			account, err := j.Account(grant.Request.Binding.ClientID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			policy := account.Policy
+			policy.Version++
+			if reset {
+				policy.WindowID = "next-window"
+			} else {
+				policy.QuotaBytes--
+			}
+			if _, err := j.ChangePolicy(ChangeRequest{Identity: id, ClientID: grant.Request.Binding.ClientID, RequestID: "change", ExpectedVersion: account.Policy.Version, Policy: policy, Reset: reset}); err != nil {
+				t.Fatal(err)
+			}
+			if err := j.CheckActiveGrant(grant.GrantID, boot); !errors.Is(err, ErrRequest) {
+				t.Fatalf("superseded grant authorized renewal: %v", err)
+			}
+			// Late cumulative receipts still settle the old reservation exactly.
+			if err := j.Report(Report{Binding: grant.Request.Binding, GrantID: grant.GrantID, Sequence: 1, Usage: Usage{RawUpload: 1, BilledBytes: 1}, Seal: true}); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
