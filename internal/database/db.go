@@ -18,6 +18,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/config"
@@ -35,6 +37,12 @@ import (
 
 var db *gorm.DB
 
+// Migration helpers use db only while databaseLifecycle excludes replacement.
+// Runtime readers see a fully initialized pool through publishedDB.
+var databaseLifecycle sync.RWMutex
+var publishedDB atomic.Pointer[gorm.DB]
+var databaseReady atomic.Bool
+
 var backupSQLiteTimeout = 2 * time.Minute
 
 const (
@@ -43,18 +51,22 @@ const (
 )
 
 func IsPostgres() bool {
-	if db == nil {
+	current := GetDB()
+	if current == nil {
 		return config.GetDBKind() == "postgres"
 	}
-	return db.Name() == "postgres"
+	return current.Name() == "postgres"
 }
 
 func Dialect() string {
-	if db == nil {
+	current := GetDB()
+	if current == nil {
 		return ""
 	}
-	return db.Name()
+	return current.Name()
 }
+
+func migrationUsesPostgres() bool { return db.Name() == "postgres" }
 
 const (
 	defaultUsername       = "admin"
@@ -141,7 +153,7 @@ func initModels() error {
 	}
 	models := allModels()
 	for _, mdl := range models {
-		if IsPostgres() && postgresModelSettled(mdl) {
+		if migrationUsesPostgres() && postgresModelSettled(mdl) {
 			continue
 		}
 		if err := db.AutoMigrate(mdl); err != nil {
@@ -216,7 +228,7 @@ func initModels() error {
 	if err := migrateClientEmailLowerIndex(); err != nil {
 		return err
 	}
-	if IsPostgres() {
+	if migrationUsesPostgres() {
 		if err := resyncPostgresSequences(db, models); err != nil {
 			log.Printf("Error resyncing postgres sequences: %v", err)
 			return err
@@ -248,7 +260,7 @@ func postgresModelSettled(mdl any) bool {
 }
 
 func dropLegacyForeignKeys() error {
-	if !IsPostgres() {
+	if !migrationUsesPostgres() {
 		return nil
 	}
 	if err := db.Exec("ALTER TABLE client_traffics DROP CONSTRAINT IF EXISTS fk_inbounds_client_stats").Error; err != nil {
@@ -294,7 +306,7 @@ func sqliteUniquePortIndexes() (autoIndexes, explicitIndexes []string, err error
 // dropLegacyInboundPortUnique removes the pre-multi-node UNIQUE on inbounds.port,
 // which AutoMigrate never drops and which blocks cross-node port reuse on old SQLite DBs.
 func dropLegacyInboundPortUnique() error {
-	if IsPostgres() {
+	if migrationUsesPostgres() {
 		return nil
 	}
 	autoIndexes, explicitIndexes, err := sqliteUniquePortIndexes()
@@ -422,7 +434,7 @@ func migrateHostVerifyPeerCertByNameColumn() error {
 	if !db.Migrator().HasColumn(&model.Host{}, "verify_peer_cert_by_name") {
 		return nil
 	}
-	if IsPostgres() {
+	if migrationUsesPostgres() {
 
 		var dataType string
 		if err := db.Raw(
@@ -1147,7 +1159,7 @@ func repairOverflowedTrafficCounters() error {
 				fmt.Sprintf("UPDATE %s SET %s = %d WHERE %s > %d", target.table, col, TrafficMax, col, TrafficMax),
 				fmt.Sprintf("UPDATE %s SET %s = 0 WHERE %s < 0", target.table, col, col),
 			}
-			if !IsPostgres() {
+			if !migrationUsesPostgres() {
 				statements = append([]string{
 					fmt.Sprintf("UPDATE %s SET %s = CAST(%s AS INTEGER) WHERE typeof(%s) = 'real'", target.table, col, col, col),
 				}, statements...)
@@ -2676,6 +2688,9 @@ func isTableEmpty(tableName string) (bool, error) {
 }
 
 func InitDB(dbPath string) error {
+	databaseLifecycle.Lock()
+	defer databaseLifecycle.Unlock()
+	databaseReady.Store(false)
 	var gormLogger logger.Interface
 	if config.IsDebug() {
 		gormLogger = logger.New(
@@ -2693,7 +2708,7 @@ func InitDB(dbPath string) error {
 	c := &gorm.Config{Logger: gormLogger, DisableForeignKeyConstraintWhenMigrating: true}
 
 	// Reopening replaces the process pool; the replaced one would keep its file open.
-	if err := CloseDB(); err != nil {
+	if err := closeDatabasePool(); err != nil {
 		log.Printf("close the replaced database pool: %v", err)
 	}
 
@@ -2782,7 +2797,12 @@ func InitDB(dbPath string) error {
 	if err := initUser(); err != nil {
 		return err
 	}
-	return runSeeders(isUsersEmpty)
+	if err := runSeeders(isUsersEmpty); err != nil {
+		return err
+	}
+	publishedDB.Store(db)
+	databaseReady.Store(true)
+	return nil
 }
 
 func normalizeApiTokenCreatedAtSeconds() error {
@@ -2903,6 +2923,13 @@ func envInt(key string, def int) int {
 }
 
 func CloseDB() error {
+	databaseLifecycle.Lock()
+	defer databaseLifecycle.Unlock()
+	return closeDatabasePool()
+}
+
+func closeDatabasePool() error {
+	databaseReady.Store(false)
 	if db != nil {
 		sqlDB, err := db.DB()
 		if err != nil {
@@ -2914,7 +2941,7 @@ func CloseDB() error {
 }
 
 func GetDB() *gorm.DB {
-	return db
+	return publishedDB.Load()
 }
 
 func IsNotFound(err error) bool {
@@ -2932,6 +2959,11 @@ func IsSQLiteDB(file io.ReaderAt) (bool, error) {
 }
 
 func BackupSQLite(dstPath string) (err error) {
+	databaseLifecycle.RLock()
+	defer databaseLifecycle.RUnlock()
+	if !databaseReady.Load() {
+		return errors.New("database is not initialized or is closed")
+	}
 	if IsPostgres() {
 		return errors.New("sqlite backup is unavailable for PostgreSQL")
 	}

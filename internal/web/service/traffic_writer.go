@@ -129,16 +129,15 @@ func runSerializedTx(fn func(tx *gorm.DB) error) error {
 	return runSerializedTxForDatabase(database.GetDB(), fn)
 }
 
-var ErrDatabaseReplaced = errors.New("database was replaced before the operation could commit; retry from the current database")
+var ErrDatabaseReplaced = database.ErrDatabaseReplaced
 
 func runSerializedTxForDatabase(expected *gorm.DB, fn func(tx *gorm.DB) error) error {
 	return submitTrafficWrite(func() error {
-		if expected == nil || database.GetDB() != expected {
-			return ErrDatabaseReplaced
-		}
-		return expected.Transaction(func(tx *gorm.DB) error {
-			ctx := context.WithValue(tx.Statement.Context, serializedTxContextKey{}, true)
-			return fn(tx.WithContext(ctx))
+		return database.WithCurrentDB(expected, func(current *gorm.DB) error {
+			return current.Transaction(func(tx *gorm.DB) error {
+				ctx := context.WithValue(tx.Statement.Context, serializedTxContextKey{}, true)
+				return fn(tx.WithContext(ctx))
+			})
 		})
 	})
 }
