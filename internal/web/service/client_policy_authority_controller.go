@@ -198,15 +198,16 @@ func (c *authorityController) ProcessRequests(ctx context.Context) error {
 		pending.Requests = append(pending.Requests, proto.Clone(c.pending[id]).(*command.AuthorityRequest))
 	}
 	c.mu.Unlock()
-	if err := c.HandleRequests(ctx, pending); err != nil {
-		return err
+	pendingErr := c.HandleRequests(ctx, pending)
+	if err := ctx.Err(); err != nil {
+		return errors.Join(pendingErr, err)
 	}
 	id := c.execution.journal.Identity()
 	page, err := c.api.ReadAuthorityRequests(ctx, &command.AuthorityBinding{AuthorityId: id.AuthorityID, Generation: id.Generation, NodeId: c.execution.boot.NodeID}, 128)
 	if err != nil {
-		return err
+		return errors.Join(pendingErr, err)
 	}
-	return c.HandleRequests(ctx, page)
+	return errors.Join(pendingErr, c.HandleRequests(ctx, page))
 }
 func (c *authorityController) HandleRequests(ctx context.Context, page *command.AuthorityRequests) error {
 	if c == nil || ctx == nil || page == nil || page.InstanceId != c.execution.boot.SourceID || page.BootId != c.execution.boot.BootID || len(page.Requests) > 128 {
@@ -250,6 +251,13 @@ func (c *authorityController) handleRequestLocked(ctx context.Context, r *comman
 		return err
 	}
 	if account.Deleted || account.Policy.Version != r.PolicyVersion {
+		// An unissued obsolete nonce holds no budget. Issued lost replies stay
+		// tracked until an exact seal/settlement or conservative stopped close.
+		if c.pending[r.RequestId] != nil {
+			if _, err := c.execution.journal.LookupRequest(c.execution.boot.NodeID, r.ClientId, r.RequestId); errors.Is(err, policyauthority.ErrNotFound) {
+				delete(c.pending, r.RequestId)
+			}
+		}
 		return policyauthority.ErrRequest
 	}
 	prior, err := c.execution.journal.LookupRequest(c.execution.boot.NodeID, r.ClientId, r.RequestId)
@@ -329,26 +337,34 @@ func (c *authorityController) SettleAndRenew(ctx context.Context) error {
 		clients = append(clients, id)
 	}
 	slices.Sort(clients)
+	var result error
 	for _, id := range clients {
-		current := c.active[id]
-		if err := c.execution.Settle(ctx, current.grantID, false, false); err != nil {
-			return err
+		if err := ctx.Err(); err != nil {
+			return errors.Join(result, err)
 		}
-		grant, err := c.execution.journal.Grant(current.grantID)
-		if err != nil {
-			return err
-		}
-		if grant.Sealed {
-			delete(c.active, id)
-			continue
-		}
-		if current.renewalSequence >= math.MaxInt64 {
-			return policyauthority.ErrRequest
-		}
-		if err := c.execution.Renew(ctx, current.grantID, current.renewalSequence+1, policyauthority.MaxLeaseDuration); err != nil {
-			return err
-		}
-		current.renewalSequence++
+		result = errors.Join(result, c.settleAndRenewLocked(ctx, id, c.active[id]))
 	}
+	return result
+}
+
+func (c *authorityController) settleAndRenewLocked(ctx context.Context, id string, current *controllerGrant) error {
+	if err := c.execution.Settle(ctx, current.grantID, false, false); err != nil {
+		return err
+	}
+	grant, err := c.execution.journal.Grant(current.grantID)
+	if err != nil {
+		return err
+	}
+	if grant.Sealed {
+		delete(c.active, id)
+		return nil
+	}
+	if current.renewalSequence >= math.MaxInt64 {
+		return policyauthority.ErrRequest
+	}
+	if err := c.execution.Renew(ctx, current.grantID, current.renewalSequence+1, policyauthority.MaxLeaseDuration); err != nil {
+		return err
+	}
+	current.renewalSequence++
 	return nil
 }

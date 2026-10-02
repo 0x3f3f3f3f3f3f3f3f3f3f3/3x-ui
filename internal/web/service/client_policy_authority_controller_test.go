@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
+	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/policyauthority"
+	"github.com/xtls/xray-core/app/clientpolicy"
 	command "github.com/xtls/xray-core/app/clientpolicy/command"
 	"google.golang.org/protobuf/proto"
 )
@@ -75,8 +77,18 @@ func TestAuthorityControllerUnavailableAccountDoesNotBlockAnotherDemand(t *testi
 type authorityDemandFault struct {
 	authorityDemandAPI
 	page         *command.AuthorityRequests
+	queued       *command.AuthorityRequests
 	installFault error
 	pauseFault   error
+	settleClient string
+	settleFault  error
+}
+
+func (f *authorityDemandFault) GetAuthorityGrant(ctx context.Context, client, grant string) (*command.ExecutionGrantState, error) {
+	if client == f.settleClient && f.settleFault != nil {
+		return nil, f.settleFault
+	}
+	return f.authorityDemandAPI.GetAuthorityGrant(ctx, client, grant)
 }
 
 func (f *authorityDemandFault) PauseAuthorityGrant(ctx context.Context, client, grant string) (*command.ExecutionGrantState, error) {
@@ -89,11 +101,99 @@ func (f *authorityDemandFault) PauseAuthorityGrant(ctx context.Context, client, 
 }
 
 func (f *authorityDemandFault) ReadAuthorityRequests(ctx context.Context, binding *command.AuthorityBinding, limit uint32) (*command.AuthorityRequests, error) {
+	if f.queued != nil {
+		page := f.queued
+		f.queued = nil
+		return page, nil
+	}
 	page, err := f.authorityDemandAPI.ReadAuthorityRequests(ctx, binding, limit)
 	if err == nil {
 		f.page = proto.Clone(page).(*command.AuthorityRequests)
 	}
 	return page, err
+}
+
+func TestAuthorityControllerStalePendingDoesNotBlockFreshPayload(t *testing.T) {
+	journal, client := authorityExecutionFixture(t)
+	api, address := authorityExecutionCore(t, "pending-demand-source", client)
+	fault := &authorityDemandFault{authorityDemandAPI: api}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	controller, err := newAuthorityController(ctx, database.GetDB(), journal, "local", fault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := &command.AuthorityRequest{RequestId: strings.Repeat("b", 32), ClientId: client, PolicyVersion: 2}
+	controller.pending[stale.RequestId] = stale
+	fault.queued = &command.AuthorityRequests{InstanceId: controller.execution.boot.SourceID, BootId: controller.execution.boot.BootID, Requests: []*command.AuthorityRequest{
+		{RequestId: strings.Repeat("a", 32), ClientId: client, PolicyVersion: 1},
+	}}
+	if err := controller.ProcessRequests(ctx); !errors.Is(err, policyauthority.ErrRequest) {
+		t.Fatalf("stale pending failure was hidden: %v", err)
+	}
+	if err := demandEndpointExchange(address); err != nil {
+		t.Fatalf("stale pending request blocked another valid payload: %v", err)
+	}
+	if len(controller.pending) != 0 {
+		t.Fatal("an unissued stale nonce kept occupying the bounded retry queue")
+	}
+	if err := controller.Stop(ctx); err != nil {
+		t.Fatal(err)
+	}
+	account, err := journal.Account(client)
+	if err != nil || account.Usage.BilledBytes != 25 || account.HeldCapacity != 0 {
+		t.Fatalf("independent demand was not exactly settled: %+v/%v", account, err)
+	}
+}
+
+func TestAuthorityControllerFailedSettlementDoesNotBlockAnotherRenewal(t *testing.T) {
+	journal, first := authorityExecutionFixture(t)
+	api, _ := authorityExecutionCore(t, "independent-renewal-source", first)
+	second := model.ClientRecord{Email: "independent-renewal", StableID: "ffffffff-ffff-4fff-bfff-ffffffffffff", Enable: true}
+	if err := database.GetDB().Create(&second).Error; err != nil {
+		t.Fatal(err)
+	}
+	account, err := journal.Account(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := journal.AddAccount(policyauthority.Seed{ClientID: second.StableID, Policy: account.Policy}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	policy := &clientpolicy.PolicyConfig{ClientId: second.StableID, Version: 1, Enabled: true, MultiplierMicros: 1500000, QuotaBytes: 100, UploadBytesPerSecond: 8192, DownloadBytesPerSecond: 8192, BurstBytes: 128}
+	if err := api.Initialize(ctx, policy, &command.Usage{}); err != nil {
+		t.Fatal(err)
+	}
+	fault := &authorityDemandFault{authorityDemandAPI: api}
+	controller, err := newAuthorityController(ctx, database.GetDB(), journal, "local", fault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := &command.AuthorityRequests{InstanceId: controller.execution.boot.SourceID, BootId: controller.execution.boot.BootID, Requests: []*command.AuthorityRequest{
+		{RequestId: strings.Repeat("a", 32), ClientId: first, PolicyVersion: 1},
+		{RequestId: strings.Repeat("b", 32), ClientId: second.StableID, PolicyVersion: 1},
+	}}
+	if err := controller.HandleRequests(ctx, page); err != nil {
+		t.Fatal(err)
+	}
+	fault.settleClient, fault.settleFault = first, errors.New("first account checkpoint unavailable")
+	if err := controller.SettleAndRenew(ctx); !errors.Is(err, fault.settleFault) {
+		t.Fatalf("settlement failure was hidden: %v", err)
+	}
+	if controller.active[first].renewalSequence != 0 || controller.active[second.StableID].renewalSequence != 1 {
+		t.Fatal("one unavailable checkpoint blocked an independent actual-core renewal")
+	}
+	if err := controller.Stop(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{first, second.StableID} {
+		account, err := journal.Account(id)
+		if err != nil || account.HeldCapacity != 0 {
+			t.Fatalf("independent grant failed to seal: %+v/%v", account, err)
+		}
+	}
 }
 
 func (f *authorityDemandFault) InstallAuthorityGrant(ctx context.Context, grant *command.ExecutionGrant) (*command.ExecutionGrantState, error) {
@@ -236,6 +336,21 @@ func TestAuthorityControllerStopRecoversLostInstallWithoutAnotherAllocation(t *t
 	}
 	if err := <-delivered; err != nil {
 		t.Fatal(err)
+	}
+	before, err := journal.Account(client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := before.Policy
+	next.Version++
+	if _, err := journal.ChangePolicy(policyauthority.ChangeRequest{Identity: journal.Identity(), ClientID: client, RequestID: "lost-install-policy-change", ExpectedVersion: before.Policy.Version, Policy: next}); err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.ProcessRequests(ctx); !errors.Is(err, policyauthority.ErrRequest) {
+		t.Fatalf("issued obsolete request failure was hidden: %v", err)
+	}
+	if len(controller.pending) != 1 {
+		t.Fatal("an issued lost reply was discarded when its policy became obsolete")
 	}
 	if err := controller.Stop(ctx); err != nil {
 		t.Fatal(err)
