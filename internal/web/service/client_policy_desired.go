@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 )
 
@@ -20,6 +21,10 @@ func PrepareClientPolicies(clientIDs []string) ([]clientpolicy.Policy, error) {
 }
 
 func prepareClientPolicies(clientIDs []string, compiled map[string]model.ClientRecord) ([]clientpolicy.Policy, error) {
+	return prepareClientPoliciesForDatabase(database.GetDB(), clientIDs, compiled)
+}
+
+func prepareClientPoliciesForDatabase(expected *gorm.DB, clientIDs []string, compiled map[string]model.ClientRecord) ([]clientpolicy.Policy, error) {
 	if len(clientIDs) == 0 || len(clientIDs) > 1000 {
 		return nil, clientpolicy.ErrInvalidPolicy
 	}
@@ -31,7 +36,7 @@ func prepareClientPolicies(clientIDs []string, compiled map[string]model.ClientR
 		seen[id] = true
 	}
 	var policies []clientpolicy.Policy
-	err := runSerializedTx(func(tx *gorm.DB) error {
+	err := runSerializedTxForDatabase(expected, func(tx *gorm.DB) error {
 		var clients []model.ClientRecord
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("stable_id IN ?", clientIDs).Order("stable_id").Find(&clients).Error; err != nil {
 			return err

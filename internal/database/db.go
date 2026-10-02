@@ -2800,8 +2800,11 @@ func InitDB(dbPath string) error {
 	if err := runSeeders(isUsersEmpty); err != nil {
 		return err
 	}
-	publishedDB.Store(db)
+	pool := &admittedPool{DB: sqlDB, expected: db}
+	db.Config.ConnPool = pool
+	db.Statement.ConnPool = pool
 	databaseReady.Store(true)
+	publishedDB.Store(db)
 	return nil
 }
 
@@ -2931,6 +2934,9 @@ func CloseDB() error {
 func closeDatabasePool() error {
 	databaseReady.Store(false)
 	if db != nil {
+		if pool, ok := db.ConnPool.(*admittedPool); ok {
+			return pool.close()
+		}
 		sqlDB, err := db.DB()
 		if err != nil {
 			return err

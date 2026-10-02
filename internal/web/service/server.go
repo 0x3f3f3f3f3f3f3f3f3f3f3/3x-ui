@@ -31,6 +31,8 @@ import (
 	"sync"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/mhsanaei/3x-ui/v3/internal/amneziawg"
 	"github.com/mhsanaei/3x-ui/v3/internal/amneziawgnet"
 	"github.com/mhsanaei/3x-ui/v3/internal/config"
@@ -1423,7 +1425,10 @@ type hostBoundSnapshot struct {
 }
 
 func captureHostBoundSettings() hostBoundSnapshot {
-	db := database.GetDB()
+	return captureHostBoundSettingsFrom(database.GetDB())
+}
+
+func captureHostBoundSettingsFrom(db *gorm.DB) hostBoundSnapshot {
 	if db == nil {
 		return hostBoundSnapshot{}
 	}
@@ -1445,10 +1450,13 @@ func captureHostBoundSettings() hostBoundSnapshot {
 }
 
 func restoreHostBoundSettings(snap hostBoundSnapshot) {
+	restoreHostBoundSettingsTo(database.GetDB(), snap)
+}
+
+func restoreHostBoundSettingsTo(db *gorm.DB, snap hostBoundSnapshot) {
 	if !snap.taken {
 		return
 	}
-	db := database.GetDB()
 	if db == nil {
 		return
 	}
@@ -1467,7 +1475,7 @@ func restoreHostBoundSettings(snap hostBoundSnapshot) {
 		}
 		// saveSetting rather than Assign(struct): GORM drops zero-valued fields from
 		// the assignment map, so an empty local value never overwrote the import.
-		if err := settingSvc.saveSetting(key, snap.values[key]); err != nil {
+		if err := settingSvc.saveSettingToDB(db, key, snap.values[key]); err != nil {
 			logger.Warningf("Import: could not restore setting %q for this machine: %v", key, err)
 		}
 	}
@@ -1540,6 +1548,9 @@ func (s *ServerService) importSQLiteDB(file multipart.File, keepHostSettings boo
 		_ = os.Remove(fallbackDir)
 	}()
 
+	if err := owner.fenceDatabase(); err != nil {
+		return err
+	}
 	if errStop := stopXrayBeforeDatabaseRestore(s); errStop != nil {
 		return common.NewErrorf("Database import aborted because Xray termination could not be confirmed: %v", errStop)
 	}
@@ -1555,7 +1566,7 @@ func (s *ServerService) importSQLiteDB(file multipart.File, keepHostSettings boo
 
 	var keptSettings hostBoundSnapshot
 	if keepHostSettings {
-		keptSettings = captureHostBoundSettings()
+		keptSettings = captureHostBoundSettingsFrom(owner.currentDatabase())
 	}
 
 	if errClose := database.CloseDB(); errClose != nil {
@@ -1604,9 +1615,9 @@ func (s *ServerService) importSQLiteDB(file multipart.File, keepHostSettings boo
 	}
 	dbReopened = true
 
-	restoreHostBoundSettings(keptSettings)
+	restoreHostBoundSettingsTo(owner.currentDatabase(), keptSettings)
 
-	s.inboundService.MigrateDB()
+	s.inboundService.migrateDBForRestore(owner.currentDatabase())
 
 	xrayStopped = false
 	if err = restartXrayAfterDatabaseRestore(s, owner); err != nil {
@@ -1810,6 +1821,9 @@ func (s *ServerService) restorePostgresDump(file multipart.File, keepHostSetting
 		return err
 	}
 
+	if err := owner.fenceDatabase(); err != nil {
+		return err
+	}
 	if errStop := stopXrayBeforeDatabaseRestore(s); errStop != nil {
 		return common.NewErrorf("Database restore aborted because Xray termination could not be confirmed: %v", errStop)
 	}
@@ -1825,7 +1839,7 @@ func (s *ServerService) restorePostgresDump(file multipart.File, keepHostSetting
 
 	var keptSettings hostBoundSnapshot
 	if keepHostSettings {
-		keptSettings = captureHostBoundSettings()
+		keptSettings = captureHostBoundSettingsFrom(owner.currentDatabase())
 	}
 
 	if errClose := database.CloseDB(); errClose != nil {
@@ -1845,9 +1859,9 @@ func (s *ServerService) restorePostgresDump(file multipart.File, keepHostSetting
 		return common.NewErrorf("Restore finished but reopening the database failed: %v", errInit)
 	}
 	dbReopened = true
-	restoreHostBoundSettings(keptSettings)
+	restoreHostBoundSettingsTo(owner.currentDatabase(), keptSettings)
 
-	s.inboundService.MigrateDB()
+	s.inboundService.migrateDBForRestore(owner.currentDatabase())
 
 	if runErr != nil {
 		return common.NewErrorf("pg_restore failed (database left unchanged): %v: %s", runErr, strings.TrimSpace(stderr.String()))
@@ -1894,6 +1908,9 @@ func (s *ServerService) migrateSQLiteIntoPostgres(file multipart.File, isSQLDump
 		return common.NewErrorf("This file cannot be imported: %v", err)
 	}
 
+	if err := owner.fenceDatabase(); err != nil {
+		return err
+	}
 	if errStop := stopXrayBeforeDatabaseRestore(s); errStop != nil {
 		return common.NewErrorf("Database restore aborted because Xray termination could not be confirmed: %v", errStop)
 	}
@@ -1917,7 +1934,7 @@ func (s *ServerService) migrateSQLiteIntoPostgres(file multipart.File, isSQLDump
 		return common.NewErrorf("Restore finished but reopening the database failed: %v", errInit)
 	}
 	dbReopened = true
-	s.inboundService.MigrateDB()
+	s.inboundService.migrateDBForRestore(owner.currentDatabase())
 
 	if migrateErr != nil {
 		return common.NewErrorf("Importing the SQLite data into PostgreSQL failed: %v; the import runs in a single transaction, so the database was left unchanged", migrateErr)

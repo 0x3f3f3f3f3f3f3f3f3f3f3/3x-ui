@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -11,10 +12,13 @@ import (
 )
 
 var databaseRestoreMutex sync.Mutex
-var ErrDatabaseRestoreInProgress = errors.New("database restore is already in progress; retry after it finishes")
+var ErrDatabaseRestoreInProgress = database.ErrRestoreInProgress
 var errDatabaseRestoreOwnerExpired = errors.New("database restore owner is no longer active")
 
-type databaseRestoreOwner struct{ source *gorm.DB }
+type databaseRestoreOwner struct {
+	source *gorm.DB
+	lease  *database.RestoreLease
+}
 
 var activeDatabaseRestore atomic.Pointer[databaseRestoreOwner]
 
@@ -30,6 +34,7 @@ func acquireDatabaseRestore() (*databaseRestoreOwner, error) {
 }
 
 func (owner *databaseRestoreOwner) release() {
+	owner.resumeDatabase()
 	lock.Lock()
 	defer lock.Unlock()
 	if activeDatabaseRestore.Load() == owner {
@@ -50,7 +55,30 @@ func checkDatabaseRestoreRestart(owner *databaseRestoreOwner) error {
 }
 
 func (s *ServerService) restartCoreAfterDatabaseRestore(owner *databaseRestoreOwner) error {
+	if err := checkDatabaseRestoreRestart(owner); err != nil {
+		return err
+	}
+	owner.resumeDatabase()
 	return s.xrayService.restartXray(true, owner)
+}
+
+func (owner *databaseRestoreOwner) fenceDatabase() error {
+	lease, err := database.BeginRestore()
+	if err != nil {
+		return err
+	}
+	owner.lease = lease
+	return nil
+}
+
+func (owner *databaseRestoreOwner) resumeDatabase() {
+	if owner.lease != nil {
+		owner.lease.Close()
+	}
+}
+
+func (owner *databaseRestoreOwner) currentDatabase() *gorm.DB {
+	return database.GetDB().WithContext(owner.lease.Context(context.Background()))
 }
 
 // Restore may proceed only after the tracked core's wait goroutine confirms

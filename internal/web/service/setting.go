@@ -419,8 +419,11 @@ func (s *SettingService) getSettingFromDB(db *gorm.DB, key string) (*model.Setti
 }
 
 func (s *SettingService) saveSetting(key string, value string) error {
-	setting, err := s.getSetting(key)
-	db := database.GetDB()
+	return s.saveSettingToDB(database.GetDB(), key, value)
+}
+
+func (s *SettingService) saveSettingToDB(db *gorm.DB, key string, value string) error {
+	setting, err := s.getSettingFromDB(db, key)
 	if database.IsNotFound(err) {
 		return db.Create(&model.Setting{
 			Key:   key,

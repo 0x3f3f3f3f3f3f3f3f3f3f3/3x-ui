@@ -21,6 +21,7 @@ import (
 var ErrManagedConfigStale = errors.New("managed configuration changed during compilation")
 
 type compiledManagedConfig struct {
+	database *gorm.DB
 	config   *xray.Config
 	state    conf.ClientPolicyConfig
 	ids      []string
@@ -49,7 +50,8 @@ func (s *XrayService) compileManagedXrayConfig(state *conf.ClientPolicyConfig) (
 	var cfg *xray.Config
 	var bindings map[string][]model.ClientRecord
 	var records map[string]model.ClientRecord
-	err := readManagedConfigSnapshot(database.GetDB(), func(tx *gorm.DB) error {
+	sourceDB := database.GetDB()
+	err := readManagedConfigSnapshot(sourceDB, func(tx *gorm.DB) error {
 		var err error
 		cfg, err = s.getXrayConfigFromDB(true, tx)
 		if err != nil {
@@ -138,14 +140,14 @@ func (s *XrayService) compileManagedXrayConfig(state *conf.ClientPolicyConfig) (
 	if _, err := coreConfig.Build(); err != nil {
 		return nil, fmt.Errorf("managed candidate validation: %w", err)
 	}
-	return &compiledManagedConfig{config: cfg, state: policyState, ids: ids, records: records, bindings: bindings}, nil
+	return &compiledManagedConfig{database: sourceDB, config: cfg, state: policyState, ids: ids, records: records, bindings: bindings}, nil
 }
 
 func (c *compiledManagedConfig) prepare() (*xray.Config, error) {
 	policyState := c.state
 	policyState.Policies = nil
 	for _, batch := range chunkStrings(c.ids, 1000) {
-		policies, err := prepareClientPolicies(batch, c.records)
+		policies, err := prepareClientPoliciesForDatabase(c.database, batch, c.records)
 		if err != nil {
 			return nil, err
 		}
@@ -165,7 +167,7 @@ func readManagedConfigSnapshot(db *gorm.DB, read func(*gorm.DB) error) error {
 		return db.Transaction(read, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	}
 	// SQLite's normal BeginTx uses the DSN's immediate write lock, even for read-only TxOptions.
-	return db.Connection(func(connection *gorm.DB) (err error) {
+	return database.WithConnection(db, func(connection *gorm.DB) (err error) {
 		connection = connection.Session(&gorm.Session{NewDB: true})
 		if err := connection.Exec("BEGIN DEFERRED").Error; err != nil {
 			return err

@@ -91,9 +91,9 @@ func TestDatabaseRestoreReopenedFallbackCanRestart(t *testing.T) {
 	oldStop, oldRestart, oldReopen := stopXrayBeforeDatabaseRestore, restartXrayAfterDatabaseRestore, reopenDatabaseAfterRestore
 	var restarts, reopens int
 	stopXrayBeforeDatabaseRestore = func(*ServerService) error { return nil }
-	restartXrayAfterDatabaseRestore = func(*ServerService, *databaseRestoreOwner) error {
+	restartXrayAfterDatabaseRestore = func(_ *ServerService, owner *databaseRestoreOwner) error {
 		var marker model.Setting
-		if err := database.GetDB().First(&marker, "key = ?", "fallback-marker").Error; err != nil || marker.Value != "original" {
+		if err := owner.currentDatabase().First(&marker, "key = ?", "fallback-marker").Error; err != nil || marker.Value != "original" {
 			t.Errorf("fallback runtime activation without original usable data: %+v/%v", marker, err)
 		}
 		restarts++

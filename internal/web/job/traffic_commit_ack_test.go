@@ -16,11 +16,24 @@ type trafficCommitAckPool struct {
 }
 
 func (p *trafficCommitAckPool) BeginTx(ctx context.Context, options *sql.TxOptions) (gorm.ConnPool, error) {
-	tx, err := p.ConnPool.(gorm.TxBeginner).BeginTx(ctx, options)
+	var tx gorm.ConnPool
+	var err error
+	switch pool := p.ConnPool.(type) {
+	case gorm.ConnPoolBeginner:
+		tx, err = pool.BeginTx(ctx, options)
+	case gorm.TxBeginner:
+		tx, err = pool.BeginTx(ctx, options)
+	default:
+		return nil, gorm.ErrInvalidTransaction
+	}
 	if err != nil {
 		return nil, err
 	}
-	return &trafficCommitAckTx{ConnPool: tx, transaction: tx, pool: p}, nil
+	committer, ok := tx.(gorm.TxCommitter)
+	if !ok {
+		return nil, gorm.ErrInvalidTransaction
+	}
+	return &trafficCommitAckTx{ConnPool: tx, transaction: committer, pool: p}, nil
 }
 
 type trafficCommitAckTx struct {

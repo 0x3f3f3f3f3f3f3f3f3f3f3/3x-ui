@@ -17,7 +17,10 @@ import (
 )
 
 func (s *InboundService) MigrationRemoveOrphanedTraffics() {
-	db := database.GetDB()
+	s.migrationRemoveOrphanedTraffics(database.GetDB())
+}
+
+func (s *InboundService) migrationRemoveOrphanedTraffics(db *gorm.DB) {
 	query := fmt.Sprintf(
 		"DELETE FROM client_traffics WHERE email NOT IN (SELECT email FROM clients) AND email NOT IN (SELECT %s %s)",
 		database.JSONFieldText("client.value", "email"),
@@ -34,8 +37,14 @@ func (s *InboundService) MigrationRemoveOrphanedTraffics() {
 }
 
 func (s *InboundService) MigrationRequirements() (err error) {
-	db := database.GetDB()
+	return s.migrationRequirements(database.GetDB())
+}
+
+func (s *InboundService) migrationRequirements(db *gorm.DB) (err error) {
 	tx := db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
 	defer func() {
 		if err == nil {
 			if commitErr := tx.Commit().Error; commitErr != nil {
@@ -289,11 +298,15 @@ func (s *InboundService) MigrationRequirements() (err error) {
 }
 
 func (s *InboundService) MigrateDB() {
-	if err := s.MigrationRequirements(); err != nil {
+	s.migrateDBForRestore(database.GetDB())
+}
+
+func (s *InboundService) migrateDBForRestore(db *gorm.DB) {
+	if err := s.migrationRequirements(db); err != nil {
 		logger.Errorf("MigrationRequirements failed: %v", err)
 	}
-	s.MigrationRemoveOrphanedTraffics()
-	s.MigrationRestoreVisionFlow()
+	s.migrationRemoveOrphanedTraffics(db)
+	s.migrationRestoreVisionFlow(db)
 }
 
 // MigrationRestoreVisionFlow repairs VLESS inbounds whose clients lost their
@@ -304,7 +317,10 @@ func (s *InboundService) MigrateDB() {
 // Vision. Idempotent: once a client carries the flow it is skipped, so this is a
 // no-op on healthy installs and on subsequent boots.
 func (s *InboundService) MigrationRestoreVisionFlow() {
-	db := database.GetDB()
+	s.migrationRestoreVisionFlow(database.GetDB())
+}
+
+func (s *InboundService) migrationRestoreVisionFlow(db *gorm.DB) {
 	var inbounds []*model.Inbound
 	if err := db.Model(&model.Inbound{}).
 		Where("protocol = ?", model.VLESS).
@@ -316,7 +332,7 @@ func (s *InboundService) MigrationRestoreVisionFlow() {
 		if ib.DisableFlow {
 			continue
 		}
-		restored, changed := s.restoreVisionFlowForEligibleInbound(nil, ib.Settings, ib.StreamSettings, ib.Protocol)
+		restored, changed := s.restoreVisionFlowForEligibleInbound(db, ib.Settings, ib.StreamSettings, ib.Protocol)
 		if !changed {
 			continue
 		}

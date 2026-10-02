@@ -56,6 +56,9 @@ func applyLocalClientPolicyReset(ctx context.Context, ids []string, prepare func
 	}
 	lock.Lock()
 	defer lock.Unlock()
+	if err := checkDatabaseRestoreRestart(nil); err != nil {
+		return err
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -98,6 +101,9 @@ func applyLocalClientPolicyReset(ctx context.Context, ids []string, prepare func
 func reconcileLocalClientPolicies(ctx context.Context, process *xray.Process) error {
 	lock.Lock()
 	defer lock.Unlock()
+	if err := checkDatabaseRestoreRestart(nil); err != nil {
+		return err
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
