@@ -20,6 +20,9 @@ type ManagedPolicyBootstrap struct {
 	ConfirmAbsentClients func(context.Context, []string) error
 	AfterSequence        uint64
 	Initializations      []*command.InitializeRequest
+	// Authorize runs after durable client initialization and before listeners
+	// open, without the Runtime mutex. The API is valid only in this callback.
+	Authorize func(context.Context, *xray.ClientPolicyAPI) error
 }
 
 type ManagedProcessRuntime interface {
@@ -137,8 +140,15 @@ func (l *Local) StartManagedProcess(ctx context.Context, process *xray.Process, 
 			return err
 		}
 		l.mu.Lock()
-		defer l.mu.Unlock()
-		return initializeManagedClients(ctx, api, bootstrap)
+		err = initializeManagedClients(ctx, api, bootstrap)
+		l.mu.Unlock()
+		if err != nil {
+			return err
+		}
+		if bootstrap.Authorize != nil {
+			return bootstrap.Authorize(ctx, api)
+		}
+		return nil
 	})
 }
 
