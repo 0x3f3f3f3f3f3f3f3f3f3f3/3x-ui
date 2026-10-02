@@ -47,6 +47,19 @@ func stopManagedAuthority(ctx context.Context, process *panelxray.Process) error
 	return nil
 }
 
+func closeStoppedManagedAuthority(ctx context.Context, process *panelxray.Process) error {
+	localAuthority.Lock()
+	defer localAuthority.Unlock()
+	if localAuthority.process != process || localAuthority.authority == nil {
+		return nil
+	}
+	closed, err := localAuthority.authority.closeStopped(ctx)
+	if closed {
+		localAuthority.process, localAuthority.authority = nil, nil
+	}
+	return err
+}
+
 func stopManagedProcess(ctx context.Context, process *panelxray.Process) error {
 	if ctx == nil || process == nil {
 		return ErrClientPolicyLedger
@@ -59,15 +72,7 @@ func stopManagedProcess(ctx context.Context, process *panelxray.Process) error {
 	if authorityErr != nil && !process.IsRunning() {
 		closeCtx, closeCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer closeCancel()
-		localAuthority.Lock()
-		if localAuthority.process == process && localAuthority.authority != nil {
-			var closed bool
-			closed, closeErr = localAuthority.authority.closeStopped(closeCtx)
-			if closed {
-				localAuthority.process, localAuthority.authority = nil, nil
-			}
-		}
-		localAuthority.Unlock()
+		closeErr = closeStoppedManagedAuthority(closeCtx, process)
 	}
 	return errors.Join(authorityErr, processErr, closeErr)
 }

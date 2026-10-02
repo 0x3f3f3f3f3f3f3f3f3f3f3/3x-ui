@@ -75,6 +75,14 @@ func (s *XrayService) managedPolicyRequested() (bool, error) {
 
 func (s *XrayService) restartManagedXrayLocked(isForce bool) error {
 	process := currentXrayProcess()
+	if process != nil && !process.IsRunning() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err := closeStoppedManagedAuthority(ctx, process)
+		cancel()
+		if err != nil {
+			return err
+		}
+	}
 	if err := checkLocalLegacyHandoff(process); err != nil {
 		return err
 	}

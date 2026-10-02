@@ -7,10 +7,12 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/config"
+	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/policyauthority"
 	"github.com/xtls/xray-core/infra/conf"
 )
@@ -85,6 +87,89 @@ func TestManagedAuthorityUncertainCloseRequiresStoppedCoreAndRetainsHolds(t *tes
 	}
 }
 
+func TestManagedAuthorityUnexpectedCoreExitRetainsBudgetAndCanRestart(t *testing.T) {
+	svc, tunnel, client, _ := setupManagedActivationService(t)
+	if err := database.GetDB().Model(client).Update("total_gb", 12<<20).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RestartXray(true); err != nil {
+		t.Fatal(err)
+	}
+	old := currentXrayProcess()
+	authority := managedAuthorityForProcess(old)
+	conn, err := net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", tunnel.Port), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	managedActivationEcho(t, conn, "warm")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := authority.controller.SettleAndRenew(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := authority.controller.join(ctx); err != nil {
+		t.Fatal(err)
+	}
+	before, err := authority.state.Journal.Account(client.StableID)
+	if err != nil || before.HeldCapacity == 0 {
+		t.Fatalf("missing outstanding grant: %+v/%v", before, err)
+	}
+	// Kill only this test-owned child, without a graceful core checkpoint or
+	// the panel's authority stop path.
+	child, err := os.FindProcess(old.PID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := child.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for old.IsRunning() && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if old.IsRunning() {
+		t.Fatal("test-owned core exit was not confirmed")
+	}
+	if err := svc.RestartXray(true); err != nil {
+		result := ""
+		if failed := currentXrayProcess(); failed != nil {
+			result = failed.GetResult()
+		}
+		t.Fatalf("confirmed core exit recovery: %v; core: %s", err, result)
+	}
+	next := managedAuthorityForProcess(currentXrayProcess())
+	archived, archiveErr := os.Lstat(authority.socketPath + ".retired-" + authority.socketBoot)
+	if archiveErr != nil || !os.SameFile(archived, authority.socketInfo) {
+		t.Fatalf("crashed core socket evidence was not preserved: %v", archiveErr)
+	}
+	if next == nil || next.controller.execution.boot == authority.controller.execution.boot {
+		t.Fatal("core restart reused its old authorization incarnation")
+	}
+	after, err := next.state.Journal.Account(client.StableID)
+	if err != nil || after.HeldCapacity != before.HeldCapacity || after.Usage != before.Usage {
+		t.Fatalf("unsealed exit returned old quota: %+v/%v", after, err)
+	}
+	conn, err = net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", tunnel.Port), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	managedActivationEcho(t, conn, "next")
+	if err := svc.StopXray(); err != nil {
+		t.Fatal(err)
+	}
+	state, err := openAuthorityState(filepath.Join(config.GetDBFolderPath(), "client-policy", "authority"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer state.Journal.Close()
+	final, err := state.Journal.Account(client.StableID)
+	if err != nil || final.HeldCapacity != before.HeldCapacity || final.Usage.BilledBytes != before.Usage.BilledBytes+16 {
+		t.Fatalf("replacement settlement credited the unsealed predecessor: %+v/%v", final, err)
+	}
+}
+
 func TestManagedAuthorityForcedRestartPreservesSettledAllowance(t *testing.T) {
 	svc, tunnel, _, _ := setupManagedActivationService(t)
 	if err := svc.RestartXray(true); err != nil {
@@ -128,6 +213,62 @@ func TestManagedAuthorityForcedRestartPreservesSettledAllowance(t *testing.T) {
 	managedActivationEcho(t, conn, "next")
 	if err := svc.StopXray(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestManagedAuthorityStoppedSocketRefusesReplacementAndExistingArchive(t *testing.T) {
+	for _, replacement := range []bool{false, true} {
+		t.Run(fmt.Sprintf("replacement-%t", replacement), func(t *testing.T) {
+			dir, err := os.MkdirTemp("", "authority-socket-")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Logf("retained owned socket fixture: %s", dir)
+			path := filepath.Join(dir, "control.sock")
+			listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			listener.SetUnlinkOnClose(false)
+			info, err := os.Lstat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := listener.Close(); err != nil {
+				t.Fatal(err)
+			}
+			a := &managedAuthority{socketPath: path, socketInfo: info, socketBoot: strings.Repeat("a", 32)}
+			archive := path + ".retired-" + a.socketBoot
+			if replacement {
+				if err := os.Rename(path, path+".original"); err != nil {
+					t.Fatal(err)
+				}
+				listener, err = net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				listener.SetUnlinkOnClose(false)
+				defer listener.Close()
+			} else if err := os.WriteFile(archive, []byte("retained evidence"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			before, err := os.Lstat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := a.preserveStoppedSocket(context.Background()); !errors.Is(err, ErrClientPolicyLedger) {
+				t.Fatalf("changed socket or existing archive was replaced: %v", err)
+			}
+			after, err := os.Lstat(path)
+			if err != nil || !os.SameFile(before, after) {
+				t.Fatalf("rejected socket cleanup changed an unowned path: %v", err)
+			}
+			if !replacement {
+				if data, err := os.ReadFile(archive); err != nil || string(data) != "retained evidence" {
+					t.Fatalf("existing socket evidence was overwritten: %q/%v", data, err)
+				}
+			}
+		})
 	}
 }
 

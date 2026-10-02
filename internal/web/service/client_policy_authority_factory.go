@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -24,6 +25,9 @@ type managedAuthority struct {
 	state      *durableAuthorityState
 	controller *authorityController
 	api        *panelxray.ClientPolicyAPI
+	socketPath string
+	socketInfo os.FileInfo
+	socketBoot string
 	closed     bool
 }
 
@@ -130,6 +134,11 @@ func (a *managedAuthority) authorize(ctx context.Context, _ *panelxray.ClientPol
 	if err != nil {
 		return err
 	}
+	info, err := os.Lstat(endpoint)
+	if err != nil || info.Mode()&os.ModeSocket == 0 {
+		return errors.Join(ErrClientPolicyLedger, err, api.Close())
+	}
+	a.socketPath, a.socketInfo, a.socketBoot = endpoint, info, api.Capabilities().BootId
 	controller, err := newAuthorityController(ctx, a.db, a.state.Journal, "local", api)
 	if err == nil {
 		err = controller.Start()
@@ -179,6 +188,9 @@ func (a *managedAuthority) closeStopped(ctx context.Context) (bool, error) {
 		if err := a.controller.join(ctx); err != nil {
 			return false, err
 		}
+	}
+	if err := a.preserveStoppedSocket(ctx); err != nil {
+		return false, err
 	}
 	var result error
 	if a.api != nil {
