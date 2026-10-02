@@ -132,13 +132,57 @@ func (e *Engine) WaitAuthorityRequests(ctx context.Context, expectedBootID strin
 // Entry and return both hold the client mutex. A demand is control traffic;
 // only a durably installed, current grant can make the later Open succeed.
 func (c *clientState) awaitAuthorityRequestLocked(ctx context.Context) error {
+	return c.waitAuthorityRequestLocked(ctx, false)
+}
+
+func (c *clientState) canRefillAuthorityLocked(now time.Time) bool {
+	if c.grant == nil || c.grant.Sealed && !c.grant.preserveSessions || c.grant.Grant.BootID != c.engine.bootID || c.grant.Grant.PolicyVersion != c.policy.Version || !now.Before(c.grant.deadline) || c.reasonsLocked(now) & ^ReasonAuthority != 0 {
+		return false
+	}
+	c.engine.demandMu.Lock()
+	defer c.engine.demandMu.Unlock()
+	return c.engine.demandEnabled
+}
+
+func (c *clientState) refillAuthorityLocked(ctx context.Context) (bool, error) {
+	if !c.canRefillAuthorityLocked(time.Now()) {
+		return false, nil
+	}
+	return true, c.waitAuthorityRequestLocked(ctx, true)
+}
+
+func (s *Session) refillAdmissionLocked(direction Direction, n uint64) (bool, error) {
+	c := s.client
+	next, err := charge(c.usage, direction, n, c.policy.Multiplier)
+	if err != nil || c.policy.exceedsQuota(next, c.uncertain) {
+		return false, err
+	}
+	minimum, err := charge(Usage{}, direction, n, c.policy.Multiplier)
+	if err != nil {
+		return false, err
+	}
+	if c.grant != nil && billedLess(Usage{BilledBytes: c.grant.Grant.Capacity}, minimum) {
+		return false, nil
+	}
+	return c.refillAuthorityLocked(s.ctx)
+}
+
+func (c *clientState) failedRefillSessionsLocked() []*Session {
+	now := time.Now()
+	if c.reasonsLocked(now) != 0 && !c.canRefillAuthorityLocked(now) {
+		return c.sessionsLocked()
+	}
+	return nil
+}
+
+func (c *clientState) waitAuthorityRequestLocked(ctx context.Context, refill bool) error {
 	e := c.engine
 	e.demandMu.Lock()
 	if !e.ready.Load() {
 		e.demandMu.Unlock()
 		return ErrEngineClosed
 	}
-	if !e.demandEnabled || c.reasonsLocked(time.Now()) != ReasonAuthority {
+	if !e.demandEnabled || !refill && c.reasonsLocked(time.Now()) != ReasonAuthority {
 		e.demandMu.Unlock()
 		return nil
 	}
@@ -181,7 +225,11 @@ func (c *clientState) awaitAuthorityRequestLocked(ctx context.Context) error {
 		}
 		e.demandMu.Unlock()
 	}()
-	timer := time.NewTimer(maxAuthorityRequestWait)
+	duration := maxAuthorityRequestWait
+	if refill && c.grant != nil {
+		duration = min(duration, time.Until(c.grant.deadline))
+	}
+	timer := time.NewTimer(duration)
 	defer timer.Stop()
 	for {
 		if err := ctx.Err(); err != nil {
@@ -193,7 +241,8 @@ func (c *clientState) awaitAuthorityRequestLocked(ctx context.Context) error {
 		if c.closed {
 			return ErrEngineClosed
 		}
-		if c.reasonsLocked(time.Now()) != ReasonAuthority {
+		reasons := c.reasonsLocked(time.Now())
+		if reasons & ^ReasonAuthority != 0 || !refill && reasons != ReasonAuthority || refill && c.grant != nil && c.grant.Grant.GrantID != previous && reasons == 0 {
 			return nil
 		}
 		changed := c.changed

@@ -327,6 +327,20 @@ func (s *Session) Admit(direction Direction, n uint64) error {
 			}
 			continue
 		}
+		if c.reasonsLocked(now) == ReasonAuthority {
+			if waiting, err := s.refillAdmissionLocked(direction, n); waiting {
+				var closed []*Session
+				if err != nil {
+					closed = c.failedRefillSessionsLocked()
+				}
+				c.mu.Unlock()
+				closeSessions(closed)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+		}
 		if c.reasonsLocked(now) != 0 {
 			sessions := c.sessionsLocked()
 			c.mu.Unlock()
@@ -338,7 +352,23 @@ func (s *Session) Admit(direction Direction, n uint64) error {
 			c.mu.Unlock()
 			return err
 		}
-		if c.policy.exceedsQuota(next, c.uncertain) || !c.withinAuthorityGrantLocked(next) {
+		if c.policy.exceedsQuota(next, c.uncertain) {
+			c.mu.Unlock()
+			return ErrRestricted
+		}
+		if !c.withinAuthorityGrantLocked(next) {
+			if waiting, err := s.refillAdmissionLocked(direction, n); waiting {
+				var closed []*Session
+				if err != nil {
+					closed = c.failedRefillSessionsLocked()
+				}
+				c.mu.Unlock()
+				closeSessions(closed)
+				if err != nil {
+					return err
+				}
+				continue
+			}
 			c.mu.Unlock()
 			return ErrRestricted
 		}
@@ -389,7 +419,9 @@ func (s *Session) Admit(direction Direction, n uint64) error {
 			c.usage = next
 			var sessions []*Session
 			if c.reasonsLocked(now) != 0 {
-				sessions = c.sessionsLocked()
+				if !c.canRefillAuthorityLocked(now) {
+					sessions = c.sessionsLocked()
+				}
 				c.notifyLocked()
 			}
 			c.mu.Unlock()

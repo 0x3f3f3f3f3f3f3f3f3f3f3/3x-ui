@@ -7,6 +7,195 @@ import (
 	"time"
 )
 
+func TestAuthorityDemandRefillsAnExhaustedGrantWithoutClosingLiveStream(t *testing.T) {
+	p := testPolicy("refill-owner")
+	p.Multiplier, p.QuotaBytes = 1500000, 100
+	e, grant := authorityExecutionFixture(t, p, 15, 2*time.Second)
+	if err := e.EnableAuthorityRequests(grant.BootID, grant.Authority); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.InstallAuthorityGrant(grant); err != nil {
+		t.Fatal(err)
+	}
+	s := openSession(t, e, p.ClientID, nil)
+	defer s.Close()
+	if err := s.Admit(Upload, 10); err != nil {
+		t.Fatal(err)
+	}
+	before, err := e.Snapshot(p.ClientID)
+	if err != nil || before.ActiveSessions != 1 {
+		t.Fatalf("exhausted finite grant closed eligible stream: %+v/%v", before, err)
+	}
+	admitted := make(chan error, 1)
+	go func() { admitted <- s.Admit(Download, 3) }()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	requests, err := e.WaitAuthorityRequests(ctx, grant.BootID, grant.Authority, 128)
+	if err != nil || len(requests) != 1 || requests[0].PreviousGrantID != grant.GrantID {
+		t.Fatalf("refill request: %+v/%v", requests, err)
+	}
+	sealed, err := e.PauseAuthorityGrant(p.ClientID, grant.GrantID)
+	if err != nil || sealed.Usage != (Usage{RawUpload: 10, BilledBytes: 15}) {
+		t.Fatalf("refill seal changed exact usage: %+v/%v", sealed, err)
+	}
+	select {
+	case err := <-admitted:
+		t.Fatalf("sealed stream admitted before replacement: %v", err)
+	default:
+	}
+	challenge, err := e.BeginAuthorityChallenge(grant.BootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := grant
+	next.GrantID, next.Sequence, next.ChallengeID, next.Capacity = "refill-grant-2", 2, challenge.ChallengeID, 20
+	if _, err := e.InstallAuthorityGrant(next); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-admitted:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal("live stream failed to resume after refill")
+	}
+	after, err := e.Snapshot(p.ClientID)
+	if err != nil || after.ActiveSessions != 1 || after.Usage != (Usage{RawUpload: 10, RawDownload: 3, BilledBytes: 19, Remainder: 500000}) {
+		t.Fatalf("refill duplicated multiplier or session: %+v/%v", after, err)
+	}
+}
+
+func TestAuthorityDemandRefillCannotPassExpiryOrGlobalQuota(t *testing.T) {
+	for _, quota := range []bool{false, true} {
+		t.Run(map[bool]string{false: "lease-expiry", true: "global-quota"}[quota], func(t *testing.T) {
+			p := testPolicy("refill-boundary")
+			p.QuotaBytes = 100
+			duration := 100 * time.Millisecond
+			if quota {
+				p.QuotaBytes = 10
+				duration = time.Second
+			}
+			e, g := authorityExecutionFixture(t, p, 10, duration)
+			if err := e.EnableAuthorityRequests(g.BootID, g.Authority); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := e.InstallAuthorityGrant(g); err != nil {
+				t.Fatal(err)
+			}
+			s := openSession(t, e, p.ClientID, nil)
+			defer s.Close()
+			if err := s.Admit(Upload, 10); err != nil {
+				t.Fatal(err)
+			}
+			start := time.Now()
+			if _, err := s.StreamChunkSize(Download); err == nil {
+				t.Fatal("unfunded refill admitted")
+			}
+			if time.Since(start) > 500*time.Millisecond {
+				t.Fatal("refill waited beyond its old monotonic lease")
+			}
+			if err := s.Admit(Download, 1); !errors.Is(err, ErrSessionClosed) {
+				t.Fatalf("expired/quota session still admitted: %v", err)
+			}
+			state, err := e.Snapshot(p.ClientID)
+			// A concurrent expiry can own Close's CAS while its map cleanup is
+			// still finishing. Admission must already be closed above.
+			for err == nil && state.ActiveSessions != 0 && time.Since(start) < 500*time.Millisecond {
+				time.Sleep(time.Millisecond)
+				state, err = e.Snapshot(p.ClientID)
+			}
+			if err != nil || state.Usage != (Usage{RawUpload: 10, BilledBytes: 10}) || state.ActiveSessions != 0 {
+				t.Fatalf("refill boundary billed or retained a session: %+v/%v", state, err)
+			}
+			e.demandMu.Lock()
+			defer e.demandMu.Unlock()
+			if e.demandWaiters != 0 || len(e.demandRequests) != 0 {
+				t.Fatal("failed refill retained demand capacity")
+			}
+		})
+	}
+}
+
+func TestAuthorityDemandOversizedPacketDoesNotIssueRepeatedRefills(t *testing.T) {
+	p := testPolicy("refill-oversized")
+	p.QuotaBytes = 100
+	e, g := authorityExecutionFixture(t, p, 10, time.Second)
+	if err := e.EnableAuthorityRequests(g.BootID, g.Authority); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.InstallAuthorityGrant(g); err != nil {
+		t.Fatal(err)
+	}
+	s := openSession(t, e, p.ClientID, nil)
+	defer s.Close()
+	if err := s.Admit(Upload, 11); !errors.Is(err, ErrRestricted) {
+		t.Fatalf("oversized packet refill result: %v", err)
+	}
+	state, err := e.Snapshot(p.ClientID)
+	if err != nil || state.Usage != (Usage{}) {
+		t.Fatalf("oversized packet billed: %+v/%v", state, err)
+	}
+	e.demandMu.Lock()
+	defer e.demandMu.Unlock()
+	if e.demandWaiters != 0 || len(e.demandRequests) != 0 {
+		t.Fatal("oversized packet entered refill loop")
+	}
+}
+
+func TestAuthorityDemandRefillPreservesSpentRateBurst(t *testing.T) {
+	p := testPolicy("refill-rate")
+	p.UploadRate, p.BurstBytes, p.QuotaBytes = 100, 10, 100
+	e, g := authorityExecutionFixture(t, p, 2, time.Second)
+	g.Upload = AuthorityShare{Rate: 10, Burst: 2}
+	if err := e.EnableAuthorityRequests(g.BootID, g.Authority); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.InstallAuthorityGrant(g); err != nil {
+		t.Fatal(err)
+	}
+	s := openSession(t, e, p.ClientID, nil)
+	defer s.Close()
+	if err := s.Admit(Upload, 2); err != nil {
+		t.Fatal(err)
+	}
+	admitted := make(chan error, 1)
+	go func() { admitted <- s.Admit(Upload, 1) }()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if _, err := e.WaitAuthorityRequests(ctx, g.BootID, g.Authority, 128); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.PauseAuthorityGrant(p.ClientID, g.GrantID); err != nil {
+		t.Fatal(err)
+	}
+	challenge, err := e.BeginAuthorityChallenge(g.BootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.GrantID, g.Sequence, g.ChallengeID = "rate-refill-2", 2, challenge.ChallengeID
+	if _, err := e.InstallAuthorityGrant(g); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-admitted:
+		t.Fatalf("refill recreated spent burst: %v", err)
+	case <-time.After(30 * time.Millisecond):
+	}
+	select {
+	case err := <-admitted:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal("refilled rate limiter never admitted")
+	}
+	state, err := e.Snapshot(p.ClientID)
+	if err != nil || state.Usage != (Usage{RawUpload: 3, BilledBytes: 3}) {
+		t.Fatalf("rate refill usage: %+v/%v", state, err)
+	}
+}
+
 func TestAuthorityDemandWaitsWithoutBillingUntilCurrentGrantIsInstalled(t *testing.T) {
 	policy := testPolicy("demand-owner")
 	policy.Multiplier, policy.QuotaBytes = 2000000, 100
