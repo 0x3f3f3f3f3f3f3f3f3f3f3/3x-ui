@@ -47,6 +47,7 @@ fi
 [[ -z "${PAIRED_PANEL_LDFLAGS:-}" ]] || panel_flags="$panel_flags $PAIRED_PANEL_LDFLAGS"
 CGO_ENABLED=1 go build -trimpath -buildvcs=false -ldflags "$panel_flags" -o "$output/x-ui" .
 (cd core/xray && CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w -X github.com/xtls/xray-core/core.build=$revision" -o "$output/bin/xray-linux-$binary_arch" ./main)
+CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w -X github.com/mhsanaei/3x-ui/v3/internal/distribution.PanelSourceRevision=$revision" -o "$output/x-ui-package" ./tools/packageverify
 cp -- x-ui.sh x-ui.rc x-ui.service.debian x-ui.service.arch x-ui.service.rhel DockerEntrypoint.sh "$output/"
 cp -- LICENSE "$output/licenses/panel-GPL-3.0.txt"
 cp -- core/xray/LICENSE "$output/licenses/xray-MPL-2.0.txt"

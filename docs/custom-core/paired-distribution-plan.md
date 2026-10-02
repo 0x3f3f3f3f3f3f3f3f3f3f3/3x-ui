@@ -25,15 +25,15 @@
 
 Files: `core/xray/app/clientpolicy/command/command.go`, new `core/xray/main/commands/all/capabilities.go`, `internal/distribution/`, the panel CLI in `main.go`, `tools/build-custom-core.sh`, and new `tools/build-paired-package.sh`.
 
-- [ ] Observe the actual preceding core rejecting the new offline `capabilities` command. Add a compiled-feature report from the same feature list used by authenticated `GetCapabilities`; never advertise instance durability in the offline report.
-- [ ] Add meaningful tests for native/shared feature coverage, unchanged RPC authorization and absence of state mutation/listeners during the actual CLI probe.
-- [ ] Implement strict bounded manifest decoding and streamed checksum verification. Require one panel/core pair, source revision, compatibility v1, normalized runtime binary path, target and native3/billing/rate/Tunnel compiled features. Reject missing/duplicate roles, unsafe paths, symlinks, changed files, wrong target, old/official binaries and mismatched source stamps.
-- [ ] Build frontend, panel and core from one clean source. Generate compatibility/checksum/toolchain/source manifests and required license/origin resources; preserve existing auxiliary resources. Reject dirty source and nonempty output rather than replacing earlier artifacts.
-- [ ] Exercise the verifier on a real clean paired package, tampered/missing files, an actual preceding core and malformed manifests. Record all failures and passing evidence; commit the working deliverable.
+- [x] Observe the actual preceding core rejecting the new offline `capabilities` command. Add a compiled-feature report from the same feature list used by authenticated `GetCapabilities`; never advertise instance durability in the offline report.
+- [x] Add meaningful tests for native/shared feature coverage, unchanged RPC authorization and absence of state mutation/listeners during the actual CLI probe.
+- [x] Implement strict bounded manifest decoding and streamed checksum verification. Require one panel/core pair, source revision, compatibility v1, normalized runtime binary path, target and native3/billing/rate/Tunnel compiled features. Reject missing/duplicate roles, unsafe paths, symlinks, changed files, wrong target, old/official binaries and mismatched source stamps.
+- [x] Build frontend, panel and core from one clean source. Generate compatibility/checksum/toolchain/source manifests and required license/origin resources; preserve existing auxiliary resources. Reject dirty source and nonempty output rather than replacing earlier artifacts.
+- [x] Exercise the verifier on a real clean paired package, tampered/missing files, an actual preceding core and malformed manifests. Record all failures and passing evidence; commit the working deliverable.
 
 ## Task 2: Wire safe distribution and replacement
 
-Files: `Dockerfile`, `DockerInit.sh`, `DockerEntrypoint.sh`, `install.sh`, `update.sh`, `x-ui.sh`, `.github/workflows/release.yml`, `.github/workflows/docker.yml`, `.github/workflows/custom-core.yml`, and distribution staging tests.
+Files: `Dockerfile`, `DockerInit.sh`, `DockerEntrypoint.sh`, `install.sh`, `update.sh`, `x-ui.sh`, `.github/workflows/release.yml`, `.github/workflows/docker.yml`, `.github/workflows/custom-core.yml`, and distribution staging tests. Also update `internal/web/service/panel/panel.go`: its automatic updater currently downloads the upstream update script and release metadata.
 
 - [ ] Replace official Xray downloads with the shared source builder and normalized target names. Pin Go/Node versions and validate image/platform inputs, including 386 and ARM variants; do not silently choose amd64 for an unknown target.
 - [ ] Require a source revision in Docker without `.git`; verify the paired manifest in the image. Exercise an actual isolated Podman build and local container native3/shared-policy smoke, with private storage and no existing-container mutation.

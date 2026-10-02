@@ -41,5 +41,16 @@ func RunCommand(ctx context.Context, args []string, output io.Writer) error {
 		}
 		return json.NewEncoder(output).Encode(m)
 	}
-	return errors.New("usage: x-ui package info | x-ui package verify DIRECTORY")
+	if len(args) == 3 && args[0] == "stage" {
+		root, err := ExtractArchive(ctx, args[1], args[2])
+		if err != nil {
+			return err
+		}
+		m, err := Verify(ctx, root)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(output).Encode(m)
+	}
+	return errors.New("usage: x-ui package info | x-ui package verify DIRECTORY | x-ui package stage ARCHIVE NEW_DIRECTORY")
 }

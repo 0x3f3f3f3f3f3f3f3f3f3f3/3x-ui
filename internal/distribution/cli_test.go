@@ -1,6 +1,7 @@
 package distribution
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -44,5 +45,31 @@ func TestPackageCommandInfoAndFailedVerifyLeaveConfiguredStateUntouched(t *testi
 		if err := RunCommand(context.Background(), args, &output); err == nil {
 			t.Fatalf("accepted invalid command %v", args)
 		}
+	}
+}
+
+func TestPackageStageExtractsBeforeValidationFailureAndPreservesOldTree(t *testing.T) {
+	archive := testArchive(t, []*tar.Header{{Name: "x-ui/x-ui", Typeflag: tar.TypeReg, Mode: 0755, Size: 4}}, [][]byte{[]byte("test")})
+	parent := t.TempDir()
+	old := filepath.Join(parent, "old-installation")
+	if err := os.Mkdir(old, 0700); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(old, "accounting-state")
+	if err := os.WriteFile(sentinel, []byte("retained"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	destination := filepath.Join(parent, "new-staging")
+	var output bytes.Buffer
+	err := RunCommand(context.Background(), []string{"stage", archive, destination}, &output)
+	if err == nil {
+		t.Fatal("stage accepted a package without a manifest")
+	}
+	if _, statErr := os.Stat(filepath.Join(destination, "x-ui", "x-ui")); statErr != nil {
+		t.Fatalf("stage command was not executed: %v; %v", statErr, err)
+	}
+	after, readErr := os.ReadFile(sentinel)
+	if readErr != nil || string(after) != "retained" {
+		t.Fatal("stage changed an installed tree")
 	}
 }
