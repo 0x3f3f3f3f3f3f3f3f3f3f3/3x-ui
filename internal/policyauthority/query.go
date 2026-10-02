@@ -1,11 +1,38 @@
 package policyauthority
 
 import (
+	"encoding/json"
 	"errors"
 	bolt "go.etcd.io/bbolt"
 )
 
 var ErrNotFound = errors.New("authority record not found")
+
+func (j *Journal) AccountPage(after string, limit int) ([]Account, error) {
+	if j == nil || j.closed.Load() || limit < 1 || limit > 1000 || after != "" && !key(after) {
+		return nil, ErrRequest
+	}
+	var accounts []Account
+	err := j.db.View(func(tx *bolt.Tx) error {
+		cursor := tx.Bucket([]byte("accounts")).Cursor()
+		k, v := cursor.Seek([]byte(after))
+		if string(k) == after {
+			k, v = cursor.Next()
+		}
+		for ; k != nil && len(accounts) < limit; k, v = cursor.Next() {
+			var account Account
+			if len(v) > maxRecordBytes || json.Unmarshal(v, &account) != nil || account.Seed.ClientID != string(k) {
+				return ErrJournal
+			}
+			accounts = append(accounts, account)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return accounts, nil
+}
 
 func (j *Journal) Grant(id string) (Grant, error) {
 	var grant Grant

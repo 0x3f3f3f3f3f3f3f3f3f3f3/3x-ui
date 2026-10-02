@@ -11,6 +11,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	_ "unsafe"
@@ -671,6 +672,11 @@ func main() {
 		runWebServer()
 	case "migrate":
 		migrateDb()
+	case "migrate-policy-authority":
+		if err := migratePolicyAuthority(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "encrypt-tokens":
 		encryptNodeTokens()
 	case "migrate-db":
@@ -774,7 +780,25 @@ Commands:
     run            run web panel
     migrate        migrate from other/old x-ui
     migrate-db     SQLite <-> .dump (--dump/--restore) or copy into PostgreSQL (--dsn)
+    migrate-policy-authority preserve stopped-core accounting in the durable policy authority
     encrypt-tokens encrypt node bearer tokens with the configured active key
     setting        set settings
 `
+}
+
+func migratePolicyAuthority() error {
+	if err := database.InitDB(config.GetDBPath()); err != nil {
+		return err
+	}
+	defer database.CloseDB()
+	dir, err := filepath.Abs(filepath.Join(config.GetDBFolderPath(), "client-policy"))
+	if err != nil {
+		return err
+	}
+	identity, err := service.MigrateLocalClientPolicyAuthority(context.Background(), dir)
+	if err != nil {
+		return fmt.Errorf("policy authority migration failed: %w", err)
+	}
+	fmt.Printf("Policy authority migration committed: %s generation %d; managed listeners remain stopped.\n", identity.AuthorityID, identity.Generation)
+	return nil
 }

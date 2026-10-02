@@ -100,6 +100,33 @@ func initializeAuthorityState(dir, sourceID string, snapshot authorityMigrationS
 	return &durableAuthorityState{Journal: journal, SourceID: sourceID}, nil
 }
 func openAuthorityState(dir string) (*durableAuthorityState, error) {
+	return loadAuthorityState(dir, false)
+}
+
+func resumeAuthorityState(dir, sourceID string) (*durableAuthorityState, error) {
+	authorityInitializationMu.Lock()
+	defer authorityInitializationMu.Unlock()
+	state, err := loadAuthorityState(dir, true)
+	if err != nil {
+		return nil, err
+	}
+	if state.SourceID != sourceID {
+		_ = state.Journal.Close()
+		return nil, policyauthority.ErrIdentity
+	}
+	manifest, err := readAuthorityManifest(dir)
+	if err == nil && manifest.Phase == "preparing" {
+		manifest.Phase = "committed"
+		err = publishAuthorityManifest(dir, manifest, false)
+	}
+	if err != nil {
+		_ = state.Journal.Close()
+		return nil, err
+	}
+	return state, nil
+}
+
+func loadAuthorityState(dir string, prepared bool) (*durableAuthorityState, error) {
 	if err := checkAuthorityDirectory(dir); err != nil {
 		return nil, err
 	}
@@ -107,7 +134,7 @@ func openAuthorityState(dir string) (*durableAuthorityState, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: manifest: %w", ErrAuthorityNotInitialized, err)
 	}
-	if manifest.Phase != "committed" {
+	if manifest.Phase != "committed" && !prepared {
 		return nil, ErrAuthorityNotInitialized
 	}
 	journal, err := policyauthority.Open(filepath.Join(dir, "journal.db"), manifest.Identity)
