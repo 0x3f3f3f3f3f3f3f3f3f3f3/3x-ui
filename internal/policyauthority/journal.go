@@ -17,7 +17,7 @@ const maxJournalBytes = 256 << 20
 const maxRecordBytes = 16 << 10
 const maxRecords = 100000
 
-var bucketNames = []string{"metadata", "accounts", "nodes", "boots", "grants", "requests"}
+var bucketNames = []string{"metadata", "accounts", "nodes", "boots", "grants", "requests", "changes"}
 var openJournal = bolt.Open
 
 func journalOptions() *bolt.Options {
@@ -38,6 +38,13 @@ type Journal struct {
 	db     *bolt.DB
 	id     Identity
 	closed atomic.Bool
+}
+
+func (j *Journal) Identity() Identity {
+	if j == nil {
+		return Identity{}
+	}
+	return j.id
 }
 
 func Create(path string, seeds []Seed) (*Journal, Identity, error) {
@@ -77,11 +84,11 @@ func Create(path string, seeds []Seed) (*Journal, Identity, error) {
 				return err
 			}
 		}
-		if err := put(tx, "metadata", "state", metadata{Schema: 1, Identity: id}); err != nil {
+		if err := put(tx, "metadata", "state", metadata{Schema: 2, Identity: id}); err != nil {
 			return err
 		}
 		for _, seed := range seeds {
-			if err := put(tx, "accounts", seed.ClientID, Account{Seed: seed, Usage: seed.Usage, WindowUsed: seed.WindowUsed}); err != nil {
+			if err := put(tx, "accounts", seed.ClientID, initialAccount(seed)); err != nil {
 				return err
 			}
 		}
@@ -105,7 +112,7 @@ func Create(path string, seeds []Seed) (*Journal, Identity, error) {
 }
 
 func Open(path string, expected Identity) (*Journal, error) {
-	if !key(expected.AuthorityID) || expected.Generation == 0 {
+	if !key(expected.AuthorityID) || expected.Generation == 0 || !bounded(expected.Generation) {
 		return nil, ErrIdentity
 	}
 	if err := privatePath(path, true); err != nil {
@@ -287,18 +294,27 @@ func (j *Journal) Issue(request Request) (Grant, error) {
 		if account.Deleted {
 			return ErrDeleted
 		}
-		if account.Seed.Policy.Version != request.Binding.PolicyVersion || account.Seed.Policy.WindowID != request.Binding.WindowID {
+		if account.Policy.Version != request.Binding.PolicyVersion || account.Policy.WindowID != request.Binding.WindowID {
 			return ErrRequest
 		}
-		total, err := sum(account.WindowUsed, account.Seed.FrozenBilled, account.HeldCapacity, request.Capacity)
-		if err != nil || !account.Seed.Policy.QuotaUnlimited && total > account.Seed.Policy.QuotaBytes {
+		total, err := addAmounts(amount{account.WindowUsed, account.WindowRemainder}, amount{account.FrozenBilled, 0}, amount{account.HeldCapacity, account.HeldRemainder}, amount{request.Capacity, 0})
+		if err != nil || !account.Policy.QuotaUnlimited && (amount{account.Policy.QuotaBytes, 0}).less(total) {
 			return ErrCapacity
 		}
-		if account.UploadHeld, err = allocateDirection(account.Seed.Policy.Upload, account.UploadHeld, request.Upload); err != nil {
+		if !account.Policy.Upload.Unlimited && account.UploadUnlimitedHeld > 0 || !account.Policy.Download.Unlimited && account.DownloadUnlimitedHeld > 0 {
+			return ErrCapacity
+		}
+		if account.UploadHeld, err = allocateDirection(account.Policy.Upload, account.UploadHeld, request.Upload); err != nil {
 			return err
 		}
-		if account.DownloadHeld, err = allocateDirection(account.Seed.Policy.Download, account.DownloadHeld, request.Download); err != nil {
+		if account.DownloadHeld, err = allocateDirection(account.Policy.Download, account.DownloadHeld, request.Download); err != nil {
 			return err
+		}
+		if request.Upload.Unlimited {
+			account.UploadUnlimitedHeld++
+		}
+		if request.Download.Unlimited {
+			account.DownloadUnlimitedHeld++
 		}
 		account.HeldCapacity, err = sum(account.HeldCapacity, request.Capacity)
 		if err != nil {
@@ -308,10 +324,13 @@ func (j *Journal) Issue(request Request) (Grant, error) {
 		if err := get(tx, "metadata", "state", &meta); err != nil {
 			return err
 		}
-		if meta.Sequence == math.MaxUint64 || tx.Bucket([]byte("grants")).Stats().KeyN >= maxRecords {
+		if meta.Sequence >= math.MaxInt64 || tx.Bucket([]byte("grants")).Stats().KeyN >= maxRecords {
 			return ErrJournal
 		}
 		meta.Sequence++
+		if err := advanceRevision(&account); err != nil {
+			return err
+		}
 		issued = Grant{Request: request, GrantID: fmt.Sprintf("%s:%d", j.id.AuthorityID, meta.Sequence), Sequence: meta.Sequence}
 		if err := put(tx, "accounts", account.Seed.ClientID, account); err != nil {
 			return err
@@ -331,7 +350,7 @@ func (j *Journal) Issue(request Request) (Grant, error) {
 }
 
 func (j *Journal) Report(report Report) error {
-	if !key(report.GrantID) || report.Sequence == 0 || !validUsage(report.Usage) {
+	if !key(report.GrantID) || report.Sequence == 0 || !bounded(report.Sequence) || !validUsage(report.Usage) {
 		return ErrRequest
 	}
 	return j.update(func(tx *bolt.Tx) error {
@@ -351,44 +370,67 @@ func (j *Journal) Report(report Report) error {
 			}
 			return ErrRequest
 		}
-		if grant.Sealed || report.Sequence < grant.ReportSequence || report.Usage.RawUpload < grant.Usage.RawUpload || report.Usage.RawDownload < grant.Usage.RawDownload || report.Usage.BilledBytes < grant.Usage.BilledBytes || report.Usage.BilledBytes > grant.Request.Capacity {
+		if grant.Sealed || report.Sequence < grant.ReportSequence || (amount{grant.Request.Capacity, 0}).less(usageAmount(report.Usage)) {
 			return ErrRequest
+		}
+		delta, err := usageDelta(report.Usage, grant.Usage)
+		if err != nil {
+			return err
 		}
 		var account Account
 		if err := get(tx, "accounts", report.Binding.ClientID, &account); err != nil {
 			return err
 		}
-		delta := report.Usage.BilledBytes - grant.Usage.BilledBytes
-		var err error
-		if account.Usage.RawUpload, err = sum(account.Usage.RawUpload, report.Usage.RawUpload-grant.Usage.RawUpload); err != nil {
+		if account.Usage, err = addUsage(account.Usage, delta); err != nil {
 			return err
 		}
-		if account.Usage.RawDownload, err = sum(account.Usage.RawDownload, report.Usage.RawDownload-grant.Usage.RawDownload); err != nil {
+		window, err := addAmounts(amount{account.WindowUsed, account.WindowRemainder}, usageAmount(delta))
+		if err != nil {
 			return err
 		}
-		if account.Usage.BilledBytes, err = sum(account.Usage.BilledBytes, delta); err != nil {
-			return err
-		}
-		if account.WindowUsed, err = sum(account.WindowUsed, delta); err != nil {
-			return err
-		}
-		if account.HeldCapacity < delta {
+		account.WindowUsed, account.WindowRemainder = window.whole, window.fraction
+		held, err := subtractAmounts(amount{account.HeldCapacity, account.HeldRemainder}, usageAmount(delta))
+		if err != nil {
 			return ErrJournal
 		}
-		account.HeldCapacity -= delta
 		if report.Seal {
-			remaining := grant.Request.Capacity - report.Usage.BilledBytes
-			if account.HeldCapacity < remaining || account.UploadHeld.Rate < grant.Request.Upload.Rate || account.UploadHeld.Burst < grant.Request.Upload.Burst || account.DownloadHeld.Rate < grant.Request.Download.Rate || account.DownloadHeld.Burst < grant.Request.Download.Burst {
+			remaining, err := subtractAmounts(amount{grant.Request.Capacity, 0}, usageAmount(report.Usage))
+			if err != nil {
 				return ErrJournal
 			}
-			account.HeldCapacity -= remaining
+			if held, err = subtractAmounts(held, remaining); err != nil {
+				return ErrJournal
+			}
+			if account.UploadHeld.Rate < grant.Request.Upload.Rate || account.UploadHeld.Burst < grant.Request.Upload.Burst || account.DownloadHeld.Rate < grant.Request.Download.Rate || account.DownloadHeld.Burst < grant.Request.Download.Burst {
+				return ErrJournal
+			}
 			account.UploadHeld.Rate -= grant.Request.Upload.Rate
 			account.UploadHeld.Burst -= grant.Request.Upload.Burst
 			account.DownloadHeld.Rate -= grant.Request.Download.Rate
 			account.DownloadHeld.Burst -= grant.Request.Download.Burst
+			if grant.Request.Upload.Unlimited {
+				if account.UploadUnlimitedHeld == 0 {
+					return ErrJournal
+				}
+				account.UploadUnlimitedHeld--
+			}
+			if grant.Request.Download.Unlimited {
+				if account.DownloadUnlimitedHeld == 0 {
+					return ErrJournal
+				}
+				account.DownloadUnlimitedHeld--
+			}
 		}
-		// The remainder stays with the immutable grant/source report; no second
-		// application of a multiplier or lossy aggregation of fractions occurs.
+		account.HeldCapacity, account.HeldRemainder = held.whole, held.fraction
+		if err := advanceRevision(&account); err != nil {
+			return err
+		}
+		if grant.ReportCount >= math.MaxInt64 {
+			return ErrJournal
+		}
+		grant.ReportCount++
+		// Source/grant fractions remain recorded as well as their exact sum.
+		// Aggregation never applies a multiplier or truncates fractional usage.
 		grant.Usage, grant.ReportSequence, grant.Sealed = report.Usage, report.Sequence, report.Seal
 		if err := put(tx, "grants", grant.GrantID, grant); err != nil {
 			return err
@@ -430,7 +472,7 @@ func (j *Journal) AddAccount(seed Seed) error {
 		if accounts.Stats().KeyN >= maxRecords {
 			return ErrJournal
 		}
-		return put(tx, "accounts", seed.ClientID, Account{Seed: seed, Usage: seed.Usage, WindowUsed: seed.WindowUsed})
+		return put(tx, "accounts", seed.ClientID, initialAccount(seed))
 	})
 }
 
@@ -443,6 +485,12 @@ func (j *Journal) Tombstone(clientID string) error {
 	return j.update(func(tx *bolt.Tx) error {
 		var account Account
 		if err := get(tx, "accounts", clientID, &account); err != nil {
+			return err
+		}
+		if account.Deleted {
+			return nil
+		}
+		if err := advanceRevision(&account); err != nil {
 			return err
 		}
 		account.Deleted = true

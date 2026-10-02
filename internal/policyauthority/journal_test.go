@@ -107,7 +107,7 @@ func TestReportsAreCumulativeAndOldBootCannotSeal(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, err := j.Account("canonical-client")
-	if err != nil || a.Usage.RawUpload != 8 || a.Usage.RawDownload != 9 || a.Usage.BilledBytes != 24 || a.HeldCapacity != 46 {
+	if err != nil || a.Usage.RawUpload != 8 || a.Usage.RawDownload != 9 || a.Usage.BilledBytes != 24 || a.Usage.Remainder != 3 || a.HeldCapacity != 45 || a.HeldRemainder != 999997 {
 		t.Fatalf("cumulative report lost/repeated billing: %+v/%v", a, err)
 	}
 	boot.BootID = "replacement-boot"

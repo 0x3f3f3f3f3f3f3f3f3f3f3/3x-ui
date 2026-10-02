@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	bolt "go.etcd.io/bbolt"
+	"sort"
 )
 
 // Open checks every stored issuance and recomputes held quota/rate/burst and
@@ -15,7 +16,7 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 		}
 	}
 	var meta metadata
-	if err := get(tx, "metadata", "state", &meta); err != nil || meta.Schema != 1 {
+	if err := get(tx, "metadata", "state", &meta); err != nil || meta.Schema != 2 {
 		return ErrJournal
 	}
 	if meta.Identity != j.id {
@@ -23,16 +24,72 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 	}
 	accounts := make(map[string]Account)
 	calculated := make(map[string]Account)
+	policies := make(map[string]Policy)
 	if err := tx.Bucket([]byte("accounts")).ForEach(func(k, v []byte) error {
 		var account Account
-		if len(v) > maxRecordBytes || json.Unmarshal(v, &account) != nil || !validSeed(account.Seed) || string(k) != account.Seed.ClientID || !validUsage(account.Usage) || !bounded(account.WindowUsed, account.HeldCapacity, account.UploadHeld.Rate, account.UploadHeld.Burst, account.DownloadHeld.Rate, account.DownloadHeld.Burst) {
+		if len(v) > maxRecordBytes || json.Unmarshal(v, &account) != nil || !validSeed(account.Seed) || !validPolicy(account.Policy) || string(k) != account.Seed.ClientID || !validUsage(account.Usage) || account.Revision == 0 || account.WindowRemainder >= fractionScale || account.WindowBaselineRemainder >= fractionScale || account.WindowBaseRemainder >= fractionScale || account.HeldRemainder >= fractionScale || !bounded(account.Revision, account.WindowUsed, account.WindowBaseline, account.WindowBaseUsed, account.FrozenBilled, account.HeldCapacity, account.UploadHeld.Rate, account.UploadHeld.Burst, account.DownloadHeld.Rate, account.DownloadHeld.Burst, account.UploadUnlimitedHeld, account.DownloadUnlimitedHeld) {
 			return ErrJournal
 		}
 		accounts[string(k)] = account
-		calculated[string(k)] = Account{Usage: account.Seed.Usage, WindowUsed: account.Seed.WindowUsed}
+		calculated[string(k)] = initialAccount(account.Seed)
+		policies[compound(string(k), fmt.Sprint(account.Seed.Policy.Version))] = account.Seed.Policy
 		return nil
 	}); err != nil {
 		return err
+	}
+	changes := make(map[string][]Change)
+	if err := tx.Bucket([]byte("changes")).ForEach(func(k, v []byte) error {
+		var change Change
+		if len(v) > maxRecordBytes || json.Unmarshal(v, &change) != nil || change.Request.Identity != j.id || !key(change.Request.RequestID) || string(k) != compound(change.Request.ClientID, change.Request.RequestID) || !validPolicy(change.Request.Policy) || !validPolicy(change.PreviousPolicy) || !validUsage(change.UsageBoundary) || change.WindowRemainderBefore >= fractionScale || !bounded(change.WindowUsedBefore, change.FrozenBefore) {
+			return ErrJournal
+		}
+		if _, exists := accounts[change.Request.ClientID]; !exists {
+			return ErrJournal
+		}
+		changes[change.Request.ClientID] = append(changes[change.Request.ClientID], change)
+		return nil
+	}); err != nil {
+		return err
+	}
+	for id, account := range accounts {
+		total := calculated[id]
+		priorUsage := account.Seed.Usage
+		windows := map[string]bool{total.Policy.WindowID: true}
+		history := changes[id]
+		sort.Slice(history, func(i, j int) bool { return history[i].Request.Policy.Version < history[j].Request.Policy.Version })
+		for _, change := range history {
+			if change.PreviousPolicy != total.Policy || change.Request.ExpectedVersion != total.Policy.Version || change.Request.Policy.Version <= total.Policy.Version || change.UsageBoundary.RawUpload < priorUsage.RawUpload || change.UsageBoundary.RawDownload < priorUsage.RawDownload || usageAmount(change.UsageBoundary).less(usageAmount(priorUsage)) || change.UsageBoundary.RawUpload > account.Usage.RawUpload || change.UsageBoundary.RawDownload > account.Usage.RawDownload || usageAmount(account.Usage).less(usageAmount(change.UsageBoundary)) || change.FrozenBefore != total.FrozenBilled {
+				return ErrJournal
+			}
+			windowDelta, err := subtractAmounts(usageAmount(change.UsageBoundary), amount{total.WindowBaseline, total.WindowBaselineRemainder})
+			if err != nil {
+				return ErrJournal
+			}
+			windowBefore, err := addAmounts(amount{total.WindowBaseUsed, total.WindowBaseRemainder}, windowDelta)
+			if err != nil || windowBefore != (amount{change.WindowUsedBefore, change.WindowRemainderBefore}) {
+				return ErrJournal
+			}
+			if change.Request.Reset {
+				if windows[change.Request.Policy.WindowID] {
+					return ErrJournal
+				}
+				total.WindowBaseline, total.WindowBaseUsed, total.FrozenBilled = change.UsageBoundary.BilledBytes, 0, 0
+				total.WindowBaselineRemainder, total.WindowBaseRemainder = change.UsageBoundary.Remainder, 0
+			} else if change.Request.Policy.WindowID != total.Policy.WindowID {
+				return ErrJournal
+			}
+			windows[change.Request.Policy.WindowID] = true
+			total.Policy = change.Request.Policy
+			policies[compound(id, fmt.Sprint(total.Policy.Version))] = total.Policy
+			priorUsage = change.UsageBoundary
+			if err := advanceRevision(&total); err != nil {
+				return ErrJournal
+			}
+		}
+		if account.Policy != total.Policy || account.WindowBaseline != total.WindowBaseline || account.WindowBaselineRemainder != total.WindowBaselineRemainder || account.WindowBaseUsed != total.WindowBaseUsed || account.WindowBaseRemainder != total.WindowBaseRemainder || account.FrozenBilled != total.FrozenBilled {
+			return ErrJournal
+		}
+		calculated[id] = total
 	}
 	nodes := make(map[string]NodeBoot)
 	if err := tx.Bucket([]byte("nodes")).ForEach(func(k, v []byte) error {
@@ -64,7 +121,7 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 	var maximum uint64
 	if err := tx.Bucket([]byte("grants")).ForEach(func(k, v []byte) error {
 		var grant Grant
-		if len(v) > maxRecordBytes || json.Unmarshal(v, &grant) != nil || string(k) != grant.GrantID || grant.Sequence == 0 || grant.Sequence > meta.Sequence || sequences[grant.Sequence] || grant.GrantID != fmt.Sprintf("%s:%d", j.id.AuthorityID, grant.Sequence) || grant.Request.Binding.Identity != j.id || !validBoot(grant.Request.Binding.NodeBoot) || !key(grant.Request.RequestID) || !key(grant.Request.ChallengeID) || grant.Request.LeaseDuration <= 0 || grant.Request.LeaseDuration > MaxLeaseDuration || grant.Request.Capacity == 0 || !bounded(grant.Request.Capacity) || !validUsage(grant.Usage) || grant.Usage.BilledBytes > grant.Request.Capacity || !validDirection(grant.Request.Upload) || !validDirection(grant.Request.Download) || grant.Sealed && grant.ReportSequence == 0 || grant.ReportSequence == 0 && grant.Usage != (Usage{}) {
+		if len(v) > maxRecordBytes || json.Unmarshal(v, &grant) != nil || string(k) != grant.GrantID || grant.Sequence == 0 || grant.Sequence > meta.Sequence || sequences[grant.Sequence] || grant.GrantID != fmt.Sprintf("%s:%d", j.id.AuthorityID, grant.Sequence) || grant.Request.Binding.Identity != j.id || !validBoot(grant.Request.Binding.NodeBoot) || !key(grant.Request.RequestID) || !key(grant.Request.ChallengeID) || grant.Request.LeaseDuration <= 0 || grant.Request.LeaseDuration > MaxLeaseDuration || grant.Request.Capacity == 0 || !bounded(grant.Request.Capacity, grant.Sequence, grant.ReportSequence, grant.ReportCount) || !validUsage(grant.Usage) || (amount{grant.Request.Capacity, 0}).less(usageAmount(grant.Usage)) || !validDirection(grant.Request.Upload) || !validDirection(grant.Request.Download) || grant.ReportCount > grant.ReportSequence || (grant.ReportCount == 0) != (grant.ReportSequence == 0) || grant.Sealed && grant.ReportSequence == 0 || grant.ReportSequence == 0 && grant.Usage != (Usage{}) {
 			return ErrJournal
 		}
 		sequences[grant.Sequence] = true
@@ -73,7 +130,14 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 		}
 		account, exists := accounts[grant.Request.Binding.ClientID]
 		node := nodes[grant.Request.Binding.NodeBoot.NodeID]
-		if !exists || node.SourceID != grant.Request.Binding.NodeBoot.SourceID || account.Seed.Policy.WindowID != grant.Request.Binding.WindowID || account.Seed.Policy.Version != grant.Request.Binding.PolicyVersion {
+		historical, knownPolicy := policies[compound(grant.Request.Binding.ClientID, fmt.Sprint(grant.Request.Binding.PolicyVersion))]
+		if !exists || !knownPolicy || node.SourceID != grant.Request.Binding.NodeBoot.SourceID || historical.WindowID != grant.Request.Binding.WindowID {
+			return ErrJournal
+		}
+		if _, err := allocateDirection(historical.Upload, Direction{}, grant.Request.Upload); err != nil {
+			return ErrJournal
+		}
+		if _, err := allocateDirection(historical.Download, Direction{}, grant.Request.Download); err != nil {
 			return ErrJournal
 		}
 		var registered NodeBoot
@@ -86,27 +150,33 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 		}
 		total := calculated[account.Seed.ClientID]
 		var err error
-		if total.Usage.RawUpload, err = sum(total.Usage.RawUpload, grant.Usage.RawUpload); err != nil {
+		if total.Revision, err = sum(total.Revision, 1, grant.ReportCount); err != nil {
 			return ErrJournal
 		}
-		if total.Usage.RawDownload, err = sum(total.Usage.RawDownload, grant.Usage.RawDownload); err != nil {
-			return ErrJournal
-		}
-		if total.Usage.BilledBytes, err = sum(total.Usage.BilledBytes, grant.Usage.BilledBytes); err != nil {
-			return ErrJournal
-		}
-		if total.WindowUsed, err = sum(total.WindowUsed, grant.Usage.BilledBytes); err != nil {
+		if total.Usage, err = addUsage(total.Usage, grant.Usage); err != nil {
 			return ErrJournal
 		}
 		if !grant.Sealed {
-			if total.HeldCapacity, err = sum(total.HeldCapacity, grant.Request.Capacity-grant.Usage.BilledBytes); err != nil {
+			remaining, err := subtractAmounts(amount{grant.Request.Capacity, 0}, usageAmount(grant.Usage))
+			if err != nil {
 				return ErrJournal
 			}
-			if total.UploadHeld, err = allocateDirection(account.Seed.Policy.Upload, total.UploadHeld, grant.Request.Upload); err != nil {
+			held, err := addAmounts(amount{total.HeldCapacity, total.HeldRemainder}, remaining)
+			if err != nil {
 				return ErrJournal
 			}
-			if total.DownloadHeld, err = allocateDirection(account.Seed.Policy.Download, total.DownloadHeld, grant.Request.Download); err != nil {
+			total.HeldCapacity, total.HeldRemainder = held.whole, held.fraction
+			if total.UploadHeld, err = allocateDirection(Direction{Unlimited: true}, total.UploadHeld, grant.Request.Upload); err != nil {
 				return ErrJournal
+			}
+			if total.DownloadHeld, err = allocateDirection(Direction{Unlimited: true}, total.DownloadHeld, grant.Request.Download); err != nil {
+				return ErrJournal
+			}
+			if grant.Request.Upload.Unlimited {
+				total.UploadUnlimitedHeld++
+			}
+			if grant.Request.Download.Unlimited {
+				total.DownloadUnlimitedHeld++
 			}
 		}
 		calculated[account.Seed.ClientID] = total
@@ -116,7 +186,17 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 	}
 	for id, account := range accounts {
 		total := calculated[id]
-		if account.HeldCapacity != total.HeldCapacity || account.UploadHeld != total.UploadHeld || account.DownloadHeld != total.DownloadHeld || account.Usage != total.Usage || account.WindowUsed != total.WindowUsed {
+		if account.Deleted {
+			if err := advanceRevision(&total); err != nil {
+				return ErrJournal
+			}
+		}
+		windowDelta, err := subtractAmounts(usageAmount(total.Usage), amount{total.WindowBaseline, total.WindowBaselineRemainder})
+		if err != nil {
+			return ErrJournal
+		}
+		windowUsed, err := addAmounts(amount{total.WindowBaseUsed, total.WindowBaseRemainder}, windowDelta)
+		if err != nil || account.Revision != total.Revision || account.HeldCapacity != total.HeldCapacity || account.HeldRemainder != total.HeldRemainder || account.UploadHeld != total.UploadHeld || account.DownloadHeld != total.DownloadHeld || account.UploadUnlimitedHeld != total.UploadUnlimitedHeld || account.DownloadUnlimitedHeld != total.DownloadUnlimitedHeld || account.Usage != total.Usage || (amount{account.WindowUsed, account.WindowRemainder}) != windowUsed {
 			return ErrJournal
 		}
 	}

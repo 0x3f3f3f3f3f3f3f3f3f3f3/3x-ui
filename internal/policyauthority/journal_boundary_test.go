@@ -62,10 +62,13 @@ func TestCurrentSealReleasesOnlyVerifiedUnusedCapacity(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, err := j.Account("canonical-client")
-	if err != nil || a.Usage.BilledBytes != 30 || a.WindowUsed != 30 || a.HeldCapacity != 0 || a.UploadHeld.Rate != 0 || a.DownloadHeld.Burst != 0 || a.Seed.Usage.BilledBytes != 10 {
+	if err != nil || a.Usage.BilledBytes != 30 || a.Usage.Remainder != 123 || a.WindowUsed != 30 || a.WindowRemainder != 123 || a.HeldCapacity != 0 || a.HeldRemainder != 0 || a.UploadHeld.Rate != 0 || a.DownloadHeld.Burst != 0 || a.Seed.Usage.BilledBytes != 10 {
 		t.Fatalf("seal lost history or double released: %+v/%v", a, err)
 	}
-	if _, err := j.Issue(issueRequest(id, boot, "remaining", 70)); err != nil {
+	if _, err := j.Issue(issueRequest(id, boot, "rounded-up", 70)); !errors.Is(err, ErrCapacity) {
+		t.Fatalf("fractional remaining budget was rounded up: %v", err)
+	}
+	if _, err := j.Issue(issueRequest(id, boot, "remaining", 69)); err != nil {
 		t.Fatal(err)
 	}
 	if err := j.Close(); err != nil {
