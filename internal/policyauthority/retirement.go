@@ -2,6 +2,7 @@ package policyauthority
 
 import (
 	bolt "go.etcd.io/bbolt"
+	"strings"
 	"time"
 )
 
@@ -73,6 +74,86 @@ func (j *Journal) ReleaseRetiredRates(boot NodeBoot) error {
 		}
 		return nil
 	})
+}
+
+// ReleaseRetiredClientRatesPage uses the existing per-node/client request index.
+// Each transaction visits at most limit records and never credits billed quota.
+// Empty next means the indexed range ended; repeating a page is idempotent.
+func (j *Journal) ReleaseRetiredClientRatesPage(nodeID, clientID, after string, limit int) (next string, err error) {
+	if j == nil || j.closed.Load() {
+		return "", ErrJournal
+	}
+	if !key(nodeID) || !key(clientID) || after != "" && !key(after) || limit < 1 || limit > 1000 {
+		return "", ErrRequest
+	}
+	j.retirementMu.Lock()
+	defer j.retirementMu.Unlock()
+	err = j.update(func(tx *bolt.Tx) error {
+		var current NodeBoot
+		if err := get(tx, "nodes", nodeID, &current); err != nil {
+			return err
+		}
+		prefix := strings.TrimSuffix(compound(nodeID, clientID), "]") + ","
+		cursor := tx.Bucket([]byte("requests")).Cursor()
+		start := compound(nodeID, clientID, after)
+		k, v := cursor.Seek([]byte(start))
+		if string(k) == start {
+			k, v = cursor.Next()
+		}
+		for visited := 0; k != nil && strings.HasPrefix(string(k), prefix) && visited < limit; visited++ {
+			var grant Grant
+			if err := get(tx, "grants", string(v), &grant); err != nil {
+				return err
+			}
+			binding := grant.Request.Binding
+			if binding.Identity != j.id || binding.ClientID != clientID || binding.NodeBoot.NodeID != nodeID || binding.NodeBoot.SourceID != current.SourceID || string(k) != compound(nodeID, clientID, grant.Request.RequestID) {
+				return ErrJournal
+			}
+			next = grant.Request.RequestID
+			if !grant.Sealed && !grant.RatesReleased && binding.NodeBoot != current {
+				var recorded NodeBoot
+				if err := get(tx, "boots", compound(nodeID, binding.NodeBoot.BootID), &recorded); err != nil || recorded != binding.NodeBoot {
+					return ErrIncarnation
+				}
+				start, known := j.retiredAt[binding.NodeBoot]
+				if !known {
+					start = j.openedAt
+				}
+				elapsed := time.Since(start)
+				if j.retirementElapsed != nil {
+					elapsed = j.retirementElapsed(start)
+				}
+				if !start.IsZero() && elapsed >= MaxLeaseDuration {
+					var account Account
+					if err := get(tx, "accounts", clientID, &account); err != nil {
+						return err
+					}
+					if err := releaseGrantRates(&account, grant.Request); err != nil {
+						return err
+					}
+					if err := advanceRevision(&account); err != nil {
+						return err
+					}
+					grant.RatesReleased = true
+					if err := put(tx, "grants", grant.GrantID, grant); err != nil {
+						return err
+					}
+					if err := put(tx, "accounts", clientID, account); err != nil {
+						return err
+					}
+				}
+			}
+			k, v = cursor.Next()
+		}
+		if k == nil || !strings.HasPrefix(string(k), prefix) {
+			next = ""
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return next, nil
 }
 
 func releaseGrantRates(account *Account, request Request) error {

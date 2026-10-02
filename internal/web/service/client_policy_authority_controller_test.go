@@ -16,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/app/clientpolicy"
 	command "github.com/xtls/xray-core/app/clientpolicy/command"
 	"google.golang.org/protobuf/proto"
+	"gorm.io/gorm"
 )
 
 func TestAuthorityControllerRejectsWholeMalformedPageBeforeIssuance(t *testing.T) {
@@ -193,6 +194,140 @@ func TestAuthorityControllerFailedSettlementDoesNotBlockAnotherRenewal(t *testin
 		if err != nil || account.HeldCapacity != 0 {
 			t.Fatalf("independent grant failed to seal: %+v/%v", account, err)
 		}
+	}
+}
+
+func TestAuthorityControllerRetiredRatesResumePayloadWithoutReturningQuota(t *testing.T) {
+	journal, client := authorityExecutionFixture(t)
+	apiA, addressA := authorityExecutionCore(t, "retired-controller-source", client)
+	apiB, addressB := authorityExecutionCore(t, "retired-controller-source", client)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	old, err := newAuthorityExecution(ctx, database.GetDB(), journal, "local", apiA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	share := policyauthority.Direction{Rate: 8192, Burst: 128}
+	grant, err := old.Authorize(ctx, authorityAllocation{ClientID: client, RequestID: "retired-original", Capacity: 40, Upload: share, Download: share, LeaseDuration: 3 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := demandEndpointExchange(addressA); err != nil {
+		t.Fatal(err)
+	}
+	controller, err := newAuthorityController(ctx, database.GetDB(), journal, "local", apiB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		stop, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = controller.Stop(stop)
+	})
+	if err := demandEndpointExchange(addressB); err == nil {
+		t.Fatal("replacement core overlapped the retired boot's rate shares")
+	}
+	timer := time.NewTimer(policyauthority.MaxLeaseDuration)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	if err := demandEndpointExchange(addressA); err == nil {
+		t.Fatal("retired core still admitted payload after its execution interval")
+	}
+	if err := demandEndpointExchange(addressB); err != nil {
+		t.Fatalf("expired retired shares blocked a replacement payload: %v", err)
+	}
+	if err := controller.Stop(ctx); err != nil {
+		t.Fatal(err)
+	}
+	retired, err := journal.Grant(grant.GrantID)
+	if err != nil || retired.Sealed || !retired.RatesReleased {
+		t.Fatalf("retired allocation was falsely sealed or kept its rates: %+v/%v", retired, err)
+	}
+	account, err := journal.Account(client)
+	if err != nil || account.HeldCapacity != 40 || account.Usage != (policyauthority.Usage{RawUpload: 8, RawDownload: 7, BilledBytes: 25, Remainder: 100000}) || account.UploadHeld.Rate != 0 || account.DownloadHeld.Rate != 0 {
+		t.Fatalf("retired rate recovery credited uncertain quota: %+v/%v", account, err)
+	}
+}
+
+func TestAuthorityControllerRetiredRateProjectionFailureRetriesCommittedPage(t *testing.T) {
+	journal, client := authorityExecutionFixture(t)
+	apiA, _ := authorityExecutionCore(t, "retired-projection-source", client)
+	apiB, address := authorityExecutionCore(t, "retired-projection-source", client)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	old, err := newAuthorityExecution(ctx, database.GetDB(), journal, "local", apiA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	share := policyauthority.Direction{Rate: 8192, Burst: 128}
+	grant, err := old.Authorize(ctx, authorityAllocation{ClientID: client, RequestID: "retired-projection", Capacity: 40, Upload: share, Download: share, LeaseDuration: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller, err := newAuthorityController(ctx, database.GetDB(), journal, "local", apiB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	timer := time.NewTimer(policyauthority.MaxLeaseDuration)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	db := database.GetDB()
+	injected := errors.New("retired rate projection failed after journal commit")
+	const callback = "test:retired-rate-projection-fault"
+	if err := db.Callback().Update().Before("gorm:update").Register(callback, func(tx *gorm.DB) {
+		if tx.Statement.Table == "client_policy_authority_projections" {
+			tx.AddError(injected)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Callback().Update().Remove(callback) })
+	if err := controller.reconcileRetiredClientRatesLocked(ctx, client); !errors.Is(err, injected) {
+		t.Fatalf("lost projection acknowledgement was hidden: %v", err)
+	}
+	retired, err := journal.Grant(grant.GrantID)
+	if err != nil || !retired.RatesReleased || retired.Sealed || controller.retirementCursor[client] != "" {
+		t.Fatalf("failed SQL rolled back rates or advanced the cursor: %+v/%v", retired, err)
+	}
+	before, err := journal.Account(client)
+	if err != nil || before.HeldCapacity != 40 || before.UploadHeld.Rate != 0 || before.DownloadHeld.Rate != 0 {
+		t.Fatalf("retired SQL failure credited quota: %+v/%v", before, err)
+	}
+	if err := db.Callback().Update().Remove(callback); err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.reconcileRetiredClientRatesLocked(ctx, client); err != nil {
+		t.Fatal(err)
+	}
+	_, projection := authorityProjection(t, client)
+	after, err := journal.Account(client)
+	if err != nil || after != before || projection != after {
+		t.Fatalf("rate page retry changed its journal result: %+v/%+v/%v", projection, after, err)
+	}
+	page := &command.AuthorityRequests{InstanceId: controller.execution.boot.SourceID, BootId: controller.execution.boot.BootID, Requests: []*command.AuthorityRequest{{RequestId: strings.Repeat("a", 32), ClientId: client, PolicyVersion: 1}}}
+	if err := controller.HandleRequests(ctx, page); err != nil {
+		t.Fatal(err)
+	}
+	if err := demandEndpointExchange(address); err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.Stop(ctx); err != nil {
+		t.Fatal(err)
+	}
+	final, err := journal.Account(client)
+	if err != nil || final.HeldCapacity != 40 || final.Usage.BilledBytes != 25 || final.Usage.Remainder != 100000 {
+		t.Fatalf("recovered projection rebilled or returned uncertain quota: %+v/%v", final, err)
 	}
 }
 

@@ -82,6 +82,75 @@ func TestRetiredRatesWaitFullMonotonicIntervalWithoutReleasingQuota(t *testing.T
 	}
 }
 
+func TestRetiredClientRatePagesAreBoundedIdempotentAndNodeScoped(t *testing.T) {
+	j, id, old, _ := journalFixture(t)
+	first, err := j.Issue(issueRequest(id, old, "a", 10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := j.Issue(issueRequest(id, old, "b", 10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := NodeBoot{NodeID: "node-b", SourceID: "source-b", BootID: "other-boot"}
+	if err := j.RegisterBoot(other); err != nil {
+		t.Fatal(err)
+	}
+	request := issueRequest(id, other, "other", 1)
+	request.Upload, request.Download = Direction{}, Direction{}
+	otherGrant, err := j.Issue(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current := old
+	current.BootID = "replacement-boot"
+	if err := j.RegisterBoot(current); err != nil {
+		t.Fatal(err)
+	}
+	elapsed := MaxLeaseDuration - time.Nanosecond
+	j.retirementElapsed = func(time.Time) time.Duration { return elapsed }
+	before, err := j.Account("canonical-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next, err := j.ReleaseRetiredClientRatesPage(old.NodeID, "canonical-client", "", 1); err != nil || next != "a" {
+		t.Fatalf("bounded first page: %q/%v", next, err)
+	}
+	if account, err := j.Account("canonical-client"); err != nil || account != before {
+		t.Fatalf("page released rates before the monotonic boundary: %+v/%v", account, err)
+	}
+	elapsed = MaxLeaseDuration
+	if next, err := j.ReleaseRetiredClientRatesPage(old.NodeID, "canonical-client", "", 1); err != nil || next != "a" {
+		t.Fatalf("first release page: %q/%v", next, err)
+	}
+	afterFirst, err := j.Account("canonical-client")
+	if err != nil || afterFirst.HeldCapacity != before.HeldCapacity || afterFirst.Usage != before.Usage || afterFirst.UploadHeld.Rate != 500 || afterFirst.DownloadHeld.Rate != 1000 || afterFirst.Revision != before.Revision+1 {
+		t.Fatalf("page crossed its limit or credited quota: %+v/%v", afterFirst, err)
+	}
+	if _, err := j.ReleaseRetiredClientRatesPage(old.NodeID, "canonical-client", "", 1); err != nil {
+		t.Fatal(err)
+	}
+	if retry, err := j.Account("canonical-client"); err != nil || retry != afterFirst {
+		t.Fatalf("page retry changed committed accounting: %+v/%v", retry, err)
+	}
+	if next, err := j.ReleaseRetiredClientRatesPage(old.NodeID, "canonical-client", "a", 1); err != nil || next != "" {
+		t.Fatalf("terminal page: %q/%v", next, err)
+	}
+	final, err := j.Account("canonical-client")
+	if err != nil || final.HeldCapacity != before.HeldCapacity || final.Usage != before.Usage || final.UploadHeld.Rate != 0 || final.DownloadHeld.Rate != 0 || final.Revision != before.Revision+2 {
+		t.Fatalf("terminal release changed uncertain quota or totals: %+v/%v", final, err)
+	}
+	for _, grant := range []Grant{first, second} {
+		retired, err := j.Grant(grant.GrantID)
+		if err != nil || retired.Sealed || !retired.RatesReleased {
+			t.Fatalf("retired grant state: %+v/%v", retired, err)
+		}
+	}
+	if untouched, err := j.Grant(otherGrant.GrantID); err != nil || untouched != otherGrant {
+		t.Fatalf("page changed another node's grant: %+v/%v", untouched, err)
+	}
+}
+
 func TestRetiredUnlimitedSharesNoLongerBlockLimitedPolicy(t *testing.T) {
 	j, id, boot, _ := journalFixture(t)
 	a, err := j.Account("canonical-client")
@@ -208,14 +277,40 @@ func TestRetiredRatesReopenRestartsQuarantineWithoutWallClockCredit(t *testing.T
 	if err := reopened.ReleaseRetiredRates(boot); !errors.Is(err, ErrCapacity) {
 		t.Fatalf("reopen credited old wall clock expiry: %v", err)
 	}
+	before, err := reopened.Account("canonical-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reopened.ReleaseRetiredClientRatesPage(boot.NodeID, "canonical-client", "", 1000); err != nil {
+		t.Fatal(err)
+	}
+	if account, err := reopened.Account("canonical-client"); err != nil || account != before {
+		t.Fatalf("reopened rate page reused an old deadline: %+v/%v", account, err)
+	}
 	elapsed := MaxLeaseDuration - time.Nanosecond
 	reopened.retirementElapsed = func(time.Time) time.Duration { return elapsed }
 	if err := reopened.ReleaseRetiredRates(boot); !errors.Is(err, ErrCapacity) {
 		t.Fatalf("reopen shortened full monotonic quarantine: %v", err)
 	}
+	if _, err := reopened.ReleaseRetiredClientRatesPage(boot.NodeID, "canonical-client", "", 1000); err != nil {
+		t.Fatal(err)
+	}
+	if account, err := reopened.Account("canonical-client"); err != nil || account != before {
+		t.Fatalf("reopened rate page shortened quarantine: %+v/%v", account, err)
+	}
 	elapsed = MaxLeaseDuration
+	if _, err := reopened.ReleaseRetiredClientRatesPage(boot.NodeID, "canonical-client", "", 1000); err != nil {
+		t.Fatal(err)
+	}
+	committed, err := reopened.Account("canonical-client")
+	if err != nil || committed.HeldCapacity != before.HeldCapacity || committed.Usage != before.Usage || committed.UploadHeld.Rate != 0 || committed.DownloadHeld.Rate != 0 {
+		t.Fatalf("reopened rate page credited quota or usage: %+v/%v", committed, err)
+	}
 	if err := reopened.ReleaseRetiredRates(boot); err != nil {
 		t.Fatal(err)
+	}
+	if account, err := reopened.Account("canonical-client"); err != nil || account != committed {
+		t.Fatalf("mixed release APIs duplicated the durable effect: %+v/%v", account, err)
 	}
 }
 
@@ -232,9 +327,17 @@ func TestConcurrentRetiredRateReleaseIsOneDurableEffect(t *testing.T) {
 	j.retirementElapsed = func(time.Time) time.Duration { return MaxLeaseDuration }
 	var wg sync.WaitGroup
 	results := make(chan error, 16)
-	for range 16 {
+	for i := range 16 {
 		wg.Add(1)
-		go func() { defer wg.Done(); results <- j.ReleaseRetiredRates(boot) }()
+		go func() {
+			defer wg.Done()
+			if i%2 == 0 {
+				results <- j.ReleaseRetiredRates(boot)
+			} else {
+				_, err := j.ReleaseRetiredClientRatesPage(boot.NodeID, "canonical-client", "", 1)
+				results <- err
+			}
+		}()
 	}
 	wg.Wait()
 	close(results)

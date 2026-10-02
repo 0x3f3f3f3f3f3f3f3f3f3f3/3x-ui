@@ -27,17 +27,18 @@ type controllerGrant struct {
 }
 
 type authorityController struct {
-	mu        sync.Mutex
-	execution *authorityExecution
-	api       authorityDemandAPI
-	active    map[string]*controllerGrant
-	pending   map[string]*command.AuthorityRequest
-	suspended map[string]bool
-	stateMu   sync.Mutex
-	cancel    context.CancelFunc
-	done      chan struct{}
-	stopped   bool
-	lastError error
+	mu               sync.Mutex
+	execution        *authorityExecution
+	api              authorityDemandAPI
+	active           map[string]*controllerGrant
+	pending          map[string]*command.AuthorityRequest
+	suspended        map[string]bool
+	retirementCursor map[string]string
+	stateMu          sync.Mutex
+	cancel           context.CancelFunc
+	done             chan struct{}
+	stopped          bool
+	lastError        error
 }
 
 func (c *authorityController) Start() error {
@@ -162,7 +163,7 @@ func newAuthorityController(ctx context.Context, db *gorm.DB, journal *policyaut
 	if err := api.EnableAuthorityRequests(ctx, &command.AuthorityBinding{AuthorityId: id.AuthorityID, Generation: id.Generation, NodeId: nodeID}); err != nil {
 		return nil, err
 	}
-	return &authorityController{execution: execution, api: api, active: make(map[string]*controllerGrant), pending: make(map[string]*command.AuthorityRequest), suspended: make(map[string]bool)}, nil
+	return &authorityController{execution: execution, api: api, active: make(map[string]*controllerGrant), pending: make(map[string]*command.AuthorityRequest), suspended: make(map[string]bool), retirementCursor: make(map[string]string)}, nil
 }
 
 func controllerCapacity(account policyauthority.Account) uint64 {
@@ -283,6 +284,15 @@ func (c *authorityController) handleRequestLocked(ctx context.Context, r *comman
 				return err
 			}
 			delete(c.active, r.ClientId)
+			account, err = c.execution.journal.Account(r.ClientId)
+			if err != nil {
+				return err
+			}
+		}
+		if c.active[r.ClientId] == nil && limitedAuthorityRatesHeld(account) {
+			if err := c.reconcileRetiredClientRatesLocked(ctx, r.ClientId); err != nil {
+				return err
+			}
 			account, err = c.execution.journal.Account(r.ClientId)
 			if err != nil {
 				return err
