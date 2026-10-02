@@ -141,16 +141,10 @@ func openPersistentEngine(path, instanceID, bootID string) (*Engine, error) {
 			if err := json.Unmarshal(value, &r); err != nil {
 				return err
 			}
-			if r.Policy.Validate() != nil || string(key) != r.Policy.ClientID || r.Usage.Remainder >= MultiplierScale || r.Epoch >= epoch || r.Sequence == 0 || r.Sequence > clients.Sequence() || r.UncertainBytes > math.MaxUint64-r.ReservedBytes || r.Usage.BilledBytes > math.MaxUint64-r.UncertainBytes-r.ReservedBytes {
+			if string(key) != r.Policy.ClientID {
 				return errors.New("invalid client state")
 			}
-			if _, err := r.Policy.effectiveExpiry(r.FirstUsedAt); err != nil {
-				return err
-			}
-			if _, err := r.Policy.quotaUsage(r.Usage, r.UncertainBytes); err != nil {
-				return err
-			}
-			if err := validateStoredAuthorityGrant(r, instanceID); err != nil {
+			if err := validateStoredClient(r, epoch-1, clients.Sequence(), instanceID); err != nil {
 				return err
 			}
 			records = append(records, r)
