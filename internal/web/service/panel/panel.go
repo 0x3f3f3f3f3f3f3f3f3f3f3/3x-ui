@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/config"
+	"github.com/mhsanaei/3x-ui/v3/internal/distribution"
 	"github.com/mhsanaei/3x-ui/v3/internal/logger"
 	"github.com/mhsanaei/3x-ui/v3/internal/web/global"
 	"github.com/mhsanaei/3x-ui/v3/internal/web/service"
@@ -40,7 +41,7 @@ type PanelUpdateInfo struct {
 }
 
 const (
-	panelUpdaterURL      = "https://raw.githubusercontent.com/MHSanaei/3x-ui/main/update.sh"
+	panelUpdaterURL      = "https://raw.githubusercontent.com/0x3f3f3f3f3f3f3f3f3f3f3/3x-ui/feature/custom-xray-unified-policy/update.sh"
 	maxPanelUpdaterBytes = 2 << 20
 	// devReleaseTag is the fixed-tag rolling pre-release the CI force-moves to the
 	// newest main commit; the dev update channel installs from it.
@@ -373,7 +374,11 @@ func releaseUpdateSlot() {
 
 func downloadPanelUpdater() (string, error) {
 	client := (&service.SettingService{}).NewProxiedHTTPClient(15 * time.Second)
-	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, panelUpdaterURL, nil)
+	url := panelUpdaterURL
+	if regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(distribution.PanelSourceRevision) {
+		url = "https://raw.githubusercontent.com/0x3f3f3f3f3f3f3f3f3f3f3/3x-ui/" + distribution.PanelSourceRevision + "/update.sh"
+	}
+	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
 	if reqErr != nil {
 		return "", fmt.Errorf("download panel updater: %w", reqErr)
 	}
@@ -430,9 +435,9 @@ func fetchLatestPanelVersion() (string, error) {
 // fetchPanelRelease fetches a release from GitHub. An empty tag resolves the
 // latest stable release; a non-empty tag (e.g. dev-latest) resolves that tag.
 func fetchPanelRelease(tag string) (*service.Release, error) {
-	url := "https://api.github.com/repos/MHSanaei/3x-ui/releases/latest"
+	url := "https://api.github.com/repos/0x3f3f3f3f3f3f3f3f3f3f3/3x-ui/releases/latest"
 	if tag != "" {
-		url = "https://api.github.com/repos/MHSanaei/3x-ui/releases/tags/" + tag
+		url = "https://api.github.com/repos/0x3f3f3f3f3f3f3f3f3f3f3/3x-ui/releases/tags/" + tag
 	}
 	client := (&service.SettingService{}).NewProxiedHTTPClient(10 * time.Second)
 	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)

@@ -31,13 +31,21 @@ func CurrentTarget() Target {
 // RunCommand never loads service environment files, opens a database or starts
 // a core instance. main dispatches it before the regular service CLI setup.
 func RunCommand(ctx context.Context, args []string, output io.Writer) error {
+	if len(args) >= 3 && args[0] == "with-lock" {
+		return RunLocked(ctx, args[1], args[2:], output)
+	}
 	if len(args) == 1 && args[0] == "info" {
 		return json.NewEncoder(output).Encode(BinaryReport{FormatVersion: 1, APIVersion: 1, Compatibility: "traffic-control-v1", SourceRevision: PanelSourceRevision, Target: CurrentTarget(), GoVersion: runtime.Version()})
 	}
-	if len(args) == 2 && args[0] == "verify" {
+	if len(args) == 2 && (args[0] == "verify" || args[0] == "verify-incoming") {
 		m, err := Verify(ctx, args[1])
 		if err != nil {
 			return err
+		}
+		if args[0] == "verify-incoming" {
+			if err := checkIncomingFiles(args[1], m); err != nil {
+				return err
+			}
 		}
 		return json.NewEncoder(output).Encode(m)
 	}
@@ -46,7 +54,7 @@ func RunCommand(ctx context.Context, args []string, output io.Writer) error {
 		if err != nil {
 			return err
 		}
-		m, err := Verify(ctx, root)
+		m, err := VerifyIncoming(ctx, root)
 		if err != nil {
 			return err
 		}
@@ -59,5 +67,25 @@ func RunCommand(ctx context.Context, args []string, output io.Writer) error {
 		}
 		return json.NewEncoder(output).Encode(p)
 	}
-	return errors.New("usage: x-ui package info | x-ui package verify DIRECTORY | x-ui package stage ARCHIVE NEW_DIRECTORY | x-ui package promote CANDIDATE INSTALLED PREVIOUS")
+	if len(args) == 3 && args[0] == "rollback" {
+		p, err := Rollback(ctx, args[1], args[2])
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(output).Encode(p)
+	}
+	if len(args) == 2 && (args[0] == "recover" || args[0] == "complete") {
+		var p *Promotion
+		var err error
+		if args[0] == "recover" {
+			p, err = Recover(ctx, args[1])
+		} else {
+			p, err = CompletePromotion(ctx, args[1])
+		}
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(output).Encode(p)
+	}
+	return errors.New("usage: x-ui package info | verify DIRECTORY | stage ARCHIVE NEW_DIRECTORY | promote CANDIDATE INSTALLED PREVIOUS | recover INSTALLED | complete INSTALLED | rollback INSTALLED FAILED | with-lock INSTALLED COMMAND [ARGS...]")
 }

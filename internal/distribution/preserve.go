@@ -93,8 +93,9 @@ func PreserveResources(previous, candidate string, m *Manifest) error {
 			return err
 		}
 		n, copyErr := io.Copy(output, io.LimitReader(input, info.Size()+1))
+		syncErr := output.Sync()
 		sourceErr, targetErr := input.Close(), output.Close()
-		if copyErr != nil || sourceErr != nil || targetErr != nil || n != info.Size() {
+		if copyErr != nil || syncErr != nil || sourceErr != nil || targetErr != nil || n != info.Size() {
 			return fmt.Errorf("application resource changed while copying: %s", name)
 		}
 		return nil

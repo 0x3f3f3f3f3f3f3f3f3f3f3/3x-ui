@@ -22,7 +22,7 @@ func packageRole(name string, target Target) (string, error) {
 		return "panel", nil
 	case name == "bin/"+CoreBinaryName(target.OS, target.Arch):
 		return "core", nil
-	case name == "x-ui-package" || name == "x-ui.sh" || name == "DockerEntrypoint.sh" || strings.HasPrefix(name, "internal/web/translation/"):
+	case name == "x-ui-package" || name == "x-ui.sh" || name == "install.sh" || name == "update.sh" || name == "install-paired-package.sh" || name == "DockerEntrypoint.sh" || strings.HasPrefix(name, "internal/web/translation/"):
 		return "control", nil
 	case name == "x-ui.rc" || strings.HasPrefix(name, "x-ui.service."):
 		return "service", nil

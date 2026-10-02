@@ -1,6 +1,6 @@
 # Paired Custom Xray distribution implementation plan
 
-> Execution: use superpowers:executing-plans inline, TDD for behavior changes and verification-before-completion. Ordinary engineering decisions and isolated worktrees are already authorized.
+> Execution: use superpowers:executing-plans inline for installer/recovery, and superpowers:dispatching-parallel-agents for independent Docker/CI files; TDD for behavior changes and verification-before-completion. Ordinary engineering decisions and isolated worktrees are already authorized.
 
 **Goal:** Install, upgrade and package the panel with its matching Custom Xray source so native Snell, mieru, SSH and shared policy cannot be lost to an official-core replacement.
 
@@ -47,5 +47,5 @@ Files: `Dockerfile`, `DockerInit.sh`, `DockerEntrypoint.sh`, `install.sh`, `upda
 - [ ] Run one whole-stage review, address its Important/Critical findings in one correction batch, then rerun appropriate regressions.
 - [ ] Rebuild immutable paired artifacts from a new clean clone and verify versions, hashes, compiled native3 features, Docker contents and all existing Linux target builds. State unavailable platform/device gates accurately.
 - [ ] Reuse real public native3 and bulk/Tunnel HTTP acceptance against the exact distributed core on SQLite/PostgreSQL; exercise fresh install, update and failed update with retained canonical identity/usage/business keys.
-- [ ] Preserve the 39 prior panel/core artifact hashes and the completed shared-policy checkpoint. Record a requirement-to-evidence matrix without marking broader migration/global/restore work complete.
+- [ ] Preserve the prior panel/core and offline-verifier artifact hashes and the completed shared-policy checkpoint. Record a requirement-to-evidence matrix without marking broader migration/global/restore work complete.
 - [ ] Integrate clean source and documentation into the authorized feature branch, push and verify exact remote SHA; continue the original remaining requirements.

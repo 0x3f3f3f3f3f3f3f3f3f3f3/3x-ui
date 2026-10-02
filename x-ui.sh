@@ -129,7 +129,7 @@ before_show_menu() {
 }
 
 install() {
-    bash <(curl -Ls https://raw.githubusercontent.com/MHSanaei/3x-ui/main/install.sh)
+    run_paired_installer install
     if [[ $? == 0 ]]; then
         if [[ $# == 0 ]]; then
             start
@@ -148,7 +148,7 @@ update() {
         fi
         return 0
     fi
-    bash <(curl -Ls https://raw.githubusercontent.com/MHSanaei/3x-ui/main/update.sh)
+    run_paired_installer update
     if [[ $? == 0 ]]; then
         LOGI "Update is complete, Panel has automatically restarted "
         before_show_menu
@@ -166,59 +166,29 @@ update_dev() {
     fi
     # XUI_UPDATE_TAG tells update.sh to install the dev-latest pre-release
     # instead of the latest stable tag.
-    XUI_UPDATE_TAG="dev-latest" bash <(curl -Ls https://raw.githubusercontent.com/MHSanaei/3x-ui/main/update.sh)
+    XUI_UPDATE_TAG="dev-latest" run_paired_installer update
     if [[ $? == 0 ]]; then
         LOGI "Dev update is complete, Panel has automatically restarted "
         before_show_menu
     fi
 }
 
-replace_xui_script() {
-    local url="$1"
-    local use_if_modified_since="$2"
-    local temp_file="/usr/bin/x-ui-temp.$$"
-
-    rm -f "$temp_file"
-    if [[ "$use_if_modified_since" == "true" ]]; then
-        curl -fLRo "$temp_file" -z /usr/bin/x-ui "$url"
-    else
-        curl -fLRo "$temp_file" "$url"
-    fi
-    if [[ $? != 0 ]]; then
-        rm -f "$temp_file"
-        return 1
-    fi
-
-    if [[ ! -s "$temp_file" ]]; then
-        rm -f "$temp_file"
-        # -z above means "not modified since /usr/bin/x-ui" rather than a
-        # real failure, so an empty download here is success, not an error.
-        [[ "$use_if_modified_since" == "true" ]] && return 0
-        return 1
-    fi
-
-    mv -f "$temp_file" /usr/bin/x-ui
-    if [[ $? != 0 ]]; then
-        rm -f "$temp_file"
-        return 1
-    fi
-    # The move already landed the new script; a transient chmod failure here
-    # shouldn't make callers think the whole replace failed.
-    chmod +x /usr/bin/x-ui
-    return 0
+run_paired_installer() {
+    local mode="$1" tag="${2:-}"
+    [[ -x "$xui_folder/x-ui-package" && -s "$xui_folder/$mode.sh" ]] || { LOGE "Installed paired installer is missing"; return 1; }
+    "$xui_folder/x-ui-package" verify "$xui_folder" > /dev/null || return 1
+    bash "$xui_folder/$mode.sh" "$tag"
 }
 
-# The menu must match the installed panel, so update it from that release's
-# tag; fall back to main only when no script is published for the version.
-installed_script_url() {
-    local ver
-    ver=$("${xui_folder}/x-ui" -v 2> /dev/null | tr -d '[:space:]')
-    if [[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && curl -fsIL -o /dev/null "https://raw.githubusercontent.com/MHSanaei/3x-ui/v${ver}/x-ui.sh"; then
-        echo "https://raw.githubusercontent.com/MHSanaei/3x-ui/v${ver}/x-ui.sh"
-    else
-        echo -e "${yellow}No x-ui.sh published for the installed version (${ver:-unknown}), using main${plain}" >&2
-        echo "https://raw.githubusercontent.com/MHSanaei/3x-ui/main/x-ui.sh"
-    fi
+restore_paired_menu() {
+    [[ -x "$xui_folder/x-ui-package" && -s "$xui_folder/x-ui.sh" ]] || return 1
+    "$xui_folder/x-ui-package" verify "$xui_folder" > /dev/null || return 1
+    local destination="${XUI_MENU_PATH:-/usr/bin/x-ui}" temporary
+    [[ "$xui_folder" =~ ^/[A-Za-z0-9_./-]+$ ]] || return 1
+    temporary=$(mktemp "${destination}.paired.XXXXXXXX") || return 1
+    sed "s|/usr/local/x-ui|$xui_folder|g" "$xui_folder/x-ui.sh" > "$temporary" || return 1
+    chmod 755 "$temporary" || return 1
+    mv -f -- "$temporary" "$destination"
 }
 
 update_menu() {
@@ -232,7 +202,7 @@ update_menu() {
         return 0
     fi
 
-    if replace_xui_script "$(installed_script_url)" "false"; then
+    if restore_paired_menu; then
         chmod +x ${xui_folder}/x-ui.sh
         echo -e "${green}Update successful. The panel has automatically restarted.${plain}"
         exit 0
@@ -250,11 +220,9 @@ legacy_version() {
         echo "Panel version cannot be empty. Exiting."
         exit 1
     fi
-    # Use the entered panel version in the download link
-    install_command="bash <(curl -Ls "https://raw.githubusercontent.com/mhsanaei/3x-ui/v$tag_version/install.sh") v$tag_version"
-
-    echo "Downloading and installing panel version $tag_version..."
-    eval $install_command
+    [[ "$tag_version" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || { LOGE "Invalid paired release version"; return 1; }
+    tag_version="v${tag_version#v}"
+    run_paired_installer install "$tag_version"
 }
 
 # Function to handle the deletion of the script file
@@ -316,7 +284,7 @@ uninstall() {
     echo ""
     echo -e "Uninstalled Successfully.\n"
     echo "If you need to install this panel again, you can use below command:"
-    echo -e "${green}bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)${plain}"
+    echo -e "${green}bash <(curl -Ls https://raw.githubusercontent.com/0x3f3f3f3f3f3f3f3f3f3f3/3x-ui/feature/custom-xray-unified-policy/install.sh)${plain}"
     echo ""
     # Trap the SIGTERM signal
     trap delete_script SIGTERM
@@ -849,7 +817,7 @@ enable_bbr() {
 }
 
 update_shell() {
-    if replace_xui_script "$(installed_script_url)" "true"; then
+    if restore_paired_menu; then
         LOGI "Upgrade script succeeded, Please rerun the script"
         before_show_menu
     else

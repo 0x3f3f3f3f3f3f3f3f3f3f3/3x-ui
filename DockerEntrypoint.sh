@@ -1,7 +1,20 @@
 #!/bin/sh
+set -eu
+
+# Reject a changed/incompatible panel/core pair before touching runtime state.
+/app/x-ui-package verify /app >/dev/null
+
+# Only the panel service command needs fail2ban and certificate renewal.
+# Offline package/core commands must not initialize the database or helpers.
+if [ "$#" -gt 0 ]; then
+    case "$1" in
+        /app/x-ui|./x-ui) [ "$#" -eq 1 ] || exec "$@" ;;
+        *) exec "$@" ;;
+    esac
+fi
 
 # Start fail2ban with the 3x-ipl jail
-if [ "$XUI_ENABLE_FAIL2BAN" = "true" ]; then
+if [ "${XUI_ENABLE_FAIL2BAN:-false}" = "true" ]; then
     LOG_FOLDER="${XUI_LOG_FOLDER:-/var/log/x-ui}"
     mkdir -p "$LOG_FOLDER"
     touch "$LOG_FOLDER/3xipl.log" "$LOG_FOLDER/3xipl-banned.log"
@@ -78,5 +91,8 @@ if [ -f /root/.acme.sh/acme.sh ]; then
     crond
 fi
 
-# Run x-ui
-exec /app/x-ui
+# Preserve Docker's requested command, including offline package/core probes.
+if [ "$#" -eq 0 ]; then
+    set -- /app/x-ui
+fi
+exec "$@"

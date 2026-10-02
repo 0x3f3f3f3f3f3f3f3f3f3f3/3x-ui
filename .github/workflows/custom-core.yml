@@ -1,12 +1,14 @@
 name: Custom core
 on:
   push:
-    branches: [feature/custom-xray-unified-policy]
-    paths: ["core/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "tools/build-ssh-capability-fixture.sh", "tools/verify-native-ssh-panel.py", "tools/build-snell-capability-fixture.sh", "tools/verify-native-snell-panel.py", "tools/verify-policy-tunnel-completion.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
+    branches: [feature/custom-xray-unified-policy, feature/paired-custom-core-distribution]
+    paths: ["core/**", "internal/distribution/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/build-paired-package.sh", "tools/packagegen/**", "tools/packageverify/**", "tools/packagedeps/**", "tools/install-paired-package.sh", "install.sh", "update.sh", "x-ui.sh", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "tools/build-ssh-capability-fixture.sh", "tools/verify-native-ssh-panel.py", "tools/build-snell-capability-fixture.sh", "tools/verify-native-snell-panel.py", "tools/verify-policy-tunnel-completion.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
   pull_request:
-    paths: ["core/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "tools/build-ssh-capability-fixture.sh", "tools/verify-native-ssh-panel.py", "tools/build-snell-capability-fixture.sh", "tools/verify-native-snell-panel.py", "tools/verify-policy-tunnel-completion.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
+    paths: ["core/**", "internal/distribution/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/build-paired-package.sh", "tools/packagegen/**", "tools/packageverify/**", "tools/packagedeps/**", "tools/install-paired-package.sh", "install.sh", "update.sh", "x-ui.sh", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "tools/build-ssh-capability-fixture.sh", "tools/verify-native-ssh-panel.py", "tools/build-snell-capability-fixture.sh", "tools/verify-native-snell-panel.py", "tools/verify-policy-tunnel-completion.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
 permissions:
   contents: read
+env:
+  GOTOOLCHAIN: go1.27.1
 jobs:
   build-test:
     runs-on: ubuntu-latest
@@ -14,10 +16,12 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: 1.27.1
           cache-dependency-path: |
             go.sum
             core/xray/go.sum
+      - name: Package validation tests
+        run: go test -race -count=1 ./internal/distribution
       - name: Core unit tests
         working-directory: core/xray
         run: go test -shuffle=on -count=1 ./...
@@ -340,7 +344,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: 1.27.1
       - run: make dist-stub
       - name: Build custom core for database bootstrap
         run: bash tools/build-custom-core.sh
@@ -435,10 +439,10 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: 1.27.1
       - uses: actions/setup-node@v7
         with:
-          node-version: 26
+          node-version: 26.10.0
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: make dist-stub
@@ -452,3 +456,69 @@ jobs:
           npm run lint
           npx vitest run src/test/ssh-*.test.* src/test/mieru-*.test.* src/test/client-form*.test.* src/test/client-qr-modal*.test.* src/test/inbound-form*.test.* src/test/outbound-form*.test.* src/test/tunnel-*-form.test.tsx --maxWorkers=2 --testTimeout=30000
           npm run build
+
+  paired-package-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.27.1
+          cache-dependency-path: |
+            go.sum
+            core/xray/go.sum
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26.10.0
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install native static C compiler
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build and execute paired offline validation
+        env:
+          CC: musl-gcc
+          PAIRED_RESOURCE_DIR: ${{ runner.temp }}/paired-native-resources
+          GOOS: linux
+          GOARCH: amd64
+          PAIRED_DEV_BUILD: "1"
+          PAIRED_PANEL_LDFLAGS: "-linkmode external -extldflags '-static'"
+        run: |
+          set -euo pipefail
+          package_root="$RUNNER_TEMP/paired-review/x-ui"
+          mkdir -p "$PAIRED_RESOURCE_DIR/licenses"
+          python3 - <<'PYCODE'
+          import json, os, shutil, subprocess
+          from pathlib import Path
+          compiler = shutil.which(os.environ["CC"])
+          record = {
+              "compilerPath": compiler,
+              "compilerVersion": subprocess.check_output([compiler, "--version"], text=True).strip(),
+              "installedMuslTools": subprocess.check_output(["dpkg-query", "-W", "musl-tools"], text=True).strip(),
+              "go": subprocess.check_output(["go", "env", "GOVERSION"], text=True).strip(),
+              "node": subprocess.check_output(["node", "--version"], text=True).strip(),
+          }
+          (Path(os.environ["PAIRED_RESOURCE_DIR"]) / "licenses/build-toolchains.json").write_text(json.dumps(record, indent=2) + "\n")
+          PYCODE
+          bash tools/build-paired-package.sh "$package_root"
+          "$package_root/x-ui-package" verify "$package_root"
+          "$package_root/x-ui" package verify "$package_root"
+          "$package_root/bin/xray-linux-amd64" capabilities
+          # Tampering must fail; restore only this temporary review fixture.
+          cp "$package_root/bin/xray-linux-amd64" "$RUNNER_TEMP/pristine-custom-xray"
+          printf 'changed' >> "$package_root/bin/xray-linux-amd64"
+          if "$package_root/x-ui-package" verify "$package_root"; then
+            echo 'tampered core was accepted' >&2; exit 1
+          fi
+          cp "$RUNNER_TEMP/pristine-custom-xray" "$package_root/bin/xray-linux-amd64"
+          "$package_root/x-ui-package" verify "$package_root"
+          mkdir -p "$RUNNER_TEMP/paired-assets"
+          cd "$RUNNER_TEMP/paired-assets"
+          tar -czf x-ui-linux-amd64.tar.gz -C "$(dirname "$package_root")" x-ui
+          cp "$package_root/x-ui-package" x-ui-package-linux-amd64
+          sha256sum x-ui-linux-amd64.tar.gz > x-ui-linux-amd64.tar.gz.sha256
+          sha256sum x-ui-package-linux-amd64 > x-ui-package-linux-amd64.sha256
+      - uses: actions/upload-artifact@v7
+        with:
+          name: paired-package-review-${{ github.sha }}
+          if-no-files-found: error
+          path: ${{ runner.temp }}/paired-assets/*

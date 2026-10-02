@@ -97,3 +97,50 @@ were preserved, and the journal was present. That test table is not the full
 the separate 11-case SQLite/PostgreSQL record above. The promotion review helper
 was built before the subsequent source-level lock addition; final clean helper,
 installer, interruption and rollback acceptance still remain.
+
+## Installer lifecycle integration checkpoint
+
+The ordinary install/update functions now use the shared paired-package library.
+They validate an incoming candidate before dependency/service operations, execute
+its hashed installer under a lifecycle kernel lock, stop the previous service,
+recover any interrupted directory replacement, promote, install packaged controls
+and activate. Remote archives and standalone verifiers each require their own
+checksum. Local package directories/archives have an explicit offline route.
+No official/upstream-core download remains in these active paths. The panel web
+updater uses the fork, with source-stamped builds pinning the bootstrap script to
+their own full commit; CLI menus use their installed paired scripts.
+
+Incoming validation rejects unhashed scripts and runtime state; installed-tree
+validation continues to allow preserved business files. A pending sibling journal
+fences replacement until recovery/completion. Code rollback creates a candidate
+from retained code and CURRENT business state, preserves the failed tree and the
+original backup, and does not undo database schema migrations. It does not claim
+coordinated-node or arbitrary backup-restore allocation fencing.
+
+`paired-distribution-recovery-red.log`, `paired-distribution-rollback-red.log` and
+`paired-distribution-lifecycle-inheritance-red.log` retain the missing behavior.
+The corresponding green race logs prove interrupted first rename recovery, path/
+journal rejection, use of latest usage instead of stale backup state, no
+resurrection of deleted credentials, and kernel lock inheritance by an installer
+child after its parent descriptor closes. Whole directory replacement remains
+local to the installation parent and retains every transaction receipt.
+
+The normal entrypoint preflight initially invoked apt/curl despite a bad local
+pair; `paired-distribution-normal-preflight-{red,green}.log` preserves that change.
+Both entrypoints now refuse the bad pair without dependency/service calls.
+`paired-distribution-installer-recovery-route-green.log` uses the actual earlier
+clean package through both offline entrypoints with the newer standalone helper:
+installed state is preserved and no external service/package command executes.
+The helper `build/x-ui-package-recovery-review` is an unstamped dirty engineering
+artifact, not a final package. Earlier helper binaries remain unchanged.
+
+Distribution/panel tests passed with local HTTP sockets enabled in
+`paired-distribution-updater-recovery-sockets-green.log`; the preceding sandbox
+run is retained separately and failed because httptest could not bind a socket.
+The fixture does not represent a product bug. Incoming/lifecycle race and vet
+logs are retained. Full temporary-prefix service activation/rollback and final
+clean-source protocol/SQL/Docker acceptance remain the next gates. Independent
+Docker/CI review evidence is recorded in `paired-docker-testing.md` and
+`paired-ci-testing.md`, including their dirty-snapshot and platform limits.
+
+The complete root Go suite passed in `paired-distribution-integration-root-regression.log`. Native optional fixture gates are covered separately by the required actual-core protocol/SQL receipts; this root-suite result alone does not assert zero skips.

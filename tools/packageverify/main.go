@@ -7,12 +7,13 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"syscall"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/distribution"
 )
 
 func main() {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	if err := distribution.RunCommand(ctx, os.Args[1:], os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, err)

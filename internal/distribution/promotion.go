@@ -11,11 +11,13 @@ import (
 )
 
 type Promotion struct {
-	SourceRevision string `json:"sourceRevision"`
-	Installed      string `json:"installed"`
-	Previous       string `json:"previous"`
-	Candidate      string `json:"candidate"`
-	State          string `json:"state"`
+	SourceRevision    string `json:"sourceRevision"`
+	Installed         string `json:"installed"`
+	Previous          string `json:"previous"`
+	Candidate         string `json:"candidate"`
+	State             string `json:"state"`
+	RollbackCandidate string `json:"rollbackCandidate,omitempty"`
+	Failed            string `json:"failed,omitempty"`
 }
 
 func containsPath(parent, child string) bool {
@@ -70,6 +72,9 @@ func Promote(ctx context.Context, candidate, installed, previous string) (*Promo
 		return nil, err
 	}
 	defer releaseLock()
+	if pending, err := readPending(installed); err != nil || pending != nil {
+		return nil, errors.New("an earlier installation transaction requires recovery or completion")
+	}
 	parent, err := os.Lstat(filepath.Dir(installed))
 	if err != nil || !parent.IsDir() || parent.Mode()&os.ModeSymlink != 0 {
 		return nil, errors.New("installation parent must be a directory without a link")
@@ -107,6 +112,9 @@ func Promote(ctx context.Context, candidate, installed, previous string) (*Promo
 	if err := writePromotionJournal(journal, p); err != nil {
 		return nil, err
 	}
+	if err := writePromotionJournal(installed+".pending.json", p); err != nil {
+		return nil, err
+	}
 	if exists {
 		if err := os.Rename(installed, previous); err != nil {
 			return p, err
@@ -125,9 +133,13 @@ func Promote(ctx context.Context, candidate, installed, previous string) (*Promo
 		}
 		p.State = "rolled-back"
 		_ = writePromotionJournal(journal, p)
+		_ = os.Remove(installed + ".pending.json")
 		return p, fmt.Errorf("candidate promotion refused; original path restored: %w", err)
 	}
 	p.State = "promoted"
+	if err := writePromotionJournal(installed+".pending.json", p); err != nil {
+		return p, fmt.Errorf("installed pair retained with pending recovery journal: %w", err)
+	}
 	if err := writePromotionJournal(journal, p); err != nil {
 		return p, fmt.Errorf("candidate installed and previous retained, but final recovery journal failed: %w", err)
 	}

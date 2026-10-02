@@ -9,7 +9,7 @@ import (
 
 // The kernel releases ownership on normal exit or process death. Keeping the
 // lock inode avoids stale-PID checks and unlink/recreate races during recovery.
-func lockPromotion(installed string) (func(), error) {
+func lockPromotionFile(installed string) (*os.File, error) {
 	root, err := os.OpenRoot(filepath.Dir(installed))
 	if err != nil {
 		return nil, err
@@ -37,5 +37,13 @@ func lockPromotion(installed string) (func(), error) {
 		_ = f.Close()
 		return nil, errors.New("another installation replacement owns the lock")
 	}
-	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); _ = f.Close() }, nil
+	return f, nil
+}
+
+func lockPromotion(installed string) (func(), error) {
+	f, err := lockPromotionFile(installed)
+	if err != nil {
+		return nil, err
+	}
+	return func() { _ = f.Close() }, nil
 }

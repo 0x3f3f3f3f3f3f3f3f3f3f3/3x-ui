@@ -1,231 +1,210 @@
-name: Release 3X-UI
+name: Release paired 3X-UI
 
 on:
   workflow_dispatch:
-  # Only main (dev channel) and version tags ship binaries; build any other
-  # branch on demand via workflow_dispatch.
   push:
     branches:
       - main
+      - feature/custom-xray-unified-policy
+      - feature/paired-custom-core-distribution
     tags:
       - "v*.*.*"
     paths:
       - "**.go"
-      - "go.mod"
-      - "go.sum"
+      - "**/go.mod"
+      - "**/go.sum"
       - "**.sh"
       - "frontend/**"
-      - "x-ui.service.debian"
-      - "x-ui.service.arch"
-      - "x-ui.service.rhel"
+      - "core/**"
+      - "x-ui.service.*"
       - ".github/workflows/release.yml"
+
+# Build jobs and feature pushes cannot publish. Only the two explicit publisher
+# jobs below receive write permission, on version tags or main respectively.
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: go1.27.1
 
 jobs:
   build:
-    permissions:
-      contents: write
     strategy:
-      # One platform hitting a transient outage must not cancel the other six.
       fail-fast: false
       matrix:
-        platform:
-          - amd64
-          - arm64
-          - armv7
-          - armv6
-          - 386
-          - armv5
-          - s390x
+        include:
+          - platform: amd64
+            goarch: amd64
+            goarm: ""
+            bootlin: x86-64
+            sha256: 09fca3aa89540f1b01b5f4210d488cbeb00f522044c53e9989b1dd8a38076912
+          - platform: arm64
+            goarch: arm64
+            goarm: ""
+            bootlin: aarch64
+            sha256: defba831ffa1175236f137069333e21ed46d4d19feb5080a90cf248b6fc2cb08
+          - platform: armv7
+            goarch: arm
+            goarm: "7"
+            bootlin: armv7-eabihf
+            sha256: 2f3a34458c3a8b961bd09f89669130fcdc4c1dbc6e31ada720527e4ad3741c11
+          - platform: armv6
+            goarch: arm
+            goarm: "6"
+            bootlin: armv6-eabihf
+            sha256: 1a283f0936953c139d7171187414839c119997ea816de201f97e79ea3cfd6947
+          - platform: "386"
+            goarch: "386"
+            goarm: ""
+            bootlin: x86-i686
+            sha256: 3a340ebc386a057f5ddb24d8f4bbde07d2c013c99cebc02ac38565e2849bfda0
+          - platform: armv5
+            goarch: arm
+            goarm: "5"
+            bootlin: armv5-eabi
+            sha256: 8cdb4ad70c6b5a66427fa3315fe3ddde1c19c90232674dec59045e04d2a36cf1
+          - platform: s390x
+            goarch: s390x
+            goarm: ""
+            bootlin: s390x-z13
+            sha256: 23f536ff2bf1a9d3b93210465471996bc7c918fbb5702a277d8e1e42ffab8559
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout source
         uses: actions/checkout@v7
-
-      - name: Setup Go
+      - name: Setup pinned Go
         uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
-          check-latest: true
-
-      # Frontend dist must be built BEFORE go build — Go's //go:embed
-      # all:dist directive in internal/web/web.go requires internal/web/dist/ to exist
-      # at compile time. internal/web/dist/ is .gitignored, so on a fresh CI
-      # checkout it doesn't exist until vite emits it.
-      - name: Setup Node.js
+          go-version: 1.27.1
+          cache-dependency-path: |
+            go.sum
+            core/xray/go.sum
+      - name: Setup pinned Node
         uses: actions/setup-node@v7
         with:
-          node-version-file: .nvmrc
-          cache: 'npm'
+          node-version: 26.10.0
+          cache: npm
           cache-dependency-path: frontend/package-lock.json
-
-      - name: Build frontend bundle
+      - name: Install checksum-pinned musl cross-compiler
+        env:
+          BOOTLIN_ARCH: ${{ matrix.bootlin }}
+          TOOLCHAIN_SHA256: ${{ matrix.sha256 }}
         run: |
-          npm ci
-          npm run build
-        working-directory: frontend
-
-      - name: Build 3X-UI
+          set -euo pipefail
+          toolchain="${BOOTLIN_ARCH}--musl--stable-2025.08-1"
+          archive="$RUNNER_TEMP/$toolchain.tar.xz"
+          curl -fL --retry 5 --retry-all-errors --retry-delay 3             "https://toolchains.bootlin.com/downloads/releases/toolchains/$BOOTLIN_ARCH/tarballs/$toolchain.tar.xz" -o "$archive"
+          printf '%s  %s\n' "$TOOLCHAIN_SHA256" "$archive" | sha256sum --check --strict
+          tar -xJf "$archive" -C "$RUNNER_TEMP"
+          # Preserve the existing direct br_real compiler invocation. Reject an
+          # ambiguous selection rather than relying on find/head ordering.
+          mapfile -t compilers < <(find "$RUNNER_TEMP/$toolchain/bin" -maxdepth 1 -name '*-gcc.br_real' -type f -executable)
+          [[ ${#compilers[@]} == 1 ]]
+          cc="$(realpath "${compilers[0]}")"
+          "$cc" --version
+          printf 'CC=%s\nBOOTLIN_TOOLCHAIN=%s\nBOOTLIN_SHA256=%s\n' "$cc" "$toolchain" "$TOOLCHAIN_SHA256" >> "$GITHUB_ENV"
+          printf '%s\n' "$RUNNER_TEMP/$toolchain/bin" >> "$GITHUB_PATH"
+      - name: Assemble existing data and legacy helpers
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          GOARCH: ${{ matrix.goarch }}
         run: |
-          CURL_RETRY="--retry 5 --retry-all-errors --retry-delay 3"
-          fetch() { wget -q --tries=5 --waitretry=10 --retry-on-http-error=429,500,502,503 "$@"; }
-          export CGO_ENABLED=1
-          export GOOS=linux
-          export GOARCH=${{ matrix.platform }}
-          # Use Bootlin prebuilt cross-toolchains (musl 1.2.5 in stable series)
-          case "${{ matrix.platform }}" in
-            amd64) BOOTLIN_ARCH="x86-64" ;;
-            arm64) BOOTLIN_ARCH="aarch64" ;;
-            armv7) BOOTLIN_ARCH="armv7-eabihf"; export GOARCH=arm GOARM=7 ;;
-            armv6) BOOTLIN_ARCH="armv6-eabihf"; export GOARCH=arm GOARM=6 ;;
-            armv5) BOOTLIN_ARCH="armv5-eabi"; export GOARCH=arm GOARM=5 ;;
-            386) BOOTLIN_ARCH="x86-i686" ;;
-            s390x) BOOTLIN_ARCH="s390x-z13" ;;
-          esac
-          echo "Resolving Bootlin musl toolchain for arch=$BOOTLIN_ARCH (platform=${{ matrix.platform }})"
-          TARBALL_BASE="https://toolchains.bootlin.com/downloads/releases/toolchains/$BOOTLIN_ARCH/tarballs/"
-          TARBALL_URL=$(curl -fsSL $CURL_RETRY "$TARBALL_BASE" | grep -oE "${BOOTLIN_ARCH}--musl--stable-[^\"]+\\.tar\\.xz" | sort -r | head -n1)
-          [ -z "$TARBALL_URL" ] && { echo "Failed to locate Bootlin musl toolchain for arch=$BOOTLIN_ARCH" >&2; exit 1; }
-          echo "Downloading: $TARBALL_URL"
-          cd /tmp
-          curl -fL -sS $CURL_RETRY -o "$(basename "$TARBALL_URL")" "$TARBALL_BASE/$TARBALL_URL"
-          tar -xf "$(basename "$TARBALL_URL")"
-          TOOLCHAIN_DIR=$(find . -maxdepth 1 -type d -name "${BOOTLIN_ARCH}--musl--stable-*" | head -n1)
-          export PATH="$(realpath "$TOOLCHAIN_DIR")/bin:$PATH"
-          export CC=$(realpath "$(find "$TOOLCHAIN_DIR/bin" -name '*-gcc.br_real' -type f -executable | head -n1)")
-          [ -z "$CC" ] && { echo "No gcc.br_real found in $TOOLCHAIN_DIR/bin" >&2; exit 1; }
-          cd -
-          # Stamp the commit into per-commit (dev channel) builds only; tagged
-          # stable releases stay unstamped so config.IsDevBuild() returns false.
-          LDFLAGS="-w -s -linkmode external -extldflags '-static'"
-          if [[ "$GITHUB_REF" != refs/tags/* ]]; then
-            LDFLAGS="$LDFLAGS -X github.com/mhsanaei/3x-ui/v3/internal/config.buildCommit=${GITHUB_SHA::8} -X github.com/mhsanaei/3x-ui/v3/internal/config.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          fi
-          go build -buildvcs=true -ldflags "$LDFLAGS" -o xui-release -v .
-          file xui-release
-          ldd xui-release || echo "Static binary confirmed"
-
-          mkdir x-ui
-          cp xui-release x-ui/
-          cp x-ui.service.debian x-ui/
-          cp x-ui.service.arch x-ui/
-          cp x-ui.service.rhel x-ui/
-          cp x-ui.sh x-ui/
-          mv x-ui/xui-release x-ui/x-ui
-          mkdir x-ui/bin
-          cd x-ui/bin
-
-          # Download dependencies
-          Xray_URL="https://github.com/XTLS/Xray-core/releases/download/v26.9.9/"
-          if [ "${{ matrix.platform }}" == "amd64" ]; then
-            fetch ${Xray_URL}Xray-linux-64.zip
-            unzip Xray-linux-64.zip
-            rm -f Xray-linux-64.zip
-          elif [ "${{ matrix.platform }}" == "arm64" ]; then
-            fetch ${Xray_URL}Xray-linux-arm64-v8a.zip
-            unzip Xray-linux-arm64-v8a.zip
-            rm -f Xray-linux-arm64-v8a.zip
-          elif [ "${{ matrix.platform }}" == "armv7" ]; then
-            fetch ${Xray_URL}Xray-linux-arm32-v7a.zip
-            unzip Xray-linux-arm32-v7a.zip
-            rm -f Xray-linux-arm32-v7a.zip
-          elif [ "${{ matrix.platform }}" == "armv6" ]; then
-            fetch ${Xray_URL}Xray-linux-arm32-v6.zip
-            unzip Xray-linux-arm32-v6.zip
-            rm -f Xray-linux-arm32-v6.zip
-          elif [ "${{ matrix.platform }}" == "386" ]; then
-            fetch ${Xray_URL}Xray-linux-32.zip
-            unzip Xray-linux-32.zip
-            rm -f Xray-linux-32.zip
-          elif [ "${{ matrix.platform }}" == "armv5" ]; then
-            fetch ${Xray_URL}Xray-linux-arm32-v5.zip
-            unzip Xray-linux-arm32-v5.zip
-            rm -f Xray-linux-arm32-v5.zip
-          elif [ "${{ matrix.platform }}" == "s390x" ]; then
-            fetch ${Xray_URL}Xray-linux-s390x.zip
-            unzip Xray-linux-s390x.zip
-            rm -f Xray-linux-s390x.zip
-          fi
-          rm -f geoip.dat geosite.dat
-          fetch https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat
-          fetch https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat
-          fetch -O geoip_IR.dat https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geoip.dat
-          fetch -O geosite_IR.dat https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geosite.dat
-          fetch -O geoip_RU.dat https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geoip.dat
-          fetch -O geosite_RU.dat https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geosite.dat
-          mv xray xray-linux-${{ matrix.platform }}
-          # mtg-multi (MTProto sidecar) ships prebuilt release binaries whose
-          # platform labels match our matrix, so download and unpack the matching
-          # archive. Only the platforms the fork publishes are packaged — the tag
-          # lookup lives inside that branch so unpackaged platforms (s390x) never
-          # depend on it. The tag comes from the release-page redirect on
-          # github.com — the host the downloads need anyway — because api.github.com
-          # has 503'd whole release runs while asset downloads kept working.
-          case "${{ matrix.platform }}" in
+          set -euo pipefail
+          fetch() { curl -fL --retry 5 --retry-all-errors --retry-delay 3 "$1" -o "$2"; }
+          resource_root="$RUNNER_TEMP/paired-resources"
+          mkdir -p "$resource_root/bin"
+          cd "$resource_root/bin"
+          fetch https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat geoip.dat
+          fetch https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat geosite.dat
+          fetch https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geoip.dat geoip_IR.dat
+          fetch https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geosite.dat geosite_IR.dat
+          fetch https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geoip.dat geoip_RU.dat
+          fetch https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geosite.dat geosite_RU.dat
+          # These remain external legacy helpers, not migrated native features.
+          case "$PLATFORM" in
             amd64|arm64|armv7|armv6|386)
-              MTG_MULTI_VER=$(curl -sf $CURL_RETRY -o /dev/null -w '%{redirect_url}' "https://github.com/mhsanaei/mtg-multi/releases/latest" | sed -n 's#.*/releases/tag/##p')
-              if [ -z "$MTG_MULTI_VER" ]; then echo "could not resolve the latest mtg-multi release tag"; exit 1; fi
-              MTG_PKG="mtg-multi-${MTG_MULTI_VER#v}-linux-${{ matrix.platform }}"
-              curl -sfLRO $CURL_RETRY "https://github.com/mhsanaei/mtg-multi/releases/download/${MTG_MULTI_VER}/${MTG_PKG}.tar.gz"
-              tar -xzf "${MTG_PKG}.tar.gz"
-              mv "${MTG_PKG}/mtg-multi" "mtg-linux-${{ matrix.platform }}"
-              rm -rf "${MTG_PKG}" "${MTG_PKG}.tar.gz"
+              mtg_version=$(curl -fsS --retry 5 --retry-all-errors --retry-delay 3 -o /dev/null -w '%{redirect_url}' https://github.com/mhsanaei/mtg-multi/releases/latest)
+              mtg_version="${mtg_version##*/}"
+              [[ "$mtg_version" =~ ^v[0-9]+(\.[0-9]+)+$ ]]
+              mtg_package="mtg-multi-${mtg_version#v}-linux-$PLATFORM"
+              fetch "https://github.com/mhsanaei/mtg-multi/releases/download/$mtg_version/$mtg_package.tar.gz" "$mtg_package.tar.gz"
+              tar -xzf "$mtg_package.tar.gz"
+              mv "$mtg_package/mtg-multi" "mtg-linux-$PLATFORM"
+              chmod +x "mtg-linux-$PLATFORM"
+              [[ "$GOARCH" != arm ]] || cp "mtg-linux-$PLATFORM" mtg-linux-arm
+              rm -rf -- "$mtg_package" "$mtg_package.tar.gz"
               ;;
           esac
-          case "${{ matrix.platform }}" in
-            amd64)
-              curl -sfLRO $CURL_RETRY "https://github.com/EAimTY/tuic/releases/download/tuic-server-1.0.0/tuic-server-1.0.0-x86_64-unknown-linux-musl"
-              mv "tuic-server-1.0.0-x86_64-unknown-linux-musl" "tuic-server"
-              chmod +x "tuic-server"
-              ;;
-            arm64)
-              curl -sfLRO $CURL_RETRY "https://github.com/EAimTY/tuic/releases/download/tuic-server-1.0.0/tuic-server-1.0.0-aarch64-unknown-linux-musl"
-              mv "tuic-server-1.0.0-aarch64-unknown-linux-musl" "tuic-server"
-              chmod +x "tuic-server"
-              ;;
-            armv7)
-              curl -sfLRO $CURL_RETRY "https://github.com/EAimTY/tuic/releases/download/tuic-server-1.0.0/tuic-server-1.0.0-armv7-unknown-linux-musleabihf"
-              mv "tuic-server-1.0.0-armv7-unknown-linux-musleabihf" "tuic-server"
-              chmod +x "tuic-server"
-              ;;
-            386)
-              curl -sfLRO $CURL_RETRY "https://github.com/EAimTY/tuic/releases/download/tuic-server-1.0.0/tuic-server-1.0.0-i686-unknown-linux-musl"
-              mv "tuic-server-1.0.0-i686-unknown-linux-musl" "tuic-server"
-              chmod +x "tuic-server"
-              ;;
+          case "$PLATFORM" in
+            amd64) tuic_target=x86_64-unknown-linux-musl ;;
+            arm64) tuic_target=aarch64-unknown-linux-musl ;;
+            armv7) tuic_target=armv7-unknown-linux-musleabihf ;;
+            386) tuic_target=i686-unknown-linux-musl ;;
+            *) tuic_target= ;;
           esac
-          cd ../..
-
-      - name: Package
+          if [[ -n "$tuic_target" ]]; then
+            fetch "https://github.com/EAimTY/tuic/releases/download/tuic-server-1.0.0/tuic-server-1.0.0-$tuic_target" tuic-server
+            chmod +x tuic-server
+          fi
+          printf 'PAIRED_RESOURCE_DIR=%s\n' "$resource_root" >> "$GITHUB_ENV"
+      - name: Build source-matched panel, Custom Xray and static verifier
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          PAIRED_PANEL_LDFLAGS: "-linkmode external -extldflags '-static'"
+          PAIRED_DEV_BUILD: ${{ startsWith(github.ref, 'refs/tags/v') && '0' || '1' }}
         run: |
-          tar -zcvf x-ui-linux-${{ matrix.platform }}.tar.gz x-ui
-          sha256sum x-ui-linux-${{ matrix.platform }}.tar.gz > x-ui-linux-${{ matrix.platform }}.tar.gz.sha256
-
-      - name: Upload files to Artifacts
+          set -euo pipefail
+          package_root="$RUNNER_TEMP/paired-release/x-ui"
+          mkdir -p "$PAIRED_RESOURCE_DIR/licenses"
+          python3 - <<'PYCODE'
+          import json, os, subprocess
+          from pathlib import Path
+          compiler = os.environ["CC"]
+          toolchain = os.environ["BOOTLIN_TOOLCHAIN"]
+          bootlin_arch = toolchain.split("--", 1)[0]
+          record = {
+              "compilerPath": compiler,
+              "compilerVersion": subprocess.check_output([compiler, "--version"], text=True).strip(),
+              "compilerArchiveURL": f"https://toolchains.bootlin.com/downloads/releases/toolchains/{bootlin_arch}/tarballs/{toolchain}.tar.xz",
+              "compilerArchiveSHA256": os.environ["BOOTLIN_SHA256"],
+              "go": subprocess.check_output(["go", "env", "GOVERSION"], text=True).strip(),
+              "node": subprocess.check_output(["node", "--version"], text=True).strip(),
+          }
+          (Path(os.environ["PAIRED_RESOURCE_DIR"]) / "licenses/build-toolchains.json").write_text(json.dumps(record, indent=2) + "\n")
+          PYCODE
+          bash tools/build-paired-package.sh "$package_root"
+          # readelf checks the target ELF without executing foreign binaries.
+          for binary in "$package_root/x-ui" "$package_root/x-ui-package" "$package_root/bin/xray-linux-"*; do
+            file "$binary"
+            if readelf -l "$binary" | grep -q 'INTERP'; then
+              echo "unexpected dynamic interpreter: $binary" >&2; exit 1
+            fi
+          done
+          if [[ "$GOARCH" == "$(go env GOHOSTARCH)" ]]; then
+            "$package_root/x-ui-package" verify "$package_root"
+            "$package_root/x-ui" package verify "$package_root"
+          fi
+          mkdir -p "$GITHUB_WORKSPACE/build/release-assets"
+          cd "$GITHUB_WORKSPACE/build/release-assets"
+          tar -czf "x-ui-linux-${{ matrix.platform }}.tar.gz" -C "$(dirname "$package_root")" x-ui
+          cp "$package_root/x-ui-package" "x-ui-package-linux-${{ matrix.platform }}"
+          sha256sum "x-ui-linux-${{ matrix.platform }}.tar.gz" > "x-ui-linux-${{ matrix.platform }}.tar.gz.sha256"
+          sha256sum "x-ui-package-linux-${{ matrix.platform }}" > "x-ui-package-linux-${{ matrix.platform }}.sha256"
+          sha256sum --check --strict ./*.sha256
+      - name: Upload paired review assets
         uses: actions/upload-artifact@v7
         with:
           name: x-ui-linux-${{ matrix.platform }}
-          path: |
-            ./x-ui-linux-${{ matrix.platform }}.tar.gz
-            ./x-ui-linux-${{ matrix.platform }}.tar.gz.sha256
-
-      - name: Upload files to GH release
-        uses: svenstaro/upload-release-action@v2
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref_name }}
-          file: x-ui-linux-${{ matrix.platform }}.tar.gz*
-          file_glob: true
-          overwrite: true
-          prerelease: true
+          if-no-files-found: error
+          path: build/release-assets/*
 
   # =================================
   #  Windows Build
   # =================================
   build-windows:
     name: Build for Windows
-    permissions:
-      contents: write
     strategy:
       matrix:
         platform:
@@ -238,8 +217,10 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
-          check-latest: true
+          go-version: 1.27.1
+          cache-dependency-path: |
+            go.sum
+            core/xray/go.sum
 
       # Frontend dist must be built BEFORE go build — see comment on the
       # Linux job above. This step is identical except npm runs on the
@@ -247,15 +228,20 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version-file: .nvmrc
+          node-version: 26.10.0
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
       - name: Build frontend bundle
         shell: pwsh
         run: |
+          if ((go env GOVERSION) -ne 'go1.27.1' -or (node --version) -ne 'v26.10.0') { throw 'incorrect pinned toolchains' }
+          if (git status --porcelain --untracked-files=normal) { throw 'Windows builds require clean whole source' }
+          "GO_BIN_DIR=$(Split-Path (Get-Command go).Source)" >> $env:GITHUB_ENV
           npm ci
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
           npm run build
+          if ($LASTEXITCODE -ne 0) { throw 'frontend build failed' }
         working-directory: frontend
 
       - name: Install MSYS2
@@ -272,7 +258,12 @@ jobs:
       - name: Build 3X-UI for Windows (CGO)
         shell: msys2 {0}
         run: |
-          export PATH="/c/hostedtoolcache/windows/go/$(ls /c/hostedtoolcache/windows/go | sort -V | tail -n1)/x64/bin:$PATH"
+          set -euo pipefail
+          export PATH="$(cygpath -u "$GO_BIN_DIR"):$PATH"
+          [[ "$(go env GOVERSION)" == go1.27.1 ]]
+          [[ -z "$(git status --porcelain --untracked-files=normal)" ]]
+          go mod verify
+          (cd core/xray && go mod verify)
 
           export CGO_ENABLED=1
           export GOOS=windows
@@ -284,34 +275,47 @@ jobs:
           gcc --version
 
           # Stamp the commit into per-commit (dev channel) builds only.
-          LDFLAGS="-w -s"
+          LDFLAGS="-w -s -X github.com/mhsanaei/3x-ui/v3/internal/distribution.PanelSourceRevision=$GITHUB_SHA"
           if [[ "$GITHUB_REF" != refs/tags/* ]]; then
             LDFLAGS="$LDFLAGS -X github.com/mhsanaei/3x-ui/v3/internal/config.buildCommit=${GITHUB_SHA:0:8} -X github.com/mhsanaei/3x-ui/v3/internal/config.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           fi
-          go build -buildvcs=true -ldflags "$LDFLAGS" -o xui-release.exe -v .
+          mkdir -p build/windows
+          go build -trimpath -buildvcs=false -ldflags "$LDFLAGS" -o build/windows/x-ui.exe -v .
+          (cd core/xray && CGO_ENABLED=0 go build -trimpath -buildvcs=false \
+            -ldflags "-s -w -X github.com/xtls/xray-core/core.build=$GITHUB_SHA" \
+            -o ../../build/windows/xray-windows-amd64.exe ./main)
+          mkdir -p build/windows/licenses
+          git archive --format=tar.gz HEAD > build/windows/licenses/corresponding-source.tar.gz
+          cp LICENSE build/windows/licenses/panel-GPL-3.0.txt
+          cp core/xray/LICENSE build/windows/licenses/xray-MPL-2.0.txt
+          cp core/THIRD_PARTY_NOTICES.md core/licenses/* core/deps/*.UPSTREAM.json build/windows/licenses/
+          cp core/deps/sing-snell/LICENSE build/windows/licenses/sing-snell-GPL-3.0.txt
+          cp core/deps/opensnell/LICENSE.md build/windows/licenses/opensnell-GPL-3.0.txt
+          cp core/deps/amneziawg-go/LICENSE build/windows/licenses/amneziawg-MIT.txt
+          command -v "$CC" > build/windows/licenses/c-compiler.txt
+          "$CC" --version >> build/windows/licenses/c-compiler.txt
+          pacman -Q >> build/windows/licenses/c-compiler.txt
+          CGO_ENABLED=0 go run ./tools/packagedeps build/windows/licenses build/windows/x-ui.exe build/windows/xray-windows-amd64.exe
 
       - name: Copy and download resources
         shell: pwsh
         run: |
           $retry = @{ MaximumRetryCount = 5; RetryIntervalSec = 10 }
           mkdir x-ui
-          Copy-Item xui-release.exe x-ui\x-ui.exe
+          Copy-Item build\windows\x-ui.exe x-ui\x-ui.exe
+          Copy-Item build\windows\licenses x-ui\licenses -Recurse
           mkdir x-ui\bin
           cd x-ui\bin
 
-          # Download Xray for Windows
-          $Xray_URL = "https://github.com/XTLS/Xray-core/releases/download/v26.9.9/"
-          Invoke-WebRequest @retry -Uri "${Xray_URL}Xray-windows-64.zip" -OutFile "Xray-windows-64.zip"
-          Expand-Archive -Path "Xray-windows-64.zip" -DestinationPath .
-          Remove-Item "Xray-windows-64.zip"
-          Remove-Item geoip.dat, geosite.dat -ErrorAction SilentlyContinue
+          # The Linux paired manifest format currently rejects Windows. This
+          # separate Windows artifact builds both members from local clean source.
+          Copy-Item ..\..\build\windows\xray-windows-amd64.exe xray-windows-amd64.exe
           Invoke-WebRequest @retry -Uri "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat" -OutFile "geoip.dat"
           Invoke-WebRequest @retry -Uri "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat" -OutFile "geosite.dat"
           Invoke-WebRequest @retry -Uri "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geoip.dat" -OutFile "geoip_IR.dat"
           Invoke-WebRequest @retry -Uri "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geosite.dat" -OutFile "geosite_IR.dat"
           Invoke-WebRequest @retry -Uri "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geoip.dat" -OutFile "geoip_RU.dat"
           Invoke-WebRequest @retry -Uri "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geosite.dat" -OutFile "geosite_RU.dat"
-          Rename-Item xray.exe xray-windows-amd64.exe
 
           # mtg-multi (MTProto sidecar) publishes a prebuilt Windows binary, so
           # download and unpack it instead of compiling. The tag comes from the
@@ -335,6 +339,23 @@ jobs:
       - name: Package to Zip
         shell: pwsh
         run: |
+          $revision = (git rev-parse HEAD).Trim()
+          if ($revision -ne $env:GITHUB_SHA -or (git status --porcelain --untracked-files=normal)) { throw 'source changed while building' }
+          $panel = (& .\x-ui\x-ui.exe package info | ConvertFrom-Json)
+          if ($LASTEXITCODE -ne 0 -or $panel.sourceRevision -ne $revision -or $panel.goVersion -ne 'go1.27.1' -or $panel.target.os -ne 'windows' -or $panel.target.arch -ne 'amd64') { throw 'panel source/target probe failed' }
+          $capabilities = (& .\x-ui\bin\xray-windows-amd64.exe capabilities | ConvertFrom-Json)
+          if ($LASTEXITCODE -ne 0 -or $capabilities.sourceRevision -ne $revision -or $capabilities.goVersion -ne 'go1.27.1' -or $capabilities.target.os -ne 'windows' -or $capabilities.target.arch -ne 'amd64' -or $capabilities.compatibility -ne 'traffic-control-v1') { throw 'managed core source/target probe failed' }
+          $required = @('trusted-snell-client-id-v1', 'trusted-mieru-client-id-v1', 'trusted-ssh-client-id-v1', 'trusted-tunnel-client-id-v1', 'shared-directional-rate-v1', 'fixed-point-billing-v1', 'quota-window-baseline-v1', 'tunnel-source-acl-v1', 'tunnel-fixed-outbound-v1')
+          foreach ($feature in $required) { if ($feature -notin $capabilities.capabilities) { throw "missing compiled feature: $feature" } }
+          @{ sourceRevision = $revision; sourceRepository = "https://github.com/${{ github.repository }}"; compatibility = 'traffic-control-v1'; target = 'windows-amd64' } |
+            ConvertTo-Json | Set-Content x-ui\licenses\package-origin.json
+          @{ compiler = 'x86_64-w64-mingw32-gcc'; compilerAndInstalledMSYS2Packages = (Get-Content x-ui\licenses\c-compiler.txt -Raw); go = 'go1.27.1'; node = 'v26.10.0' } |
+            ConvertTo-Json | Set-Content x-ui\licenses\build-toolchains.json
+          $files = @(Get-ChildItem x-ui -File -Recurse | ForEach-Object {
+            @{ path = [IO.Path]::GetRelativePath("$PWD\x-ui", $_.FullName).Replace('\', '/'); sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(); size = $_.Length }
+          })
+          @{ sourceRevision = $revision; sourceRepository = "https://github.com/${{ github.repository }}"; target = 'windows-amd64'; go = 'go1.27.1'; node = 'v26.10.0'; panelInfo = $panel; compiledCapabilities = $capabilities; files = $files; linuxInstallerManifest = $false } |
+            ConvertTo-Json -Depth 12 | Set-Content x-ui\licenses\windows-build.json
           Compress-Archive -Path .\x-ui -DestinationPath "x-ui-windows-amd64.zip"
           $hash = (Get-FileHash x-ui-windows-amd64.zip -Algorithm SHA256).Hash.ToLower()
           [IO.File]::WriteAllText("$PWD\x-ui-windows-amd64.zip.sha256", "$hash  x-ui-windows-amd64.zip`n")
@@ -343,17 +364,29 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: x-ui-windows-amd64
+          if-no-files-found: error
           path: |
             ./x-ui-windows-amd64.zip
             ./x-ui-windows-amd64.zip.sha256
 
-      - name: Upload files to GH release
+  publish-tags:
+    name: Publish version-tag assets
+    needs: [build, build-windows]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: release-artifacts
+          merge-multiple: true
+      - name: Upload archives and checksum-bound installer verifiers
         uses: svenstaro/upload-release-action@v2
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.ref_name }}
-          file: x-ui-windows-amd64.zip*
+          file: release-artifacts/*
           file_glob: true
           overwrite: true
           prerelease: true
@@ -422,4 +455,4 @@ jobs:
               --target "${COMMIT}" --title "Dev build ${short}" --notes "${notes}"
           fi
 
-          retry gh release upload dev-latest dev-artifacts/*.tar.gz dev-artifacts/*.zip dev-artifacts/*.sha256 --clobber
+          retry gh release upload dev-latest dev-artifacts/* --clobber
