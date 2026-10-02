@@ -44,7 +44,7 @@ func TestDatabaseRestoreAcceptsConfirmedAbsentCore(t *testing.T) {
 			t.Cleanup(func() { xrayState.replace(previous); isManuallyStopped.Store(manuallyStopped) })
 			oldRestart := restartXrayAfterDatabaseRestore
 			var restarts int
-			restartXrayAfterDatabaseRestore = func(*ServerService) error { restarts++; return nil }
+			restartXrayAfterDatabaseRestore = func(*ServerService, *databaseRestoreOwner) error { restarts++; return nil }
 			t.Cleanup(func() { restartXrayAfterDatabaseRestore = oldRestart })
 			if err := (&ServerService{}).ImportDB(restoreUpload{bytes.NewReader(payload)}, false); err != nil {
 				t.Fatalf("confirmed absent core blocked database import: %v", err)
@@ -97,7 +97,7 @@ func TestDatabaseRestoreStopFailureLeavesDatabaseAndRuntimeUntouched(t *testing.
 				stops++
 				return errors.New("injected uncertain core termination")
 			}
-			restartXrayAfterDatabaseRestore = func(*ServerService) error { restarts++; return nil }
+			restartXrayAfterDatabaseRestore = func(*ServerService, *databaseRestoreOwner) error { restarts++; return nil }
 			t.Cleanup(func() { stopXrayBeforeDatabaseRestore, restartXrayAfterDatabaseRestore = oldStop, oldRestart })
 			svc := &ServerService{}
 			var restore func(multipart.File) error

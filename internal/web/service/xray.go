@@ -1475,6 +1475,13 @@ func (s *XrayService) TestRoute(req xray.RouteTestRequest) (*xray.RouteTestResul
 // routing rules/balancers are hot-reloadable); only changes the core cannot
 // take at runtime — or a force request — stop and restart the process.
 func (s *XrayService) RestartXray(isForce bool) error {
+	return s.restartXray(isForce, nil)
+}
+
+func (s *XrayService) restartXray(isForce bool, owner *databaseRestoreOwner) error {
+	if err := checkDatabaseRestoreRestart(owner); err != nil {
+		return err
+	}
 	if !isForce && isManuallyStopped.Load() {
 		return nil
 	}
@@ -1488,6 +1495,9 @@ func (s *XrayService) RestartXray(isForce bool) error {
 	}
 	lock.Lock()
 	defer lock.Unlock()
+	if err := checkDatabaseRestoreRestart(owner); err != nil {
+		return err
+	}
 	logger.Debug("restart Xray, force:", isForce)
 	if !isForce && isManuallyStopped.Load() {
 		return nil

@@ -1484,12 +1484,22 @@ var lazilyMintedSettingKeys = map[string]bool{
 }
 
 var stopXrayBeforeDatabaseRestore = (*ServerService).stopCoreForDatabaseRestore
-var restartXrayAfterDatabaseRestore = (*ServerService).RestartXrayService
+var restartXrayAfterDatabaseRestore = (*ServerService).restartCoreAfterDatabaseRestore
+var reopenDatabaseAfterRestore = database.InitDB
 
 func (s *ServerService) ImportDB(file multipart.File, keepHostSettings bool) error {
 	if database.IsPostgres() {
 		return s.importPostgresDB(file, keepHostSettings)
 	}
+	return s.importSQLiteDB(file, keepHostSettings)
+}
+
+func (s *ServerService) importSQLiteDB(file multipart.File, keepHostSettings bool) error {
+	owner, err := acquireDatabaseRestore()
+	if err != nil {
+		return err
+	}
+	defer owner.release()
 	kind, err := sniffUploadKind(file)
 	if err != nil {
 		return common.NewErrorf("Error reading uploaded file: %v", err)
@@ -1502,20 +1512,12 @@ func (s *ServerService) ImportDB(file multipart.File, keepHostSettings bool) err
 		return common.NewError("Invalid file: expected a SQLite database (.db) from Back Up or a SQLite migration dump (.dump)")
 	}
 
-	tempPath := fmt.Sprintf("%s.temp", config.GetDBPath())
-
-	if _, err := os.Stat(tempPath); err == nil {
-		if errRemove := os.Remove(tempPath); errRemove != nil {
-			return common.NewErrorf("Error removing existing temporary db file: %v", errRemove)
-		}
+	stageDir, err := os.MkdirTemp(filepath.Dir(config.GetDBPath()), ".x-ui-restore-*")
+	if err != nil {
+		return common.NewErrorf("Error creating private database staging directory: %v", err)
 	}
-	defer func() {
-		if _, err := os.Stat(tempPath); err == nil {
-			if rerr := os.Remove(tempPath); rerr != nil {
-				logger.Warningf("Warning: failed to remove temp file: %v", rerr)
-			}
-		}
-	}()
+	defer os.RemoveAll(stageDir)
+	tempPath := filepath.Join(stageDir, "incoming.db")
 
 	if err := stageSQLiteUpload(file, kind, tempPath); err != nil {
 		return err
@@ -1527,14 +1529,25 @@ func (s *ServerService) ImportDB(file multipart.File, keepHostSettings bool) err
 	if err = database.PrepareSQLiteForMigration(tempPath); err != nil {
 		return common.NewErrorf("This file cannot be imported: %v", err)
 	}
+	fallbackDir, err := os.MkdirTemp(filepath.Dir(config.GetDBPath()), ".x-ui-restore-backup-*")
+	if err != nil {
+		return common.NewErrorf("Error creating private fallback directory: %v", err)
+	}
+	fallbackPath := filepath.Join(fallbackDir, "previous.db")
+	defer func() {
+		// Remove only this import's empty directory. A retained previous
+		// database remains available after a failed replacement or activation.
+		_ = os.Remove(fallbackDir)
+	}()
 
 	if errStop := stopXrayBeforeDatabaseRestore(s); errStop != nil {
 		return common.NewErrorf("Database import aborted because Xray termination could not be confirmed: %v", errStop)
 	}
 	xrayStopped := true
+	dbReopened := false
 	defer func() {
-		if xrayStopped {
-			if errR := restartXrayAfterDatabaseRestore(s); errR != nil {
+		if xrayStopped && dbReopened {
+			if errR := restartXrayAfterDatabaseRestore(s, owner); errR != nil {
 				logger.Warningf("Failed to restart Xray after DB import error: %v", errR)
 			}
 		}
@@ -1546,31 +1559,22 @@ func (s *ServerService) ImportDB(file multipart.File, keepHostSettings bool) err
 	}
 
 	if errClose := database.CloseDB(); errClose != nil {
-		logger.Warningf("Failed to close existing DB before replacement: %v", errClose)
+		return common.NewErrorf("Database import aborted because the existing database could not be closed: %v", errClose)
 	}
 
 	// Registered after the xray-restart defer so it runs first (LIFO): every
 	// error return below leaves a database file at the configured path, and the
 	// restart needs an open pool to build the xray config from it.
-	dbReopened := false
 	defer func() {
 		if dbReopened {
 			return
 		}
-		if errReopen := database.InitDB(config.GetDBPath()); errReopen != nil {
+		if errReopen := reopenDatabaseAfterRestore(config.GetDBPath()); errReopen != nil {
 			logger.Warningf("Failed to reopen the database after import error: %v", errReopen)
+			return
 		}
+		dbReopened = true
 	}()
-
-	// Backup the current database for fallback
-	fallbackPath := fmt.Sprintf("%s.backup", config.GetDBPath())
-
-	// Remove the existing fallback file (if any)
-	if _, err := os.Stat(fallbackPath); err == nil {
-		if errRemove := os.Remove(fallbackPath); errRemove != nil {
-			return common.NewErrorf("Error removing existing fallback db file: %v", errRemove)
-		}
-	}
 
 	// Move the current database to the fallback location
 	if err = os.Rename(config.GetDBPath(), fallbackPath); err != nil {
@@ -1587,7 +1591,7 @@ func (s *ServerService) ImportDB(file multipart.File, keepHostSettings bool) err
 	}
 
 	// Open & migrate new DB
-	if err = database.InitDB(config.GetDBPath()); err != nil {
+	if err = reopenDatabaseAfterRestore(config.GetDBPath()); err != nil {
 		// A failed InitDB still holds the imported file open; close before the
 		// rename or Windows refuses to replace it.
 		if errClose := database.CloseDB(); errClose != nil {
@@ -1605,7 +1609,7 @@ func (s *ServerService) ImportDB(file multipart.File, keepHostSettings bool) err
 	s.inboundService.MigrateDB()
 
 	xrayStopped = false
-	if err = restartXrayAfterDatabaseRestore(s); err != nil {
+	if err = restartXrayAfterDatabaseRestore(s, owner); err != nil {
 		return common.NewErrorf("Imported DB but failed to start Xray: %v; the previous database was kept at %s", err, fallbackPath)
 	}
 
@@ -1774,6 +1778,11 @@ func (s *ServerService) importPostgresDB(file multipart.File, keepHostSettings b
 }
 
 func (s *ServerService) restorePostgresDump(file multipart.File, keepHostSettings bool) error {
+	owner, err := acquireDatabaseRestore()
+	if err != nil {
+		return err
+	}
+	defer owner.release()
 	bin, err := exec.LookPath("pg_restore")
 	if err != nil {
 		return common.NewError("pg_restore not found on the server; install the postgresql-client package to restore a PostgreSQL database")
@@ -1805,9 +1814,10 @@ func (s *ServerService) restorePostgresDump(file multipart.File, keepHostSetting
 		return common.NewErrorf("Database restore aborted because Xray termination could not be confirmed: %v", errStop)
 	}
 	xrayStopped := true
+	dbReopened := false
 	defer func() {
-		if xrayStopped {
-			if errR := restartXrayAfterDatabaseRestore(s); errR != nil {
+		if xrayStopped && dbReopened {
+			if errR := restartXrayAfterDatabaseRestore(s, owner); errR != nil {
 				logger.Warningf("Failed to restart Xray after DB restore error: %v", errR)
 			}
 		}
@@ -1819,7 +1829,7 @@ func (s *ServerService) restorePostgresDump(file multipart.File, keepHostSetting
 	}
 
 	if errClose := database.CloseDB(); errClose != nil {
-		logger.Warningf("Failed to close existing DB before restore: %v", errClose)
+		return common.NewErrorf("Database restore aborted because the existing database could not be closed: %v", errClose)
 	}
 
 	cmd := exec.CommandContext(context.Background(), bin,
@@ -1831,9 +1841,10 @@ func (s *ServerService) restorePostgresDump(file multipart.File, keepHostSetting
 	cmd.Stderr = &stderr
 	runErr := cmd.Run()
 
-	if errInit := database.InitDB(config.GetDBPath()); errInit != nil {
+	if errInit := reopenDatabaseAfterRestore(config.GetDBPath()); errInit != nil {
 		return common.NewErrorf("Restore finished but reopening the database failed: %v", errInit)
 	}
+	dbReopened = true
 	restoreHostBoundSettings(keptSettings)
 
 	s.inboundService.MigrateDB()
@@ -1843,13 +1854,18 @@ func (s *ServerService) restorePostgresDump(file multipart.File, keepHostSetting
 	}
 
 	xrayStopped = false
-	if err := restartXrayAfterDatabaseRestore(s); err != nil {
+	if err := restartXrayAfterDatabaseRestore(s, owner); err != nil {
 		return common.NewErrorf("Restored DB but failed to start Xray: %v", err)
 	}
 	return nil
 }
 
 func (s *ServerService) migrateSQLiteIntoPostgres(file multipart.File, isSQLDump bool) error {
+	owner, err := acquireDatabaseRestore()
+	if err != nil {
+		return err
+	}
+	defer owner.release()
 	tempDir, err := os.MkdirTemp("", "x-ui-pg-migrate-*")
 	if err != nil {
 		return common.NewErrorf("Error creating temporary folder: %v", err)
@@ -1882,23 +1898,25 @@ func (s *ServerService) migrateSQLiteIntoPostgres(file multipart.File, isSQLDump
 		return common.NewErrorf("Database restore aborted because Xray termination could not be confirmed: %v", errStop)
 	}
 	xrayStopped := true
+	dbReopened := false
 	defer func() {
-		if xrayStopped {
-			if errR := restartXrayAfterDatabaseRestore(s); errR != nil {
+		if xrayStopped && dbReopened {
+			if errR := restartXrayAfterDatabaseRestore(s, owner); errR != nil {
 				logger.Warningf("Failed to restart Xray after DB restore error: %v", errR)
 			}
 		}
 	}()
 
 	if errClose := database.CloseDB(); errClose != nil {
-		logger.Warningf("Failed to close existing DB before restore: %v", errClose)
+		return common.NewErrorf("Database restore aborted because the existing database could not be closed: %v", errClose)
 	}
 
 	migrateErr := database.MigrateData(dbPath, config.GetDBDSN())
 
-	if errInit := database.InitDB(config.GetDBPath()); errInit != nil {
+	if errInit := reopenDatabaseAfterRestore(config.GetDBPath()); errInit != nil {
 		return common.NewErrorf("Restore finished but reopening the database failed: %v", errInit)
 	}
+	dbReopened = true
 	s.inboundService.MigrateDB()
 
 	if migrateErr != nil {
@@ -1906,7 +1924,7 @@ func (s *ServerService) migrateSQLiteIntoPostgres(file multipart.File, isSQLDump
 	}
 
 	xrayStopped = false
-	if err := restartXrayAfterDatabaseRestore(s); err != nil {
+	if err := restartXrayAfterDatabaseRestore(s, owner); err != nil {
 		return common.NewErrorf("Restored DB but failed to start Xray: %v", err)
 	}
 	return nil
