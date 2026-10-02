@@ -277,6 +277,13 @@ func (j *Journal) Issue(request Request) (Grant, error) {
 		if err := j.checkBinding(tx, request.Binding); err != nil {
 			return err
 		}
+		var account Account
+		if err := get(tx, "accounts", request.Binding.ClientID, &account); err != nil {
+			return err
+		}
+		if account.Deleted {
+			return ErrDeleted
+		}
 		requestKey := compound(request.Binding.NodeBoot.NodeID, request.Binding.ClientID, request.RequestID)
 		if raw := tx.Bucket([]byte("requests")).Get([]byte(requestKey)); raw != nil {
 			if err := get(tx, "grants", string(raw), &issued); err != nil {
@@ -286,13 +293,6 @@ func (j *Journal) Issue(request Request) (Grant, error) {
 				return ErrRequest
 			}
 			return nil
-		}
-		var account Account
-		if err := get(tx, "accounts", request.Binding.ClientID, &account); err != nil {
-			return err
-		}
-		if account.Deleted {
-			return ErrDeleted
 		}
 		if account.Policy.Version != request.Binding.PolicyVersion || account.Policy.WindowID != request.Binding.WindowID {
 			return ErrRequest

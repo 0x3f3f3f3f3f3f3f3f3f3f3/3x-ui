@@ -249,3 +249,17 @@ func TestJournalDisappearingBeforeOpenIsNeverRecreated(t *testing.T) {
 		t.Fatalf("open recreated a lost authority file: %v", err)
 	}
 }
+
+func TestDeletedAccountCannotReplayUnsealedIssuance(t *testing.T) {
+	j, id, boot, _ := journalFixture(t)
+	r := issueRequest(id, boot, "before-delete", 10)
+	if _, err := j.Issue(r); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Tombstone(r.Binding.ClientID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := j.Issue(r); !errors.Is(err, ErrDeleted) {
+		t.Fatalf("deleted client replayed an unsealed grant: %v", err)
+	}
+}

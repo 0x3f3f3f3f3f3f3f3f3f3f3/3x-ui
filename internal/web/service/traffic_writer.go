@@ -132,9 +132,20 @@ func runSerializedTx(fn func(tx *gorm.DB) error) error {
 var ErrDatabaseReplaced = database.ErrDatabaseReplaced
 
 func runSerializedTxForDatabase(expected *gorm.DB, fn func(tx *gorm.DB) error) error {
+	ctx := context.Background()
+	if expected != nil && expected.Statement != nil && expected.Statement.Context != nil {
+		ctx = expected.Statement.Context
+	}
+	return runSerializedTxContextForDatabase(ctx, expected, fn)
+}
+
+func runSerializedTxContextForDatabase(ctx context.Context, expected *gorm.DB, fn func(tx *gorm.DB) error) error {
 	return submitTrafficWrite(func() error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		return database.WithCurrentDB(expected, func(current *gorm.DB) error {
-			return current.Transaction(func(tx *gorm.DB) error {
+			return current.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 				ctx := context.WithValue(tx.Statement.Context, serializedTxContextKey{}, true)
 				return fn(tx.WithContext(ctx))
 			})
