@@ -35,17 +35,19 @@ Files: `core/xray/app/clientpolicy/command/command.go`, new `core/xray/main/comm
 
 Files: `Dockerfile`, `DockerInit.sh`, `DockerEntrypoint.sh`, `install.sh`, `update.sh`, `x-ui.sh`, `.github/workflows/release.yml`, `.github/workflows/docker.yml`, `.github/workflows/custom-core.yml`, and distribution staging tests. Also update `internal/web/service/panel/panel.go`: its automatic updater currently downloads the upstream update script and release metadata.
 
-- [ ] Replace official Xray downloads with the shared source builder and normalized target names. Pin Go/Node versions and validate image/platform inputs, including 386 and ARM variants; do not silently choose amd64 for an unknown target.
-- [ ] Require a source revision in Docker without `.git`; verify the paired manifest in the image. Exercise an actual isolated Podman build and local container native3/shared-policy smoke, with private storage and no existing-container mutation.
-- [ ] Resolve installer/updater/menu sources to this fork. Require checksums and a staged validated package before service stop or installed-directory changes. Supply an explicit local-package route for artifacts built without publishing a release.
-- [ ] Safely stage archives, excluding traversal, links and unbounded extraction. Perform replacement in the installation parent's filesystem; retain a previous tree and preserve data, host keys and unknown custom resources. Inject preflight, extraction, promotion and interrupted replacement failures, proving the old installation remains usable or rolls back.
-- [ ] Update all seven release targets to compile the managed core with the panel. Feature CI uploads review artifacts only; this task does not trigger a release workflow or publish images.
-- [ ] Run actual temporary-prefix fresh-install/upgrade/rollback proof, SQL/core-state preservation checks and affected shell/Go/static tests; commit the working integration.
+- [x] Replace official Xray downloads with the shared source builder and normalized target names. Pin Go/Node versions and validate image/platform inputs, including 386 and ARM variants; do not silently choose amd64 for an unknown target.
+- [x] Require a source revision in Docker without `.git`; verify the paired manifest in the image. Exercise an actual isolated Podman build and local container native3/shared-policy smoke, with private storage and no existing-container mutation.
+- [x] Resolve installer/updater/menu sources to this fork. Require checksums and a staged validated package before service stop or installed-directory changes. Supply an explicit local-package route for artifacts built without publishing a release.
+- [x] Safely stage archives, excluding traversal, links and unbounded extraction. Perform replacement in the installation parent's filesystem; retain a previous tree and preserve data, host keys and unknown custom resources. Inject preflight, extraction, promotion and interrupted replacement failures, proving the old installation remains usable or rolls back.
+- [x] Update all seven release targets to compile the managed core with the panel. Feature CI uploads review artifacts only; this task does not trigger a release workflow or publish images.
+- [x] Run actual temporary-prefix fresh-install/upgrade/rollback proof, SQL/core-state preservation checks and affected shell/Go/static tests; commit the working integration.
 
 ## Task 3: Close distribution acceptance and publish
 
-- [ ] Run one whole-stage review, address its Important/Critical findings in one correction batch, then rerun appropriate regressions.
+- [x] Run one whole-stage review, address its Important/Critical findings in one correction batch, then rerun appropriate regressions.
 - [ ] Rebuild immutable paired artifacts from a new clean clone and verify versions, hashes, compiled native3 features, Docker contents and all existing Linux target builds. State unavailable platform/device gates accurately.
-- [ ] Reuse real public native3 and bulk/Tunnel HTTP acceptance against the exact distributed core on SQLite/PostgreSQL; exercise fresh install, update and failed update with retained canonical identity/usage/business keys.
-- [ ] Preserve the prior panel/core and offline-verifier artifact hashes and the completed shared-policy checkpoint. Record a requirement-to-evidence matrix without marking broader migration/global/restore work complete.
+- [x] Reuse real public native3 and bulk/Tunnel HTTP acceptance against the exact distributed core on SQLite/PostgreSQL; exercise fresh install, update and failed update with retained canonical identity/usage/business keys.
+- [x] Preserve the prior panel/core and offline-verifier artifact hashes and the completed shared-policy checkpoint. Record a requirement-to-evidence matrix without marking broader migration/global/restore work complete.
 - [ ] Integrate clean source and documentation into the authorized feature branch, push and verify exact remote SHA; continue the original remaining requirements.
+
+Corrected native-arm64 evidence and remaining gates: `paired-distribution-acceptance.md`. The seven-target full CGO/runtime gate remains open; static bootstrap cross-builds are a narrower passing result. The recorded additional rate baseline anomaly also remains open.

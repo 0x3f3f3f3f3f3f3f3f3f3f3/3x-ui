@@ -159,3 +159,5 @@ selected frontend source/notices. Earlier packages and passing receipts are
 historical evidence, not proof of the corrected integrated artifact. Final
 clean build and actual lifecycle/native protocol/container acceptance remain
 open until their new receipts are recorded.
+
+The new clean source/artifact results are recorded in `paired-distribution-acceptance.md`, including passing native3/SQL/lifecycle/container checks and the remaining platform/rate-anomaly limits. Earlier pending paragraphs above describe their dated checkpoints.
