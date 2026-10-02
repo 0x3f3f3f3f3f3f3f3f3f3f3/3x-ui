@@ -135,6 +135,24 @@ func projectClientPolicyAccounting(row clientPolicyAccountingRow) (*xray.ClientP
 			return nil, ErrClientPolicyLedger
 		}
 	}
+	account, err := accountingAuthority(row)
+	if err != nil {
+		return nil, err
+	}
+	if account != nil {
+		// Execution and SQL snapshots may be older than already confirmed
+		// authority reports. Preserve each known cumulative counter; allocated
+		// capacity is deliberately excluded from this delivered-usage floor.
+		row.RawUpload = max(row.RawUpload, int64(account.Usage.RawUpload))
+		row.RawDownload = max(row.RawDownload, int64(account.Usage.RawDownload))
+		if account.Usage.BilledBytes > uint64(row.BilledBytes) || account.Usage.BilledBytes == uint64(row.BilledBytes) && account.Usage.Remainder > uint64(row.Remainder) {
+			row.BilledBytes, row.Remainder = int64(account.Usage.BilledBytes), int64(account.Usage.Remainder)
+		}
+		row.UncertainBytes = max(row.UncertainBytes, int64(account.Seed.FrozenBilled))
+		if row.BilledBytes > math.MaxInt64-row.UncertainBytes {
+			return nil, ErrClientPolicyLedger
+		}
+	}
 	base := row.Reset
 	if row.RawUpload < base.RawUpload || row.RawDownload < base.RawDownload || row.UncertainBytes < base.UncertainBytes || row.BilledBytes < base.BilledBytes || row.BilledBytes == base.BilledBytes && row.Remainder < base.Remainder {
 		return nil, ErrClientPolicyLedger
@@ -165,10 +183,7 @@ func projectClientPolicyAccounting(row clientPolicyAccountingRow) (*xray.ClientP
 	}
 	_, fingerprint, desiredErr := fingerprintClientPolicy(row.DesiredClient, latestReset)
 	policyPending := desiredErr != nil || fingerprint != row.DesiredClient.PolicyFingerprint || row.PolicyVersion != row.DesiredVersion
-	budget, err := projectClientPolicyBudget(row)
-	if err != nil {
-		return nil, err
-	}
+	budget := formatClientPolicyBudget(account)
 	return &xray.ClientPolicyAccounting{
 		ClientID:   row.ClientID,
 		Lifetime:   formatClientPolicyUsage(row.RawUpload, row.RawDownload, row.BilledBytes, row.Remainder, row.UncertainBytes),
@@ -181,6 +196,14 @@ func projectClientPolicyAccounting(row clientPolicyAccountingRow) (*xray.ClientP
 }
 
 func projectClientPolicyBudget(row clientPolicyAccountingRow) (*xray.ClientPolicyBudget, error) {
+	account, err := accountingAuthority(row)
+	if err != nil {
+		return nil, err
+	}
+	return formatClientPolicyBudget(account), nil
+}
+
+func accountingAuthority(row clientPolicyAccountingRow) (*policyauthority.Account, error) {
 	projection := row.Authority
 	if projection == (model.ClientPolicyAuthorityProjection{}) {
 		return nil, nil
@@ -189,27 +212,34 @@ func projectClientPolicyBudget(row clientPolicyAccountingRow) (*xray.ClientPolic
 	if projection.ClientID != row.ClientID || !validPolicySourceKey(projection.AuthorityID) || projection.Generation <= 0 || projection.Revision <= 0 || json.Unmarshal([]byte(projection.AccountJSON), &account) != nil || account.Seed.ClientID != row.ClientID || account.Revision != uint64(projection.Revision) || account.Deleted || account.Policy.Version == 0 || account.Policy.Version > uint64(row.DesiredVersion) || account.Policy.QuotaUnlimited && account.Policy.QuotaBytes != 0 {
 		return nil, ErrClientPolicyLedger
 	}
-	for _, n := range []uint64{account.Policy.QuotaBytes, account.WindowUsed, account.FrozenBilled, account.HeldCapacity} {
+	for _, n := range []uint64{account.Policy.QuotaBytes, account.WindowUsed, account.FrozenBilled, account.HeldCapacity, account.Usage.RawUpload, account.Usage.RawDownload, account.Usage.BilledBytes, account.Seed.FrozenBilled} {
 		if n > math.MaxInt64 {
 			return nil, ErrClientPolicyLedger
 		}
 	}
-	if account.WindowRemainder >= clientpolicy.MultiplierScale || account.HeldRemainder >= clientpolicy.MultiplierScale {
+	if account.WindowRemainder >= clientpolicy.MultiplierScale || account.HeldRemainder >= clientpolicy.MultiplierScale || account.Usage.Remainder >= clientpolicy.MultiplierScale {
 		return nil, ErrClientPolicyLedger
+	}
+	return &account, nil
+}
+
+func formatClientPolicyBudget(account *policyauthority.Account) *xray.ClientPolicyBudget {
+	if account == nil {
+		return nil
 	}
 	budget := &xray.ClientPolicyBudget{
 		Allocated: formatClientPolicyBilled(int64(account.HeldCapacity), int64(account.HeldRemainder)),
 		Frozen:    strconv.FormatUint(account.FrozenBilled, 10),
 	}
 	if account.Policy.QuotaUnlimited {
-		return budget, nil
+		return budget
 	}
 	left := account.Policy.QuotaBytes
 	for _, used := range []uint64{account.WindowUsed, account.FrozenBilled, account.HeldCapacity} {
 		if used >= left {
 			amount := "0"
 			budget.Unallocated = &amount
-			return budget, nil
+			return budget
 		}
 		left -= used
 	}
@@ -225,7 +255,7 @@ func projectClientPolicyBudget(row clientPolicyAccountingRow) (*xray.ClientPolic
 		amount = formatClientPolicyBilled(int64(left), int64(remainder))
 	}
 	budget.Unallocated = &amount
-	return budget, nil
+	return budget
 }
 
 func formatClientPolicyUsage(upload, download, billed, remainder, uncertain int64) xray.ClientPolicyUsage {

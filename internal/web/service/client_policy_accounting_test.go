@@ -54,6 +54,35 @@ func TestClientPolicyAccountingBudgetPreservesFractionsAndConservativeBounds(t *
 	}
 }
 
+func TestClientPolicyAccountingAuthorityFloorPreservesFractionsAndRejectsOverflow(t *testing.T) {
+	for _, test := range []struct {
+		name              string
+		billed, remainder int64
+		want              string
+	}{
+		{"older-whole-byte", 9, 999999, "10.1"},
+		{"older-fraction", 10, 50000, "10.1"},
+		{"newer-execution-receipt", 10, 200000, "10.2"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			account := policyauthority.Account{Revision: 2, Seed: policyauthority.Seed{ClientID: "owner"}, Policy: policyauthority.Policy{Version: 1, QuotaBytes: 100}, Usage: policyauthority.Usage{RawUpload: 3, RawDownload: 2, BilledBytes: 10, Remainder: 100000}, HeldCapacity: 40}
+			raw, _ := json.Marshal(account)
+			row := clientPolicyAccountingRow{ClientPolicyReceipt: model.ClientPolicyReceipt{ClientID: "owner", InstanceID: "source", Epoch: 1, Sequence: 1, PolicyVersion: 1, RawUpload: 3, BilledBytes: test.billed, Remainder: test.remainder}, SourceEpoch: 1, SourceSequence: 1, SourceCount: 1, TotalClientID: "owner", TotalUpload: 3, TotalBilled: test.billed, DesiredVersion: 1, QuotaBytes: 100, Authority: model.ClientPolicyAuthorityProjection{ClientID: "owner", AuthorityID: "issuer", Generation: 1, Revision: 2, AccountJSON: string(raw)}}
+			view, err := projectClientPolicyAccounting(row)
+			if err != nil || view.Lifetime.Billed != test.want || view.Period.Billed != test.want || view.Lifetime.Upload != "3" || view.Lifetime.Download != "2" || view.Budget.Allocated != "40" {
+				t.Fatalf("known counter floor rebilled a fraction or allocated capacity: %+v/%v", view, err)
+			}
+			account.Usage.BilledBytes = math.MaxInt64
+			account.Seed.FrozenBilled = 1
+			raw, _ = json.Marshal(account)
+			row.Authority.AccountJSON = string(raw)
+			if _, err := projectClientPolicyAccounting(row); !errors.Is(err, ErrClientPolicyLedger) {
+				t.Fatalf("known billing plus historical uncertainty overflow accepted: %v", err)
+			}
+		})
+	}
+}
+
 func TestClientPolicyAccountingIncludesEverySnapshotBatch(t *testing.T) {
 	setupPolicyLedgerDB(t)
 	db := database.GetDB()

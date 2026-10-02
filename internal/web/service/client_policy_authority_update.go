@@ -70,6 +70,17 @@ func (a *managedAuthority) PrepareUpdate(ctx context.Context, caps *command.Capa
 	return bootstrap, nil
 }
 
+// Ordinary receipt polling also commits exact grant reports, so restored
+// execution counters cannot leave the known lifetime projection behind.
+func (a *managedAuthority) Checkpoint(ctx context.Context) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.closed || a.controller == nil {
+		return ErrClientPolicyLedger
+	}
+	return a.controller.SettleAndRenew(ctx)
+}
+
 func (a *managedAuthority) SuspendClients(ctx context.Context, ids []string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()

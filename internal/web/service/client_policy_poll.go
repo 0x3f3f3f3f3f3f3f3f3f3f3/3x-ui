@@ -15,10 +15,17 @@ import (
 )
 
 // Instance and epoch checks reject stale replies; Runtime releases its RPC mutex before settlement.
-func pollLocalClientPolicyLedger(ctx context.Context, process *xray.Process) error {
+func pollLocalClientPolicyLedger(ctx context.Context, process *xray.Process) (resultErr error) {
 	sourceDB := database.GetDB()
+	var checkpointErr error
+	defer func() { resultErr = errors.Join(checkpointErr, resultErr) }()
 	if authority := managedAuthorityForProcess(process); authority != nil {
 		sourceDB = authority.db
+		if err := authority.Checkpoint(ctx); err != nil {
+			// Grant proofs and cumulative ledger pages are independent RPCs.
+			// Retain this error without discarding an available receipt page.
+			checkpointErr = fmt.Errorf("checkpoint authority before ledger collection: %w", err)
+		}
 	}
 	var config conf.ClientPolicyConfig
 	if err := json.Unmarshal(process.GetConfig().ClientPolicy, &config); err != nil {

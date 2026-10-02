@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v3/internal/config"
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
+	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/policyauthority"
 	"github.com/xtls/xray-core/infra/conf"
 	"gorm.io/gorm"
@@ -469,10 +471,10 @@ func TestManagedAuthorityAccountingSeparatesAllocatedBudgetFromDeliveredUsage(t 
 	if err := authority.controller.SettleAndRenew(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := authority.controller.join(ctx); err != nil {
+	if _, _, err := svc.GetXrayTraffic(); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := svc.GetXrayTraffic(); err != nil {
+	if err := authority.controller.join(ctx); err != nil {
 		t.Fatal(err)
 	}
 	traffic, err := (&InboundService{}).GetClientTrafficByEmail(client.Email)
@@ -492,6 +494,150 @@ func TestManagedAuthorityAccountingSeparatesAllocatedBudgetFromDeliveredUsage(t 
 	}
 	if view.Lifetime.Upload != "104" || view.Lifetime.Download != "204" || view.Lifetime.Billed != "316" || view.Budget == nil || view.Budget.Allocated != "9684" || view.Budget.Frozen != "0" || view.Budget.Unallocated != "0" {
 		t.Fatalf("allocated budget was omitted or counted as delivered traffic: %s", raw)
+	}
+}
+
+func TestManagedAuthorityPairedOldSnapshotsKeepConfirmedLifetimeVisible(t *testing.T) {
+	// This acceptance exercises the actual SQLite import route. PostgreSQL
+	// import/reconciliation has its own backend gate, rather than relabeling it.
+	t.Setenv("XUI_DB_TYPE", "sqlite")
+	t.Setenv("XUI_DB_DSN", "")
+	svc, tunnel, client, _ := setupManagedActivationService(t)
+	// The activation helper keeps SQL in its original isolated directory. The
+	// real import route uses the configured deployment path, so publish an
+	// identical fresh fixture there before any managed process has booted.
+	if err := database.BackupSQLite(config.GetDBPath()); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.CloseDB(); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.InitDB(config.GetDBPath()); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RestartXray(true); err != nil {
+		t.Fatal(err)
+	}
+	var coreConfig conf.ClientPolicyConfig
+	if err := json.Unmarshal(currentXrayProcess().GetConfig().ClientPolicy, &coreConfig); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.GetXrayTraffic(); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.StopXray(); err != nil {
+		t.Fatal(err)
+	}
+	fixture := filepath.Dir(coreConfig.StateFile)
+	sqlSnapshot := filepath.Join(fixture, "before-consumption-sql.db")
+	if err := database.BackupSQLite(sqlSnapshot); err != nil {
+		t.Fatal(err)
+	}
+	oldSQL, err := os.ReadFile(sqlSnapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldCore, err := os.ReadFile(coreConfig.StateFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fixture, "before-consumption-core.db"), oldCore, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RestartXray(true); err != nil {
+		t.Fatal(err)
+	}
+	conn, err := net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", tunnel.Port), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	managedActivationEcho(t, conn, "warm")
+	_ = conn.Close()
+	if err := svc.StopXray(); err != nil {
+		t.Fatal(err)
+	}
+	consumed, err := os.ReadFile(coreConfig.StateFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fixture, "after-consumption-core.db"), consumed, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.BackupSQLite(filepath.Join(fixture, "after-consumption-sql.db")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(coreConfig.StateFile, oldCore, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := (&ServerService{}).ImportDB(restoreUpload{bytes.NewReader(oldSQL)}, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.GetXrayTraffic(); err != nil {
+		t.Fatal(err)
+	}
+	traffic, err := (&InboundService{}).GetClientTrafficByEmail(client.Email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if traffic.Accounting == nil || traffic.Accounting.Lifetime.Upload != "104" || traffic.Accounting.Lifetime.Download != "204" || traffic.Accounting.Lifetime.Billed != "316" {
+		t.Fatalf("old SQL/core snapshots hid committed lifetime usage: %+v", traffic.Accounting)
+	}
+	conn, err = net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", tunnel.Port), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	managedActivationEcho(t, conn, "next")
+	if _, _, err := svc.GetXrayTraffic(); err != nil {
+		t.Fatal(err)
+	}
+	traffic, err = (&InboundService{}).GetClientTrafficByEmail(client.Email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if traffic.Accounting == nil || traffic.Accounting.Lifetime.Billed != "332" || traffic.Accounting.Lifetime.Upload != "108" || traffic.Accounting.Lifetime.Download != "208" {
+		t.Fatalf("restored execution failed to preserve and advance known lifetime: %+v", traffic.Accounting)
+	}
+}
+
+func TestManagedAuthorityPollingKeepsLedgerReceiptWhenGrantCheckpointFails(t *testing.T) {
+	svc, tunnel, client, _ := setupManagedActivationService(t)
+	if err := svc.RestartXray(true); err != nil {
+		t.Fatal(err)
+	}
+	conn, err := net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", tunnel.Port), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	managedActivationEcho(t, conn, "warm")
+	if _, _, err := svc.GetXrayTraffic(); err != nil {
+		t.Fatal(err)
+	}
+	authority := managedAuthorityForProcess(currentXrayProcess())
+	c := authority.controller
+	injected := errors.New("one grant checkpoint is unavailable")
+	c.mu.Lock()
+	original := c.execution.api
+	c.execution.api = &authorityDemandFault{authorityDemandAPI: c.api, settleClient: client.StableID, settleFault: injected}
+	c.mu.Unlock()
+	t.Cleanup(func() { c.mu.Lock(); c.execution.api = original; c.mu.Unlock() })
+	managedActivationEcho(t, conn, "next")
+	if _, _, err := svc.GetXrayTraffic(); !errors.Is(err, injected) {
+		t.Fatalf("checkpoint failure hidden: %v", err)
+	}
+	var receipt model.ClientPolicyReceipt
+	if err := database.GetDB().First(&receipt, "client_id = ?", client.StableID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if receipt.RawUpload != 108 || receipt.RawDownload != 208 || receipt.BilledBytes != 332 {
+		t.Fatalf("grant checkpoint fault blocked the independent ledger collection: %+v", receipt)
+	}
+	c.mu.Lock()
+	c.execution.api = original
+	c.mu.Unlock()
+	if err := svc.StopXray(); err != nil {
+		t.Fatal(err)
 	}
 }
 
