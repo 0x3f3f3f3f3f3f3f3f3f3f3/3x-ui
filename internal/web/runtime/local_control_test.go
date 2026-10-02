@@ -22,6 +22,7 @@ import (
 	"github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/proxy/vless"
 	vlessencoding "github.com/xtls/xray-core/proxy/vless/encoding"
+	"github.com/xtls/xray-core/testing/testauthority"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
@@ -32,7 +33,7 @@ func TestLocalRuntimeUsesPrivateControlForHandlersRoutingAndStats(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	t.Logf("retained private Runtime control fixture: %s", dir)
 	socket, state := filepath.Join(dir, "core.sock"), filepath.Join(dir, "state.db")
 	if err := clientpolicy.CreateStore(state, "runtime-test"); err != nil {
 		t.Fatal(err)
@@ -73,6 +74,13 @@ func TestLocalRuntimeUsesPrivateControlForHandlersRoutingAndStats(t *testing.T) 
 	}
 	t.Cleanup(func() { _ = policyAPI.Close() })
 	if err := policyAPI.Apply(ctx, []*clientpolicy.PolicyConfig{{ClientId: "owner", Version: 1, Enabled: true, MultiplierMicros: 1000000, BurstBytes: 65536}}); err != nil {
+		t.Fatal(err)
+	}
+	current, err := policyAPI.GetClient(ctx, "owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := testauthority.InstallRPC(ctx, policyAPI, current.Policy, 2<<20); err != nil {
 		t.Fatal(err)
 	}
 	target, err := net.Listen("tcp", "127.0.0.1:0")

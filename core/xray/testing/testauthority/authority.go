@@ -4,12 +4,50 @@
 package testauthority
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"testing"
 
 	"github.com/xtls/xray-core/app/clientpolicy"
+	command "github.com/xtls/xray-core/app/clientpolicy/command"
 )
+
+type PrivateAPI interface {
+	Capabilities() *command.Capabilities
+	BindAuthority(context.Context, *command.AuthorityBinding) error
+	AuthorityChallenge(context.Context) (*command.AuthorityChallenge, error)
+	InstallAuthorityGrant(context.Context, *command.ExecutionGrant) (*command.ExecutionGrantState, error)
+}
+
+// InstallRPC provides one finite isolated-fixture allocation over the real
+// private control API. It is not a durable or globally coordinated issuer.
+func InstallRPC(ctx context.Context, api PrivateAPI, policy *clientpolicy.PolicyConfig, capacity uint64) error {
+	if api == nil || policy == nil || capacity == 0 || capacity > math.MaxInt64 {
+		return clientpolicy.ErrAuthority
+	}
+	caps := api.Capabilities()
+	if caps == nil || caps.BootId == "" {
+		return clientpolicy.ErrAuthority
+	}
+	binding := &command.AuthorityBinding{AuthorityId: "private-fixture-authority", Generation: 1, NodeId: "private-fixture-node"}
+	if err := api.BindAuthority(ctx, binding); err != nil {
+		return err
+	}
+	challenge, err := api.AuthorityChallenge(ctx)
+	if err != nil {
+		return err
+	}
+	upload, download := &command.AuthorityShare{Unlimited: true}, &command.AuthorityShare{Unlimited: true}
+	if policy.UploadBytesPerSecond != 0 {
+		upload = &command.AuthorityShare{Rate: policy.UploadBytesPerSecond, Burst: policy.BurstBytes}
+	}
+	if policy.DownloadBytesPerSecond != 0 {
+		download = &command.AuthorityShare{Rate: policy.DownloadBytesPerSecond, Burst: policy.BurstBytes}
+	}
+	_, err = api.InstallAuthorityGrant(ctx, &command.ExecutionGrant{Authority: binding, InstanceId: caps.InstanceId, BootId: caps.BootId, ClientId: policy.ClientId, WindowId: "private-fixture-window", PolicyVersion: policy.Version, GrantId: policy.ClientId + ":fixture-1", Sequence: 1, ChallengeId: challenge.ChallengeId, Capacity: capacity, Upload: upload, Download: download, LeaseDurationMillis: uint64(clientpolicy.MaxAuthorityLeaseDuration.Milliseconds())})
+	return err
+}
 
 func Grant(t testing.TB, engine *clientpolicy.Engine, policy clientpolicy.Policy) {
 	t.Helper()

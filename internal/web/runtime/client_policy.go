@@ -20,8 +20,8 @@ type ManagedPolicyBootstrap struct {
 	ConfirmAbsentClients func(context.Context, []string) error
 	AfterSequence        uint64
 	Initializations      []*command.InitializeRequest
-	// Authorize runs after durable client initialization and before listeners
-	// open, without the Runtime mutex. The API is valid only in this callback.
+	// Authorize runs after durable initialization and desired policy application,
+	// before listeners open and without the Runtime mutex. Its API is temporary.
 	Authorize func(context.Context, *xray.ClientPolicyAPI) error
 }
 
@@ -131,8 +131,10 @@ func (l *Local) StartManagedProcess(ctx context.Context, process *xray.Process, 
 	if err := json.Unmarshal(process.GetConfig().ClientPolicy, &config); err != nil {
 		return err
 	}
-	return process.StartManaged(ctx, func(ctx context.Context, api *xray.ClientPolicyAPI) error {
-		bootstrap, err := prepare(ctx, api.Capabilities())
+	var bootstrap *ManagedPolicyBootstrap
+	return process.StartManagedAuthorized(ctx, func(ctx context.Context, api *xray.ClientPolicyAPI) error {
+		var err error
+		bootstrap, err = prepare(ctx, api.Capabilities())
 		if err != nil {
 			return err
 		}
@@ -144,6 +146,11 @@ func (l *Local) StartManagedProcess(ctx context.Context, process *xray.Process, 
 		l.mu.Unlock()
 		if err != nil {
 			return err
+		}
+		return nil
+	}, func(ctx context.Context, api *xray.ClientPolicyAPI) error {
+		if bootstrap == nil {
+			return errors.New("managed authorization requires prepared bootstrap")
 		}
 		if bootstrap.Authorize != nil {
 			return bootstrap.Authorize(ctx, api)

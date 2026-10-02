@@ -16,6 +16,7 @@ import (
 
 	"github.com/xtls/xray-core/app/clientpolicy"
 	policycommand "github.com/xtls/xray-core/app/clientpolicy/command"
+	"github.com/xtls/xray-core/testing/testauthority"
 )
 
 func TestManagedProcessNegotiatesAndSeedsBeforeOpeningListeners(t *testing.T) {
@@ -29,7 +30,7 @@ func TestManagedProcessNegotiatesAndSeedsBeforeOpeningListeners(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			t.Cleanup(func() { _ = os.RemoveAll(dir) })
+			t.Logf("retained managed process fixture: %s", dir)
 			t.Setenv("XUI_BIN_FOLDER", dir)
 			t.Setenv("XUI_LOG_FOLDER", dir)
 			if err := os.Symlink(binary, filepath.Join(dir, GetBinaryName())); err != nil {
@@ -78,7 +79,7 @@ func TestManagedProcessNegotiatesAndSeedsBeforeOpeningListeners(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), activationTimeout)
 			defer cancel()
 			errSetup := errors.New("panel ledger transaction failed")
-			err = process.StartManaged(ctx, func(ctx context.Context, api *ClientPolicyAPI) error {
+			err = process.StartManagedAuthorized(ctx, func(ctx context.Context, api *ClientPolicyAPI) error {
 				proof := process.NativeTrafficConfigProof()
 				if proof == nil || proof.ConfigStable {
 					t.Error("control-only bootstrap acquired legacy configuration eligibility")
@@ -107,6 +108,16 @@ func TestManagedProcessNegotiatesAndSeedsBeforeOpeningListeners(t *testing.T) {
 					seedUsage.Remainder = 500000
 				}
 				return api.Initialize(ctx, seedPolicy, seedUsage)
+			}, func(ctx context.Context, api *ClientPolicyAPI) error {
+				current, err := api.GetClient(ctx, "owner")
+				if err != nil {
+					return err
+				}
+				capacity := uint64(900)
+				if mode == "quota-window" {
+					capacity = 600
+				}
+				return testauthority.InstallRPC(ctx, api, current.Policy, capacity)
 			})
 			if mode != "success" && mode != "quota-window" && mode != "slow-preparation" {
 				if mode == "preparation-failure" && !errors.Is(err, errSetup) {

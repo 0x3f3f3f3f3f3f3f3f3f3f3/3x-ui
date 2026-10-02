@@ -16,7 +16,18 @@ import (
 
 // StartManaged negotiates a control-only core and prepares usage before adding business listeners.
 // The preparation callback must restore the panel's durable seed for every new identity.
-func (p *Process) StartManaged(ctx context.Context, prepare func(context.Context, *ClientPolicyAPI) error) (err error) {
+func (p *Process) StartManaged(ctx context.Context, prepare func(context.Context, *ClientPolicyAPI) error) error {
+	return p.startManaged(ctx, prepare, nil)
+}
+
+func (p *Process) StartManagedAuthorized(ctx context.Context, prepare, authorize func(context.Context, *ClientPolicyAPI) error) error {
+	if authorize == nil {
+		return errors.New("managed authorization callback is required")
+	}
+	return p.startManaged(ctx, prepare, authorize)
+}
+
+func (p *Process) startManaged(ctx context.Context, prepare, authorize func(context.Context, *ClientPolicyAPI) error) (err error) {
 	if p.IsRunning() {
 		return errors.New("xray is already running")
 	}
@@ -119,6 +130,11 @@ func (p *Process) StartManaged(ctx context.Context, prepare func(context.Context
 			return err
 		}
 		policies = policies[n:]
+	}
+	if authorize != nil {
+		if err := authorize(ctx, policyAPI); err != nil {
+			return err
+		}
 	}
 	var api XrayAPI
 	if err := api.InitEndpoint(socket); err != nil {

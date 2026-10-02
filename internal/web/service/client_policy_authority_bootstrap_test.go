@@ -23,8 +23,11 @@ import (
 )
 
 func TestAuthorityBootstrapInstallsGrantBeforeOpeningBusinessListener(t *testing.T) {
-	for _, fail := range []bool{false, true} {
-		t.Run(map[bool]string{false: "activate", true: "projection-failure"}[fail], func(t *testing.T) {
+	for _, scenario := range []struct {
+		name            string
+		fail, recovered bool
+	}{{name: "activate"}, {name: "projection-failure", fail: true}, {name: "recovered-old-policy", recovered: true}} {
+		t.Run(scenario.name, func(t *testing.T) {
 			binary := os.Getenv("XRAY_E2E_BINARY")
 			if binary == "" {
 				t.Skip("set XRAY_E2E_BINARY to the built grant-capable core")
@@ -43,6 +46,29 @@ func TestAuthorityBootstrapInstallsGrantBeforeOpeningBusinessListener(t *testing
 			state := &conf.ClientPolicyConfig{StateFile: filepath.Join(dir, "state.db"), InstanceID: "startup-source", Policies: []clientpolicy.Policy{{ClientID: client, Version: 1, Enabled: true, Multiplier: 1500000, QuotaBytes: 100, UploadRate: 8192, DownloadRate: 8192, BurstBytes: 128}}}
 			if err := clientpolicy.CreateStore(state.StateFile, state.InstanceID); err != nil {
 				t.Fatal(err)
+			}
+			if scenario.recovered {
+				engine, err := clientpolicy.OpenPersistentEngine(state.StateFile, state.InstanceID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := engine.Initialize(state.Policies[0], clientpolicy.Usage{}); err != nil {
+					_ = engine.Close()
+					t.Fatal(err)
+				}
+				if err := engine.Close(); err != nil {
+					t.Fatal(err)
+				}
+				account, err := j.Account(client)
+				if err != nil {
+					t.Fatal(err)
+				}
+				policy := account.Policy
+				policy.Version = 2
+				if _, err := j.ChangePolicy(policyauthority.ChangeRequest{Identity: j.Identity(), ClientID: client, RequestID: "before-startup-policy-change", ExpectedVersion: 1, Policy: policy}); err != nil {
+					t.Fatal(err)
+				}
+				state.Policies[0].Version = 2
 			}
 			policyRaw, err := json.Marshal(state)
 			if err != nil {
@@ -109,7 +135,7 @@ func TestAuthorityBootstrapInstallsGrantBeforeOpeningBusinessListener(t *testing
 					if err != nil {
 						return err
 					}
-					if fail {
+					if scenario.fail {
 						name := "authority_bootstrap_projection_fault"
 						db := database.GetDB()
 						if err := db.Callback().Create().Before("gorm:create").Register(name, func(tx *gorm.DB) {
@@ -130,7 +156,7 @@ func TestAuthorityBootstrapInstallsGrantBeforeOpeningBusinessListener(t *testing
 			if !called {
 				t.Fatalf("managed startup skipped the authority callback: %v", err)
 			}
-			if fail {
+			if scenario.fail {
 				if !errors.Is(err, injected) || process.IsRunning() || process.IsControlReady() {
 					t.Fatalf("failed authorization left core activated: %v/%v/%v", err, process.IsRunning(), process.IsControlReady())
 				}
