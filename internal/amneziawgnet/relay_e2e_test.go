@@ -153,7 +153,7 @@ func TestSocksRelayAgainstRealXray(t *testing.T) {
 	}
 	defer func() {
 		_ = cmd.Process.Kill()
-		_, _ = cmd.Process.Wait()
+		_ = cmd.Wait()
 	}()
 	waitForPort(t, socksPort)
 
@@ -278,7 +278,7 @@ func TestSocksRelayAgainstRealXray(t *testing.T) {
 	// look for both directions' counters keyed by the peer's real email --
 	// the exact proof Finding 3 established manually in Phase 0.
 	_ = cmd.Process.Kill()
-	_, _ = cmd.Process.Wait()
+	_ = cmd.Wait()
 	log := xrayLog.String()
 	wantUp := fmt.Sprintf("user>>>%s>>>traffic>>>uplink", wantEmail)
 	wantDown := fmt.Sprintf("user>>>%s>>>traffic>>>downlink", wantEmail)
@@ -389,7 +389,8 @@ func TestManagerEnsureAutomaticallyWiresRelay(t *testing.T) {
 		t.Fatalf("write xray config: %v", err)
 	}
 
-	var xrayLog syncBuffer
+	// Delayed capture makes the output-drain barrier observable.
+	xrayLog := syncBuffer{writeDelay: 250 * time.Millisecond}
 	cmd := exec.Command(bin, "-c", cfgPath)
 	cmd.Stdout = &xrayLog
 	cmd.Stderr = &xrayLog
@@ -398,7 +399,7 @@ func TestManagerEnsureAutomaticallyWiresRelay(t *testing.T) {
 	}
 	defer func() {
 		_ = cmd.Process.Kill()
-		_, _ = cmd.Process.Wait()
+		_ = cmd.Wait()
 	}()
 	waitForPort(t, socksPort)
 
@@ -469,7 +470,7 @@ func TestManagerEnsureAutomaticallyWiresRelay(t *testing.T) {
 	}
 
 	_ = cmd.Process.Kill()
-	_, _ = cmd.Process.Wait()
+	_ = cmd.Wait()
 	log := xrayLog.String()
 	wantUp := fmt.Sprintf("user>>>%s>>>traffic>>>uplink", wantEmail)
 	if !strings.Contains(log, wantUp) {
@@ -575,11 +576,15 @@ func readFull(r interface{ Read([]byte) (int, error) }, buf []byte, timeout time
 // syncBuffer is a concurrency-safe bytes buffer for capturing a subprocess's
 // combined stdout/stderr while the test may read it from another goroutine.
 type syncBuffer struct {
-	mu  sync.Mutex
-	buf strings.Builder
+	writeDelay time.Duration
+	mu         sync.Mutex
+	buf        strings.Builder
 }
 
 func (s *syncBuffer) Write(p []byte) (int, error) {
+	if s.writeDelay > 0 {
+		time.Sleep(s.writeDelay)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.buf.Write(p)
