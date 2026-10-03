@@ -176,6 +176,12 @@ func (r *Remote) baseURL() (string, error) {
 }
 
 func (r *Remote) do(ctx context.Context, method, path string, body any) (*envelope, error) {
+	return r.doWithResponseLimit(ctx, method, path, body, maxRemoteResponseBytes, false)
+}
+
+// Strict control requests reject redirects and unknown envelope fields.
+// Ordinary node calls retain their existing response and redirect behavior.
+func (r *Remote) doWithResponseLimit(ctx context.Context, method, path string, body any, responseLimit int64, strict bool) (*envelope, error) {
 	// mtls nodes authenticate via the client certificate, so a bearer token is
 	// optional for them; every other mode still requires one.
 	if r.node.ApiToken == "" && r.node.TlsVerifyMode != "mtls" {
@@ -251,6 +257,11 @@ func (r *Remote) do(ctx context.Context, method, path string, body any) (*envelo
 	if err != nil {
 		return nil, err
 	}
+	if strict {
+		isolated := *client
+		isolated.CheckRedirect = func(*http.Request, []*http.Request) error { return ErrNodeAuthorityDiscovery }
+		client = &isolated
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%s %s: %w", method, path, err)
@@ -274,20 +285,30 @@ func (r *Remote) do(ctx context.Context, method, path string, body any) (*envelo
 	// Fast-fail on an honestly-declared oversize body; the LimitReader below is
 	// the real guard since Content-Length is untrusted, may be absent, or is -1
 	// under transparent decompression.
-	if resp.ContentLength > maxRemoteResponseBytes {
-		return nil, fmt.Errorf("%s %s: %w (content-length %d, cap %d)", method, path, errRemoteResponseTooLarge, resp.ContentLength, maxRemoteResponseBytes)
+	if resp.ContentLength > responseLimit {
+		return nil, fmt.Errorf("%s %s: %w (content-length %d, cap %d)", method, path, errRemoteResponseTooLarge, resp.ContentLength, responseLimit)
 	}
 
-	raw, err := readCappedBody(resp.Body, maxRemoteResponseBytes)
+	raw, err := readCappedBody(resp.Body, responseLimit)
 	if err != nil {
 		if errors.Is(err, errRemoteResponseTooLarge) {
-			return nil, fmt.Errorf("%s %s: %w (cap %d bytes)", method, path, err, maxRemoteResponseBytes)
+			return nil, fmt.Errorf("%s %s: %w (cap %d bytes)", method, path, err, responseLimit)
 		}
 		return nil, fmt.Errorf("read body: %w", err)
 	}
 
 	var env envelope
-	if err := json.Unmarshal(raw, &env); err != nil {
+	if strict {
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&env); err != nil {
+			return nil, fmt.Errorf("decode envelope: %w", err)
+		}
+		var extra any
+		if decoder.Decode(&extra) != io.EOF {
+			return nil, ErrNodeAuthorityDiscovery
+		}
+	} else if err := json.Unmarshal(raw, &env); err != nil {
 		return nil, fmt.Errorf("decode envelope: %w", err)
 	}
 	if !env.Success {

@@ -19,9 +19,9 @@ Discovery must identify the same live owned process/socket/instance/boot and fai
 Files: create internal/web/runtime/node_authority.go; internal/web/service/node_authority.go and node_authority_test.go.
 Interfaces: AuthorityDiscoveryRequest{ExpectedInstanceID,ExpectedBootID}; NodeAuthorityDiscovery{Capabilities,Challenge}, Validate(request). ClientPolicyNodeService.DiscoverAuthority(ctx,request) returns *NodeAuthorityDiscovery/error. Both expected IDs empty for first discovery or both valid/bounded. Produces shared contract for Tasks2/3.
 
-- [ ] Step1: add TestManagedAuthorityNodeDiscoveryUsesCurrentOwnedBoot and TestManagedAuthorityNodeDiscoveryRejectsUnsafeOwnership. Real owned core, fresh nonce, copied capabilities, same-boot bound read; forced restart rejects oldboot then discovers a fresh one; partial/wrong IDs, cancellation, stopped/foreign/restore/socket mismatch refuse. Expected RED: missing service/behavior, no invented accounting defect.
-- [ ] Step2: implement serialized owned read/challenge, shared bounded response/request validation, active-restore refusal and current owner/socket identity checks. Expected named parents PASS with actual core and no skips.
-- [ ] Step3: commit and task-done running both exact parents with verified core. Expected actual PASS; ledger all deviations.
+- [x] Step1: add TestManagedAuthorityNodeDiscoveryUsesCurrentOwnedBoot and TestManagedAuthorityNodeDiscoveryRejectsUnsafeOwnership. Real owned core, fresh nonce, copied capabilities, same-boot bound read; forced restart rejects oldboot then discovers a fresh one; partial/wrong IDs, cancellation, stopped/foreign/restore/socket mismatch refuse. Expected RED: missing service/behavior, no invented accounting defect.
+- [x] Step2: implement serialized owned read/challenge, shared bounded response/request validation, active-restore refusal and current owner/socket identity checks. Expected named parents PASS with actual core and no skips.
+- [x] Step3: commit and task-done running both exact parents with verified core. Expected actual PASS; ledger all deviations.
 
 ## Task 2: Verified bounded remote discovery
 
