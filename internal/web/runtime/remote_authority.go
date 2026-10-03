@@ -24,6 +24,15 @@ func (r *Remote) DiscoverAuthority(ctx context.Context, request AuthorityDiscove
 	if err != nil {
 		return nil, err
 	}
+	fields, err := DecodeNodeAuthorityObject(bytes.NewReader(env.Obj), "capabilities", "challenge", "executionRole")
+	if err != nil {
+		return nil, ErrNodeAuthorityDiscovery
+	}
+	if role := fields["executionRole"]; role != nil {
+		if _, err := DecodeNodeAuthorityObject(bytes.NewReader(role), "mode", "authorityId", "generation", "nodeId"); err != nil {
+			return nil, ErrNodeAuthorityDiscovery
+		}
+	}
 	var result NodeAuthorityDiscovery
 	decoder := json.NewDecoder(bytes.NewReader(env.Obj))
 	decoder.DisallowUnknownFields()

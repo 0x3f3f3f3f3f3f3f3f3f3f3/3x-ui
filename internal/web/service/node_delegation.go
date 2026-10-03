@@ -127,10 +127,8 @@ func (*ClientPolicyNodeService) ConfigureDelegation(ctx context.Context, request
 	if err != nil {
 		return nil, err
 	}
-	for _, seed := range snapshot.Seeds {
-		if seed.Usage != (policyauthority.Usage{}) || seed.WindowUsed != 0 || seed.WindowRemainder != 0 {
-			return nil, ErrAuthorityNotInitialized
-		}
+	if err := checkNodeDelegationSnapshotFresh(snapshot); err != nil {
+		return nil, err
 	}
 	state, err := initializeAuthorityStateWithRole(dir, stateConfig.InstanceID, snapshot, request.Role())
 	if err != nil {

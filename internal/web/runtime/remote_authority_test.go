@@ -109,6 +109,13 @@ func TestRemoteAuthorityDiscoveryRequiresVerifiedTLS(t *testing.T) {
 
 func TestRemoteAuthorityDiscoveryRejectsInvalidResponse(t *testing.T) {
 	valid := string(authorityRemoteEnvelope(t, authorityRemoteFixture()))
+	delegated := authorityRemoteFixture()
+	delegated.ExecutionRole = &NodeExecutionRole{Mode: NodeExecutionDelegated, AuthorityID: "coordinator", Generation: 3, NodeID: "node-a"}
+	withRole := string(authorityRemoteEnvelope(t, delegated))
+	rawRole, err := json.Marshal(delegated.ExecutionRole)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, tc := range []struct {
 		name   string
 		change func(*NodeAuthorityDiscovery)
@@ -119,6 +126,12 @@ func TestRemoteAuthorityDiscoveryRejectsInvalidResponse(t *testing.T) {
 		{name: "null-challenge", change: func(d *NodeAuthorityDiscovery) { d.Challenge = nil }},
 		{name: "wrong-api", change: func(d *NodeAuthorityDiscovery) { d.Capabilities.ApiVersion = 2 }},
 		{name: "wrong-instance", change: func(d *NodeAuthorityDiscovery) { d.Capabilities.InstanceId = "different-instance" }},
+		{name: "explicit-null-execution-role", raw: strings.Replace(valid, `"challenge":`, `"executionRole":null,"challenge":`, 1)},
+		{name: "delegated-role-erased-by-duplicate-null", raw: strings.Replace(withRole, `"executionRole":`+string(rawRole), `"executionRole":`+string(rawRole)+`,"executionRole":null`, 1)},
+		{name: "case-alias-execution-role", raw: strings.Replace(withRole, `"executionRole":`, `"ExecutionRole":`, 1)},
+		{name: "duplicate-role-binding", raw: strings.Replace(withRole, `"authorityId":`, `"authorityId":"other","authorityId":`, 1)},
+		{name: "case-alias-role-binding", raw: strings.Replace(withRole, `"authorityId":`, `"AuthorityId":`, 1)},
+		{name: "duplicate-role-mode", raw: strings.Replace(withRole, `"mode":`, `"mode":"local","mode":`, 1)},
 		{name: "unknown-execution-role", change: func(d *NodeAuthorityDiscovery) {
 			d.ExecutionRole = &NodeExecutionRole{Mode: "unknown"}
 		}},

@@ -134,6 +134,83 @@ func TestNodeDelegationRejectsActivatedOrUnsafeState(t *testing.T) {
 	}
 }
 
+func TestNodeDelegationRejectsHiddenHistoricalState(t *testing.T) {
+	for _, name := range []string{"frozen-only-total", "orphan-legacy-traffic", "legacy-masked-by-zero-total", "orphan-receipt-usage", "receipt-seed-history", "orphan-reset-history"} {
+		t.Run(name, func(t *testing.T) {
+			dir, request := nodeDelegationFixture(t)
+			state, err := EnsureLocalClientPolicyState(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			client := model.ClientRecord{Email: "hidden-history"}
+			if err := database.GetDB().Create(&client).Error; err != nil {
+				t.Fatal(err)
+			}
+			switch name {
+			case "frozen-only-total":
+				if err := database.GetDB().Create(&model.ClientPolicyTotal{ClientID: client.StableID, UncertainBytes: 1}).Error; err != nil {
+					t.Fatal(err)
+				}
+			case "orphan-legacy-traffic":
+				if err := database.GetDB().Create(&panelxray.ClientTraffic{Email: "absent-owner", Up: 1}).Error; err != nil {
+					t.Fatal(err)
+				}
+			case "legacy-masked-by-zero-total":
+				if err := database.GetDB().Create(&model.ClientPolicyTotal{ClientID: client.StableID}).Error; err != nil {
+					t.Fatal(err)
+				}
+				if err := database.GetDB().Create(&panelxray.ClientTraffic{Email: client.Email, Down: 1}).Error; err != nil {
+					t.Fatal(err)
+				}
+			case "orphan-receipt-usage":
+				if err := database.GetDB().Create(&model.ClientPolicyReceipt{InstanceID: state.InstanceID, ClientID: "f5913b70-2e06-4a60-a664-b022debc01dc", PolicyVersion: 1, RawUpload: 1}).Error; err != nil {
+					t.Fatal(err)
+				}
+			case "receipt-seed-history":
+				if err := database.GetDB().Create(&model.ClientPolicyReceipt{InstanceID: state.InstanceID, ClientID: client.StableID, PolicyVersion: 1, SeedBilled: 1}).Error; err != nil {
+					t.Fatal(err)
+				}
+			case "orphan-reset-history":
+				if err := database.GetDB().Create(&model.ClientPolicyReset{InstanceID: state.InstanceID, ClientID: "f5913b70-2e06-4a60-a664-b022debc01dc", RequestID: "previous-reset", PolicyVersion: 1, RawUpload: 1}).Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+			if result, err := (&ClientPolicyNodeService{}).ConfigureDelegation(context.Background(), request); err == nil || result != nil {
+				t.Fatal("historical consumption/liability was delegated as fresh")
+			}
+			if _, err := os.Lstat(filepath.Join(dir, "authority", "authority.json")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("rejected history published a role: %v", err)
+			}
+		})
+	}
+}
+
+func TestNodeDelegationZeroHistoricalRecordsRemainFresh(t *testing.T) {
+	dir, request := nodeDelegationFixture(t)
+	state, err := EnsureLocalClientPolicyState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := model.ClientRecord{Email: "fresh-zero-records"}
+	if err := database.GetDB().Create(&client).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.GetDB().Create(&model.ClientPolicyTotal{ClientID: client.StableID}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.GetDB().Create(&model.ClientPolicyReceipt{InstanceID: state.InstanceID, ClientID: client.StableID, PolicyVersion: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, email := range []string{client.Email, "orphan-zero-record"} {
+		if err := database.GetDB().Create(&panelxray.ClientTraffic{Email: email}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if result, err := (&ClientPolicyNodeService{}).ConfigureDelegation(context.Background(), request); err != nil || result == nil || result.Role != request.Role() {
+		t.Fatalf("zero historical records prevented fresh setup: %+v/%v", result, err)
+	}
+}
+
 func TestNodeDelegationConfigureResumesPreparedRole(t *testing.T) {
 	dir, request := nodeDelegationFixture(t)
 	original := publishAuthorityManifest
