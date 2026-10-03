@@ -31,7 +31,10 @@ type startupOperationFixture struct {
 // would rewind this later multiplier and charge the next payload at 2x.
 func TestManagedAuthorityStartupAcknowledgementPreservesLaterState(t *testing.T) {
 	t.Run("later-multiplier-window-inbound", testStartupLaterState)
-	t.Run("deleted-uuid-reused-email-and-id", testStartupDeletedIdentity)
+	for _, kind := range []string{"direct", "renewal"} {
+		t.Run("deleted-uuid-reused-email-and-id-"+kind, func(t *testing.T) { testStartupDeletedIdentity(t, kind) })
+	}
+	t.Run("later-renewal-count-and-expiry", testStartupLaterRenewal)
 }
 
 func testStartupLaterState(t *testing.T) {
@@ -91,8 +94,54 @@ func testStartupLaterState(t *testing.T) {
 	}
 }
 
-func testStartupDeletedIdentity(t *testing.T) {
-	f := setupStartupPreparedOperation(t, "direct")
+// Replaying the original renewal count or expiry would erase legitimate later
+// state. Completion proves the consumed floor and current canonical mirror.
+func testStartupLaterRenewal(t *testing.T) {
+	f := setupStartupPreparedOperation(t, "renewal")
+	db := database.GetDB()
+	const laterExpiry = int64(4102444800000)
+	if err := db.Table("clients").Where("stable_id = ?", f.client.StableID).
+		Updates(map[string]any{"expiry_time": laterExpiry, "updated_at": laterExpiry, "policy_multiplier": "0.5"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Table("client_traffics").Where("email = ?", f.client.Email).
+		Updates(map[string]any{"expiry_time": laterExpiry, "reset_count": 3}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.RestartXray(true); err != nil {
+		t.Fatal(err)
+	}
+	owner := managedAuthorityForProcess(currentXrayProcess())
+	var traffic panelxray.ClientTraffic
+	if err := db.First(&traffic, "email = ?", f.client.Email).Error; err != nil || traffic.ResetCount != 3 || traffic.ExpiryTime != laterExpiry {
+		t.Fatalf("later renewal state rewound: %+v/%v", traffic, err)
+	}
+	prepared, err := owner.state.Journal.LookupResetPreparation(f.prepared.RequestID)
+	if err != nil || prepared != f.prepared {
+		t.Fatalf("later renewal changed preparation: %v", err)
+	}
+	if _, err := owner.state.Journal.LookupResetCompletion(f.prepared.RequestID); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	flow, err := net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", f.inbound.Port), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer flow.Close()
+	managedActivationEcho(t, flow, "next")
+	if err := owner.Checkpoint(ctx); err != nil {
+		t.Fatal(err)
+	}
+	account, err := owner.state.Journal.Account(f.client.StableID)
+	if err != nil || account.Usage != (policyauthority.Usage{RawUpload: 108, RawDownload: 208, BilledBytes: 320}) || account.WindowBaseline != 316 || account.WindowUsed != 4 {
+		t.Fatalf("later renewal billing lost: %+v/%v", account, err)
+	}
+}
+
+func testStartupDeletedIdentity(t *testing.T, kind string) {
+	f := setupStartupPreparedOperation(t, kind)
 	db := database.GetDB()
 	if err := db.Create(&model.ClientPolicyTombstone{ClientID: f.client.StableID}).Error; err != nil {
 		t.Fatal(err)
@@ -149,11 +198,14 @@ func testStartupDeletedIdentity(t *testing.T) {
 // Skipping post-RPC ownership/source checks or ignoring completion errors would
 // leave a listener serving while its durable operation remains uncertain.
 func TestManagedAuthorityStartupAcknowledgementRefusesUncertainExecution(t *testing.T) {
-	for _, fault := range []string{"source", "pool", "socket", "boot", "core", "policy", "stamp", "null-stamp", "completion", "late-boot", "owner"} {
+	for _, fault := range []string{"source", "pool", "socket", "boot", "core", "policy", "stamp", "null-stamp", "completion", "late-boot", "owner", "renewal-count", "late-renewal-count", "null-renewal-count", "missing-renewal-traffic", "renewal-expiry", "null-renewal-expiry"} {
 		t.Run(fault, func(t *testing.T) {
 			kind := "direct"
 			if fault == "stamp" || fault == "null-stamp" {
 				kind = "inbound"
+			}
+			if strings.Contains(fault, "renewal") {
+				kind = "renewal"
 			}
 			f := setupStartupPreparedOperation(t, kind)
 			db := database.GetDB()
@@ -167,7 +219,7 @@ func TestManagedAuthorityStartupAcknowledgementRefusesUncertainExecution(t *test
 					return
 				}
 				queries++
-				late := fault == "completion" || fault == "late-boot"
+				late := fault == "completion" || fault == "late-boot" || fault == "late-renewal-count"
 				if late && queries != 2 || !late && queries != 1 {
 					return
 				}
@@ -182,6 +234,20 @@ func TestManagedAuthorityStartupAcknowledgementRefusesUncertainExecution(t *test
 						at = nil
 					}
 					tx.AddError(tx.Session(&gorm.Session{NewDB: true}).Model(&model.Inbound{}).Where("stable_id = ?", f.inbound.StableID).Update("last_traffic_reset_time", at).Error)
+				case "renewal-count", "late-renewal-count", "null-renewal-count":
+					var count any = 0
+					if fault == "null-renewal-count" {
+						count = nil
+					}
+					tx.AddError(tx.Session(&gorm.Session{NewDB: true}).Table("client_traffics").Where("email = ?", f.client.Email).Update("reset_count", count).Error)
+				case "missing-renewal-traffic":
+					tx.AddError(tx.Session(&gorm.Session{NewDB: true}).Where("email = ?", f.client.Email).Delete(&panelxray.ClientTraffic{}).Error)
+				case "renewal-expiry", "null-renewal-expiry":
+					var expiry any = 0
+					if fault == "null-renewal-expiry" {
+						expiry = nil
+					}
+					tx.AddError(tx.Session(&gorm.Session{NewDB: true}).Table("client_traffics").Where("email = ?", f.client.Email).Update("expiry_time", expiry).Error)
 				case "pool":
 					owner.db = db.Session(&gorm.Session{NewDB: true})
 				case "owner":

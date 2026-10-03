@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"strings"
@@ -21,6 +22,7 @@ type authorityStartupOperation struct {
 	resets   []model.ClientPolicyReset
 	clients  []string
 	stamps   []authorityResetInboundStamp
+	renewals []authorityRenewalEffect
 }
 
 func (a *managedAuthority) pendingStartupOperation(key string) (*authorityStartupOperation, error) {
@@ -60,6 +62,7 @@ func (a *managedAuthority) pendingStartupOperation(key string) (*authorityStartu
 			return nil, err
 		}
 		op.resets = snapshot.Resets
+		op.renewals = snapshot.Effects
 		original, err := decodeAuthorityRenewalCapture(capture, a.state.Journal, a.state.SourceID)
 		if err != nil {
 			return nil, err
@@ -106,6 +109,30 @@ func (a *managedAuthority) validateStartupOperationTx(tx *gorm.DB, op *authority
 			return err
 		}
 		if stale != 0 {
+			return ErrClientPolicyLedger
+		}
+	}
+	for _, effect := range op.renewals {
+		account, err := a.state.Journal.LookupAccount(effect.ClientID)
+		if err != nil {
+			return err
+		}
+		if account.Deleted {
+			continue // The original UUID still requires tombstone/core proof below.
+		}
+		var rows []struct {
+			ExpiryTime        sql.NullInt64
+			TrafficExpiryTime sql.NullInt64
+			ResetCount        sql.NullInt64
+		}
+		// Count is a consumed floor; expiry mirrors today's canonical desired
+		// state. Completion observes both without replaying the old effects.
+		if err := tx.Table("clients c").Select("c.expiry_time, ct.expiry_time AS traffic_expiry_time, ct.reset_count").
+			Joins("LEFT JOIN client_traffics ct ON ct.email = c.email").
+			Where("c.stable_id = ?", effect.ClientID).Scan(&rows).Error; err != nil {
+			return err
+		}
+		if len(rows) != 1 || !rows[0].ResetCount.Valid || rows[0].ResetCount.Int64 < int64(effect.AfterResetCount) || !rows[0].ExpiryTime.Valid || !rows[0].TrafficExpiryTime.Valid || rows[0].ExpiryTime.Int64 != rows[0].TrafficExpiryTime.Int64 {
 			return ErrClientPolicyLedger
 		}
 	}
