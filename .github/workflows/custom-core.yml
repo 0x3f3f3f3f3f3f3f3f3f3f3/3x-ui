@@ -22,6 +22,17 @@ jobs:
             core/xray/go.sum
       - name: Package validation tests
         run: go test -race -count=1 ./internal/distribution
+      - name: Stable inbound resource identities (sqlite)
+        env:
+          XUI_DB_TYPE: sqlite
+        run: |
+          set -euo pipefail
+          make dist-stub
+          go test -race -count=1 -v ./internal/database ./internal/web/service \
+            -run '^TestInboundStableIdentity' | tee /tmp/inbound-identities-sqlite.log
+          for test in TestInboundStableIdentityDatabaseExport TestInboundStableIdentityHistoricalMigration TestInboundStableIdentityRejectsCorruptMigration TestInboundStableIdentityLifecycle TestInboundStableIdentityPublicCopyAndImport TestInboundStableIdentityPublicNativeEdits; do
+            grep -q -- "^--- PASS: $test " /tmp/inbound-identities-sqlite.log
+          done
       - name: Source snapshot and database replacement regressions (sqlite)
         env:
           XUI_DB_TYPE: sqlite
@@ -374,6 +385,17 @@ jobs:
         with:
           go-version: 1.27.1
       - run: make dist-stub
+      - name: Stable inbound resource identities (postgres)
+        env:
+          XUI_DB_TYPE: postgres
+        run: |
+          set -euo pipefail
+          make dist-stub
+          go test -race -count=1 -v ./internal/database ./internal/web/service \
+            -run '^TestInboundStableIdentity' | tee /tmp/inbound-identities-postgres.log
+          for test in TestInboundStableIdentityDatabaseExport TestInboundStableIdentityHistoricalMigration TestInboundStableIdentityRejectsCorruptMigration TestInboundStableIdentityLifecycle TestInboundStableIdentityPublicCopyAndImport TestInboundStableIdentityPublicNativeEdits; do
+            grep -q -- "^--- PASS: $test " /tmp/inbound-identities-postgres.log
+          done
       - name: Source snapshot and database replacement regressions (postgres)
         env:
           XUI_DB_TYPE: postgres
