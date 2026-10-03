@@ -27,6 +27,7 @@ type authorityResetCaptureSnapshot struct {
 	Schema             int
 	Operation          model.ClientTrafficResetBatch
 	OriginalManagedIDs []string
+	OriginalInbounds   []authorityResetInboundIdentity `json:",omitempty"`
 }
 
 func authorityResetRequestKey(request string) string {
@@ -49,7 +50,7 @@ func decodeAuthorityResetCapture(capture policyauthority.ResetOperationCapture, 
 	}
 	decoder := json.NewDecoder(strings.NewReader(capture.Snapshot))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&snapshot) != nil || decoder.Decode(new(any)) != io.EOF || snapshot.Schema != 1 || !validAuthorityResetBatch(snapshot.Operation) || capture.RequestID != authorityResetRequestKey(snapshot.Operation.RequestID) || capture.CalendarKey != authorityResetCalendarKey(snapshot.Operation.Scope, snapshot.Operation.ScheduledAt) || len(snapshot.OriginalManagedIDs) > 100000 {
+	if decoder.Decode(&snapshot) != nil || decoder.Decode(new(any)) != io.EOF || !validAuthorityResetBatch(snapshot.Operation) || validateAuthorityResetInbounds(snapshot) != nil || capture.RequestID != authorityResetRequestKey(snapshot.Operation.RequestID) || capture.CalendarKey != authorityResetCalendarKey(snapshot.Operation.Scope, snapshot.Operation.ScheduledAt) || len(snapshot.OriginalManagedIDs) > 100000 {
 		return snapshot, ErrClientPolicyLedger
 	}
 	var targets []clientResetTarget
@@ -224,6 +225,16 @@ func runAuthorityResetCapture(ctx context.Context, requestKey, calendarKey strin
 			return err
 		}
 		snapshot := authorityResetCaptureSnapshot{Schema: 1, Operation: *operation, OriginalManagedIDs: managed}
+		if strings.HasPrefix(operation.Scope, "inbound:") {
+			snapshot.Schema = 2
+			snapshot.OriginalInbounds, err = captureAuthorityResetInboundsTx(tx, operation.Scope)
+			if err != nil {
+				return err
+			}
+			if err := validateAuthorityResetInbounds(snapshot); err != nil {
+				return err
+			}
+		}
 		raw, err := json.Marshal(snapshot)
 		if err != nil {
 			return err

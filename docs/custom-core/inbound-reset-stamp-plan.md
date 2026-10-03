@@ -32,9 +32,9 @@ Files: modify client_policy_authority_reset_capture.go, client_policy_authority_
 
 Consumes: model.Inbound.StableID, authorityResetExecutionStateLocked and existing journal APIs. Produces: authorityResetInboundIdentity{ID int, StableID string}, authorityResetInboundStamp{StableID string, ResetAt int64}, strict original membership validation and protected stamp application/preparation.
 
-- [ ] Step1: Add TestManagedAuthorityInboundResetRetainsOriginalStamp with actual owned Tunnel warm traffic, private journal preparation/completion and exact stamp/reset boundary. Run focused race. Expected RED: public managed manual inbound reset lacks preparation.
-- [ ] Step2: Implement schema2 manual inbound captures, original UUID-only stamp updates and schema2 prepared effects; preserve schema1 and no false legacy/calendar completion. Expected GREEN: exact original execution stamp and immutable retry.
-- [ ] Step3: Add TestManagedAuthorityInboundResetCaptureRetryPreservesResourceSet for capture-only single/all scope after deletion/reused ID, addition, rename and attachment changes. Expected: only original surviving UUIDs stamped; original client selection retained. Run both tests and existing unsupported-effect compatibility tests, commit/task-done. Expected PASS with actual core.
+- [x] Step1: Add TestManagedAuthorityInboundResetRetainsOriginalStamp with actual owned Tunnel warm traffic, private journal preparation/completion and exact stamp/reset boundary. Run focused race. Expected RED: public managed manual inbound reset lacks preparation.
+- [x] Step2: Implement schema2 manual inbound captures, original UUID-only stamp updates and schema2 prepared effects; preserve schema1 and no false legacy/calendar completion. Expected GREEN: exact original execution stamp and immutable retry.
+- [x] Step3: Add TestManagedAuthorityInboundResetCaptureRetryPreservesResourceSet for capture-only single/all scope after deletion/reused ID, addition, rename and attachment changes. Expected: only original surviving UUIDs stamped; original client selection retained. Run both tests and existing unsupported-effect compatibility tests, commit/task-done. Expected PASS with actual core.
 
 ## Task 2: Exact recovery and strict refusal
 

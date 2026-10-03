@@ -240,7 +240,7 @@ func TestManagedAuthorityResetExecutionRefusesLostOwnerAfterCapture(t *testing.T
 }
 
 func TestManagedAuthorityResetExecutionDoesNotAcknowledgeOtherEffects(t *testing.T) {
-	for _, effect := range []string{"legacy-client", "calendar-inbound", "manual-inbound"} {
+	for _, effect := range []string{"legacy-client", "calendar-inbound"} {
 		t.Run(effect, func(t *testing.T) {
 			svc, tunnel, _, _ := setupManagedActivationService(t)
 			db := database.GetDB()
@@ -267,10 +267,6 @@ func TestManagedAuthorityResetExecutionDoesNotAcknowledgeOtherEffects(t *testing
 			switch effect {
 			case "calendar-inbound":
 				if err := (&ClientService{}).RunScheduledTrafficReset(ctx, "daily", time.Now().UTC()); err != nil {
-					t.Fatal(err)
-				}
-			case "manual-inbound":
-				if err := (&ClientService{}).ResetAllClientTrafficsWithRequest(ctx, &InboundService{}, tunnel.Id, request); err != nil {
 					t.Fatal(err)
 				}
 			default:

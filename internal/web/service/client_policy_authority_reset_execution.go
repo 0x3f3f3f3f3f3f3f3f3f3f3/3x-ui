@@ -26,6 +26,7 @@ type authorityResetPreparationSnapshot struct {
 	ActiveManagedIDs []string
 	Affected         int
 	Resets           []model.ClientPolicyReset
+	InboundStamps    []authorityResetInboundStamp `json:",omitempty"`
 }
 
 func authorityResetSnapshotDigest(raw string) string {
@@ -86,7 +87,7 @@ func authorityResetExecutionCapture(state *durableAuthorityState, operation mode
 	if snapshot.Operation.Scope != operation.Scope || snapshot.Operation.ScheduledAt != operation.ScheduledAt || snapshot.Operation.TargetsJSON != operation.TargetsJSON || snapshot.Operation.InboundIDsJSON != operation.InboundIDsJSON || snapshot.Operation.SelectionHash != operation.SelectionHash || snapshot.Operation.CreatedAt != operation.CreatedAt {
 		return nil, ErrClientPolicyLedger
 	}
-	if authorityResetCaptureHasLegacy(snapshot) || strings.HasPrefix(operation.Scope, "inbound:") {
+	if authorityResetCaptureHasLegacy(snapshot) || strings.HasPrefix(operation.Scope, "inbound:") && snapshot.Schema == 1 {
 		return nil, nil
 	}
 	return &capture, nil
@@ -98,12 +99,12 @@ func decodeAuthorityResetPreparation(prepared policyauthority.ResetOperationPrep
 	if err != nil {
 		return snapshot, err
 	}
-	if prepared.Identity != capture.Identity || prepared.SourceID != source || prepared.RequestID != capture.RequestID || prepared.CaptureDigest != authorityResetSnapshotDigest(capture.Snapshot) || authorityResetCaptureHasLegacy(original) || strings.HasPrefix(original.Operation.Scope, "inbound:") {
+	if prepared.Identity != capture.Identity || prepared.SourceID != source || prepared.RequestID != capture.RequestID || prepared.CaptureDigest != authorityResetSnapshotDigest(capture.Snapshot) || authorityResetCaptureHasLegacy(original) || strings.HasPrefix(original.Operation.Scope, "inbound:") && original.Schema == 1 {
 		return snapshot, ErrClientPolicyLedger
 	}
 	decoder := json.NewDecoder(strings.NewReader(prepared.Snapshot))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&snapshot) != nil || decoder.Decode(new(any)) != io.EOF || snapshot.Schema != 1 || snapshot.RequestID != original.Operation.RequestID || snapshot.ResetAt <= 0 || snapshot.Affected != len(snapshot.ActiveManagedIDs) || len(snapshot.ActiveManagedIDs) > 100000 || len(snapshot.Resets) != len(snapshot.ActiveManagedIDs) {
+	if decoder.Decode(&snapshot) != nil || decoder.Decode(new(any)) != io.EOF || snapshot.Schema != original.Schema || snapshot.RequestID != original.Operation.RequestID || snapshot.ResetAt <= 0 || snapshot.Affected != len(snapshot.ActiveManagedIDs) || len(snapshot.ActiveManagedIDs) > 100000 || len(snapshot.Resets) != len(snapshot.ActiveManagedIDs) || validateAuthorityInboundResetStamps(original, snapshot) != nil {
 		return snapshot, ErrClientPolicyLedger
 	}
 	if original.Operation.ScheduledAt > 0 && snapshot.ResetAt != original.Operation.ScheduledAt {
@@ -122,7 +123,7 @@ func decodeAuthorityResetPreparation(prepared policyauthority.ResetOperationPrep
 	return snapshot, nil
 }
 
-func prepareAuthorityResetExecutionTx(ctx context.Context, tx *gorm.DB, state *durableAuthorityState, capture *policyauthority.ResetOperationCapture, operation model.ClientTrafficResetBatch, resetAt int64) error {
+func prepareAuthorityResetExecutionTx(ctx context.Context, tx *gorm.DB, state *durableAuthorityState, capture *policyauthority.ResetOperationCapture, operation model.ClientTrafficResetBatch, resetAt int64, stamps []authorityResetInboundStamp) error {
 	if capture == nil {
 		return nil
 	}
@@ -141,6 +142,11 @@ func prepareAuthorityResetExecutionTx(ctx context.Context, tx *gorm.DB, state *d
 		return ErrClientPolicyLedger
 	}
 	snapshot := authorityResetPreparationSnapshot{Schema: 1, RequestID: operation.RequestID, ResetAt: resetAt, ActiveManagedIDs: ids, Affected: operation.Affected}
+	originalCapture, err := decodeAuthorityResetCapture(*capture, state.Journal, state.SourceID)
+	if err != nil {
+		return err
+	}
+	snapshot.Schema, snapshot.InboundStamps = originalCapture.Schema, stamps
 	request := "batch:" + authorityResetSnapshotDigest(operation.RequestID)
 	for _, batch := range chunkStrings(ids, 1000) {
 		var rows []model.ClientPolicyReset

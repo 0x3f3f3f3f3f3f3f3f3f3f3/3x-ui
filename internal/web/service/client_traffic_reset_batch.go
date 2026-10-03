@@ -377,7 +377,7 @@ func (s *ClientService) applyTrafficResetBatchLocked(ctx context.Context, operat
 				}
 			}
 			if operation.Applied {
-				return prepareAuthorityResetExecutionTx(ctx, tx, state, capture, operation, resetAt)
+				return prepareAuthorityResetExecutionTx(ctx, tx, state, capture, operation, resetAt, nil)
 			}
 			legacyEmails = orphans
 			for _, record := range records {
@@ -408,7 +408,17 @@ func (s *ClientService) applyTrafficResetBatchLocked(ctx context.Context, operat
 					return err
 				}
 			}
-			if strings.HasPrefix(scope, "inbound:") && len(records)+len(orphans) > 0 {
+			var inboundStamps []authorityResetInboundStamp
+			if strings.HasPrefix(scope, "inbound:") && len(records)+len(orphans) > 0 && capture != nil {
+				original, err := decodeAuthorityResetCapture(*capture, state.Journal, state.SourceID)
+				if err != nil {
+					return err
+				}
+				inboundStamps, err = applyAuthorityInboundResetStampsTx(tx, original.OriginalInbounds, resetAt)
+				if err != nil {
+					return err
+				}
+			} else if strings.HasPrefix(scope, "inbound:") && len(records)+len(orphans) > 0 {
 				id, _ := strconv.Atoi(strings.TrimPrefix(scope, "inbound:"))
 				query := tx.Model(&model.Inbound{}).Where("id = ?", id)
 				if id == -1 {
@@ -428,7 +438,7 @@ func (s *ClientService) applyTrafficResetBatchLocked(ctx context.Context, operat
 			if err := tx.Model(&operation).Select("applied", "affected", "managed_ids_json").Updates(&operation).Error; err != nil {
 				return err
 			}
-			return prepareAuthorityResetExecutionTx(ctx, tx, state, capture, operation, resetAt)
+			return prepareAuthorityResetExecutionTx(ctx, tx, state, capture, operation, resetAt, inboundStamps)
 		})
 		if err != nil {
 			return nil, err
