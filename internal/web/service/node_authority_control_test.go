@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -121,6 +123,162 @@ func assertNodeControlRefuses(t *testing.T, f *nodeControlFixture, ctx context.C
 }
 
 func TestNodeAuthorityControlRequiresOwnedDelegatedCore(t *testing.T) {
+	t.Run("sql-admission-retained-across-rpc", func(t *testing.T) {
+		for _, action := range []string{"restore", "close-replacement-pool"} {
+			t.Run(action, func(t *testing.T) {
+				f := newNodeControlFixture(t)
+				reached, release := make(chan struct{}), make(chan struct{})
+				var once sync.Once
+				operationDone := make(chan error, 1)
+				admissionDone := make(chan error, 1)
+				operationJoined, admissionStarted, admissionJoined := false, false, false
+				defer func() {
+					once.Do(func() { close(release) })
+					// Join retained callbacks before managed-process fixture cleanup;
+					// a deliberate regression must fail rather than deadlock teardown.
+					for _, pending := range []struct {
+						join bool
+						done <-chan error
+					}{{!operationJoined, operationDone}, {admissionStarted && !admissionJoined, admissionDone}} {
+						if pending.join {
+							select {
+							case <-pending.done:
+							case <-time.After(5 * time.Second):
+								t.Error("retained callback did not exit before fixture cleanup")
+							}
+						}
+					}
+				}()
+				go func() {
+					request := panelruntime.NodeAuthorityGrantRequest{Binding: f.binding, ClientID: f.client.StableID, GrantID: f.grant.GrantId}
+					result, err := ownedNodeAuthorityGrant(context.Background(), request, false, func(ctx context.Context, owner *managedAuthority) (*command.ExecutionGrantState, error) {
+						state, rpcErr := owner.api.InstallAuthorityGrant(ctx, f.grant)
+						if rpcErr != nil {
+							return nil, rpcErr
+						}
+						close(reached)
+						select {
+						case <-release:
+						case <-ctx.Done():
+							return nil, ctx.Err()
+						}
+						return state, nil
+					})
+					if err == nil && (result == nil || !proto.Equal(result.State.Grant, f.grant)) {
+						err = fmt.Errorf("real admitted grant result missing")
+					}
+					operationDone <- err
+				}()
+				waitTrafficWriterSignal(t, reached, "real installation did not reach retained callback")
+				started := make(chan struct{})
+				admissionStarted = true
+				go func() {
+					close(started)
+					if action == "restore" {
+						lease, err := database.BeginRestore()
+						if lease != nil {
+							lease.Close()
+						}
+						admissionDone <- err
+					} else {
+						admissionDone <- database.CloseDB()
+					}
+				}()
+				waitTrafficWriterSignal(t, started, "SQL replacement attempt did not start")
+				if action == "restore" {
+					deadline := time.Now().Add(time.Second)
+					for {
+						ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+						err := f.owner.db.WithContext(ctx).Exec("SELECT 1").Error
+						cancel()
+						if errors.Is(err, database.ErrRestoreInProgress) {
+							break // The restore lease is published but its drain remains excluded.
+						}
+						if time.Now().After(deadline) {
+							t.Fatalf("restore did not publish admission: %v", err)
+						}
+						time.Sleep(time.Millisecond)
+					}
+				}
+				select {
+				case err := <-admissionDone:
+					admissionJoined = true
+					t.Fatalf("SQL replacement crossed the retained real RPC: %v", err)
+				case <-time.After(100 * time.Millisecond):
+				}
+				if database.GetDB() != f.owner.db {
+					t.Fatal("SQL owner changed inside retained RPC")
+				}
+				once.Do(func() { close(release) })
+				err := waitTrafficWriterErr(t, operationDone)
+				operationJoined = true
+				if err != nil {
+					t.Fatalf("admitted real RPC did not complete: %v", err)
+				}
+				err = waitTrafficWriterErr(t, admissionDone)
+				admissionJoined = true
+				if err != nil {
+					t.Fatalf("SQL replacement failed after admission release: %v", err)
+				}
+				account, err := f.journal.Account(f.client.StableID)
+				if err != nil || account.HeldCapacity != 256 || account.Usage != (policyauthority.Usage{}) {
+					t.Fatalf("SQL lifecycle released uncertain capacity: %+v/%v", account, err)
+				}
+			})
+		}
+	})
+	t.Run("post-rpc-ownership", func(t *testing.T) {
+		for _, fault := range []string{"socket", "durable-role"} {
+			t.Run(fault, func(t *testing.T) {
+				f := newNodeControlFixture(t)
+				request := panelruntime.NodeAuthorityGrantRequest{Binding: f.binding, ClientID: f.client.StableID, GrantID: f.grant.GrantId}
+				var committed *command.ExecutionGrantState
+				result, err := ownedNodeAuthorityGrant(context.Background(), request, false, func(ctx context.Context, owner *managedAuthority) (*command.ExecutionGrantState, error) {
+					state, rpcErr := owner.api.InstallAuthorityGrant(ctx, f.grant)
+					if rpcErr != nil {
+						return nil, rpcErr
+					}
+					committed = proto.Clone(state).(*command.ExecutionGrantState)
+					if fault == "socket" {
+						retained := owner.socketPath + ".post-rpc"
+						if err := os.Rename(owner.socketPath, retained); err != nil {
+							return nil, err
+						}
+						listener, err := net.Listen("unix", owner.socketPath)
+						if err != nil {
+							_ = os.Rename(retained, owner.socketPath)
+							return nil, err
+						}
+						t.Cleanup(func() {
+							_ = listener.Close()
+							if err := os.Rename(retained, owner.socketPath); err != nil {
+								t.Error(err)
+							}
+						})
+					} else {
+						role := owner.state.Role
+						owner.state.Role.NodeID = "obsolete-after-rpc"
+						t.Cleanup(func() { owner.state.Role = role })
+					}
+					return state, nil
+				})
+				if committed == nil || !proto.Equal(committed.Grant, f.grant) || committed.Sealed {
+					t.Fatal("fault was not injected after a successful real grant installation")
+				}
+				if err == nil || result != nil {
+					t.Fatal("post-RPC ownership failure acknowledged a successful result")
+				}
+				actual, getErr := f.owner.api.GetAuthorityGrant(context.Background(), f.client.StableID, f.grant.GrantId)
+				if getErr != nil || actual == nil || !proto.Equal(actual.Grant, f.grant) {
+					t.Fatalf("uncertain real mutation was not retained: %v", getErr)
+				}
+				account, accountErr := f.journal.Account(f.client.StableID)
+				if accountErr != nil || account.HeldCapacity != 256 || account.Usage != (policyauthority.Usage{}) {
+					t.Fatalf("ownership failure released uncertain coordinator capacity: %+v/%v", account, accountErr)
+				}
+			})
+		}
+	})
 	t.Run("delegated-owned", func(t *testing.T) {
 		f := newNodeControlFixture(t)
 		for _, tc := range []struct {
