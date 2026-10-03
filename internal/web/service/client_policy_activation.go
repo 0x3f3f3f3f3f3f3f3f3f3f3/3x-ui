@@ -253,6 +253,9 @@ func (s *XrayService) restartManagedXrayLocked(isForce bool) error {
 	if err != nil {
 		return errors.Join(err, stopManagedAuthority(ctx, process))
 	}
+	if err := authority.CompleteStartupOperations(ctx); err != nil {
+		return errors.Join(err, stopManagedProcess(ctx, process))
+	}
 	return nil
 }
 
