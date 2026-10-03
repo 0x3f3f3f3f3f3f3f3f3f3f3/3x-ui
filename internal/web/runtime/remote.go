@@ -299,6 +299,9 @@ func (r *Remote) doWithResponseLimit(ctx context.Context, method, path string, b
 
 	var env envelope
 	if strict {
+		if _, err := DecodeNodeAuthorityObject(bytes.NewReader(raw), "success", "msg", "obj"); err != nil {
+			return nil, ErrNodeAuthorityDiscovery
+		}
 		decoder := json.NewDecoder(bytes.NewReader(raw))
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&env); err != nil {

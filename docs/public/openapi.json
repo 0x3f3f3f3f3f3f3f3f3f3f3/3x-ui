@@ -1958,6 +1958,14 @@
             "example": "2",
             "type": "string"
           },
+          "budget": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ClientPolicyBudget"
+              }
+            ],
+            "nullable": true
+          },
           "clientId": {
             "example": "e18c9a96-71bf-48d4-933f-8b9a46d4290c",
             "type": "string"
@@ -1999,6 +2007,29 @@
           "policyPending",
           "quotaBytes",
           "resetPending"
+        ],
+        "type": "object"
+      },
+      "ClientPolicyBudget": {
+        "description": "Allocations remain distinct from confirmed delivered usage. Unallocated is\nnull for an unlimited quota; held grants are still shown in that case.",
+        "properties": {
+          "allocated": {
+            "example": "65536",
+            "type": "string"
+          },
+          "frozen": {
+            "example": "0",
+            "type": "string"
+          },
+          "unallocated": {
+            "example": "1.5",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "allocated",
+          "frozen"
         ],
         "type": "object"
       },
@@ -6486,6 +6517,317 @@
                       "load1": 0.5,
                       "load5": 0.3,
                       "load15": 0.2
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/server/clientPolicyDelegation": {
+      "post": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Configure a fresh stopped node to execute grants from its coordinator.",
+        "operationId": "post_panel_api_server_clientPolicyDelegation",
+        "description": "Requires HTTPS and an admin/node-sync token, verified mTLS, or an authenticated session with CSRF protection. Supply the exact coordinator authority ID, generation, and node ID. Setup requires a fresh stopped source with no consumed usage. The binding is immutable outside ordinary SQL/core restores; identical retries return the original instance and role, while changed bindings are refused. Requests and responses are limited to 32 KiB. This operation configures the execution role; the coordinator grant transport is developed separately.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "authorityId",
+                  "generation",
+                  "nodeId"
+                ],
+                "properties": {
+                  "authorityId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                  },
+                  "generation": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 1
+                  },
+                  "nodeId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                  }
+                }
+              },
+              "example": {
+                "authorityId": "coordinator",
+                "generation": 3,
+                "nodeId": "node-a"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "instanceId",
+                        "role"
+                      ],
+                      "properties": {
+                        "instanceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "role": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "mode",
+                            "authorityId",
+                            "generation",
+                            "nodeId"
+                          ],
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "delegated"
+                              ]
+                            },
+                            "authorityId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "generation": {
+                              "type": "integer",
+                              "format": "int64",
+                              "minimum": 1
+                            },
+                            "nodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "instanceId": "node-instance",
+                    "role": {
+                      "mode": "delegated",
+                      "authorityId": "coordinator",
+                      "generation": 3,
+                      "nodeId": "node-a"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/server/clientPolicyAuthority": {
+      "post": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Discover the current owned node core and a boot-bound authority challenge.",
+        "operationId": "post_panel_api_server_clientPolicyAuthority",
+        "description": "Requires HTTPS and an admin/node-sync token, verified mTLS, or an authenticated session with CSRF protection. Leave both expected IDs empty for first discovery; otherwise supply both exact IDs from the previous response. An old boot is refused after restart. Wire and decoded requests and responses are limited to 32 KiB. This call discovers capabilities and a fresh challenge; it issues no quota or rate grant.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "expectedInstanceId": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "Exact stable instance ID, paired with expectedBootId; leave both empty for first discovery."
+                  },
+                  "expectedBootId": {
+                    "type": "string",
+                    "pattern": "^(?:[0-9a-fA-F]{32})?$",
+                    "description": "Exact boot ID from the previous discovery; paired with expectedInstanceId."
+                  }
+                }
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "type": "object",
+                      "required": [
+                        "capabilities",
+                        "challenge"
+                      ],
+                      "properties": {
+                        "capabilities": {
+                          "type": "object",
+                          "properties": {
+                            "api_version": {
+                              "type": "integer"
+                            },
+                            "instance_id": {
+                              "type": "string"
+                            },
+                            "boot_id": {
+                              "type": "string"
+                            },
+                            "core_version": {
+                              "type": "string"
+                            },
+                            "capabilities": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "challenge": {
+                          "type": "object",
+                          "properties": {
+                            "instance_id": {
+                              "type": "string"
+                            },
+                            "boot_id": {
+                              "type": "string"
+                            },
+                            "challenge_id": {
+                              "type": "string"
+                            },
+                            "max_duration_millis": {
+                              "type": "integer",
+                              "format": "int64"
+                            }
+                          }
+                        },
+                        "executionRole": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "mode"
+                              ],
+                              "properties": {
+                                "mode": {
+                                  "type": "string",
+                                  "enum": [
+                                    "local"
+                                  ]
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "mode",
+                                "authorityId",
+                                "generation",
+                                "nodeId"
+                              ],
+                              "properties": {
+                                "mode": {
+                                  "type": "string",
+                                  "enum": [
+                                    "delegated"
+                                  ]
+                                },
+                                "authorityId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                },
+                                "generation": {
+                                  "type": "integer",
+                                  "format": "int64",
+                                  "minimum": 1
+                                },
+                                "nodeId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            }
+                          ],
+                          "description": "Current nodes report their immutable role. Legacy local nodes may omit this field."
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "capabilities": {
+                      "api_version": 1,
+                      "instance_id": "node-instance",
+                      "boot_id": "11111111111111111111111111111111",
+                      "capabilities": [
+                        "fresh-core-incarnation-v1",
+                        "monotonic-authority-challenge-v1",
+                        "boot-bound-execution-grants-v1"
+                      ]
+                    },
+                    "challenge": {
+                      "instance_id": "node-instance",
+                      "boot_id": "11111111111111111111111111111111",
+                      "challenge_id": "22222222222222222222222222222222",
+                      "max_duration_millis": 10000
+                    },
+                    "executionRole": {
+                      "mode": "local"
                     }
                   }
                 }

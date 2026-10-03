@@ -6526,6 +6526,136 @@
         }
       }
     },
+    "/panel/api/server/clientPolicyDelegation": {
+      "post": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Configure a fresh stopped node to execute grants from its coordinator.",
+        "operationId": "post_panel_api_server_clientPolicyDelegation",
+        "description": "Requires HTTPS and an admin/node-sync token, verified mTLS, or an authenticated session with CSRF protection. Supply the exact coordinator authority ID, generation, and node ID. Setup requires a fresh stopped source with no consumed usage. The binding is immutable outside ordinary SQL/core restores; identical retries return the original instance and role, while changed bindings are refused. Requests and responses are limited to 32 KiB. This operation configures the execution role; the coordinator grant transport is developed separately.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "authorityId",
+                  "generation",
+                  "nodeId"
+                ],
+                "properties": {
+                  "authorityId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                  },
+                  "generation": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 1
+                  },
+                  "nodeId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                  }
+                }
+              },
+              "example": {
+                "authorityId": "coordinator",
+                "generation": 3,
+                "nodeId": "node-a"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "instanceId",
+                        "role"
+                      ],
+                      "properties": {
+                        "instanceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "role": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "mode",
+                            "authorityId",
+                            "generation",
+                            "nodeId"
+                          ],
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "delegated"
+                              ]
+                            },
+                            "authorityId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "generation": {
+                              "type": "integer",
+                              "format": "int64",
+                              "minimum": 1
+                            },
+                            "nodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "instanceId": "node-instance",
+                    "role": {
+                      "mode": "delegated",
+                      "authorityId": "coordinator",
+                      "generation": 3,
+                      "nodeId": "node-a"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/panel/api/server/clientPolicyAuthority": {
       "post": {
         "tags": [
@@ -6572,7 +6702,109 @@
                     "msg": {
                       "type": "string"
                     },
-                    "obj": {}
+                    "obj": {
+                      "type": "object",
+                      "required": [
+                        "capabilities",
+                        "challenge"
+                      ],
+                      "properties": {
+                        "capabilities": {
+                          "type": "object",
+                          "properties": {
+                            "api_version": {
+                              "type": "integer"
+                            },
+                            "instance_id": {
+                              "type": "string"
+                            },
+                            "boot_id": {
+                              "type": "string"
+                            },
+                            "core_version": {
+                              "type": "string"
+                            },
+                            "capabilities": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "challenge": {
+                          "type": "object",
+                          "properties": {
+                            "instance_id": {
+                              "type": "string"
+                            },
+                            "boot_id": {
+                              "type": "string"
+                            },
+                            "challenge_id": {
+                              "type": "string"
+                            },
+                            "max_duration_millis": {
+                              "type": "integer",
+                              "format": "int64"
+                            }
+                          }
+                        },
+                        "executionRole": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "mode"
+                              ],
+                              "properties": {
+                                "mode": {
+                                  "type": "string",
+                                  "enum": [
+                                    "local"
+                                  ]
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "mode",
+                                "authorityId",
+                                "generation",
+                                "nodeId"
+                              ],
+                              "properties": {
+                                "mode": {
+                                  "type": "string",
+                                  "enum": [
+                                    "delegated"
+                                  ]
+                                },
+                                "authorityId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                },
+                                "generation": {
+                                  "type": "integer",
+                                  "format": "int64",
+                                  "minimum": 1
+                                },
+                                "nodeId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            }
+                          ],
+                          "description": "Current nodes report their immutable role. Legacy local nodes may omit this field."
+                        }
+                      }
+                    }
                   }
                 },
                 "example": {
@@ -6593,6 +6825,9 @@
                       "boot_id": "11111111111111111111111111111111",
                       "challenge_id": "22222222222222222222222222222222",
                       "max_duration_millis": 10000
+                    },
+                    "executionRole": {
+                      "mode": "local"
                     }
                   }
                 }

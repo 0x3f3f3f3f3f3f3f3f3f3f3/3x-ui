@@ -33,11 +33,11 @@ Interfaces: Task1 role consumed by managedAuthority. Delegated bootstrap initial
 
 ## Task 3: Typed HTTPS delegation setup
 
-Files: controller/node_authority.go and node_delegation_test.go; runtime/remote_authority.go and remote_delegation_test.go; frontend API source/generated OpenAPI; exact api_auth_test inventory.
+Files: controller/node_authority.go, api.go and node_delegation_test.go; runtime/remote.go, remote_delegation.go and remote_delegation_test.go; frontend API source/generated OpenAPI and request/runtime contract tests; exact api_auth_test inventory.
 Interfaces: POST /panel/api/server/clientPolicyDelegation consumes strict exact flat fields authorityId/generation/nodeId, shared existing TLS/auth32KiB/envelope/CSRF chain. Remote.ConfigureDelegation(ctx,request) verified direct HTTPS and strict bounded response; no generic core RPC.
-- [ ] Add TestNodeDelegationHTTPAuthenticationAndBounds / TestRemoteNodeDelegationRequiresVerifiedTLS / TestRemoteNodeDelegationRejectsInvalidResponse. Real token/certificate/pin/private opt-in, admin/node-sync/monitor/method/HTTP/CSRF/duplicate-alias-null/size/identity semantics. Expected behavioral RED.
-- [ ] Implement typed setup and catalog/schema/inventory contracts. Expected both HTTP/client boundaries plus existing auth/envelope/catalog/frontend tests PASS.
-- [ ] Commit/task-done affected named parents. Expected pass.
+- [x] Add TestNodeDelegationHTTPAuthenticationAndBounds / TestRemoteNodeDelegationRequiresVerifiedTLS / TestRemoteNodeDelegationRejectsInvalidResponse. Real token/certificate/pin/private opt-in, admin/node-sync/monitor/method/HTTP/CSRF/duplicate-alias-null/size/identity semantics. Expected behavioral RED.
+- [x] Implement typed setup and catalog/schema/inventory contracts. Expected both HTTP/client boundaries plus existing auth/envelope/catalog/frontend tests PASS.
+- [x] Commit/task-done affected named parents. Expected pass.
 
 ## Task 4: Actual HTTPS startup and acceptance
 

@@ -39,6 +39,30 @@ function requestBody(path: string): OpenApiRequestBody {
 }
 
 describe('generated OpenAPI request bodies', () => {
+  it('documents strict delegation setup and its required binding', () => {
+    const body = requestBody('/panel/api/server/clientPolicyDelegation');
+    expect(body.required).toBe(true);
+    const schema = body.content['application/json'].schema;
+    expect(schema).toMatchObject({ type: 'object', additionalProperties: false });
+    expect(schema.required).toEqual(['authorityId', 'generation', 'nodeId']);
+    expect(Object.keys(schema.properties ?? {})).toEqual(['authorityId', 'generation', 'nodeId']);
+    expect(schema.properties?.generation).toMatchObject({
+      type: 'integer',
+      format: 'int64',
+      minimum: 1,
+    });
+    expect(schema.properties?.authorityId).toMatchObject({
+      type: 'string',
+      minLength: 1,
+      maxLength: 128,
+    });
+    expect(schema.properties?.nodeId).toMatchObject({
+      type: 'string',
+      minLength: 1,
+      maxLength: 128,
+    });
+  });
+
   it('preserves JSON, form, and multipart parameter declarations', () => {
     const login = requestBody('/login').content['application/json'];
     expect(login.schema.properties).toHaveProperty('username');

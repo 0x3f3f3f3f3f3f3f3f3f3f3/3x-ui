@@ -24,6 +24,30 @@ func NewNodeAuthorityAPIController(g *gin.RouterGroup) {
 	})
 	api.Use(middleware.ConfigEnvelopeMiddlewareWithLimit(panelruntime.NodeAuthorityMessageLimit), middleware.CSRFMiddleware())
 	api.POST("/server/clientPolicyAuthority", discoverNodeAuthority)
+	api.POST("/server/clientPolicyDelegation", configureNodeDelegation)
+}
+
+func configureNodeDelegation(c *gin.Context) {
+	request, err := decodeNodeDelegationRequest(c.Request.Body)
+	if err != nil {
+		pureJsonMsg(c, http.StatusBadRequest, false, panelruntime.ErrNodeAuthorityDiscovery.Error())
+		return
+	}
+	result, err := (&service.ClientPolicyNodeService{}).ConfigureDelegation(c.Request.Context(), request)
+	if err != nil {
+		jsonObj(c, nil, panelruntime.ErrNodeAuthorityDiscovery)
+		return
+	}
+	jsonObj(c, result, nil)
+}
+
+func decodeNodeDelegationRequest(body io.Reader) (panelruntime.NodeDelegationRequest, error) {
+	var request panelruntime.NodeDelegationRequest
+	fields, err := panelruntime.DecodeNodeAuthorityObject(body, "authorityId", "generation", "nodeId")
+	if err != nil || len(fields) != 3 || json.Unmarshal(fields["authorityId"], &request.AuthorityID) != nil || json.Unmarshal(fields["generation"], &request.Generation) != nil || json.Unmarshal(fields["nodeId"], &request.NodeID) != nil || request.Validate() != nil {
+		return request, panelruntime.ErrNodeAuthorityDiscovery
+	}
+	return request, nil
 }
 
 func discoverNodeAuthority(c *gin.Context) {

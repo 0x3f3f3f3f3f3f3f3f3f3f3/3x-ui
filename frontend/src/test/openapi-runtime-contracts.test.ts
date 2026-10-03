@@ -11,6 +11,7 @@ interface OpenApiSchema {
   required?: string[];
   properties?: Record<string, OpenApiSchema>;
   items?: OpenApiSchema;
+  oneOf?: OpenApiSchema[];
 }
 
 interface OpenApiParameter {
@@ -60,6 +61,21 @@ function responseObjectSchema(path: string, method = 'get'): OpenApiSchema {
 }
 
 describe('generated OpenAPI runtime contracts', () => {
+  it('documents delegation identity and execution role discovery', () => {
+    const setup = responseObjectSchema('/panel/api/server/clientPolicyDelegation', 'post');
+    expect(setup.properties?.instanceId).toMatchObject({ type: 'string' });
+    expect(setup.properties?.role?.properties?.mode).toEqual({
+      type: 'string',
+      enum: ['delegated'],
+    });
+    expect(setup.properties?.role?.properties?.authorityId).toMatchObject({ type: 'string' });
+    expect(setup.properties?.role?.properties?.nodeId).toMatchObject({ type: 'string' });
+    const discovery = responseObjectSchema('/panel/api/server/clientPolicyAuthority', 'post');
+    expect(
+      discovery.properties?.executionRole?.oneOf?.map((branch) => branch.properties?.mode?.enum),
+    ).toEqual([['local'], ['delegated']]);
+  });
+
   it('exports only valid OpenAPI paths and HTTP methods', () => {
     const validMethods = new Set([
       'get',

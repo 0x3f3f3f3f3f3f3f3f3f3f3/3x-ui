@@ -65,6 +65,18 @@ export interface Section {
   endpoints: Endpoint[];
 }
 
+const delegatedNodeRoleSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['mode', 'authorityId', 'generation', 'nodeId'],
+  properties: {
+    mode: { type: 'string', enum: ['delegated'] },
+    authorityId: { type: 'string', minLength: 1, maxLength: 128 },
+    generation: { type: 'integer', format: 'int64', minimum: 1 },
+    nodeId: { type: 'string', minLength: 1, maxLength: 128 },
+  },
+};
+
 // /inbounds/update replaces the whole row, so it takes the same payload as /add.
 const inboundBody =
   '{\n  "enable": true,\n  "remark": "VLESS-443",\n  "listen": "",\n  "port": 443,\n  "protocol": "vless",\n  "expiryTime": 0,\n  "total": 0,\n  "settings": {\n    "clients": [{ "id": "...", "email": "user1" }],\n    "decryption": "none",\n    "fallbacks": []\n  },\n  "streamSettings": {\n    "network": "tcp",\n    "security": "reality",\n    "realitySettings": { "show": false, "dest": "..." }\n  },\n  "sniffing": {\n    "enabled": true,\n    "destOverride": ["http", "tls"]\n  }\n}';
@@ -454,6 +466,59 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'POST',
+        path: '/panel/api/server/clientPolicyDelegation',
+        summary: 'Configure a fresh stopped node to execute grants from its coordinator.',
+        description:
+          'Requires HTTPS and an admin/node-sync token, verified mTLS, or an authenticated session with CSRF protection. Supply the exact coordinator authority ID, generation, and node ID. Setup requires a fresh stopped source with no consumed usage. The binding is immutable outside ordinary SQL/core restores; identical retries return the original instance and role, while changed bindings are refused. Requests and responses are limited to 32 KiB. This operation configures the execution role; the coordinator grant transport is developed separately.',
+        body: '{"authorityId":"coordinator","generation":3,"nodeId":"node-a"}',
+        requestSchema: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['authorityId', 'generation', 'nodeId'],
+          properties: {
+            authorityId: {
+              type: 'string',
+              minLength: 1,
+              maxLength: 128,
+              pattern: '^[^ \\t\\r\\n\\u0000]+$',
+            },
+            generation: { type: 'integer', format: 'int64', minimum: 1 },
+            nodeId: {
+              type: 'string',
+              minLength: 1,
+              maxLength: 128,
+              pattern: '^[^ \\t\\r\\n\\u0000]+$',
+            },
+          },
+        },
+        responseObjectSchema: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['instanceId', 'role'],
+          properties: {
+            instanceId: { type: 'string', minLength: 1, maxLength: 128 },
+            role: delegatedNodeRoleSchema,
+          },
+        },
+        response: JSON.stringify(
+          {
+            success: true,
+            obj: {
+              instanceId: 'node-instance',
+              role: {
+                mode: 'delegated',
+                authorityId: 'coordinator',
+                generation: 3,
+                nodeId: 'node-a',
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      },
+      {
+        method: 'POST',
         path: '/panel/api/server/clientPolicyAuthority',
         summary: 'Discover the current owned node core and a boot-bound authority challenge.',
         description:
@@ -477,6 +542,44 @@ export const sections: readonly Section[] = [
             },
           },
         },
+        responseObjectSchema: {
+          type: 'object',
+          required: ['capabilities', 'challenge'],
+          properties: {
+            capabilities: {
+              type: 'object',
+              properties: {
+                api_version: { type: 'integer' },
+                instance_id: { type: 'string' },
+                boot_id: { type: 'string' },
+                core_version: { type: 'string' },
+                capabilities: { type: 'array', items: { type: 'string' } },
+              },
+            },
+            challenge: {
+              type: 'object',
+              properties: {
+                instance_id: { type: 'string' },
+                boot_id: { type: 'string' },
+                challenge_id: { type: 'string' },
+                max_duration_millis: { type: 'integer', format: 'int64' },
+              },
+            },
+            executionRole: {
+              oneOf: [
+                {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['mode'],
+                  properties: { mode: { type: 'string', enum: ['local'] } },
+                },
+                delegatedNodeRoleSchema,
+              ],
+              description:
+                'Current nodes report their immutable role. Legacy local nodes may omit this field.',
+            },
+          },
+        },
         response: JSON.stringify(
           {
             success: true,
@@ -497,6 +600,7 @@ export const sections: readonly Section[] = [
                 challenge_id: '22222222222222222222222222222222',
                 max_duration_millis: 10000,
               },
+              executionRole: { mode: 'local' },
             },
           },
           null,
