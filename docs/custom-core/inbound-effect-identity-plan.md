@@ -41,4 +41,4 @@ Files: inbound.go and focused public create/import/update/copy tests. Consumes T
 - [x] Step1: Full make test-go with actual core/original writer probes; require new named migration/resource parents in both CI database jobs and verify actual final name coverage. Expected: corresponding checks PASS with every skip/failure honestly recorded.
 - [x] Step2: Record evidence/remaining parent, commit/task-done. Expected: complete bounded source/test contract; exact legacy/inbound/remote effect preparations remain next parent work.
 - [x] Step3: Sole fresh entire bounded diff review; regrade/rule every declined boundary; one author Critical/Important TDD fix pass and green suite. Expected: no bounded blocker, no second review; preserve workspace.
-- [ ] Step4: Authorized normal feature push and independent remote/local SHA comparison. Expected: identical SHAs, continue the full parent objective.
+- [x] Step4: Authorized normal feature push and independent remote/local SHA comparison. Expected: identical SHAs, continue the full parent objective.
