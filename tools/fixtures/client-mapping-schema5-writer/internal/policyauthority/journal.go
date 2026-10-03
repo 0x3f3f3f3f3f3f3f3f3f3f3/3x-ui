@@ -30,13 +30,12 @@ func journalOptions() *bolt.Options {
 }
 
 type metadata struct {
-	Schema            uint64   `json:"schema"`
-	MappingBaseSchema uint64   `json:"mappingBaseSchema,omitempty"`
-	Identity          Identity `json:"identity"`
-	Sequence          uint64   `json:"sequence"`
-	MigrationDigest   string   `json:"migrationDigest"`
-	MigrationSource   string   `json:"migrationSource,omitempty"`
-	SnapshotDigest    string   `json:"snapshotDigest,omitempty"`
+	Schema          uint64   `json:"schema"`
+	Identity        Identity `json:"identity"`
+	Sequence        uint64   `json:"sequence"`
+	MigrationDigest string   `json:"migrationDigest"`
+	MigrationSource string   `json:"migrationSource,omitempty"`
+	SnapshotDigest  string   `json:"snapshotDigest,omitempty"`
 }
 
 type Journal struct {

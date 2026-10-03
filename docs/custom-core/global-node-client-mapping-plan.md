@@ -29,21 +29,21 @@
 4. SQL import/restore, node deletion, role/source change or stale boot must not retarget durable mapping or settle uncertain capacity. Tasks1/2/4.
 5. Older schema writers and concurrent enrollment/reopen must not erase the mapping fence or reset history. Task1, with all existing writer probes retained.
 
-## Task1: Original journal mapping evidence and compatibility fence
+## Task 1: Original journal mapping evidence and compatibility fence
 
 **Create:** `internal/policyauthority/client_mapping.go`, `client_mapping_test.go`.
 **Modify:** existing `journal.go` metadata, `validate.go`, `reset_operation.go`, `reset_operation_progress.go` only where schema7/bucket-presence compatibility requires it.
 
 **Interfaces:** `ClientMapping` carries `Authority Identity`, `NodeAnchor Identity`, `NodeID`, `SourceID`, `GlobalClientID`, `LocalClientID`, `GlobalPolicyVersion`, `LocalPolicyVersion`, `PolicyDigest`. `ClientMappingSide` constants `ClientMappingNode` and `ClientMappingCoordinator` distinguish the original anchor. `Journal.RecordClientMapping(side ClientMappingSide, mapping ClientMapping) error`, `LookupClientMapping(side ClientMappingSide, sourceID, localClientID string) (ClientMapping,error)` and `ClientMappings(side ClientMappingSide, after string, limit int) ([]ClientMapping,error)` commit/return value copies. Stable UUIDs are canonical; versions are positive bounded integers and digest is64 lowercase hex. A source/global reverse index rejects two local clients for one canonical client at the same source. The same canonical client may map to separate actual node sources.
 
-- [ ] Freeze current-schema6 policy-authority source and build a standalone older-writer refusal probe outside retained old workspaces. Add owning tests for immutable exact retry/conflict, reversed collisions, wrong original role/source, unknown/deleted/consumed account, reopen, corruption and bounded records.
-- [ ] Obtain meaningful behavioral RED; preserve compilation/setup failures separately. Run `go test -race -count=1 -v ./internal/policyauthority -run '^TestClientMapping'`.
-- [ ] Add schema7 mapping bucket and transactional original-role/account validation. Metadata retains `mappingBaseSchema`4/5/6; reset helpers validate that underlying floor and advance it only when real capture/progress is committed. Do not manufacture empty reset histories. All reset operations must retain schema7, never downgrade it. Reopen validates every record/reverse index/source/anchor and the matching account's monotonic version without demanding its later usage remain0.
-- [ ] GREEN all mapping parents, full journal tests and old schema4/5/6 writer refusal with exact source/probe hashes. Commit and record task completion.
+- [x] Freeze current-schema6 policy-authority source and build a standalone older-writer refusal probe outside retained old workspaces. Add owning tests for immutable exact retry/conflict, reversed collisions, wrong original role/source, unknown/deleted/consumed account, reopen, corruption and bounded records.
+- [x] Obtain meaningful behavioral RED; preserve compilation/setup failures separately. Run `go test -race -count=1 -v ./internal/policyauthority -run '^TestClientMapping'`.
+- [x] Add schema7 mapping bucket and transactional original-role/account validation. Metadata retains `mappingBaseSchema`4/5/6; reset helpers validate that underlying floor and advance it only when real capture/progress is committed. Do not manufacture empty reset histories. All reset operations must retain schema7, never downgrade it. Reopen validates every record/reverse index/source/anchor and the matching account's monotonic version without demanding its later usage remain0.
+- [x] GREEN all mapping parents, full journal tests and old schema4/5/6 writer refusal with exact source/probe hashes. Commit and record task completion.
 
 **Completion:** every named `TestClientMapping*` parent passes, zero FAIL/SKIP/no-tests, full journal tests pass, three actual old-writer probes refuse mapped journals without changing bytes.
 
-## Task2: Owned policy proof and production enrollment
+## Task 2: Owned policy proof and production enrollment
 
 **Create:** `internal/web/runtime/node_client_mapping.go`, `node_client_mapping_json.go`, `internal/web/service/node_client_mapping.go`, `node_client_mapping_test.go`, `internal/web/controller/node_client_mapping.go`, `node_client_mapping_test.go`.
 **Modify:** existing node-authority route registration, exact node-sync inventory, `frontend/src/pages/api-docs/endpoints.ts`, owning catalog contract tests and both generated artifacts.
@@ -57,7 +57,7 @@
 
 **Completion:** three literal parent tests pass on both backends with actual core, zero FAIL/SKIP/no-tests; both backend markers present, catalog contracts/generation/equality/typecheck and affected vet pass.
 
-## Task3: Canonical mapped adapter and coordinator evidence
+## Task 3: Canonical mapped adapter and coordinator evidence
 
 **Create:** `internal/web/runtime/remote_client_mapping.go`, `mapped_remote_authority_api.go` and owning tests; `internal/web/service/client_policy_node_mapping.go` and tests; `internal/database/model/client_policy_node_mapping.go`.
 **Modify:** `internal/database/db.go` model registration.
@@ -71,7 +71,7 @@
 
 **Completion:** exact three parents pass with zero FAIL/SKIP/no-tests, runtime suite and both backend coordinator parents pass; real transport request bodies contain the local identity/version while coordinator results contain canonical identity/version, with all other fields unchanged.
 
-## Task4: Actual mapped TLS grants, exact billing and current gates
+## Task 4: Actual mapped TLS grants, exact billing and current gates
 
 **Create:** `internal/sub/node_client_mapping_http_runtime_test.go`; mapping testing/decision documentation.
 **Modify:** `.github/workflows/custom-core.yml`, original implementation plan checkpoint.

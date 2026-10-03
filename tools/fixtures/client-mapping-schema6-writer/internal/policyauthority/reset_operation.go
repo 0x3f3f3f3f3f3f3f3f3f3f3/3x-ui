@@ -80,11 +80,11 @@ func (j *Journal) CaptureResetOperation(request ResetOperationCapture) error {
 		if meta.Identity != request.Identity || !key(meta.MigrationSource) || request.SourceID != meta.MigrationSource {
 			return ErrIdentity
 		}
-		if resetJournalSchema(meta) < 4 || resetJournalSchema(meta) > 6 {
+		if meta.Schema < 4 || meta.Schema > 6 {
 			return ErrJournal
 		}
 		b := tx.Bucket([]byte(resetOperationBucket))
-		if resetJournalSchema(meta) == 4 && b != nil || resetJournalSchema(meta) >= 5 && b == nil {
+		if meta.Schema == 4 && b != nil || meta.Schema >= 5 && b == nil {
 			return ErrJournal
 		}
 		if b != nil {
@@ -130,12 +130,8 @@ func (j *Journal) CaptureResetOperation(request ResetOperationCapture) error {
 				return err
 			}
 		}
-		if resetJournalSchema(meta) == 4 {
-			if meta.Schema == 7 {
-				meta.MappingBaseSchema = 5
-			} else {
-				meta.Schema = 5
-			}
+		if meta.Schema == 4 {
+			meta.Schema = 5
 		}
 		return put(tx, "metadata", "state", meta)
 	})
@@ -149,7 +145,7 @@ func resetHeader(tx *bolt.Tx, meta metadata, requestID string) (resetOperationHe
 	var h resetOperationHeader
 	b := tx.Bucket([]byte(resetOperationBucket))
 	if b == nil {
-		if resetJournalSchema(meta) == 4 {
+		if meta.Schema == 4 {
 			return h, ErrNotFound
 		}
 		return h, ErrJournal
@@ -285,7 +281,7 @@ func (j *Journal) LookupResetCalendar(calendarKey string) (ResetOperationCapture
 		}
 		b := tx.Bucket([]byte(resetOperationBucket))
 		if b == nil {
-			if resetJournalSchema(meta) == 4 {
+			if meta.Schema == 4 {
 				return ErrNotFound
 			}
 			return ErrJournal
@@ -319,7 +315,7 @@ func (j *Journal) ResetOperationPage(after string, limit int) ([]ResetOperationS
 		}
 		b := tx.Bucket([]byte(resetOperationBucket))
 		if b == nil {
-			if resetJournalSchema(meta) == 4 {
+			if meta.Schema == 4 {
 				return nil
 			}
 			return ErrJournal
@@ -344,7 +340,7 @@ func (j *Journal) ResetOperationPage(after string, limit int) ([]ResetOperationS
 
 func (j *Journal) validateResetOperations(tx *bolt.Tx, meta metadata) error {
 	b := tx.Bucket([]byte(resetOperationBucket))
-	if resetJournalSchema(meta) == 4 {
+	if meta.Schema == 4 {
 		if b != nil {
 			return ErrJournal
 		}

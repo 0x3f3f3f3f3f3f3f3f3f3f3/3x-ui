@@ -20,14 +20,11 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 		}
 	}
 	var meta metadata
-	if err := get(tx, "metadata", "state", &meta); err != nil || meta.Schema < 4 || meta.Schema > 7 {
+	if err := get(tx, "metadata", "state", &meta); err != nil || meta.Schema != 4 {
 		return ErrJournal
 	}
 	if meta.Identity != j.id {
 		return ErrIdentity
-	}
-	if err := validateClientMappings(tx, meta); err != nil {
-		return err
 	}
 	if meta.MigrationSource != "" || meta.SnapshotDigest != "" {
 		if !key(meta.MigrationSource) || !validSnapshotDigest(meta.SnapshotDigest) {
@@ -35,12 +32,6 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 		}
 	}
 	if err := validateMigrationRecords(tx, meta.MigrationDigest); err != nil {
-		return err
-	}
-	if err := j.validateResetOperations(tx, meta); err != nil {
-		return err
-	}
-	if err := validateResetProgress(tx, meta); err != nil {
 		return err
 	}
 	accounts := make(map[string]Account)

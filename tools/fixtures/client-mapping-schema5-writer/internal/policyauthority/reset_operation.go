@@ -80,11 +80,11 @@ func (j *Journal) CaptureResetOperation(request ResetOperationCapture) error {
 		if meta.Identity != request.Identity || !key(meta.MigrationSource) || request.SourceID != meta.MigrationSource {
 			return ErrIdentity
 		}
-		if resetJournalSchema(meta) < 4 || resetJournalSchema(meta) > 6 {
+		if meta.Schema != 4 && meta.Schema != 5 {
 			return ErrJournal
 		}
 		b := tx.Bucket([]byte(resetOperationBucket))
-		if resetJournalSchema(meta) == 4 && b != nil || resetJournalSchema(meta) >= 5 && b == nil {
+		if meta.Schema == 4 && b != nil || meta.Schema == 5 && b == nil {
 			return ErrJournal
 		}
 		if b != nil {
@@ -130,13 +130,7 @@ func (j *Journal) CaptureResetOperation(request ResetOperationCapture) error {
 				return err
 			}
 		}
-		if resetJournalSchema(meta) == 4 {
-			if meta.Schema == 7 {
-				meta.MappingBaseSchema = 5
-			} else {
-				meta.Schema = 5
-			}
-		}
+		meta.Schema = 5
 		return put(tx, "metadata", "state", meta)
 	})
 	if err != nil && !errors.Is(err, ErrJournal) && !errors.Is(err, ErrIdentity) && !errors.Is(err, ErrRequest) {
@@ -149,7 +143,7 @@ func resetHeader(tx *bolt.Tx, meta metadata, requestID string) (resetOperationHe
 	var h resetOperationHeader
 	b := tx.Bucket([]byte(resetOperationBucket))
 	if b == nil {
-		if resetJournalSchema(meta) == 4 {
+		if meta.Schema == 4 {
 			return h, ErrNotFound
 		}
 		return h, ErrJournal
@@ -168,7 +162,6 @@ func resetHeader(tx *bolt.Tx, meta metadata, requestID string) (resetOperationHe
 
 type resetChunkReader struct {
 	tx       *bolt.Tx
-	bucket   string
 	header   resetOperationHeader
 	index    uint64
 	data     []byte
@@ -187,11 +180,7 @@ func (r *resetChunkReader) Read(p []byte) (int, error) {
 			return 0, io.EOF
 		}
 		var chunk resetOperationChunk
-		bucket := r.bucket
-		if bucket == "" {
-			bucket = resetOperationBucket
-		}
-		if err := get(r.tx, bucket, resetChunkKey(r.header.RequestID, r.index), &chunk); err != nil {
+		if err := get(r.tx, resetOperationBucket, resetChunkKey(r.header.RequestID, r.index), &chunk); err != nil {
 			return 0, ErrJournal
 		}
 		wanted := min(uint64(resetOperationChunkBytes), r.header.SnapshotBytes-r.index*resetOperationChunkBytes)
@@ -229,25 +218,17 @@ func readResetOperation(tx *bolt.Tx, meta metadata, requestID string) (ResetOper
 	if err != nil {
 		return ResetOperationCapture{}, err
 	}
-	value, err := readResetSnapshot(tx, resetOperationBucket, h)
-	if err != nil {
-		return ResetOperationCapture{}, err
-	}
-	return ResetOperationCapture{Identity: h.Identity, SourceID: h.SourceID, RequestID: h.RequestID, CalendarKey: h.CalendarKey, Snapshot: value}, nil
-}
-
-func readResetSnapshot(tx *bolt.Tx, bucket string, h resetOperationHeader) (string, error) {
 	var snapshot strings.Builder
 	snapshot.Grow(int(h.SnapshotBytes))
 	hash := sha256.New()
-	if _, err := io.Copy(io.MultiWriter(&snapshot, hash), &resetChunkReader{tx: tx, bucket: bucket, header: h}); err != nil || hex.EncodeToString(hash.Sum(nil)) != h.Digest {
-		return "", ErrJournal
+	if _, err := io.Copy(io.MultiWriter(&snapshot, hash), &resetChunkReader{tx: tx, header: h}); err != nil || hex.EncodeToString(hash.Sum(nil)) != h.Digest {
+		return ResetOperationCapture{}, ErrJournal
 	}
 	value := snapshot.String()
 	if !utf8.ValidString(value) || !json.Valid([]byte(value)) || strings.TrimSpace(value)[0] != '{' {
-		return "", ErrJournal
+		return ResetOperationCapture{}, ErrJournal
 	}
-	return value, nil
+	return ResetOperationCapture{Identity: h.Identity, SourceID: h.SourceID, RequestID: h.RequestID, CalendarKey: h.CalendarKey, Snapshot: value}, nil
 }
 
 func (j *Journal) LookupResetOperation(requestID string) (ResetOperationCapture, error) {
@@ -285,7 +266,7 @@ func (j *Journal) LookupResetCalendar(calendarKey string) (ResetOperationCapture
 		}
 		b := tx.Bucket([]byte(resetOperationBucket))
 		if b == nil {
-			if resetJournalSchema(meta) == 4 {
+			if meta.Schema == 4 {
 				return ErrNotFound
 			}
 			return ErrJournal
@@ -319,7 +300,7 @@ func (j *Journal) ResetOperationPage(after string, limit int) ([]ResetOperationS
 		}
 		b := tx.Bucket([]byte(resetOperationBucket))
 		if b == nil {
-			if resetJournalSchema(meta) == 4 {
+			if meta.Schema == 4 {
 				return nil
 			}
 			return ErrJournal
@@ -344,7 +325,7 @@ func (j *Journal) ResetOperationPage(after string, limit int) ([]ResetOperationS
 
 func (j *Journal) validateResetOperations(tx *bolt.Tx, meta metadata) error {
 	b := tx.Bucket([]byte(resetOperationBucket))
-	if resetJournalSchema(meta) == 4 {
+	if meta.Schema == 4 {
 		if b != nil {
 			return ErrJournal
 		}
@@ -375,40 +356,36 @@ func (j *Journal) validateResetOperations(tx *bolt.Tx, meta metadata) error {
 		if expectedRecords > maxRecords {
 			return ErrJournal
 		}
-		return validateResetSnapshot(tx, resetOperationBucket, h)
-	})
-	if err != nil || expectedRecords != b.Stats().KeyN {
-		return ErrJournal
-	}
-	return nil
-}
-
-func validateResetSnapshot(tx *bolt.Tx, bucket string, h resetOperationHeader) error {
-	hash := sha256.New()
-	if _, err := io.Copy(hash, &resetChunkReader{tx: tx, bucket: bucket, header: h}); err != nil || hex.EncodeToString(hash.Sum(nil)) != h.Digest {
-		return ErrJournal
-	}
-	decoder := json.NewDecoder(&resetChunkReader{tx: tx, bucket: bucket, header: h})
-	decoder.UseNumber()
-	first, err := decoder.Token()
-	if err != nil || first != json.Delim('{') {
-		return ErrJournal
-	}
-	depth := 1
-	for depth > 0 {
-		token, err := decoder.Token()
-		if err != nil {
+		hash := sha256.New()
+		if _, err := io.Copy(hash, &resetChunkReader{tx: tx, header: h}); err != nil || hex.EncodeToString(hash.Sum(nil)) != h.Digest {
 			return ErrJournal
 		}
-		if delim, ok := token.(json.Delim); ok {
-			if delim == '{' || delim == '[' {
-				depth++
-			} else {
-				depth--
+		decoder := json.NewDecoder(&resetChunkReader{tx: tx, header: h})
+		decoder.UseNumber()
+		first, err := decoder.Token()
+		if err != nil || first != json.Delim('{') {
+			return ErrJournal
+		}
+		depth := 1
+		for depth > 0 {
+			token, err := decoder.Token()
+			if err != nil {
+				return ErrJournal
+			}
+			if delim, ok := token.(json.Delim); ok {
+				if delim == '{' || delim == '[' {
+					depth++
+				} else {
+					depth--
+				}
 			}
 		}
-	}
-	if _, err := decoder.Token(); err != io.EOF {
+		if _, err := decoder.Token(); err != io.EOF {
+			return ErrJournal
+		}
+		return nil
+	})
+	if err != nil || expectedRecords != b.Stats().KeyN {
 		return ErrJournal
 	}
 	return nil

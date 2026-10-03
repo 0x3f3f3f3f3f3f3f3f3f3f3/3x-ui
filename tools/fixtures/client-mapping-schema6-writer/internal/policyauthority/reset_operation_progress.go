@@ -49,7 +49,7 @@ func resetProgressMetadata(tx *bolt.Tx, id Identity, source string) (metadata, e
 	if meta.Identity != id || !key(meta.MigrationSource) || meta.MigrationSource != source {
 		return meta, ErrIdentity
 	}
-	if resetJournalSchema(meta) < 4 || resetJournalSchema(meta) > 6 {
+	if meta.Schema < 4 || meta.Schema > 6 {
 		return meta, ErrJournal
 	}
 	_, err := resetProgressRecords(tx, meta)
@@ -58,13 +58,13 @@ func resetProgressMetadata(tx *bolt.Tx, id Identity, source string) (metadata, e
 
 func resetProgressRecords(tx *bolt.Tx, meta metadata) (*bolt.Bucket, error) {
 	b := tx.Bucket([]byte(resetProgressBucket))
-	if resetJournalSchema(meta) == 4 || resetJournalSchema(meta) == 5 {
+	if meta.Schema == 4 || meta.Schema == 5 {
 		if b != nil {
 			return nil, ErrJournal
 		}
 		return nil, nil
 	}
-	if resetJournalSchema(meta) != 6 || b == nil {
+	if meta.Schema != 6 || b == nil {
 		return nil, ErrJournal
 	}
 	return b, nil
@@ -124,11 +124,7 @@ func (j *Journal) PrepareResetOperation(request ResetOperationPreparation) error
 				return err
 			}
 		}
-		if meta.Schema == 7 {
-			meta.MappingBaseSchema = 6
-		} else {
-			meta.Schema = 6
-		}
+		meta.Schema = 6
 		return put(tx, "metadata", "state", meta)
 	})
 	return progressWriteError("prepare reset", err)
