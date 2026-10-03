@@ -51,5 +51,5 @@ Consumes: Task1 original capture/prepared stamps. Produces: recoverAuthorityInbo
 Files: CI required parent loops, inbound-reset-stamp-testing.md and this plan/ledger.
 
 - [x] Step1: Add all five owned parents to both CI gates; run affected resets/renewals/restore/identity, five native/shared HTTP parents, fresh vet and full make test-go with actual core and original writer probes. Expected PASS; all failures/skips recorded.
-- [ ] Step2: Record evidence/parent boundaries, commit/task-done, one fresh whole bounded review. Expected: no bounded blockers after one author Critical/Important RED/GREEN correction and full suite; no second review.
+- [x] Step2: Record evidence/parent boundaries, commit/task-done, one fresh whole bounded review. Expected: no bounded blockers after one author Critical/Important RED/GREEN correction and full suite; no second review.
 - [ ] Step3: Normal authorized feature push, independent SHA check and ledger closure. Expected remote/local equality; continue remaining full parent work.
