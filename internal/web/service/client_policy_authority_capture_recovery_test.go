@@ -27,6 +27,99 @@ type authorityCaptureRecoveryFixture struct {
 	grant     policyauthority.Grant
 }
 
+// Even without legacy clients, a calendar can reset inbound counters. Losing
+// its SQL acknowledgement must not authorize clearing later inbound traffic.
+func TestAuthorityResetCaptureRecoveryRejectsAmbiguousInboundCalendarEffects(t *testing.T) {
+	for _, managed := range []bool{false, true} {
+		for _, acknowledgement := range []string{"missing", "pending"} {
+			t.Run(fmt.Sprintf("managed-%t/%s", managed, acknowledgement), func(t *testing.T) {
+				fixture := setupAuthorityCaptureRecoveryFixture(t)
+				db := database.GetDB()
+				inbound := model.Inbound{Tag: "captured-inbound-effects", TrafficReset: "daily", Up: 3, Down: 5}
+				if err := db.Create(&inbound).Error; err != nil {
+					t.Fatal(err)
+				}
+				if managed {
+					if err := db.Model(&model.ClientRecord{}).Where("stable_id = ?", fixture.account.Seed.ClientID).Update("traffic_reset", "daily").Error; err != nil {
+						t.Fatal(err)
+					}
+				}
+				now := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
+				var original model.ClientTrafficResetBatch
+				if managed {
+					var err error
+					original, err = captureScheduledTrafficReset(context.Background(), "daily", now)
+					if err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					if err := (&ClientService{}).RunScheduledTrafficReset(context.Background(), "daily", now); err != nil {
+						t.Fatal(err)
+					}
+					if err := db.First(&original, "scheduled_at > 0").Error; err != nil {
+						t.Fatal(err)
+					}
+					if err := db.First(&inbound, inbound.Id).Error; err != nil || inbound.Up != 0 || inbound.Down != 0 || !original.Applied {
+						t.Fatalf("original inbound reset did not execute: %d/%d/%v", inbound.Up, inbound.Down, err)
+					}
+				}
+				if original.InboundIDsJSON != fmt.Sprintf("[%d]", inbound.Id) || (original.TargetsJSON == "[]") == managed {
+					t.Fatalf("fixture lost captured inbound/client membership: %+v", original)
+				}
+				before, err := openAuthorityState(filepath.Join(filepath.Dir(fixture.config.StateFile), "authority"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				originalCapture, err := before.Journal.LookupResetOperation(authorityResetRequestKey(original.RequestID))
+				if closeErr := before.Journal.Close(); err != nil || closeErr != nil {
+					t.Fatalf("read original inbound capture: %v/%v", err, closeErr)
+				}
+				if acknowledgement == "missing" {
+					if err := db.Where("request_id = ?", original.RequestID).Delete(&model.ClientTrafficResetBatch{}).Error; err != nil {
+						t.Fatal(err)
+					}
+				} else if err := db.Model(&original).Updates(map[string]any{"applied": false, "affected": 0, "managed_ids_json": "[]"}).Error; err != nil {
+					t.Fatal(err)
+				}
+				if err := db.Model(&inbound).Updates(map[string]any{"up": 7, "down": 11, "last_traffic_reset_time": 0}).Error; err != nil {
+					t.Fatal(err)
+				}
+				if err := recoverAuthorityDesiredState(context.Background(), fixture.config); !errors.Is(err, ErrClientPolicyLedger) {
+					t.Errorf("cold recovery accepted ambiguous inbound effects: %v", err)
+				}
+				if err := (&ClientService{}).RunScheduledTrafficReset(context.Background(), "daily", now); !errors.Is(err, ErrClientPolicyLedger) {
+					t.Errorf("public calendar retry accepted ambiguous inbound effects: %v", err)
+				}
+				if err := db.First(&inbound, inbound.Id).Error; err != nil || inbound.Up != 7 || inbound.Down != 11 || inbound.LastTrafficResetTime != 0 {
+					t.Fatalf("ambiguous calendar replay cleared later inbound traffic: %d/%d/%d/%v", inbound.Up, inbound.Down, inbound.LastTrafficResetTime, err)
+				}
+				var count int64
+				want := int64(1)
+				if acknowledgement == "missing" {
+					want = 0
+				}
+				if err := db.Model(&model.ClientTrafficResetBatch{}).Where("request_id = ?", original.RequestID).Count(&count).Error; err != nil || count != want {
+					t.Fatalf("ambiguous recovery changed the SQL acknowledgement: %d/%v", count, err)
+				}
+				state, err := openAuthorityState(filepath.Join(filepath.Dir(fixture.config.StateFile), "authority"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer state.Journal.Close()
+				assertAuthorityCaptureRecoveryFundedState(t, state.Journal, fixture)
+				capture, err := state.Journal.LookupResetOperation(authorityResetRequestKey(original.RequestID))
+				if err != nil || capture != originalCapture {
+					t.Fatalf("refusal changed the exact original inbound capture: %v", err)
+				}
+				snapshot, err := decodeAuthorityResetCapture(capture, state.Journal, fixture.config.InstanceID)
+				if err != nil || snapshot.Operation.Applied || snapshot.Operation.RequestID != original.RequestID || snapshot.Operation.InboundIDsJSON != original.InboundIDsJSON {
+					t.Fatalf("refusal replaced the original pending inbound capture: %v", err)
+				}
+			})
+		}
+	}
+}
+
 func assertAuthorityCaptureRecoveryFundedState(t *testing.T, journal *policyauthority.Journal, fixture authorityCaptureRecoveryFixture) {
 	t.Helper()
 	account, err := journal.Account(fixture.account.Seed.ClientID)

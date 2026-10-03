@@ -71,6 +71,12 @@ func decodeAuthorityResetCapture(capture policyauthority.ResetOperationCapture, 
 }
 
 func authorityResetCaptureHasLegacy(snapshot authorityResetCaptureSnapshot) bool {
+	var inboundIDs []int
+	if json.Unmarshal([]byte(snapshot.Operation.InboundIDsJSON), &inboundIDs) != nil || len(inboundIDs) != 0 {
+		// Calendar inbound counters and remote resets are effects even when
+		// the client selection is empty or contains only managed identities.
+		return true
+	}
 	managed := make(map[string]bool, len(snapshot.OriginalManagedIDs))
 	for _, id := range snapshot.OriginalManagedIDs {
 		managed[id] = true
@@ -92,8 +98,8 @@ func recoverAuthorityCapturedResetTx(tx *gorm.DB, snapshot authorityResetCapture
 		var current model.ClientTrafficResetBatch
 		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&current, "request_id = ?", snapshot.Operation.RequestID).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) || err == nil && !current.Applied {
-			// Selection alone cannot distinguish an unapplied legacy reset from
-			// a restored SQL acknowledgement. Exact effect preparation follows.
+			// Selection alone cannot distinguish unapplied client/inbound effects
+			// from a restored SQL acknowledgement. Exact preparation follows.
 			return ErrClientPolicyLedger
 		}
 		if err != nil {
