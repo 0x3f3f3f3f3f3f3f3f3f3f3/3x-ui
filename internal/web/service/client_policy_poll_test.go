@@ -577,7 +577,13 @@ func applyRestrictedPollingCalendar(t *testing.T, ctx context.Context, period st
 // retains no production owner/manifest. Exercise its existing lower pipeline
 // directly; both public capture and application must reject that ownership.
 func applyRestrictedPollingOperation(ctx context.Context, operation model.ClientTrafficResetBatch) (int, bool, error) {
-	lock.Lock()
-	defer lock.Unlock()
-	return (&ClientService{}).applyTrafficResetBatchLocked(ctx, &InboundService{}, operation, database.GetDB(), nil, nil)
+	affected, needRestart, effects, err := func() (int, bool, *trafficResetLegacyEffects, error) {
+		lock.Lock()
+		defer lock.Unlock()
+		return (&ClientService{}).applyTrafficResetBatchLocked(ctx, operation, database.GetDB(), nil, nil)
+	}()
+	if effects != nil {
+		needRestart = effects.apply(ctx, &InboundService{}) || needRestart
+	}
+	return affected, needRestart, err
 }

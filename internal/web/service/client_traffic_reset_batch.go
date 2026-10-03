@@ -246,29 +246,39 @@ func (s *ClientService) resetTrafficBatch(ctx context.Context, inboundSvc *Inbou
 	return s.applyTrafficResetBatch(ctx, inboundSvc, operation)
 }
 
-func (s *ClientService) applyTrafficResetBatch(ctx context.Context, inboundSvc *InboundService, operation model.ClientTrafficResetBatch) (affected int, needRestart bool, resultErr error) {
+func (s *ClientService) applyTrafficResetBatch(ctx context.Context, inboundSvc *InboundService, operation model.ClientTrafficResetBatch) (int, bool, error) {
+	affected, needRestart, effects, err := s.applyTrafficResetBatchLifecycle(ctx, operation)
+	// Generic Runtime callbacks acquire the lifecycle lock while inbound edits
+	// hold an inbound lock. Apply legacy effects only after releasing lifecycle.
+	if effects != nil {
+		needRestart = effects.apply(ctx, inboundSvc) || needRestart
+	}
+	return affected, needRestart, err
+}
+
+func (s *ClientService) applyTrafficResetBatchLifecycle(ctx context.Context, operation model.ClientTrafficResetBatch) (affected int, needRestart bool, effects *trafficResetLegacyEffects, resultErr error) {
 	if ctx == nil {
-		return 0, false, ErrClientPolicyLedger
+		return 0, false, nil, ErrClientPolicyLedger
 	}
 	if err := ctx.Err(); err != nil {
-		return 0, false, err
+		return 0, false, nil, err
 	}
 	lock.Lock()
 	defer lock.Unlock()
 	if err := checkDatabaseRestoreRestart(nil); err != nil {
-		return 0, false, err
+		return 0, false, nil, err
 	}
 	expected := database.GetDB()
 	state, owned, err := authorityResetExecutionStateLocked(ctx, expected)
 	if err != nil {
-		return 0, false, err
+		return 0, false, nil, err
 	}
 	if owned {
 		defer func() { resultErr = errors.Join(resultErr, state.Journal.Close()) }()
 	}
 	capture, err := authorityResetExecutionCapture(state, operation)
 	if err != nil {
-		return 0, false, err
+		return 0, false, nil, err
 	}
 	process := currentXrayProcess()
 	if managedAuthorityForProcess(process) != nil {
@@ -281,18 +291,18 @@ func (s *ClientService) applyTrafficResetBatch(ctx context.Context, inboundSvc *
 			}
 		}()
 	}
-	return s.applyTrafficResetBatchLocked(ctx, inboundSvc, operation, expected, state, capture)
+	return s.applyTrafficResetBatchLocked(ctx, operation, expected, state, capture)
 }
 
-func (s *ClientService) applyTrafficResetBatchLocked(ctx context.Context, inboundSvc *InboundService, operation model.ClientTrafficResetBatch, expected *gorm.DB, state *durableAuthorityState, capture *policyauthority.ResetOperationCapture) (int, bool, error) {
+func (s *ClientService) applyTrafficResetBatchLocked(ctx context.Context, operation model.ClientTrafficResetBatch, expected *gorm.DB, state *durableAuthorityState, capture *policyauthority.ResetOperationCapture) (int, bool, *trafficResetLegacyEffects, error) {
 	scope := operation.Scope
 	records, _, err := resolveClientResetTargets(expected.WithContext(ctx), operation.TargetsJSON, false)
 	if err != nil {
-		return 0, false, err
+		return 0, false, nil, err
 	}
 	managed, err := resetBatchManagedIDs(expected.WithContext(ctx), operation, records)
 	if err != nil {
-		return 0, false, err
+		return 0, false, nil, err
 	}
 	hash := sha256.Sum256([]byte(operation.RequestID))
 	policyRequest := "batch:" + hex.EncodeToString(hash[:])
@@ -309,6 +319,17 @@ func (s *ClientService) applyTrafficResetBatchLocked(ctx context.Context, inboun
 			tx = tx.WithContext(ctx)
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&operation, "request_id = ?", operation.RequestID).Error; err != nil {
 				return err
+			}
+			if operation.Applied && capture != nil {
+				// Older implementations acknowledged per-client changes without
+				// an operation preparation. A retry cannot invent their original
+				// effect time from its wall clock or a later client's reset stamp.
+				_, err := state.Journal.LookupResetPreparation(capture.RequestID)
+				if errors.Is(err, policyauthority.ErrNotFound) {
+					capture = nil
+				} else if err != nil {
+					return err
+				}
 			}
 			records, orphans, err := resolveClientResetTargets(tx, operation.TargetsJSON, true)
 			if err != nil {
@@ -421,25 +442,43 @@ func (s *ClientService) applyTrafficResetBatchLocked(ctx context.Context, inboun
 		_, err = prepare("")
 	}
 	if !committed {
-		return 0, false, err
-	}
-	needRestart := legacyAffected > 0
-	for _, email := range legacyEmails {
-		inboundSvc.resetMtprotoClientQuota(email)
-	}
-	for _, id := range sortedInboundIds(enabledInbounds) {
-		if applyErr := applyLegacyResetEnable(ctx, inboundSvc, id, enabledInbounds[id]); applyErr != nil {
-			needRestart = true
-			logger.Warning("Failed to apply committed traffic reset enable:", applyErr)
-		}
-	}
-	if fresh && operation.ScheduledAt > 0 {
-		applyScheduledLegacyReset(ctx, inboundSvc, operation, legacy, scheduledInbounds)
+		return 0, false, nil, err
 	}
 	if err == nil {
 		err = completeAuthorityResetExecution(ctx, expected, state, capture)
 	}
-	return operation.Affected, needRestart, err
+	return operation.Affected, legacyAffected > 0, &trafficResetLegacyEffects{
+		operation: operation, legacy: legacy, emails: legacyEmails,
+		enabledInbounds: enabledInbounds, scheduledInbounds: scheduledInbounds, fresh: fresh,
+	}, err
+}
+
+// SQL preparation and managed acknowledgement are complete before this phase.
+// Legacy effects keep their existing runtime error/restart behavior.
+type trafficResetLegacyEffects struct {
+	operation         model.ClientTrafficResetBatch
+	legacy            []model.ClientRecord
+	emails            []string
+	enabledInbounds   map[int][]string
+	scheduledInbounds []int
+	fresh             bool
+}
+
+func (effects *trafficResetLegacyEffects) apply(ctx context.Context, inboundSvc *InboundService) bool {
+	needRestart := false
+	for _, email := range effects.emails {
+		inboundSvc.resetMtprotoClientQuota(email)
+	}
+	for _, id := range sortedInboundIds(effects.enabledInbounds) {
+		if applyErr := applyLegacyResetEnable(ctx, inboundSvc, id, effects.enabledInbounds[id]); applyErr != nil {
+			needRestart = true
+			logger.Warning("Failed to apply committed traffic reset enable:", applyErr)
+		}
+	}
+	if effects.fresh && effects.operation.ScheduledAt > 0 {
+		applyScheduledLegacyReset(ctx, inboundSvc, effects.operation, effects.legacy, effects.scheduledInbounds)
+	}
+	return needRestart
 }
 
 func resetLegacyTrafficBatch(tx *gorm.DB, emails []string) (int, error) {
