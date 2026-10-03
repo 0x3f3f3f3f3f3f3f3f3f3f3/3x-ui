@@ -12,7 +12,7 @@ This stage protects selection metadata and restores its SQL projection. It does 
 
 Add a credential-free typed envelope `authorityResetCaptureSnapshot` with `Schema int`, `Operation model.ClientTrafficResetBatch`, and `OriginalManagedIDs []string`. Schema is 1. Managed IDs are sorted unique original target UUIDs determined under the selection transaction and pinned lifecycle; include managed calendar targets before eligibility filtering. The batch passes existing validAuthorityResetBatch. The envelope retains no ClientRecord credentials or Inbound settings.
 
-Journal request key is `traffic-reset:` plus SHA256 of the exact SQL request ID, encoded as lowercase hex. Calendar key is `traffic-calendar:` plus SHA256 of `scope + "/" + decimal scheduledAt`. Decode validates the key/request derivation, calendar association, source/identity and exact typed fields; malformed service-prefixed captures refuse. Other journal namespaces (including opaque storage compatibility fixtures) remain unrelated. Header-only recovery pages have 128 entries; load one snapshot at a time, not 128 payloads.
+Journal request key is `traffic-reset:` plus SHA256 of the exact SQL request ID, encoded as lowercase hex. Calendar key is the lowercase 64-character SHA256 of `"traffic-calendar:" + scope + "/" + decimal scheduledAt`, matching the existing journal's digest-only calendar contract. Decode validates the key/request derivation, calendar association, source/identity and exact typed fields; malformed service-prefixed captures refuse. Other journal namespaces (including opaque storage compatibility fixtures) remain unrelated. Header-only recovery pages have 128 entries; load one snapshot at a time, not 128 payloads.
 
 ## Ownership and locks
 
