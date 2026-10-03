@@ -14,10 +14,10 @@ Files: create internal/web/service/client_policy_authority_direct_reset.go and c
 
 Consumes: existing source-owned authority resolver, journal capture/progress APIs and private managed reset helper. Produces: direct typed key/capture/preparation decoders and application wrapper; original raw policy request is unchanged.
 
-- [ ] Step1: Write actual public single/direct boundary witnesses and inspect missing-capture functionalRED. Include2x warm316/later348/window32, repeated immutable retry and raw request identity. Expected: current implementation has no journal operation.
-- [ ] Step2: Implement source/handle-owned direct lifecycle flow and strict capture/preparation before SQL commit, completion after real apply/resume. Make fresh reset CreatedAt equal supplied effect time. Expected: all exact witnesses/timestamps/payloads pass, no RPC under SQL transaction.
-- [ ] Step3: Add actual core failure/cancel/foreign owner/source/pool and old acknowledged compatibility/partial historical overlap acceptance. Expected: failure retains preparation with no completion and stops business core; original rows/history remain exact.
-- [ ] Step4: Run focused real races, vet/diff and commit; task-done with direct execution selection. Expected: PASS with zero unexpected skips.
+- [x] Step1: Write actual public single/direct boundary witnesses and inspect missing-capture functionalRED. Include2x warm316/later348/window32, repeated immutable retry and raw request identity. Expected: current implementation has no journal operation.
+- [x] Step2: Implement source/handle-owned direct lifecycle flow and strict capture/preparation before SQL commit, completion after real apply/resume. Make fresh reset CreatedAt equal supplied effect time. Expected: all exact witnesses/timestamps/payloads pass, no RPC under SQL transaction.
+- [x] Step3: Add actual core failure/cancel/foreign owner/source/pool and old acknowledged compatibility/partial historical overlap acceptance. Expected: failure retains preparation with no completion and stops business core; original rows/history remain exact.
+- [x] Step4: Run focused real races, vet/diff and commit; task-done with direct execution selection. Expected: PASS with zero unexpected skips.
 
 ## Task 2: Cold and interrupted direct recovery
 
@@ -25,10 +25,10 @@ Files: add client_policy_authority_direct_reset_recovery_test.go; modify direct 
 
 Consumes: Task1 strict envelope and current retained account/history. Produces: common semantic reset projection and bounded direct capture recovery, without metadata acknowledgement.
 
-- [ ] Step1: Actual deferred SQL commit failure after durable preparation then cold recovery. Expected: missing semantic reset boundary functionalRED before recovery integration.
-- [ ] Step2: Reuse validated projection, include direct namespaces in bounded recovery, retain pending/acknowledged version ordering. Expected: exact account/grant/capture/preparation unchanged; original rows/time restored; completion absent until actual application.
-- [ ] Step3: Cover later desired multiplier/reset, old raw-request row loss, rename/delete/email reuse, surrogate IDs, malformed/foreign/usage/cancel/SQL handle refusal and original direct subset overlap. Expected: no new boundary, rollback, recreated identity or invented ack.
-- [ ] Step4: Run affected direct/batch/history/calendar/entrypoint races on both backends, vet/diff and commit/task-done. Expected: PASS with backend provenance explicit.
+- [x] Step1: Actual deferred SQL commit failure after durable preparation then cold recovery. Expected: missing semantic reset boundary functionalRED before recovery integration.
+- [x] Step2: Reuse validated projection, include direct namespaces in bounded recovery, retain pending/acknowledged version ordering. Expected: exact account/grant/capture/preparation unchanged; original rows/time restored; completion absent until actual application.
+- [x] Step3: Cover later desired multiplier/reset, old raw-request row loss, rename/delete/email reuse, surrogate IDs, malformed/foreign/usage/cancel/SQL handle refusal and original direct subset overlap. Expected: no new boundary, rollback, recreated identity or invented ack.
+- [x] Step4: Run affected direct/batch/history/calendar/entrypoint races on both backends, vet/diff and commit/task-done. Expected: PASS with backend provenance explicit.
 
 ## Task 3: Current regression and sole review
 

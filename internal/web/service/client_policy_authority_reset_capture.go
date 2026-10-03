@@ -264,12 +264,27 @@ func recoverAuthorityResetCaptures(ctx context.Context, expected *gorm.DB, journ
 			return nil
 		}
 		for _, summary := range page {
-			if !strings.HasPrefix(summary.RequestID, authorityResetRequestPrefix) {
+			direct := strings.HasPrefix(summary.RequestID, authorityDirectResetPrefix)
+			if !direct && !strings.HasPrefix(summary.RequestID, authorityResetRequestPrefix) {
 				continue
 			}
 			capture, err := journal.LookupResetOperation(summary.RequestID)
 			if err != nil {
 				return err
+			}
+			if direct {
+				if _, err := decodeAuthorityDirectResetCapture(capture, journal, source); err != nil {
+					return err
+				}
+				if err := runSerializedTxContextForDatabase(ctx, expected, func(tx *gorm.DB) error {
+					if err := validateSource(tx); err != nil {
+						return err
+					}
+					return recoverAuthorityDirectPreparedResetTx(tx, journal, source, capture)
+				}); err != nil {
+					return err
+				}
+				continue
 			}
 			snapshot, err := decodeAuthorityResetCapture(capture, journal, source)
 			if err != nil {
