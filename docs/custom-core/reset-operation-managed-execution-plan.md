@@ -51,7 +51,7 @@
 
 ### Task 3: Final regression, evidence and sole review
 
-**Files:** Update `docs/custom-core/issuance-journal-foundation.md`, this plan and plan ledger.
+**Files:** Update `docs/custom-core/issuance-journal-foundation.md`, this plan and plan ledger; correct the deliberately restricted lower pipeline fixture in `internal/web/service/client_policy_poll_test.go` and factor the unchanged private calendar resumption loop if final gates expose admission assumptions.
 
 - [ ] Step1: Run affected reset/authority/polling/import race coverage on both backends, actual writer probe compatibility, full `make test-go`, journal/service vet and diff. Expected: all pass; deliberately forced SQLite/optional cases labeled accurately.
 - [ ] Step2: Record actual results, failed fixture logs and unchanged native/core source provenance; commit evidence and task-done cheap final public witness gate. Expected: final source green.

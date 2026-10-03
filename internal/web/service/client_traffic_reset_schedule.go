@@ -303,6 +303,14 @@ func scheduledRemoteResetRequests(tx *gorm.DB, operation model.ClientTrafficRese
 }
 
 func resumeScheduledTrafficResets(ctx context.Context) error {
+	return resumeScheduledTrafficResetsWithApplication(ctx, func(ctx context.Context, operation model.ClientTrafficResetBatch) (int, bool, error) {
+		return (&ClientService{}).applyTrafficResetBatch(ctx, &InboundService{}, operation)
+	})
+}
+
+// Selection and retry ordering are shared with restricted pipeline acceptance;
+// the ordinary entry point always supplies source-owned application above.
+func resumeScheduledTrafficResetsWithApplication(ctx context.Context, apply func(context.Context, model.ClientTrafficResetBatch) (int, bool, error)) error {
 	var pending []model.ClientTrafficResetBatch
 	if err := database.GetDB().WithContext(ctx).Where("scheduled_at > 0 AND applied = ?", false).Order("last_attempt_at, scheduled_at DESC, created_at DESC").Limit(8).Find(&pending).Error; err != nil {
 		return err
@@ -318,7 +326,7 @@ func resumeScheduledTrafficResets(ctx context.Context) error {
 			failures = append(failures, err)
 			continue
 		}
-		_, needRestart, err := (&ClientService{}).applyTrafficResetBatch(ctx, &InboundService{}, operation)
+		_, needRestart, err := apply(ctx, operation)
 		if needRestart {
 			(&XrayService{}).SetToNeedRestart()
 		}

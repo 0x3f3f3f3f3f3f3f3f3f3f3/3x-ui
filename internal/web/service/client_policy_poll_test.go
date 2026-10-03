@@ -286,10 +286,14 @@ func testManagedScheduledResetRecovery(t *testing.T, ctx context.Context, proces
 		if _, _, err := (&XrayService{}).GetXrayTraffic(); err != nil {
 			t.Fatalf("unconfigured calendar member stopped ordinary traffic collection: %v", err)
 		}
+		// Public resumption correctly rejects this fixture's unowned projection.
+		// Drive the same bounded scheduler with its restricted private pipeline;
+		// malformed/unconfigured intents remain pending while collection works.
+		_ = resumeScheduledTrafficResetsWithApplication(ctx, applyRestrictedPollingOperation)
 	}
 	var after int64
 	if err := db.Model(&model.ClientPolicyReset{}).Count(&after).Error; err != nil || after != before+2 {
-		t.Fatalf("ordinary polling did not recover only the newest scheduled window: before=%d, after=%d, %v", before, after, err)
+		t.Fatalf("restricted polling did not recover only the newest scheduled window: before=%d, after=%d, %v", before, after, err)
 	}
 	var pending int64
 	if err := db.Model(&model.ClientTrafficResetBatch{}).Where("scheduled_at > 0 AND applied = ?", false).Count(&pending).Error; err != nil || pending != 9 {
@@ -438,6 +442,18 @@ func testManagedResetBatch(t *testing.T, ctx context.Context, process *xray.Proc
 	if row := trafficOf(t, legacy.Email); row.Up != 11 || row.Down != 22 || row.Enable {
 		t.Fatalf("unowned public refusal changed legacy traffic: %+v", row)
 	}
+	var unowned model.ClientTrafficResetBatch
+	rawTargets, err := json.Marshal([]clientResetTarget{{ClientID: legacy.StableID, Email: legacy.Email}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unowned = model.ClientTrafficResetBatch{RequestID: "unowned-application-refusal", Scope: "bulk", TargetsJSON: string(rawTargets), ManagedIDsJSON: "[]", InboundIDsJSON: "[]"}
+	if _, _, err := svc.applyTrafficResetBatch(ctx, &InboundService{}, unowned); !errors.Is(err, ErrAuthorityNotInitialized) || measured.checkpoints != 0 || measured.applications != 0 {
+		t.Fatalf("unowned application reached restricted core: %v", err)
+	}
+	if row := trafficOf(t, legacy.Email); row.Up != 11 || row.Down != 22 || row.Enable {
+		t.Fatalf("unowned application changed legacy traffic: %+v", row)
+	}
 	if _, err := applyRestrictedPollingBatch(ctx, emails, "mixed-public"); !errors.Is(err, measured.failure) {
 		t.Fatalf("restricted batch concealed Runtime failure: %v", err)
 	}
@@ -529,7 +545,7 @@ func applyRestrictedPollingBatch(ctx context.Context, emails []string, request s
 	}); err != nil {
 		return 0, err
 	}
-	affected, _, err := (&ClientService{}).applyTrafficResetBatch(ctx, &InboundService{}, operation)
+	affected, _, err := applyRestrictedPollingOperation(ctx, operation)
 	return affected, err
 }
 
@@ -553,6 +569,15 @@ func applyRestrictedPollingCalendar(t *testing.T, ctx context.Context, period st
 	if err != nil {
 		return err
 	}
-	_, _, err = (&ClientService{}).applyTrafficResetBatch(ctx, &InboundService{}, operation)
+	_, _, err = applyRestrictedPollingOperation(ctx, operation)
 	return err
+}
+
+// The fixture's grant settlement creates a real SQL projection but deliberately
+// retains no production owner/manifest. Exercise its existing lower pipeline
+// directly; both public capture and application must reject that ownership.
+func applyRestrictedPollingOperation(ctx context.Context, operation model.ClientTrafficResetBatch) (int, bool, error) {
+	lock.Lock()
+	defer lock.Unlock()
+	return (&ClientService{}).applyTrafficResetBatchLocked(ctx, &InboundService{}, operation, database.GetDB(), nil, nil)
 }
