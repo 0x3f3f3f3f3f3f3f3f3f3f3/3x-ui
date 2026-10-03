@@ -1,0 +1,37 @@
+# Source-owned reset selection capture
+
+This continues restore-authority Task 4 for Snell, mieru, SSH, shared multiplier/rate and TCP/UDP Tunnel clients. The independent live Tunnel test proves an all-request retry after SQL operation loss selects a later client and clears its raw 7/11 counters. Preserve the original selection without reducing accounted usage or interpreting SQL Applied as core completion. The user authorizes autonomous ordinary engineering decisions and inline execution.
+
+## Chosen boundary
+
+Use the existing immutable journal capture inside the pinned selection transaction, before its SQL commit can become uncertain. SQL-only storage failed the actual regression. Per-client evidence cannot reconstruct complete no-op/orphan/legacy/calendar membership. A separate file duplicates ownership. Commit exact original request, scope, scheduled window, targets, inbounds and creation timestamp to the existing journal; never recapture a later selection for an existing protected request/calendar.
+
+This stage protects selection metadata and restores its SQL projection. It does not activate preparation/completion callers. That next stage must pin original usage boundaries and legacy effects before enabling complete recovery. An unresolved mixed pending capture must not be replayed as an acknowledged reset.
+
+## Snapshot and namespace
+
+Add a credential-free typed envelope `authorityResetCaptureSnapshot` with `Schema int`, `Operation model.ClientTrafficResetBatch`, and `OriginalManagedIDs []string`. Schema is 1. Managed IDs are sorted unique original target UUIDs determined under the selection transaction and pinned lifecycle; include managed calendar targets before eligibility filtering. The batch passes existing validAuthorityResetBatch. The envelope retains no ClientRecord credentials or Inbound settings.
+
+Journal request key is `traffic-reset:` plus SHA256 of the exact SQL request ID, encoded as lowercase hex. Calendar key is `traffic-calendar:` plus SHA256 of `scope + "/" + decimal scheduledAt`. Decode validates the key/request derivation, calendar association, source/identity and exact typed fields; malformed service-prefixed captures refuse. Other journal namespaces (including opaque storage compatibility fixtures) remain unrelated. Header-only recovery pages have 128 entries; load one snapshot at a time, not 128 payloads.
+
+## Ownership and locks
+
+`runAuthorityResetCapture(ctx context.Context, requestKey, calendarKey string, operation *model.ClientTrafficResetBatch, selectOperation func(*gorm.DB) error, validateSelection func(model.ClientTrafficResetBatch) error) error` wraps manual and calendar selection. Context must be nonnil/noncancelled. Lock order is lifecycle lock, active authority mutex, current/pinned serialized SQL transaction, journal transaction. Hold no SQL transaction across a runtime RPC.
+
+An active owner reuses its journal and database and validates SourceID/config.InstanceID/current database before selection. A running managed process without its owner refuses. A stopped process/configured deployment with an existing private authority directory opens through the existing manifest and never creates/reinitializes anything. A missing authority required by the previous managed process or retained authority projection refuses. A genuinely pre-authority legacy source retains its existing SQL-only path; explicit migration fixtures remain supported. Complete owner-loss outside these existing markers is still a parent deliverable, not established by this metadata stage.
+
+Inside the pinned transaction, validate the local source against the owned manifest. Look up the original journal request/calendar BEFORE invoking selectOperation. If found, decode and validate its original envelope, verify the caller selection, restore immutable SQL fields with existing recoverAuthorityResetBatchTx and read the current row. Preserve a later matching SQL Applied/LastAttemptAt; refuse immutable or calendar collision. Never replace its targets with current emails. If absent, run existing selection, read the actual persisted batch with original auto-create time/defaults, determine original managed IDs, validate and CaptureResetOperation before SQL commit. A failed SQL commit may leave a durable pending capture; its exact original request is retained for retry.
+
+## Ambiguous legacy effects
+
+For a protected pending capture whose SQL acknowledgement is missing/false, any original orphan or canonical target outside OriginalManagedIDs means legacy execution is ambiguous. Do not zero those counters or authorize cold activation from that unresolved state. Return ErrClientPolicyLedger pending the separately designed prepared legacy witness. A managed-only pending capture may restore original metadata because per-client reset evidence retains existing committed boundaries; deletion is allowed, recreated identities/new clients are excluded. This conservative restriction can delay a never-executed mixed request after SQL failure, which the next exact-preparation integration must resolve. It is preferable to a second destructive reset, and no paired publication occurs at this intermediate boundary.
+
+## Startup projection
+
+`recoverAuthorityResetCaptures(ctx context.Context, expected *gorm.DB, journal *policyauthority.Journal, source string) error` scans source-owned service-prefixed summaries and restores each validated operation through pinned serialized SQL transactions. Run after existing immutable migration history and before account/policy recovery and core compilation. It issues no grant, changes no account/policy/window and applies no legacy runtime effects. Conflicts, cancellation, stale pool, source mismatch or ambiguous pending mixed effects leave activation closed and retain all original journal records.
+
+## Acceptance
+
+Actual live all/bulk/inbound/calendar retry after SQL row loss excludes later client 7/11 and preserves the existing Tunnel flow. Managed renamed/deleted/recreated identity follows UUID, not reused email. Compare exact original capture and full account/grant before/after metadata recovery. Capture no-op/empty calendar and preserve its original request/time. An injected selection SQL failure after journal capture retains the original snapshot; retry uses it. Conflicting immutable SQL/selection/source/calendar refuses without replacing capture. Cancelled/stale-pool recovery changes no destination. Missing required journal is not recreated. Mixed pending ambiguity refuses with unchanged legacy counters. Run real SQLite and private isolated PostgreSQL acceptance, broader reset/history/calendar/service gates, vet/diff and full Go. Retain actual RED and GREEN logs, snapshots and clean-core provenance.
+
+After this stage, implement durable exact preparation and actual core/legacy completion. Parent owner-loss/nodes/business-path migration/scale/platform and clean paired publication remain required. No external push, release or deployment in this plan.
