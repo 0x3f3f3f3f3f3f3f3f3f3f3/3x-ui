@@ -33,6 +33,17 @@ func TestPasswordProxyOwnerFieldsLostAcknowledgement(t *testing.T) {
 				t.Fatal(err)
 			}
 			port := probe.Addr().(*net.TCPAddr).Port
+			if port == tunnel.Port {
+				// The saved tunnel is not listening yet. Keep the colliding
+				// socket reserved while choosing a distinct password listener.
+				replacement, err := net.Listen("tcp4", "127.0.0.1:0")
+				_ = probe.Close()
+				if err != nil {
+					t.Fatal(err)
+				}
+				probe = replacement
+				port = probe.Addr().(*net.TCPAddr).Port
+			}
 			_ = probe.Close()
 			inbounds, clients := &InboundService{}, &ClientService{}
 			ib, _, err := inbounds.AddInbound(&model.Inbound{Enable: true, Protocol: protocol, Listen: "127.0.0.1", Port: port, Settings: passwordOwnerSettings(t, protocol,
