@@ -57,6 +57,11 @@ func applyLocalClientPolicyReset(ctx context.Context, ids []string, prepare func
 	}
 	lock.Lock()
 	defer lock.Unlock()
+	return applyLocalClientPolicyResetLocked(ctx, ids, prepare)
+}
+
+// Caller holds the lifecycle lock for the complete enclosing operation.
+func applyLocalClientPolicyResetLocked(ctx context.Context, ids []string, prepare func(string) ([]clientpolicy.Policy, error)) (resultErr error) {
 	if err := checkDatabaseRestoreRestart(nil); err != nil {
 		return err
 	}

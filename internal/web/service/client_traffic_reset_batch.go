@@ -21,6 +21,7 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/logger"
+	"github.com/mhsanaei/3x-ui/v3/internal/policyauthority"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
 
@@ -245,13 +246,51 @@ func (s *ClientService) resetTrafficBatch(ctx context.Context, inboundSvc *Inbou
 	return s.applyTrafficResetBatch(ctx, inboundSvc, operation)
 }
 
-func (s *ClientService) applyTrafficResetBatch(ctx context.Context, inboundSvc *InboundService, operation model.ClientTrafficResetBatch) (int, bool, error) {
-	scope := operation.Scope
-	records, _, err := resolveClientResetTargets(database.GetDB().WithContext(ctx), operation.TargetsJSON, false)
+func (s *ClientService) applyTrafficResetBatch(ctx context.Context, inboundSvc *InboundService, operation model.ClientTrafficResetBatch) (affected int, needRestart bool, resultErr error) {
+	if ctx == nil {
+		return 0, false, ErrClientPolicyLedger
+	}
+	if err := ctx.Err(); err != nil {
+		return 0, false, err
+	}
+	lock.Lock()
+	defer lock.Unlock()
+	if err := checkDatabaseRestoreRestart(nil); err != nil {
+		return 0, false, err
+	}
+	expected := database.GetDB()
+	state, owned, err := authorityResetExecutionStateLocked(ctx, expected)
 	if err != nil {
 		return 0, false, err
 	}
-	managed, err := resetBatchManagedIDs(database.GetDB().WithContext(ctx), operation, records)
+	if owned {
+		defer func() { resultErr = errors.Join(resultErr, state.Journal.Close()) }()
+	}
+	capture, err := authorityResetExecutionCapture(state, operation)
+	if err != nil {
+		return 0, false, err
+	}
+	process := currentXrayProcess()
+	if managedAuthorityForProcess(process) != nil {
+		defer func() {
+			if resultErr != nil && process.IsRunning() {
+				stop, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				resultErr = errors.Join(resultErr, stopManagedProcess(stop, process))
+				(&XrayService{}).SetToNeedRestart()
+			}
+		}()
+	}
+	return s.applyTrafficResetBatchLocked(ctx, inboundSvc, operation, expected, state, capture)
+}
+
+func (s *ClientService) applyTrafficResetBatchLocked(ctx context.Context, inboundSvc *InboundService, operation model.ClientTrafficResetBatch, expected *gorm.DB, state *durableAuthorityState, capture *policyauthority.ResetOperationCapture) (int, bool, error) {
+	scope := operation.Scope
+	records, _, err := resolveClientResetTargets(expected.WithContext(ctx), operation.TargetsJSON, false)
+	if err != nil {
+		return 0, false, err
+	}
+	managed, err := resetBatchManagedIDs(expected.WithContext(ctx), operation, records)
 	if err != nil {
 		return 0, false, err
 	}
@@ -266,7 +305,7 @@ func (s *ClientService) applyTrafficResetBatch(ctx context.Context, inboundSvc *
 	fresh := false
 	prepare := func(instanceID string) ([]clientpolicy.Policy, error) {
 		var policies []clientpolicy.Policy
-		err := runSerializedTx(func(tx *gorm.DB) error {
+		err := runSerializedTxContextForDatabase(ctx, expected, func(tx *gorm.DB) error {
 			tx = tx.WithContext(ctx)
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&operation, "request_id = ?", operation.RequestID).Error; err != nil {
 				return err
@@ -317,7 +356,7 @@ func (s *ClientService) applyTrafficResetBatch(ctx context.Context, inboundSvc *
 				}
 			}
 			if operation.Applied {
-				return nil
+				return prepareAuthorityResetExecutionTx(ctx, tx, state, capture, operation, resetAt)
 			}
 			legacyEmails = orphans
 			for _, record := range records {
@@ -365,7 +404,10 @@ func (s *ClientService) applyTrafficResetBatch(ctx context.Context, inboundSvc *
 			operation.Applied, operation.Affected, operation.ManagedIDsJSON = true, affected+len(activeManaged), string(raw)
 			legacyAffected = affected
 			fresh = true
-			return tx.Model(&operation).Select("applied", "affected", "managed_ids_json").Updates(&operation).Error
+			if err := tx.Model(&operation).Select("applied", "affected", "managed_ids_json").Updates(&operation).Error; err != nil {
+				return err
+			}
+			return prepareAuthorityResetExecutionTx(ctx, tx, state, capture, operation, resetAt)
 		})
 		if err != nil {
 			return nil, err
@@ -374,7 +416,7 @@ func (s *ClientService) applyTrafficResetBatch(ctx context.Context, inboundSvc *
 		return policies, nil
 	}
 	if len(managed) > 0 {
-		err = applyLocalClientPolicyReset(ctx, managed, prepare)
+		err = applyLocalClientPolicyResetLocked(ctx, managed, prepare)
 	} else {
 		_, err = prepare("")
 	}
@@ -393,6 +435,9 @@ func (s *ClientService) applyTrafficResetBatch(ctx context.Context, inboundSvc *
 	}
 	if fresh && operation.ScheduledAt > 0 {
 		applyScheduledLegacyReset(ctx, inboundSvc, operation, legacy, scheduledInbounds)
+	}
+	if err == nil {
+		err = completeAuthorityResetExecution(ctx, expected, state, capture)
 	}
 	return operation.Affected, needRestart, err
 }
