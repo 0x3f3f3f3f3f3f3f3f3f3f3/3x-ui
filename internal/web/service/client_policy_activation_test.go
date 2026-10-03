@@ -454,6 +454,16 @@ func setupManagedActivationService(t *testing.T) (*XrayService, *model.Inbound, 
 		t.Skip("set XRAY_E2E_BINARY to the built custom core")
 	}
 	setupPolicyLedgerDB(t)
+	return setupManagedActivationServiceFromDatabase(t)
+}
+
+// Actual PostgreSQL restore fixtures already own a fresh database.
+func setupManagedActivationServiceFromDatabase(t *testing.T) (*XrayService, *model.Inbound, *model.ClientRecord, int) {
+	t.Helper()
+	binary := os.Getenv("XRAY_E2E_BINARY")
+	if binary == "" {
+		t.Skip("set XRAY_E2E_BINARY to the built custom core")
+	}
 	StartTrafficWriter()
 	t.Cleanup(StopTrafficWriter)
 	policyConfigTemplate(t)
