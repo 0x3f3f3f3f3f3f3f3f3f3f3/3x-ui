@@ -43,9 +43,9 @@ Interfaces: POST /panel/api/server/clientPolicyDelegation consumes strict exact 
 
 Files: sub/node_delegation_http_runtime_test.go, custom-core.yml, testing/decisions docs and parent plan.
 Interfaces: consumes Tasks1-3, runs setup before first managed source activation, separate real production API auth router.
-- [ ] Add TestNodeDelegationHTTPActualOwnedCore: real SQL node-sync token/pinned TLS configures fresh stopped source; real managed core starts delegated, discovery has exact tuple, no-grant Tunnel passes0 bytes, restart retains role and rejects old boot; malformed/changed/activated setup refuses; literal backend marker. Expected behavior RED if missing integration, or honest characterization pass if already correct.
-- [ ] Require exact service/HTTP parents in both-backend CI with no FAIL/SKIP/no-tests and real backend marker, preserve native gates. Freeze inputs; run actual both-backend owned/HTTPS races, native5 each, full Go with writer probes, affected vet/frontend/YAML/hash checks. Expected required no-skip pass and full exit0.
-- [ ] Document precise evidence and remaining scope, commit/task-done actual parents. Expected pass without global-policy claim.
+- [x] Add TestNodeDelegationHTTPActualOwnedCore: real SQL node-sync token/pinned TLS configures fresh stopped source; real managed core starts delegated, discovery has exact tuple, no-grant Tunnel passes0 bytes, restart retains role and rejects old boot; malformed/changed/activated setup refuses; literal backend marker. Expected behavior RED if missing integration, or honest characterization pass if already correct.
+- [x] Require exact service/HTTP parents in both-backend CI with no FAIL/SKIP/no-tests and real backend marker, preserve native gates. Freeze inputs; run actual both-backend owned/HTTPS races, native5 each, full Go with writer probes, affected vet/frontend/YAML/hash checks. Expected required no-skip pass and full exit0.
+- [x] Document precise evidence and remaining scope, commit/task-done actual parents. Expected pass without global-policy claim.
 
 ## Finish and continue
 

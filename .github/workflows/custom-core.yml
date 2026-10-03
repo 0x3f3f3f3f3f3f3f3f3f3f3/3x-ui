@@ -124,18 +124,19 @@ jobs:
           PYCODE
       - name: Build custom core
         run: bash tools/build-custom-core.sh
-      - name: Owned node authority discovery (sqlite)
+      - name: Owned node authority discovery and delegation (sqlite)
         run: |
           set -euo pipefail
           make dist-stub
           XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race -count=1 -v -timeout 10m ./internal/web/service ./internal/sub \
-            -run '^Test(ManagedAuthorityNodeDiscovery|NodeAuthorityDiscoveryHTTPActualOwnedCore)' | tee /tmp/node-authority-sqlite.log
-          for test in TestManagedAuthorityNodeDiscoveryUsesCurrentOwnedBoot TestManagedAuthorityNodeDiscoveryRejectsUnsafeOwnership TestNodeAuthorityDiscoveryHTTPActualOwnedCore; do
+            -run '^Test(ManagedAuthorityNodeDiscovery|ManagedDelegatedNode|NodeAuthorityDiscoveryHTTPActualOwnedCore|NodeDelegationHTTPActualOwnedCore)' | tee /tmp/node-authority-sqlite.log
+          for test in TestManagedAuthorityNodeDiscoveryUsesCurrentOwnedBoot TestManagedAuthorityNodeDiscoveryRejectsUnsafeOwnership TestNodeAuthorityDiscoveryHTTPActualOwnedCore TestManagedDelegatedNodeStartsWithoutLocalIssuer TestManagedDelegatedNodeRestartRetainsRole TestManagedDelegatedNodeRejectsLocalResetBeforeCapture TestNodeDelegationHTTPActualOwnedCore; do
             grep -q -- "^--- PASS: $test " /tmp/node-authority-sqlite.log
           done
           grep -q -- 'node authority discovery backend: sqlite' /tmp/node-authority-sqlite.log
+          grep -q -- 'node delegation backend: sqlite' /tmp/node-authority-sqlite.log
           if grep -Eq -- '^[[:space:]]*--- (FAIL|SKIP):|^FAIL([[:space:]]|$)|no tests to run' /tmp/node-authority-sqlite.log; then
-            echo 'required node authority discovery test failed or skipped' >&2
+            echo 'required node authority discovery/delegation test failed or skipped' >&2
             exit 1
           fi
       - name: Bulk native client policy HTTP and Tunnel accounting (sqlite)
@@ -450,18 +451,19 @@ jobs:
             echo 'required actual PostgreSQL restore test failed or skipped' >&2
             exit 1
           fi
-      - name: Owned node authority discovery (postgres)
+      - name: Owned node authority discovery and delegation (postgres)
         run: |
           set -euo pipefail
           make dist-stub
           XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race -count=1 -v -timeout 10m ./internal/web/service ./internal/sub \
-            -run '^Test(ManagedAuthorityNodeDiscovery|NodeAuthorityDiscoveryHTTPActualOwnedCore)' | tee /tmp/node-authority-postgres.log
-          for test in TestManagedAuthorityNodeDiscoveryUsesCurrentOwnedBoot TestManagedAuthorityNodeDiscoveryRejectsUnsafeOwnership TestNodeAuthorityDiscoveryHTTPActualOwnedCore; do
+            -run '^Test(ManagedAuthorityNodeDiscovery|ManagedDelegatedNode|NodeAuthorityDiscoveryHTTPActualOwnedCore|NodeDelegationHTTPActualOwnedCore)' | tee /tmp/node-authority-postgres.log
+          for test in TestManagedAuthorityNodeDiscoveryUsesCurrentOwnedBoot TestManagedAuthorityNodeDiscoveryRejectsUnsafeOwnership TestNodeAuthorityDiscoveryHTTPActualOwnedCore TestManagedDelegatedNodeStartsWithoutLocalIssuer TestManagedDelegatedNodeRestartRetainsRole TestManagedDelegatedNodeRejectsLocalResetBeforeCapture TestNodeDelegationHTTPActualOwnedCore; do
             grep -q -- "^--- PASS: $test " /tmp/node-authority-postgres.log
           done
           grep -q -- 'node authority discovery backend: postgres' /tmp/node-authority-postgres.log
+          grep -q -- 'node delegation backend: postgres' /tmp/node-authority-postgres.log
           if grep -Eq -- '^[[:space:]]*--- (FAIL|SKIP):|^FAIL([[:space:]]|$)|no tests to run' /tmp/node-authority-postgres.log; then
-            echo 'required node authority discovery test failed or skipped' >&2
+            echo 'required node authority discovery/delegation test failed or skipped' >&2
             exit 1
           fi
       - name: Bulk native client policy HTTP and Tunnel accounting (postgres)

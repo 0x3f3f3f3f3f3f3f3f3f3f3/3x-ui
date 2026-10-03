@@ -1,0 +1,35 @@
+# Durable delegated node mode evidence
+
+Snell, mieru and SSH remain the core requirements, followed by multiplier billing, directional rates and TCP/UDP Tunnel forwarding. This prerequisite makes a node execute coordinator grants without starting a local allocation controller. Typed remote grants, global/node policy model/API/UI and actual two-node quota/rate coordination remain required follow-up work. Existing remote policy guards remain.
+
+## Durable role
+
+Task1 initial behavioral RED0.830s exposed unavailable fresh configuration/prepared role publication. Additional RED0.367s exposed accepted changed valid bindings and a schema downgrade. Schema2 now pins the role as original `execution-role` migration evidence and includes it in the snapshot digest. Legacy schema1 retains its original digest and remains local only without role evidence. An intermediate3.513s run failed on the existing migration kind allowlist; the new exact kind was registered, and that failed attempt remains retained. Actual same-role preparing retry RED0.557s was corrected without choosing another identity or accepting a changed snapshot.
+
+Task1 races passed29 journal/service parents, zero failures/skips (journal1.139s/service7.675s). A narrow runtime filter ran no tests and is not counted; a separate full runtime race passed4.344s. PostgreSQL role/state15 parents passed23.624s, zero failures/skips. Original actual local discovery parents passed3.905s under the new explicit local role. Required task completion ran all29 journal/service parents. Commit0d5e218902ad32e2143732cd9832daa82c9de884 retains this boundary.
+
+## Owned delegated startup
+
+Actual-core behavior initially failed0.914s: the delegated manifest still started a local controller and discovery omitted its role. Startup now binds the current core to the immutable coordinator tuple and enables demand before business admission without constructing a local controller. No-grant Tunnel attempts forward0 bytes and acquire no local held capacity. Real restart changes boot while retaining source/role; a missing role refuses restart.
+
+Live exact setup retry RED1.061s exposed an attempt to reopen an already owned bbolt journal. The retry now uses the retained owner under lifecycle, SQL admission, source and private-socket/boot checks. Response role values are copies. Stopped/foreign process, replaced socket and restore admission refuse discovery.
+
+Local-reset admission RED1.030s exposed durable capture before absent-controller refusal, followed by cleanup stopping the delegated core. Shared execution/capture admission and stopped journal opening now reject delegated local work before writes. Live and stopped direct reset, batch selection and subsequent restart are covered. The original local flow-preserving reset test still passes.
+
+Final Task2 actual races each passed6 parents with zero failures/skips: SQLite8.002s/PostgreSQL20.342s. Broader PostgreSQL startup acknowledgement/discovery9 parents passed100.346s. Full runtime race passed5.231s; affected vet/diff checks passed. Task completion verified all5 required actual parents in6.637s. Commitac7c7f46d75db55d3f6cd00b598c3daaff204487 retains this boundary.
+
+## Authenticated HTTPS setup
+
+Task3 initial RED showed the missing HTTP route404 (controller0.546s) and the unavailable typed TLS client (runtime0.133s). The fail-closed stub's negative response tests are not acceptance. Real pinned TLS with an encrypted stored node token then passed; duplicate/case-alias response envelope fields still produced behavioral RED0.718s. Strict authority envelope decoding now requires exact unique non-null fields, and setup validates both nested role fields and equality to the requested binding.
+
+HTTP tests cover admin/node-sync/verified certificate/session authentication, CSRF, monitor/method/plaintext denial,32KiB wire/decoded bounds and duplicate/escaped-duplicate/case-alias/null/type/identity rejection. A failed CSRF fixture sent an old login Cookie alongside its replacement; the test was corrected to browser last-value behavior without changing production CSRF. Another fixture wrongly expected fresh empty-source setup to fail without a running core. Both backends actually configured it successfully; corrected assertions require success, exact role and stable source across authorized retries. Failed attempts are retained separately.
+
+Corrected controller races each passed9 parents, zero failures/skips: SQLite7.764s/PostgreSQL19.167s. Full runtime race passed15.463s. OpenAPI initially failed on a missing endpoint, then on missing explicit response schemas; final10 request/runtime contracts passed8.62s. Generated frontend/docs artifacts match, typecheck/vet/diff checks passed. Task completion verified the3 required setup parents and exact route inventory. Commita4cd00222e41edc3b189ea64efb5a8ddb0f90c5a retains this boundary.
+
+## Actual startup and final acceptance
+
+The actual production-auth TLS integration passed as honest characterization,4.451s: fresh stopped setup, real delegated startup, live idempotent retry, changed generation refusal, no-grant Tunnel0 bytes, retained role/new boot after restart and private-core identity/zero usage. A separate actual local-core fixture refuses conversion and continues literal echo. Invalid real token and duplicate/null JSON requests refuse before setup. No additional production fix or invented RED was needed.
+
+CI requires all7 exact discovery/delegation service/HTTP parents on SQLite and PostgreSQL, both actual backend markers, and zero FAIL/SKIP/no-tests. Prior native gates remain. YAML and6 CI helper tests pass. Freeze31 code/test/workflow/generated inputs plus unchanged actual core SHA `ef1c6b74fe441ecc195edb77993fdf3ebdb4722b2018bf581364b03243a4aff7` before acceptance.
+
+Final required owned races passed7 parents each, zero failures/skips: SQLite service16.318s/sub9.361s; PostgreSQL service32.785s/sub11.058s. Native/shared5-parent races passed with zero failures/skips: SQLite102.045s/PostgreSQL130.853s. Both literal five-parent and backend/Tunnel verifier checks passed; the Tunnel helper itself validates the bulk parent, so the other four parents were checked separately. Affected vet passed, and all31 frozen hashes plus the actual core SHA match. Full `make test-go` exited0 with52 passing package results, using the actual core and both existing old-writer probes. The sole phase review and publication are pending. Raw logs and every failed attempt are retained under `/root/task-evidence/restore-authority-execution-bridge/delegated-node-mode-*`; plan workspace and worktree remain retained. Hosted CI and whole-parent completion are not claimed.
