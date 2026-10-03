@@ -37,19 +37,19 @@ Interfaces: consumes Task1 DTO; Remote.DiscoverAuthority(ctx,request). Existing 
 Files: create internal/web/controller/node_authority.go and node_authority_test.go; modify api.go and middleware/config_envelope.go/test; create internal/sub/node_authority_http_runtime_test.go.
 Interfaces: consumes Task1 service/DTO and Task2 Remote. Dedicated authenticated subgroup POST /server/clientPolicyAuthority before ordinary envelope chain, with32KiB wire/decompressed cap and CSRF. Existing node-sync POST allowlist gains only this route.
 
-- [ ] Step1: add TestNodeAuthorityDiscoveryHTTPAuthenticationAndBounds and TestConfigEnvelopeExplicitLimit; actual token scopes, missing/monitor/wrong-method/HTTP reject, TLS positive reaches owned validation, partial/unknown/trailing/oversized and compressed bodies rejected. Expected boundary RED.
-- [ ] Step2: implement typed JSON handler, existing auth/mTLS scope/CSRF, early cap middleware and response envelope. Expected route/middleware parents and existing API auth/envelope regressions PASS.
-- [ ] Step3: add TestNodeAuthorityDiscoveryHTTPActualOwnedCore with existing native HTTP harness, real TLS pin and actual challenge through Remote; after real core restart old binding refuses and initial discovery has newboot; actual Tunnel payload proves owned core still operates. Expected actual RED if integration missing, then PASS; document auth-route evidence separately from harness session.
-- [ ] Step4: commit/task-done named controller/middleware/actual HTTP parents with verified core. Expected real no-skip PASS.
+- [x] Step1: add TestNodeAuthorityDiscoveryHTTPAuthenticationAndBounds and TestConfigEnvelopeExplicitLimit; actual token scopes, missing/monitor/wrong-method/HTTP reject, TLS positive reaches owned validation, partial/unknown/trailing/oversized and compressed bodies rejected. Expected boundary RED.
+- [x] Step2: implement typed JSON handler, existing auth/mTLS scope/CSRF, early cap middleware and response envelope. Expected route/middleware parents and existing API auth/envelope regressions PASS.
+- [x] Step3: add TestNodeAuthorityDiscoveryHTTPActualOwnedCore with existing native HTTP harness, real TLS pin and actual challenge through Remote; after real core restart old binding refuses and initial discovery has newboot; actual Tunnel payload proves owned core still operates. Expected actual RED if integration missing, then PASS; document auth-route evidence separately from harness session.
+- [x] Step4: commit/task-done named controller/middleware/actual HTTP parents with verified core. Expected real no-skip PASS.
 
 ## Task 4: Required acceptance and publication evidence
 
 Files: CI custom-core.yml; docs/custom-core/node-authority-discovery-testing.md and parent implementation-plan.md.
 Interfaces: consumes all named Task1–3 parents; same core unchanged.
 
-- [ ] Step1: require exact actual service/HTTP discovery parents in existing both-backend CI with no FAIL/SKIP/no-tests, preserve native gates. Expected YAML/bash and gate behavior checks PASS.
-- [ ] Step2: freeze changed executable inputs; run affected controller/runtime/middleware/service/sub races on both database labels and native five-parent gates in internal/sub both backends; full make test-go with old-writer probes, fresh vet/diff and source/core hash checks. Expected actual required parents PASS0fail/skip, full package exit0.
-- [ ] Step3: document exact RED/GREEN and scope/limitations, commit/task-done required named actual parents. Expected no premature coordinated-policy claim.
+- [x] Step1: require exact actual service/HTTP discovery parents in existing both-backend CI with no FAIL/SKIP/no-tests, preserve native gates. Expected YAML/bash and gate behavior checks PASS.
+- [x] Step2: freeze changed executable inputs; run affected controller/runtime/middleware/service/sub races on both database labels and native five-parent gates in internal/sub both backends; full make test-go with old-writer probes, fresh vet/diff and source/core hash checks. Expected actual required parents PASS0fail/skip, full package exit0.
+- [x] Step3: document exact RED/GREEN and scope/limitations, commit/task-done required named actual parents. Expected no premature coordinated-policy claim.
 
 ## Phase finishing
 

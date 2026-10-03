@@ -6526,6 +6526,82 @@
         }
       }
     },
+    "/panel/api/server/clientPolicyAuthority": {
+      "post": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Discover the current owned node core and a boot-bound authority challenge.",
+        "operationId": "post_panel_api_server_clientPolicyAuthority",
+        "description": "Requires HTTPS and an admin/node-sync token, verified mTLS, or an authenticated session with CSRF protection. Leave both expected IDs empty for first discovery; otherwise supply both exact IDs from the previous response. An old boot is refused after restart. Wire and decoded requests and responses are limited to 32 KiB. This call discovers capabilities and a fresh challenge; it issues no quota or rate grant.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "expectedInstanceId": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "Exact stable instance ID, paired with expectedBootId; leave both empty for first discovery."
+                  },
+                  "expectedBootId": {
+                    "type": "string",
+                    "pattern": "^(?:[0-9a-fA-F]{32})?$",
+                    "description": "Exact boot ID from the previous discovery; paired with expectedInstanceId."
+                  }
+                }
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "capabilities": {
+                      "api_version": 1,
+                      "instance_id": "node-instance",
+                      "boot_id": "11111111111111111111111111111111",
+                      "capabilities": [
+                        "fresh-core-incarnation-v1",
+                        "monotonic-authority-challenge-v1",
+                        "boot-bound-execution-grants-v1"
+                      ]
+                    },
+                    "challenge": {
+                      "instance_id": "node-instance",
+                      "boot_id": "11111111111111111111111111111111",
+                      "challenge_id": "22222222222222222222222222222222",
+                      "max_duration_millis": 10000
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/panel/api/server/fail2banStatus": {
       "get": {
         "tags": [

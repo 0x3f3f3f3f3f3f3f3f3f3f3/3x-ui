@@ -453,6 +453,57 @@ export const sections: readonly Section[] = [
           '{\n  "success": true,\n  "obj": {\n    "cpu": 12.5,\n    "mem": { "current": 2147483648, "total": 8589934592 },\n    "swap": { "current": 0, "total": 4294967296 },\n    "disk": { "current": 53687091200, "total": 268435456000 },\n    "netIO": { "up": 1073741824, "down": 2147483648 },\n    "xray": { "state": "running", "version": "v25.10.31" },\n    "tcpCount": 42,\n    "load": { "load1": 0.5, "load5": 0.3, "load15": 0.2 }\n  }\n}',
       },
       {
+        method: 'POST',
+        path: '/panel/api/server/clientPolicyAuthority',
+        summary: 'Discover the current owned node core and a boot-bound authority challenge.',
+        description:
+          'Requires HTTPS and an admin/node-sync token, verified mTLS, or an authenticated session with CSRF protection. Leave both expected IDs empty for first discovery; otherwise supply both exact IDs from the previous response. An old boot is refused after restart. Wire and decoded requests and responses are limited to 32 KiB. This call discovers capabilities and a fresh challenge; it issues no quota or rate grant.',
+        body: '{}',
+        requestSchema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            expectedInstanceId: {
+              type: 'string',
+              maxLength: 128,
+              description:
+                'Exact stable instance ID, paired with expectedBootId; leave both empty for first discovery.',
+            },
+            expectedBootId: {
+              type: 'string',
+              pattern: '^(?:[0-9a-fA-F]{32})?$',
+              description:
+                'Exact boot ID from the previous discovery; paired with expectedInstanceId.',
+            },
+          },
+        },
+        response: JSON.stringify(
+          {
+            success: true,
+            obj: {
+              capabilities: {
+                api_version: 1,
+                instance_id: 'node-instance',
+                boot_id: '11111111111111111111111111111111',
+                capabilities: [
+                  'fresh-core-incarnation-v1',
+                  'monotonic-authority-challenge-v1',
+                  'boot-bound-execution-grants-v1',
+                ],
+              },
+              challenge: {
+                instance_id: 'node-instance',
+                boot_id: '11111111111111111111111111111111',
+                challenge_id: '22222222222222222222222222222222',
+                max_duration_millis: 10000,
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      },
+      {
         method: 'GET',
         path: '/panel/api/server/fail2banStatus',
         summary:
