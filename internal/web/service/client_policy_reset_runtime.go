@@ -109,6 +109,11 @@ func applyLocalClientPolicyReset(ctx context.Context, ids []string, prepare func
 		if err := authority.ApplyPolicies(ctx, managed, policies); err != nil {
 			return fmt.Errorf("reset saved but authority application failed: %w", err)
 		}
+		// Calendar eligibility can omit identities suspended before preparation.
+		// Resume the full original set only after every selected policy applied.
+		if err := authority.ResumeClients(ctx, ids); err != nil {
+			return fmt.Errorf("reset saved but authority resume failed: %w", err)
+		}
 		return nil
 	}
 	for start := 0; start < len(policies); start += 1000 {

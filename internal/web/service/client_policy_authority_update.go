@@ -95,6 +95,18 @@ func (a *managedAuthority) SuspendClients(ctx context.Context, ids []string) err
 	return nil
 }
 
+func (a *managedAuthority) ResumeClients(ctx context.Context, ids []string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if a.closed || a.controller == nil {
+		return ErrClientPolicyLedger
+	}
+	return a.controller.ResumeClients(ids)
+}
+
 // Caller owns restart serialization. RPCs happen after each SQL transaction has
 // completed; suspended identities cannot issue against a partially applied reset.
 func (a *managedAuthority) ApplyPolicies(ctx context.Context, managed panelruntime.ManagedProcessRuntime, policies []clientpolicy.Policy) error {
