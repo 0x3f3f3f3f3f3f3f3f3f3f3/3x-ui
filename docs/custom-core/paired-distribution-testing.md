@@ -161,3 +161,14 @@ clean build and actual lifecycle/native protocol/container acceptance remain
 open until their new receipts are recorded.
 
 The new clean source/artifact results are recorded in `paired-distribution-acceptance.md`, including passing native3/SQL/lifecycle/container checks and the remaining platform/rate-anomaly limits. Earlier pending paragraphs above describe their dated checkpoints.
+
+
+## Native/shared renewal checkpoint361e981a
+
+A new clean Linux ARM64 pair was built from frozen source361e981a1430add71f9b656ac9426707988238ca using Go1.27.1/Node26.10.0 in /tmp/3x-ui-renewal-paired-361e981a. Locked Go module verification, fresh npm/frontend build, complete compiled frontend source/notices, corresponding-source/module archives, both executable source reports and package self-verification passed. The source checkout stayed clean. The package has558 declared files and required native3/shared direction-rate/fixed-point billing/quota-window/Tunnel capabilities; offline reports describe compiled features, not configured-store durability.
+
+The exact packaged static core passed five real HTTP/SQL/native parents without skips/failures on SQLite61.658s and isolated PostgreSQL80.480s: bulk shared billing/Tunnel, mieru lifecycle, Snell TCP/UDP/QUIC shared lifecycle/export, OpenSSH lifecycle and authorized reverse/strict native outbound. Three actual manifest-owned renewal parents then passed SQLite7.791s/PostgreSQL12.935s, covering the original2x348/base316/window32 witness, omission successor/cold recovery and deferred SQL commit/live-window recovery. Thus8 distinct passing parents per backend use the new packaged core. Native HTTP fixtures supply their authenticated user context; login middleware and proprietary/device/full-platform acceptance are not claimed by these tests.
+
+The installer-shaped x-ui/ archive is294198665 bytes, SHA2568731040bfe91b8c6f4096a5ad6ed024fc7e521c8606b714c84e550a916265887. Actual archive extraction and incoming558-file verification passed in a new private staging directory. Panel SHA25689711dbe2a33960e9b6acb40c42588e5d915ba3afb8b93f1745ebb8135674397; core SHA256ef1c6b74fe441ecc195edb77993fdf3ebdb4722b2018bf581364b03243a4aff7; corresponding source archive SHA2563a524450da39a0929328ef2ec17594ec9585afe16f06cc1a36a670fc125b79f7.
+
+The retained package, archive, staging directory, exact binary info, backend JSONL and receipt use paired-native-shared-renewal-361e981a prefixes under /root/task-evidence/restore-authority-execution-bridge. Existing packages are unchanged. This is a verified native/shared/renewal source checkpoint, with complete original parent acceptance still active: exact legacy/inbound/remote effects and stable resource identity, generic acknowledgement, owner/cloning/replacement fencing, coordinated nodes, remaining single-core business migration, public scale/retention and complete platform/device/restore/install/upgrade/rollback/final publication. No release or deployment occurred.
