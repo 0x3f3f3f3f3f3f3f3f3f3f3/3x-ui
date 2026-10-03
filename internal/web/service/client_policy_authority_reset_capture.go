@@ -222,3 +222,59 @@ func runAuthorityResetCapture(ctx context.Context, requestKey, calendarKey strin
 		return journal.CaptureResetOperation(policyauthority.ResetOperationCapture{Identity: journal.Identity(), SourceID: state.SourceID, RequestID: authorityResetRequestKey(operation.RequestID), CalendarKey: authorityResetCalendarKey(operation.Scope, operation.ScheduledAt), Snapshot: string(raw)})
 	})
 }
+
+// Startup owns the lifecycle and private journal. Restore metadata only, one
+// bounded snapshot at a time; existing policy/account recovery follows this.
+func recoverAuthorityResetCaptures(ctx context.Context, expected *gorm.DB, journal *policyauthority.Journal, source string) error {
+	if ctx == nil || expected == nil || journal == nil || !validPolicySourceKey(source) {
+		return ErrClientPolicyLedger
+	}
+	validateSource := func(tx *gorm.DB) error {
+		var current model.ClientPolicySource
+		if err := tx.Where("node_key = ?", "local").First(&current).Error; err != nil {
+			return err
+		}
+		if current.InstanceID != source {
+			return ErrClientPolicyLedger
+		}
+		return nil
+	}
+	if err := runSerializedTxContextForDatabase(ctx, expected, validateSource); err != nil {
+		return err
+	}
+	after := ""
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		page, err := journal.ResetOperationPage(after, 128)
+		if err != nil {
+			return err
+		}
+		if len(page) == 0 {
+			return nil
+		}
+		for _, summary := range page {
+			if !strings.HasPrefix(summary.RequestID, authorityResetRequestPrefix) {
+				continue
+			}
+			capture, err := journal.LookupResetOperation(summary.RequestID)
+			if err != nil {
+				return err
+			}
+			snapshot, err := decodeAuthorityResetCapture(capture, journal, source)
+			if err != nil {
+				return err
+			}
+			if err := runSerializedTxContextForDatabase(ctx, expected, func(tx *gorm.DB) error {
+				if err := validateSource(tx); err != nil {
+					return err
+				}
+				return recoverAuthorityCapturedResetTx(tx, snapshot)
+			}); err != nil {
+				return err
+			}
+		}
+		after = page[len(page)-1].RequestID
+	}
+}

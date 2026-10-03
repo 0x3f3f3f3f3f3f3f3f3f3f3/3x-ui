@@ -18,6 +18,7 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/policyauthority"
+	panelxray "github.com/mhsanaei/3x-ui/v3/internal/xray"
 	"github.com/xtls/xray-core/infra/conf"
 	"gorm.io/gorm"
 )
@@ -517,15 +518,19 @@ func TestManagedAuthorityAccountingSeparatesAllocatedBudgetFromDeliveredUsage(t 
 }
 
 func TestManagedAuthorityPairedOldSnapshotsKeepConfirmedLifetimeVisible(t *testing.T) {
-	testManagedAuthorityPairedOldSnapshots(t, 0)
+	testManagedAuthorityPairedOldSnapshots(t, 0, false)
 }
 
 func TestManagedAuthorityPairedOldSnapshotsRetainAppliedResetWindow(t *testing.T) {
-	testManagedAuthorityPairedOldSnapshots(t, 1)
+	testManagedAuthorityPairedOldSnapshots(t, 1, false)
 }
 
 func TestManagedAuthorityPairedOldSnapshotsRetainEarlierResetRequests(t *testing.T) {
-	testManagedAuthorityPairedOldSnapshots(t, 2)
+	testManagedAuthorityPairedOldSnapshots(t, 2, false)
+}
+
+func TestManagedAuthorityPairedOldSnapshotsRetainPostMigrationAllSelection(t *testing.T) {
+	testManagedAuthorityPairedOldSnapshots(t, 1, true)
 }
 
 func TestManagedAuthorityPendingResetChargesTrafficSinceCommittedBoundary(t *testing.T) {
@@ -561,7 +566,7 @@ func TestManagedAuthorityPendingResetChargesTrafficSinceCommittedBoundary(t *tes
 	}
 }
 
-func testManagedAuthorityPairedOldSnapshots(t *testing.T, resetCount int) {
+func testManagedAuthorityPairedOldSnapshots(t *testing.T, resetCount int, batchReset bool) {
 	t.Helper()
 	// This acceptance exercises the actual SQLite import route. PostgreSQL
 	// import/reconciliation has its own backend gate, rather than relabeling it.
@@ -625,8 +630,14 @@ func testManagedAuthorityPairedOldSnapshots(t *testing.T, resetCount int) {
 		if resetIndex > 0 {
 			requestID = fmt.Sprintf("preserved-reset-window-%d", resetIndex+1)
 		}
-		if err := ResetLocalClientPolicy(ctx, client.StableID, requestID); err != nil {
-			t.Fatal(err)
+		if batchReset {
+			if _, err := (&ClientService{}).ResetAllTrafficsWithRequest(ctx, requestID); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			if err := ResetLocalClientPolicy(ctx, client.StableID, requestID); err != nil {
+				t.Fatal(err)
+			}
 		}
 		conn, err = net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", tunnel.Port), time.Second)
 		if err != nil {
@@ -667,6 +678,33 @@ func testManagedAuthorityPairedOldSnapshots(t *testing.T, resetCount int) {
 	}
 	if resetCount > 0 && (traffic.Accounting.Period.Billed != "16" || traffic.Accounting.ResetPending) {
 		t.Fatalf("old snapshots reopened an obsolete quota window: %+v", traffic.Accounting)
+	}
+	if batchReset {
+		later := model.ClientRecord{Email: "created-after-paired-restore", Enable: true}
+		if err := database.GetDB().Create(&later).Error; err != nil {
+			t.Fatal(err)
+		}
+		if err := database.GetDB().Create(&panelxray.ClientTraffic{Email: later.Email, Enable: true, Up: 7, Down: 11}).Error; err != nil {
+			t.Fatal(err)
+		}
+		owner := managedAuthorityForProcess(currentXrayProcess())
+		before, err := owner.state.Journal.Account(client.StableID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if _, err := (&ClientService{}).ResetAllTrafficsWithRequest(ctx, "preserved-reset-window"); err != nil {
+			t.Fatal(err)
+		}
+		var untouched panelxray.ClientTraffic
+		if err := database.GetDB().First(&untouched, "email = ?", later.Email).Error; err != nil || untouched.Up != 7 || untouched.Down != 11 {
+			t.Fatalf("paired restore retry reset later identity: up=%d down=%d err=%v", untouched.Up, untouched.Down, err)
+		}
+		after, err := owner.state.Journal.Account(client.StableID)
+		if err != nil || before.Policy != after.Policy || before.Usage != after.Usage || before.WindowBaseline != after.WindowBaseline || before.WindowUsed != after.WindowUsed {
+			t.Fatalf("paired restore batch retry changed retained accounting: %v", err)
+		}
 	}
 	if resetCount > 1 {
 		var resets []model.ClientPolicyReset
