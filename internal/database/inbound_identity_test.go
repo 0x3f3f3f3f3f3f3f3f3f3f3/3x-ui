@@ -240,3 +240,75 @@ func TestInboundStableIdentityLifecycle(t *testing.T) {
 		t.Fatal("new resource inherited deleted resource identity")
 	}
 }
+
+func TestInboundStableIdentityDatabaseExport(t *testing.T) {
+	for _, mode := range []string{"missing", "partial", "invalid"} {
+		t.Run(mode, func(t *testing.T) {
+			src := inboundIdentityDB(t)
+			rows := []model.Inbound{
+				{Tag: "export-one", Port: 27201, Settings: `{"credential":"retained","opaque":9007199254740993}`, Up: 111, Down: 222},
+				{Tag: "export-two", Port: 27202, Settings: `{"credential":"other"}`, Up: 333, Down: 444},
+				{Tag: "export-three", Port: 27203, Settings: `{"credential":"third"}`, Up: 555, Down: 666},
+			}
+			if err := src.Create(&rows).Error; err != nil {
+				t.Fatal(err)
+			}
+			retained := storedInboundIdentity(t, src, rows[0].Id)
+			if err := src.Migrator().DropIndex(&model.Inbound{}, "idx_inbounds_stable_id"); err != nil {
+				t.Fatal(err)
+			}
+			if mode == "missing" {
+				if err := src.Migrator().DropColumn(&model.Inbound{}, "stable_id"); err != nil {
+					t.Fatal(err)
+				}
+			} else if mode == "partial" {
+				if err := src.Exec("UPDATE inbounds SET stable_id = NULL WHERE id = ?", rows[1].Id).Error; err != nil {
+					t.Fatal(err)
+				}
+				if err := src.Exec("UPDATE inbounds SET stable_id = '' WHERE id = ?", rows[2].Id).Error; err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if err := src.Exec("UPDATE inbounds SET stable_id = 'credential-not-identity' WHERE id = ?", rows[0].Id).Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+			dst, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "export.db")), &gorm.Config{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { handle, _ := dst.DB(); _ = handle.Close() })
+			err = copyAllModels(src, dst)
+			if mode == "invalid" {
+				if err == nil {
+					t.Fatal("database export admitted invalid retained resource identity")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("historical database cannot export independent inbound identities: %v", err)
+			}
+			seen := map[string]bool{}
+			for _, before := range rows {
+				identity := storedInboundIdentity(t, dst, before.Id)
+				if seen[identity] || mode == "partial" && before.Id == rows[0].Id && identity != retained {
+					t.Fatal("database export changed or reused a retained UUID")
+				}
+				seen[identity] = true
+				var after model.Inbound
+				if err := dst.First(&after, before.Id).Error; err != nil {
+					t.Fatal(err)
+				}
+				if after.Settings != before.Settings || after.Up != before.Up || after.Down != before.Down || after.Tag != before.Tag || after.Port != before.Port {
+					t.Fatal("database export changed exact business data")
+				}
+			}
+			if mode == "partial" {
+				var originals []string
+				if err := src.Table("inbounds").Where("id = ?", rows[2].Id).Pluck("stable_id", &originals).Error; err != nil || len(originals) != 1 || originals[0] != "" {
+					t.Fatal("read-only export backfilled the source")
+				}
+			}
+		})
+	}
+}

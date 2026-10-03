@@ -326,6 +326,11 @@ func copyTable(src, dst *gorm.DB, mdl any) (int, error) {
 
 		rows := make([]map[string]any, n)
 		for i := range n {
+			if inbound, ok := slice.Index(i).Interface().(*model.Inbound); ok {
+				if err := inbound.BeforeCreate(nil); err != nil {
+					return total, err
+				}
+			}
 			if client, ok := slice.Index(i).Interface().(*model.ClientRecord); ok {
 				if err := client.BeforeCreate(nil); err != nil {
 					return total, err
