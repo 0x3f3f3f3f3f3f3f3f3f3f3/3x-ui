@@ -40,7 +40,7 @@
 
 ### Task 2: Recover exact prepared effects through interruption
 
-**Files:** Modify execution helper, `client_policy_authority_reset_capture.go`, `client_policy_authority_evidence.go`; extend focused execution tests.
+**Files:** Modify execution helper, `client_policy_authority_reset_capture.go`, `client_policy_authority_evidence.go`; create `client_policy_authority_reset_execution_recovery_test.go` for focused interruption/recovery tests.
 
 **Interfaces:** Consume Task1 payload and current account history. Produce preparation-aware source-owned retry/cold projection with semantic reset identity; preserve current history APIs.
 

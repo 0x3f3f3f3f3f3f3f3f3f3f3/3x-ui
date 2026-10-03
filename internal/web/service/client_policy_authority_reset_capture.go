@@ -201,6 +201,9 @@ func runAuthorityResetCapture(ctx context.Context, requestKey, calendarKey strin
 			if err := recoverAuthorityCapturedResetTx(tx, snapshot); err != nil {
 				return err
 			}
+			if err := recoverAuthorityPreparedResetTx(tx, journal, state.SourceID, capture); err != nil {
+				return err
+			}
 			return tx.First(operation, "request_id = ?", snapshot.Operation.RequestID).Error
 		}
 		if !errors.Is(err, policyauthority.ErrNotFound) {
@@ -276,7 +279,10 @@ func recoverAuthorityResetCaptures(ctx context.Context, expected *gorm.DB, journ
 				if err := validateSource(tx); err != nil {
 					return err
 				}
-				return recoverAuthorityCapturedResetTx(tx, snapshot)
+				if err := recoverAuthorityCapturedResetTx(tx, snapshot); err != nil {
+					return err
+				}
+				return recoverAuthorityPreparedResetTx(tx, journal, source, capture)
 			}); err != nil {
 				return err
 			}

@@ -339,6 +339,16 @@ func recoverAuthorityResetTx(tx *gorm.DB, account policyauthority.Account, sourc
 	if reset == nil || validateClientPolicyReset(reset) != nil || reset.CreatedAt < 0 || reset.ClientID != account.Seed.ClientID || reset.InstanceID != source || reset.PolicyVersion <= 0 || uint64(reset.PolicyVersion) > account.Policy.Version || uint64(reset.RawUpload) > account.Usage.RawUpload || uint64(reset.RawDownload) > account.Usage.RawDownload || uint64(reset.BilledBytes) > account.Usage.BilledBytes || uint64(reset.BilledBytes) == account.Usage.BilledBytes && uint64(reset.Remainder) > account.Usage.Remainder {
 		return ErrClientPolicyLedger
 	}
+	if err := recoverAuthoritySemanticResetTx(tx, reset); err != nil {
+		return err
+	}
+	// The monotone projection preserves any later acknowledged SQL timestamp.
+	return recordClientTrafficResetTimes(tx, []string{reset.ClientID}, reset.CreatedAt)
+}
+
+// The caller validates its protected evidence and account usage boundary.
+// Restore semantic identity without reusing a possibly occupied surrogate ID.
+func recoverAuthoritySemanticResetTx(tx *gorm.DB, reset *model.ClientPolicyReset) error {
 	var existing model.ClientPolicyReset
 	err := tx.Where("client_id = ? AND request_id = ?", reset.ClientID, reset.RequestID).First(&existing).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -361,8 +371,5 @@ func recoverAuthorityResetTx(tx *gorm.DB, account policyauthority.Account, sourc
 			return ErrClientPolicyLedger
 		}
 	}
-	// A retained stale stamp suppresses the calendar's reset-history fallback.
-	// Raise it in the same projection transaction using validated evidence;
-	// the monotone upsert preserves any later acknowledged SQL timestamp.
-	return recordClientTrafficResetTimes(tx, []string{reset.ClientID}, reset.CreatedAt)
+	return nil
 }

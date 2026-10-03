@@ -201,3 +201,75 @@ func completeAuthorityResetExecution(ctx context.Context, expected *gorm.DB, sta
 		return state.Journal.CompleteResetOperation(policyauthority.ResetOperationCompletion{Identity: prepared.Identity, SourceID: prepared.SourceID, RequestID: prepared.RequestID, PreparationDigest: authorityResetSnapshotDigest(prepared.Snapshot)})
 	})
 }
+
+// Preparation is intent, not execution acknowledgement. The journal account
+// supplies the known usage ceiling; later committed policy history wins.
+func recoverAuthorityPreparedResetTx(tx *gorm.DB, journal *policyauthority.Journal, source string, capture policyauthority.ResetOperationCapture) error {
+	prepared, err := journal.LookupResetPreparation(capture.RequestID)
+	if errors.Is(err, policyauthority.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	snapshot, err := decodeAuthorityResetPreparation(prepared, capture, journal, source)
+	if err != nil {
+		return err
+	}
+	original, err := decodeAuthorityResetCapture(capture, journal, source)
+	if err != nil {
+		return err
+	}
+	operation := original.Operation
+	operation.Applied, operation.Affected = true, snapshot.Affected
+	raw, err := json.Marshal(snapshot.ActiveManagedIDs)
+	if err != nil {
+		return err
+	}
+	operation.ManagedIDsJSON = string(raw)
+	if err := recoverAuthorityResetBatchTx(tx, operation); err != nil {
+		return err
+	}
+	for _, reset := range snapshot.Resets {
+		account, err := journal.LookupAccount(reset.ClientID)
+		if err != nil {
+			return err
+		}
+		if uint64(reset.RawUpload) > account.Usage.RawUpload || uint64(reset.RawDownload) > account.Usage.RawDownload || uint64(reset.BilledBytes) > account.Usage.BilledBytes || uint64(reset.BilledBytes) == account.Usage.BilledBytes && uint64(reset.Remainder) > account.Usage.Remainder {
+			return ErrClientPolicyLedger
+		}
+		if err := recoverAuthoritySemanticResetTx(tx, &reset); err != nil {
+			return err
+		}
+		if err := recordClientTrafficResetTimes(tx, []string{reset.ClientID}, snapshot.ResetAt); err != nil {
+			return err
+		}
+		if account.Deleted {
+			continue
+		}
+		var client model.ClientRecord
+		err = tx.Where("stable_id = ?", reset.ClientID).First(&client).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if err := validateLocalClientPolicyResetScope(tx, []string{reset.ClientID}); err != nil {
+			return err
+		}
+		// Acknowledged history below restores its own version/fingerprint.
+		// Installing the user's changed business fields at that same version
+		// would conflict with the retained core policy instead of advancing it.
+		if client.DesiredPolicyVersion < reset.PolicyVersion && account.Policy.Version < uint64(reset.PolicyVersion) {
+			_, fingerprint, err := fingerprintClientPolicy(client, &reset)
+			if err != nil {
+				return err
+			}
+			if err := tx.Table("clients").Where("id = ?", client.Id).Updates(map[string]any{"desired_policy_version": reset.PolicyVersion, "policy_fingerprint": fingerprint}).Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
