@@ -32,9 +32,9 @@ Produces: private create-only Inbound.StableID, BeforeCreate canonical nonzero U
 
 Files: inbound.go and focused public create/import/update/copy tests. Consumes Task1 stable storage.
 
-- [ ] Step1: Reproduce public AddInbound copying a saved object and ordinary UpdateInbound preservation across port/tag/config changes. Expected RED: new copied resource must not reuse old UUID; existing identity survives edits.
-- [ ] Step2: Clear source identity on new resource admission and preserve stored identity during ordinary edits; retain native credentials/SSH key ownership/client links/config/statistics. Expected GREEN: new resources receive new UUIDs, ordinary updates keep the original.
-- [ ] Step3: Run affected migration/import/native-owner races on both real backends, vet/diff, commit and task-done. Expected PASS; no native wire or production deploy claim from SQL-only contracts.
+- [x] Step1: Reproduce public AddInbound copying a saved object and ordinary UpdateInbound preservation across port/tag/config changes. Expected RED: new copied resource must not reuse old UUID; existing identity survives edits.
+- [x] Step2: Clear source identity on new resource admission and preserve stored identity during ordinary edits; retain native credentials/SSH key ownership/client links/config/statistics. Expected GREEN: new resources receive new UUIDs, ordinary updates keep the original.
+- [x] Step3: Run affected migration/import/native-owner races on both real backends, vet/diff, commit and task-done. Expected PASS; no native wire or production deploy claim from SQL-only contracts.
 
 ## Task 3: Regression, sole review and verified stage push
 
