@@ -43,6 +43,9 @@ func authorityResetExecutionStateLocked(ctx context.Context, expected *gorm.DB) 
 		if owner.closed || owner.db != expected || owner.config.InstanceID != owner.state.SourceID {
 			return nil, false, ErrClientPolicyLedger
 		}
+		if owner.delegated() {
+			return nil, false, ErrClientPolicyLedger
+		}
 		return owner.state, false, nil
 	}
 	if process := currentXrayProcess(); process != nil && process.IsRunning() {

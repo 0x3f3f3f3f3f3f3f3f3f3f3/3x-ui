@@ -49,6 +49,20 @@ func (*ClientPolicyNodeService) ConfigureDelegation(ctx context.Context, request
 				if source.InstanceID != manifest.SourceID {
 					return policyauthority.ErrIdentity
 				}
+				if owner := managedAuthorityForProcess(currentXrayProcess()); owner != nil {
+					if !owner.mu.TryLock() {
+						return panelruntime.ErrNodeAuthorityDiscovery
+					}
+					defer owner.mu.Unlock()
+					if owner.db != sourceDB || owner.state.SourceID != source.InstanceID || owner.state.Role != request.Role() {
+						return policyauthority.ErrIdentity
+					}
+					if err := owner.validateStartupOwner(ctx); err != nil {
+						return err
+					}
+					result = &panelruntime.NodeDelegationResult{InstanceID: source.InstanceID, Role: owner.state.Role}
+					return nil
+				}
 				state, err := openAuthorityState(dir)
 				if err != nil {
 					return err

@@ -85,7 +85,13 @@ func (a *managedAuthority) validateStartupOwner(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if a.closed || a.api == nil || a.controller == nil || a.process != currentXrayProcess() || managedAuthorityForProcess(a.process) != a || !a.process.IsRunning() || !a.process.IsControlReady() || a.config.InstanceID != a.state.SourceID {
+	if a.closed || a.api == nil || a.process != currentXrayProcess() || managedAuthorityForProcess(a.process) != a || !a.process.IsRunning() || !a.process.IsControlReady() || a.config.InstanceID != a.state.SourceID {
+		return ErrClientPolicyLedger
+	}
+	if err := a.validateExecutionRole(); err != nil {
+		return err
+	}
+	if a.delegated() != (a.controller == nil) {
 		return ErrClientPolicyLedger
 	}
 	current, err := os.Lstat(a.socketPath)
@@ -241,6 +247,16 @@ func (a *managedAuthority) CompleteStartupOperations(ctx context.Context) error 
 	defer a.mu.Unlock()
 	if err := a.validateStartupOwner(ctx); err != nil {
 		return err
+	}
+	if a.delegated() {
+		page, err := a.state.Journal.ResetOperationPage("", 1)
+		if err != nil {
+			return err
+		}
+		if len(page) != 0 {
+			return ErrClientPolicyLedger
+		}
+		return nil
 	}
 	config, err := a.config.Build()
 	if err != nil {

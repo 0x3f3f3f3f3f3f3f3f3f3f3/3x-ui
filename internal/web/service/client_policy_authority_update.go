@@ -75,6 +75,15 @@ func (a *managedAuthority) PrepareUpdate(ctx context.Context, caps *command.Capa
 func (a *managedAuthority) Checkpoint(ctx context.Context) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if ctx == nil {
+		return ErrClientPolicyLedger
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if a.delegated() {
+		return a.validateStartupOwner(ctx)
+	}
 	if a.closed || a.controller == nil {
 		return ErrClientPolicyLedger
 	}

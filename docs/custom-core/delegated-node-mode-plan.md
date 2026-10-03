@@ -25,11 +25,11 @@ Interfaces: NodeExecutionRole{Mode,AuthorityID,Generation,NodeID}, Validate(); N
 
 ## Task 2: Owned delegated bootstrap
 
-Files: service/client_policy_authority_factory.go, client_policy_authority_startup_completion.go, client_policy_authority_update.go, node_authority.go; runtime/node_authority.go; service/node_delegation_runtime_test.go.
+Files: service/node_execution_owner.go and node_delegation.go; test-only client_policy_activation_test.go; service/client_policy_authority_factory.go, client_policy_authority_startup_completion.go, client_policy_authority_update.go, client_policy_authority_reset_execution.go, client_policy_authority_reset_capture.go, node_authority.go; runtime/node_authority.go and remote_authority_test.go; service/node_delegation_runtime_test.go.
 Interfaces: Task1 role consumed by managedAuthority. Delegated bootstrap initializes existing immutable policy seeds, binds the actual core to role tuple and enables demand before business listeners, without newAuthorityController. DiscoverAuthority produces executionRole and delegated tuple; Validate accepts omitted legacy local role and requires valid delegated tuple.
-- [ ] Add TestManagedDelegatedNodeStartsWithoutLocalIssuer / TestManagedDelegatedNodeRestartRetainsRole. Actual core/no local controller/no local allocations, Tunnel without a grant passes0 bytes, exact current challenge, stable instance/new boot after restart, stopped/restore/socket/role corruption refusal. Expected RED before startup support.
-- [ ] Implement role-specific startup/owned validation/stop/checkpoint with safe refusal of unsupported delegated local reset/hot-update paths; retain ordinary local behavior. Expected required actual parents pass0skip, no background local issuer.
-- [ ] Commit/task-done actual parents with verified core plus local discovery parents. Expected no-skip pass.
+- [x] Add TestManagedDelegatedNodeStartsWithoutLocalIssuer / TestManagedDelegatedNodeRestartRetainsRole. Actual core/no local controller/no local allocations, Tunnel without a grant passes0 bytes, exact current challenge, stable instance/new boot after restart, stopped/restore/socket/role corruption refusal. Expected RED before startup support.
+- [x] Implement role-specific startup/owned validation/stop/checkpoint with safe refusal of unsupported delegated local reset/hot-update paths; retain ordinary local behavior. Expected required actual parents pass0skip, no background local issuer.
+- [x] Commit/task-done actual parents with verified core plus local discovery parents. Expected no-skip pass.
 
 ## Task 3: Typed HTTPS delegation setup
 

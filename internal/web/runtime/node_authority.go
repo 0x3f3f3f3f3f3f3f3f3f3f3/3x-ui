@@ -19,8 +19,9 @@ type AuthorityDiscoveryRequest struct {
 }
 
 type NodeAuthorityDiscovery struct {
-	Capabilities *command.Capabilities       `json:"capabilities"`
-	Challenge    *command.AuthorityChallenge `json:"challenge"`
+	Capabilities  *command.Capabilities       `json:"capabilities"`
+	Challenge     *command.AuthorityChallenge `json:"challenge"`
+	ExecutionRole *NodeExecutionRole          `json:"executionRole,omitempty"`
 }
 
 func authorityNonce(value string) bool {
@@ -44,6 +45,9 @@ func (r AuthorityDiscoveryRequest) Validate() error {
 
 func (d *NodeAuthorityDiscovery) Validate(request AuthorityDiscoveryRequest) error {
 	if request.Validate() != nil || d == nil || d.Capabilities == nil || d.Challenge == nil {
+		return ErrNodeAuthorityDiscovery
+	}
+	if d.ExecutionRole != nil && d.ExecutionRole.Validate() != nil {
 		return ErrNodeAuthorityDiscovery
 	}
 	c, challenge := d.Capabilities, d.Challenge

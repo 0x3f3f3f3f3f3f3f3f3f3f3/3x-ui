@@ -46,7 +46,8 @@ func (*ClientPolicyNodeService) DiscoverAuthority(ctx context.Context, request p
 			if err != nil {
 				return err
 			}
-			result = &panelruntime.NodeAuthorityDiscovery{Capabilities: capabilities, Challenge: challenge}
+			role := owner.state.Role
+			result = &panelruntime.NodeAuthorityDiscovery{Capabilities: capabilities, Challenge: challenge, ExecutionRole: &role}
 			if err := result.Validate(request); err != nil {
 				return err
 			}

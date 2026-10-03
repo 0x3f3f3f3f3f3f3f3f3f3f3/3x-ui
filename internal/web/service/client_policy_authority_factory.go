@@ -54,10 +54,13 @@ func openManagedAuthority(process *panelxray.Process, config *conf.ClientPolicyC
 func (a *managedAuthority) Prepare(ctx context.Context, caps *command.Capabilities) (*panelruntime.ManagedPolicyBootstrap, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.closed || a.controller != nil || ctx == nil {
+	if a.closed || a.controller != nil || a.api != nil || ctx == nil {
 		return nil, ErrClientPolicyLedger
 	}
 	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := a.validateExecutionRole(); err != nil {
 		return nil, err
 	}
 	if err := runSerializedTxContextForDatabase(ctx, a.db, func(tx *gorm.DB) error { return nil }); err != nil {
@@ -131,8 +134,11 @@ func (a *managedAuthority) Prepare(ctx context.Context, caps *command.Capabiliti
 func (a *managedAuthority) authorize(ctx context.Context, _ *panelxray.ClientPolicyAPI) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.closed || a.controller != nil {
+	if a.closed || a.controller != nil || a.api != nil {
 		return ErrClientPolicyLedger
+	}
+	if err := a.validateExecutionRole(); err != nil {
+		return err
 	}
 	endpoint, err := a.process.GetAPIEndpoint()
 	if err != nil {
@@ -147,6 +153,17 @@ func (a *managedAuthority) authorize(ctx context.Context, _ *panelxray.ClientPol
 		return errors.Join(ErrClientPolicyLedger, err, api.Close())
 	}
 	a.socketPath, a.socketInfo, a.socketBoot = endpoint, info, api.Capabilities().BootId
+	if a.delegated() {
+		binding := a.delegatedBinding()
+		if err := api.BindAuthority(ctx, binding); err != nil {
+			return errors.Join(err, api.Close())
+		}
+		if err := api.EnableAuthorityRequests(ctx, binding); err != nil {
+			return errors.Join(err, api.Close())
+		}
+		a.api = api
+		return nil
+	}
 	controller, err := newAuthorityController(ctx, a.db, a.state.Journal, "local", api)
 	if err == nil {
 		err = controller.Start()

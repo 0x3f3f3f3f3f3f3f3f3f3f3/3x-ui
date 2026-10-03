@@ -119,6 +119,15 @@ func TestRemoteAuthorityDiscoveryRejectsInvalidResponse(t *testing.T) {
 		{name: "null-challenge", change: func(d *NodeAuthorityDiscovery) { d.Challenge = nil }},
 		{name: "wrong-api", change: func(d *NodeAuthorityDiscovery) { d.Capabilities.ApiVersion = 2 }},
 		{name: "wrong-instance", change: func(d *NodeAuthorityDiscovery) { d.Capabilities.InstanceId = "different-instance" }},
+		{name: "unknown-execution-role", change: func(d *NodeAuthorityDiscovery) {
+			d.ExecutionRole = &NodeExecutionRole{Mode: "unknown"}
+		}},
+		{name: "delegated-role-without-binding", change: func(d *NodeAuthorityDiscovery) {
+			d.ExecutionRole = &NodeExecutionRole{Mode: NodeExecutionDelegated}
+		}},
+		{name: "local-role-with-delegated-binding", change: func(d *NodeAuthorityDiscovery) {
+			d.ExecutionRole = &NodeExecutionRole{Mode: NodeExecutionLocal, AuthorityID: "coordinator", Generation: 1, NodeID: "node"}
+		}},
 		{name: "wrong-boot", change: func(d *NodeAuthorityDiscovery) { d.Challenge.BootId = strings.Repeat("c", 32) }},
 		{name: "invalid-nonce", change: func(d *NodeAuthorityDiscovery) { d.Challenge.ChallengeId = "invalid" }},
 		{name: "missing-feature", change: func(d *NodeAuthorityDiscovery) { d.Capabilities.Capabilities = []string{"fresh-core-incarnation-v1"} }},

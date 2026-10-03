@@ -16,6 +16,7 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/policyauthority"
+	panelruntime "github.com/mhsanaei/3x-ui/v3/internal/web/runtime"
 	"github.com/xtls/xray-core/infra/conf"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -138,7 +139,11 @@ func resetCaptureStateLocked(expected *gorm.DB) (*durableAuthorityState, error) 
 	if err != nil {
 		return nil, ErrAuthorityNotInitialized
 	}
-	return openAuthorityState(dir)
+	state, err := openAuthorityState(dir)
+	if err == nil && state.Role.Mode == panelruntime.NodeExecutionDelegated {
+		return nil, errors.Join(ErrClientPolicyLedger, state.Journal.Close())
+	}
+	return state, err
 }
 
 func runAuthorityResetCapture(ctx context.Context, requestKey, calendarKey string, operation *model.ClientTrafficResetBatch, selectOperation func(*gorm.DB) error, validateSelection func(model.ClientTrafficResetBatch) error) (result error) {
@@ -159,6 +164,9 @@ func runAuthorityResetCapture(ctx context.Context, requestKey, calendarKey strin
 		owner.mu.Lock()
 		defer owner.mu.Unlock()
 		if owner.closed || owner.db != expected || owner.state.SourceID != owner.config.InstanceID {
+			return ErrClientPolicyLedger
+		}
+		if owner.delegated() {
 			return ErrClientPolicyLedger
 		}
 		state = owner.state

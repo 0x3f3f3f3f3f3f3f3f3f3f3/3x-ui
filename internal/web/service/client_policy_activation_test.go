@@ -459,6 +459,12 @@ func setupManagedActivationService(t *testing.T) (*XrayService, *model.Inbound, 
 
 // Actual PostgreSQL restore fixtures already own a fresh database.
 func setupManagedActivationServiceFromDatabase(t *testing.T) (*XrayService, *model.Inbound, *model.ClientRecord, int) {
+	return setupManagedActivationServiceWithUsage(t, 100, 200)
+}
+
+// Fresh delegated execution has no prior local usage to transfer. Existing
+// activation fixtures retain their literal historical100/200 defaults.
+func setupManagedActivationServiceWithUsage(t *testing.T, upload, download int64) (*XrayService, *model.Inbound, *model.ClientRecord, int) {
 	t.Helper()
 	binary := os.Getenv("XRAY_E2E_BINARY")
 	if binary == "" {
@@ -514,7 +520,7 @@ func setupManagedActivationServiceFromDatabase(t *testing.T) (*XrayService, *mod
 	if err := db.Create(&owner).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Create(&xray.ClientTraffic{Email: owner.Email, Enable: true, Up: 100, Down: 200}).Error; err != nil {
+	if err := db.Create(&xray.ClientTraffic{Email: owner.Email, Enable: true, Up: upload, Down: download}).Error; err != nil {
 		t.Fatal(err)
 	}
 	probe, err := net.Listen("tcp", "127.0.0.1:0")
