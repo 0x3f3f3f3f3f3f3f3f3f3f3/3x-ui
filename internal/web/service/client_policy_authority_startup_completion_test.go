@@ -149,10 +149,10 @@ func testStartupDeletedIdentity(t *testing.T) {
 // Skipping post-RPC ownership/source checks or ignoring completion errors would
 // leave a listener serving while its durable operation remains uncertain.
 func TestManagedAuthorityStartupAcknowledgementRefusesUncertainExecution(t *testing.T) {
-	for _, fault := range []string{"source", "pool", "socket", "boot", "core", "policy", "stamp", "completion", "late-boot", "owner"} {
+	for _, fault := range []string{"source", "pool", "socket", "boot", "core", "policy", "stamp", "null-stamp", "completion", "late-boot", "owner"} {
 		t.Run(fault, func(t *testing.T) {
 			kind := "direct"
-			if fault == "stamp" {
+			if fault == "stamp" || fault == "null-stamp" {
 				kind = "inbound"
 			}
 			f := setupStartupPreparedOperation(t, kind)
@@ -176,8 +176,12 @@ func TestManagedAuthorityStartupAcknowledgementRefusesUncertainExecution(t *test
 				switch fault {
 				case "source":
 					owner.config.InstanceID = "foreign-startup-source"
-				case "stamp":
-					tx.AddError(tx.Session(&gorm.Session{NewDB: true}).Model(&model.Inbound{}).Where("stable_id = ?", f.inbound.StableID).Update("last_traffic_reset_time", 0).Error)
+				case "stamp", "null-stamp":
+					var at any = 0
+					if fault == "null-stamp" {
+						at = nil
+					}
+					tx.AddError(tx.Session(&gorm.Session{NewDB: true}).Model(&model.Inbound{}).Where("stable_id = ?", f.inbound.StableID).Update("last_traffic_reset_time", at).Error)
 				case "pool":
 					owner.db = db.Session(&gorm.Session{NewDB: true})
 				case "owner":

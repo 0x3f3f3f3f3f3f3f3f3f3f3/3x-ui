@@ -102,7 +102,7 @@ func (a *managedAuthority) validateStartupOperationTx(tx *gorm.DB, op *authority
 	}
 	for _, batch := range chunkStrings(ids, 1000) {
 		var stale int64
-		if err := tx.Model(&model.Inbound{}).Where("stable_id IN ? AND last_traffic_reset_time < ?", batch, op.stamps[0].ResetAt).Count(&stale).Error; err != nil {
+		if err := tx.Model(&model.Inbound{}).Where("stable_id IN ? AND (last_traffic_reset_time IS NULL OR last_traffic_reset_time < ?)", batch, op.stamps[0].ResetAt).Count(&stale).Error; err != nil {
 			return err
 		}
 		if stale != 0 {
@@ -166,7 +166,10 @@ func (a *managedAuthority) verifyStartupCore(ctx context.Context, op *authorityS
 	}
 	identity := a.state.Journal.Identity()
 	binding := &command.AuthorityBinding{AuthorityId: identity.AuthorityID, Generation: identity.Generation, NodeId: a.controller.execution.boot.NodeID}
-	if _, err := a.api.ReadAuthorityRequests(ctx, binding, 1); err != nil {
+	// Authorization already enabled demand during activation. Repeating this
+	// idempotent RPC verifies boot and binding immediately without long polling
+	// or allocating any execution grant.
+	if err := a.api.EnableAuthorityRequests(ctx, binding); err != nil {
 		return err
 	}
 	for _, id := range op.clients {
@@ -193,6 +196,9 @@ func (a *managedAuthority) verifyStartupCore(ctx context.Context, op *authorityS
 		if reset, ok := floors[id]; ok && !startupUsageCovers(state.Usage, reset) {
 			return ErrClientPolicyLedger
 		}
+	}
+	if err := a.api.EnableAuthorityRequests(ctx, binding); err != nil {
+		return err
 	}
 	return a.validateStartupOwner(ctx)
 }

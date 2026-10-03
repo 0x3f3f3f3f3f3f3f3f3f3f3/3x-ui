@@ -25,7 +25,7 @@ func startupZeroEffectProgram(t *testing.T, state *durableAuthorityState, reques
 	if err := state.Journal.CaptureResetOperation(capture); err != nil {
 		t.Fatal(err)
 	}
-	raw, err = json.Marshal(authorityResetPreparationSnapshot{Schema: 1, RequestID: request, ResetAt: 100})
+	raw, err = json.Marshal(authorityResetPreparationSnapshot{Schema: 1, RequestID: request, ResetAt: 100, ActiveManagedIDs: []string{}})
 	if err != nil {
 		t.Fatal(err)
 	}
