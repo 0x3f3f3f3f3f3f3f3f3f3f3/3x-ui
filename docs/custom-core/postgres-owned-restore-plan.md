@@ -32,9 +32,9 @@ Files: create internal/web/service/postgres_connection.go and postgres_connectio
 
 Consumes: `pgConnEnv(dsn string) ([]string, string, error)` used by exportPostgresDB/restorePostgresDump. Produces the same signature with equivalent safe environment for URI and keyword DSNs; no new public API.
 
-- [ ] Step1: Add TestPostgresToolConnectionSettings and TestPostgresToolConnectionRejectsUnsafeInput. Literal fixtures assert keyword Unix socket/database/user/port/sslmode; URI query socket; escaped synthetic password; unique configured overrides; runtime options; multiple host behavior; malformed/NUL errors exclude a synthetic secret marker. Run these parents. Expected RED: keyword DSN rejected and query override/unsafe diagnostic behavior exposed.
-- [ ] Step2: Implement focused parser/environment mapping and remove the duplicate server helper/import. Run new parents plus existing PG restore diagnostics/import preflight tests. Expected PASS without credential output or changed SQLite behavior.
-- [ ] Step3: Add TestPostgresToolBackupUsesActualPrivateDatabase with actual configured PG fixture/tool opt-in, random database and sentinel rows; exercise real exportPostgresDB, inspect PGDMP and list archive. Expected PASS against the created database; shared schemas untouched. Commit and task-done with the named connection/actual backup parents.
+- [x] Step1: Add TestPostgresToolConnectionSettings and TestPostgresToolConnectionRejectsUnsafeInput. Literal fixtures assert keyword Unix socket/database/user/port/sslmode; URI query socket; escaped synthetic password; unique configured overrides; runtime options; multiple host behavior; malformed/NUL errors exclude a synthetic secret marker. Run these parents. Expected RED: keyword DSN rejected and query override/unsafe diagnostic behavior exposed.
+- [x] Step2: Implement focused parser/environment mapping and remove the duplicate server helper/import. Run new parents plus existing PG restore diagnostics/import preflight tests. Expected PASS without credential output or changed SQLite behavior.
+- [x] Step3: Add TestPostgresToolBackupUsesActualPrivateDatabase with actual configured PG fixture/tool opt-in, random database and sentinel rows; exercise real exportPostgresDB, inspect PGDMP and list archive. Expected PASS against the created database; shared schemas untouched. Commit and task-done with the named connection/actual backup parents.
 
 ## Task 2: Actual owned PostgreSQL restore
 

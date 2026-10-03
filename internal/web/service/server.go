@@ -18,7 +18,6 @@ import (
 	"mime/multipart"
 	stdnet "net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path"
@@ -1630,41 +1629,6 @@ func (s *ServerService) importSQLiteDB(file multipart.File, keepHostSettings boo
 		}
 	}
 	return nil
-}
-
-// pgConnEnv turns the configured PostgreSQL DSN into the PG* environment used by
-// pg_dump/pg_restore, keeping the password out of the process argument list.
-func pgConnEnv(dsn string) (env []string, dbname string, err error) {
-	u, err := url.Parse(strings.TrimSpace(dsn))
-	if err != nil {
-		return nil, "", err
-	}
-	if u.Scheme != "postgres" && u.Scheme != "postgresql" {
-		return nil, "", common.NewErrorf("unsupported DSN scheme %q", u.Scheme)
-	}
-	dbname = strings.TrimPrefix(u.Path, "/")
-	if dbname == "" {
-		return nil, "", common.NewError("PostgreSQL DSN is missing a database name")
-	}
-	host := u.Hostname()
-	if host == "" {
-		host = "127.0.0.1"
-	}
-	port := u.Port()
-	if port == "" {
-		port = "5432"
-	}
-	env = append(os.Environ(), "PGHOST="+host, "PGPORT="+port, "PGDATABASE="+dbname)
-	if user := u.User.Username(); user != "" {
-		env = append(env, "PGUSER="+user)
-	}
-	if pass, ok := u.User.Password(); ok {
-		env = append(env, "PGPASSWORD="+pass)
-	}
-	if sslmode := u.Query().Get("sslmode"); sslmode != "" {
-		env = append(env, "PGSSLMODE="+sslmode)
-	}
-	return env, dbname, nil
 }
 
 func (s *ServerService) exportPostgresDB() ([]byte, error) {
