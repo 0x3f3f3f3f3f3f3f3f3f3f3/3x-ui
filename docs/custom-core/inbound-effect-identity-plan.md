@@ -24,9 +24,9 @@ Spec: docs/custom-core/inbound-effect-identity-design.md, original requirements/
 Files: model.go, new model/inbound_identity.go and database/inbound_identity.go plus identity tests; database/db.go pre-AutoMigrate hook.
 Produces: private create-only Inbound.StableID, BeforeCreate canonical nonzero UUID generation/validation, migrateInboundStableIDColumn/migrateInboundStableIDs bounded backfill.
 
-- [ ] Step1: Actual persisted create/update/delete/numeric reuse and historical missing/nullable/partial1001-row migration tests. Expected RED: current source cannot persist a stable inbound UUID; no compile-only missing-field claim.
-- [ ] Step2: Implement model identity and transactional bounded migration before unique-index creation; validate retained values and preserve exact business fields. Expected GREEN: same UUID across updates/reinitialization, new UUID for new resource, no data drift.
-- [ ] Step3: Exercise retained invalid/duplicate IDs and real PostgreSQL missing/partial schemas, vet/diff, commit and task-done. Expected: exact refusal/rollback or correct migration; backend provenance explicit.
+- [x] Step1: Actual persisted create/update/delete/numeric reuse and historical missing/nullable/partial1001-row migration tests. Expected RED: current source cannot persist a stable inbound UUID; no compile-only missing-field claim.
+- [x] Step2: Implement model identity and transactional bounded migration before unique-index creation; validate retained values and preserve exact business fields. Expected GREEN: same UUID across updates/reinitialization, new UUID for new resource, no data drift.
+- [x] Step3: Exercise retained invalid/duplicate IDs and real PostgreSQL missing/partial schemas, vet/diff, commit and task-done. Expected: exact refusal/rollback or correct migration; backend provenance explicit.
 
 ## Task 2: Preserve identity through public resource edits
 

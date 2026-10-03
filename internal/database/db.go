@@ -137,6 +137,9 @@ func migrateInboundExcludeFromSubColumn() error {
 }
 
 func initModels() error {
+	if err := migrateInboundStableIDColumn(); err != nil {
+		return err
+	}
 	if err := migrateClientStableIDColumn(); err != nil {
 		return err
 	}

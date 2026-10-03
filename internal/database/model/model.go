@@ -49,6 +49,7 @@ type User struct {
 
 // Inbound represents an Xray inbound configuration with traffic statistics and settings.
 type Inbound struct {
+	StableID             string               `json:"-" form:"-" gorm:"column:stable_id;uniqueIndex;<-:create"`                                                                                                     // Persistent resource identity; portable imports allocate a new one
 	Id                   int                  `json:"id" form:"id" gorm:"primaryKey;autoIncrement" example:"1"`                                                                                                     // Unique identifier
 	UserId               int                  `json:"-"`                                                                                                                                                            // Associated user ID
 	Up                   int64                `json:"up" form:"up"`                                                                                                                                                 // Upload traffic in bytes
