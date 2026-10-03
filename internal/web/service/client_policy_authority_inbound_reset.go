@@ -115,3 +115,23 @@ func validateAuthorityInboundResetStamps(original authorityResetCaptureSnapshot,
 	}
 	return nil
 }
+
+func recoverAuthorityInboundResetStampsTx(tx *gorm.DB, stamps []authorityResetInboundStamp) error {
+	if len(stamps) == 0 {
+		return nil
+	}
+	ids := make([]string, len(stamps))
+	at := stamps[0].ResetAt
+	for i, row := range stamps {
+		if at <= 0 || row.ResetAt != at || !authorityResetCanonicalInboundID(row.StableID) || i > 0 && row.StableID <= stamps[i-1].StableID {
+			return ErrClientPolicyLedger
+		}
+		ids[i] = row.StableID
+	}
+	for _, batch := range chunkStrings(ids, 1000) {
+		if err := tx.Model(&model.Inbound{}).Where("stable_id IN ? AND last_traffic_reset_time < ?", batch, at).Update("last_traffic_reset_time", at).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}

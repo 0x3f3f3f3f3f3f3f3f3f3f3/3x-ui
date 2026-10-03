@@ -236,7 +236,10 @@ func recoverAuthorityPreparedResetTx(tx *gorm.DB, journal *policyauthority.Journ
 	if err := recoverAuthorityResetBatchTx(tx, operation); err != nil {
 		return err
 	}
-	return recoverAuthorityPreparedResetRowsTx(tx, journal, source, snapshot.Resets, snapshot.ResetAt)
+	if err := recoverAuthorityPreparedResetRowsTx(tx, journal, source, snapshot.Resets, snapshot.ResetAt); err != nil {
+		return err
+	}
+	return recoverAuthorityInboundResetStampsTx(tx, snapshot.InboundStamps)
 }
 
 // A zero common effect time uses each original semantic row's protected time.

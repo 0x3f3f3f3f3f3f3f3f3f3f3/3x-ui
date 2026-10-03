@@ -42,9 +42,9 @@ Files: same focused service file/tests and reset execution recovery integration.
 
 Consumes: Task1 original capture/prepared stamps. Produces: recoverAuthorityInboundResetStampsTx(tx *gorm.DB, stamps []authorityResetInboundStamp) error, called by prepared reset metadata recovery.
 
-- [ ] Step1: Add TestManagedAuthorityInboundResetColdRecoveryPreservesOriginalResources with actual original reset/payload then coherent SQL restoration, later/renamed/deleted/reused resources, repeated metadata projection and full funded account/grant invariance. Expected RED: original timestamp missing after restoration.
-- [ ] Step2: Implement strict UUID monotonic timestamp projection; add TestManagedAuthorityInboundResetCommitFailureRecoversOriginalStamp with actual deferred commit failure and no false completion. Expected GREEN: exact original stamp/billed boundary restored and no acknowledgement or funding mutation.
-- [ ] Step3: Add TestManagedAuthorityInboundResetRejectsInvalidPrograms for unknown schema/field, invalid/duplicate UUID, wrong membership/time/source and contradictory capture; keep historical compatibility. Run both real backends, vet/diff, commit/task-done. Expected PASS with provenance explicit.
+- [x] Step1: Add TestManagedAuthorityInboundResetColdRecoveryPreservesOriginalResources with actual original reset/payload then coherent SQL restoration, later/renamed/deleted/reused resources, repeated metadata projection and full funded account/grant invariance. Expected RED: original timestamp missing after restoration.
+- [x] Step2: Implement strict UUID monotonic timestamp projection; add TestManagedAuthorityInboundResetCommitFailureRecoversOriginalStamp with actual deferred commit failure and no false completion. Expected GREEN: exact original stamp/billed boundary restored and no acknowledgement or funding mutation.
+- [x] Step3: Add TestManagedAuthorityInboundResetRejectsInvalidPrograms for unknown schema/field, invalid/duplicate UUID, wrong membership/time/source and contradictory capture; keep historical compatibility. Run both real backends, vet/diff, commit/task-done. Expected PASS with provenance explicit.
 
 ## Task 3: Regression and publication
 
