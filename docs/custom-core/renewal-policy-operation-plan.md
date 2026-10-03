@@ -45,10 +45,10 @@ Files: add internal/web/service/client_policy_authority_renewal_recovery.go and 
 
 Consumes: Task1 strict original triggers/effects and retained account history. Produces: recoverAuthorityPreparedRenewalTx(tx,journal,source,capture) error with no metadata acknowledgement or funding mutation.
 
-- [ ] Step1: Actual deferred SQL commit failure after preparation and old SQL expiry/count/reset-row restoration after later payload. Expected RED: original effects/window missing; retained funded40 account/grant unchanged before projection.
-- [ ] Step2: Integrate bounded strict namespace recovery before compilation/due selection; restore justified original before/after tuples/count/semantic rows and preserve later desired fields. Expected GREEN: lifetime348/base316/window32, exact original expiry/count; no new window or metadata completion.
-- [ ] Step3: Cover expiry-only cap exhaustion, later acknowledged renewal/manual reset and desired expiry/rule/multiplier, rename/delete/reused email and numeric ID, changed mirrors, malformed/membership/source/usage/tuple contradictions, cancellation and stale handle. Expected: correct identity/order or fail-closed refusal; full account/funded40 grant retained during metadata-only recovery.
-- [ ] Step4: Run affected renewal/direct/batch/history/calendar/lifecycle races on both real backends, vet/diff, commit and task-done with recovery selection. Expected PASS with backend provenance explicit.
+- [x] Step1: Actual deferred SQL commit failure after preparation and old SQL expiry/count/reset-row restoration after later payload. Expected RED: original effects/window missing; retained funded40 account/grant unchanged before projection.
+- [x] Step2: Integrate bounded strict namespace recovery before compilation/due selection; restore justified original before/after tuples/count/semantic rows and preserve later desired fields. Expected GREEN: lifetime348/base316/window32, exact original expiry/count; no new window or metadata completion.
+- [x] Step3: Cover expiry-only cap exhaustion, later acknowledged renewal/manual reset and desired expiry/rule/multiplier, rename/delete/reused email and numeric ID, changed mirrors, malformed/membership/source/usage/tuple contradictions, cancellation and stale handle. Expected: correct identity/order or fail-closed refusal; full account/funded40 grant retained during metadata-only recovery.
+- [x] Step4: Run affected renewal/direct/batch/history/calendar/lifecycle races on both real backends, vet/diff, commit and task-done with recovery selection. Expected PASS with backend provenance explicit.
 
 ## Task 3: Regression, sole review and stage push
 

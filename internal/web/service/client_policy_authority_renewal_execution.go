@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
@@ -223,39 +222,42 @@ func resumeAuthorityClientRenewals(ctx context.Context, process *xray.Process) e
 		if err == nil {
 			err = ErrClientPolicyLedger
 		}
+		if owned && state != nil {
+			err = errors.Join(err, state.Journal.Close())
+		}
 		return err
 	}
-	after := ""
-	for {
-		page, err := state.Journal.ResetOperationPage(after, 128)
+	operations, err := orderedAuthorityRenewals(ctx, state.Journal, state.SourceID)
+	if err != nil {
+		return err
+	}
+	for _, operation := range operations {
+		if operation.ResetAt == 0 {
+			continue
+		}
+		capture, err := state.Journal.LookupResetOperation(operation.RequestID)
 		if err != nil {
 			return err
 		}
-		for _, header := range page {
-			after = header.RequestID
-			if !strings.HasPrefix(header.RequestID, authorityRenewalPrefix) {
-				continue
-			}
-			capture, err := state.Journal.LookupResetOperation(header.RequestID)
-			if err != nil {
-				return err
-			}
-			if err := runSerializedTxContextForDatabase(ctx, expected, func(tx *gorm.DB) error {
-				return recoverAuthorityPreparedRenewalTx(tx, state.Journal, state.SourceID, capture)
-			}); err != nil {
-				return err
-			}
-			if _, err := state.Journal.LookupResetCompletion(header.RequestID); err == nil {
-				continue
-			} else if !errors.Is(err, policyauthority.ErrNotFound) {
-				return err
-			}
-			if err := applyAuthorityCapturedRenewalLocked(ctx, process, expected, state, capture); err != nil {
-				return err
-			}
-		}
-		if len(page) < 128 {
-			return nil
+		if err := runSerializedTxContextForDatabase(ctx, expected, func(tx *gorm.DB) error {
+			return recoverAuthorityPreparedRenewalTx(tx, state.Journal, state.SourceID, capture)
+		}); err != nil {
+			return err
 		}
 	}
+	for _, operation := range operations {
+		if _, err := state.Journal.LookupResetCompletion(operation.RequestID); err == nil {
+			continue
+		} else if !errors.Is(err, policyauthority.ErrNotFound) {
+			return err
+		}
+		capture, err := state.Journal.LookupResetOperation(operation.RequestID)
+		if err != nil {
+			return err
+		}
+		if err := applyAuthorityCapturedRenewalLocked(ctx, process, expected, state, capture); err != nil {
+			return err
+		}
+	}
+	return nil
 }

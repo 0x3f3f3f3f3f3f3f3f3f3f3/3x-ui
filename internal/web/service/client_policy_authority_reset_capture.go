@@ -251,6 +251,9 @@ func recoverAuthorityResetCaptures(ctx context.Context, expected *gorm.DB, journ
 	if err := runSerializedTxContextForDatabase(ctx, expected, validateSource); err != nil {
 		return err
 	}
+	if err := recoverAuthorityRenewalPreparations(ctx, expected, journal, source); err != nil {
+		return err
+	}
 	after := ""
 	for {
 		if err := ctx.Err(); err != nil {
@@ -264,6 +267,9 @@ func recoverAuthorityResetCaptures(ctx context.Context, expected *gorm.DB, journ
 			return nil
 		}
 		for _, summary := range page {
+			if strings.HasPrefix(summary.RequestID, authorityRenewalPrefix) {
+				continue
+			}
 			direct := strings.HasPrefix(summary.RequestID, authorityDirectResetPrefix)
 			if !direct && !strings.HasPrefix(summary.RequestID, authorityResetRequestPrefix) {
 				continue

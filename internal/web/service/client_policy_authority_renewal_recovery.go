@@ -16,7 +16,7 @@ func recoverAuthorityPreparedRenewalTx(tx *gorm.DB, journal *policyauthority.Jou
 	if err := validateAuthorityDirectResetSourceTx(tx, source); err != nil {
 		return err
 	}
-	original, err := decodeAuthorityRenewalCapture(capture, journal, source)
+	_, err := decodeAuthorityRenewalCapture(capture, journal, source)
 	if err != nil {
 		return err
 	}
@@ -30,10 +30,6 @@ func recoverAuthorityPreparedRenewalTx(tx *gorm.DB, journal *policyauthority.Jou
 	snapshot, err := decodeAuthorityRenewalPreparation(prepared, capture, journal, source)
 	if err != nil {
 		return err
-	}
-	triggers := make(map[string]authorityRenewalTrigger, len(original.Triggers))
-	for _, trigger := range original.Triggers {
-		triggers[trigger.ClientID] = trigger
 	}
 	expiries := make(map[string]int64, len(snapshot.Effects))
 	for _, effect := range snapshot.Effects {
@@ -62,11 +58,13 @@ func recoverAuthorityPreparedRenewalTx(tx *gorm.DB, journal *policyauthority.Jou
 		if traffic.ResetCount < effect.BeforeResetCount {
 			return ErrClientPolicyLedger
 		}
-		trigger := triggers[effect.ClientID]
 		// A versioned or later-stamped edit remains the desired configuration.
-		// Only the original expiry under its original renewal rules is restored.
-		rulesMatch := client.Reset == trigger.Reset && client.ResetDay == trigger.ResetDay && client.ResetWeekday == trigger.ResetWeekday && client.ResetMax == trigger.ResetMax
-		if client.ExpiryTime == effect.BeforeExpiryTime && rulesMatch && client.DesiredPolicyVersion <= effect.BeforePolicyVersion && client.UpdatedAt <= effect.BeforeUpdatedAt {
+		// Prepared effects already happened under the captured renewal rules.
+		// Older desired rules remain SQL's configuration after effect recovery.
+		if client.ExpiryTime == effect.BeforeExpiryTime && client.UpdatedAt <= effect.BeforeUpdatedAt && client.DesiredPolicyVersion > effect.BeforePolicyVersion {
+			return ErrClientPolicyLedger
+		}
+		if client.ExpiryTime == effect.BeforeExpiryTime && client.DesiredPolicyVersion <= effect.BeforePolicyVersion && client.UpdatedAt <= effect.BeforeUpdatedAt {
 			client.ExpiryTime = effect.AfterExpiryTime
 			client.UpdatedAt = max(client.UpdatedAt, effect.AfterUpdatedAt)
 			if err := tx.Table("clients").Where("stable_id = ?", effect.ClientID).Updates(map[string]any{"expiry_time": client.ExpiryTime, "updated_at": client.UpdatedAt}).Error; err != nil {
