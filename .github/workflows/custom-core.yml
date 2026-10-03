@@ -429,7 +429,7 @@ jobs:
           done
           XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race -count=1 -v -timeout 10m ./internal/web/service \
             -run '^Test(PostgresTool|ManagedAuthorityActualPostgresRestore)' | tee /tmp/actual-postgres-owned-restore.log
-          for test in TestPostgresToolConnectionSettings TestPostgresToolConnectionRejectsUnsafeInput TestPostgresToolBackupUsesActualPrivateDatabase TestPostgresToolSessionOptionsPreserveValues TestManagedAuthorityActualPostgresRestorePreservesConsumption TestManagedAuthorityActualPostgresRestorePreservesPreparedReset TestManagedAuthorityActualPostgresRestoreFailureKeepsOwnedRuntime; do
+          for test in TestPostgresToolConnectionSettings TestPostgresToolConnectionRejectsUnsafeInput TestPostgresToolBackupUsesActualPrivateDatabase TestPostgresToolSessionOptionsPreserveValues TestPostgresToolResolvedConnectionBoundaries TestPostgresToolRejectsInheritedDirectTLS TestPostgresToolRejectsUnsupportedEffectiveProtocol TestPostgresToolExplicitTimezoneOverridesInheritedEnvironment TestPostgresToolTLSAliasRejectsPlaintextServer TestManagedAuthorityActualPostgresRestoreUsesLiteralDatabaseName TestManagedAuthorityActualPostgresRestorePreservesUncertainAllocation TestManagedAuthorityActualPostgresRestorePreservesConsumption TestManagedAuthorityActualPostgresRestorePreservesPreparedReset TestManagedAuthorityActualPostgresRestoreFailureKeepsOwnedRuntime; do
             grep -q -- "^--- PASS: $test " /tmp/actual-postgres-owned-restore.log
           done
           if grep -Eq -- '^[[:space:]]*--- (FAIL|SKIP):|^FAIL([[:space:]]|$)' /tmp/actual-postgres-owned-restore.log; then

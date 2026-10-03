@@ -34,6 +34,11 @@ func pgConnEnv(dsn string) ([]string, string, error) {
 	if err != nil {
 		return nil, "", errPostgresToolConnection
 	}
+	// PostgreSQL16 libpq cannot preserve direct TLS negotiation or newer
+	// protocol-version requirements from the effective pgx configuration.
+	if cfg.SSLNegotiation == "direct" || cfg.MinProtocolVersion != "" && cfg.MinProtocolVersion != "3.0" || cfg.MaxProtocolVersion != "" && cfg.MaxProtocolVersion != "3.0" {
+		return nil, "", errPostgresToolConnection
+	}
 	for _, fallback := range cfg.Fallbacks {
 		if fallback.Host != cfg.Host || fallback.Port != cfg.Port {
 			return nil, "", errPostgresToolConnection
@@ -42,10 +47,20 @@ func pgConnEnv(dsn string) ([]string, string, error) {
 	if strings.Contains(cfg.Host, ",") || strings.Contains(settings["host"], ",") || strings.Contains(settings["port"], ",") {
 		return nil, "", errPostgresToolConnection
 	}
+	// Carry only PostgreSQL variables that the panel driver also consumes.
+	// Runtime timezone is emitted below from cfg, so inherited PGTZ cannot
+	// override an explicit timezone sent through PGOPTIONS.
+	inherited := map[string]bool{
+		"PGHOST": true, "PGPORT": true, "PGDATABASE": true, "PGUSER": true, "PGPASSWORD": true,
+		"PGPASSFILE": true, "PGAPPNAME": true, "PGCONNECT_TIMEOUT": true, "PGSSLMODE": true,
+		"PGSSLKEY": true, "PGSSLCERT": true, "PGSSLSNI": true, "PGSSLROOTCERT": true,
+		"PGSSLPASSWORD": true, "PGTARGETSESSIONATTRS": true, "PGOPTIONS": true,
+		"PGCHANNELBINDING": true, "PGREQUIREAUTH": true,
+	}
 	env := make(map[string]string)
 	for _, entry := range os.Environ() {
 		key, value, ok := strings.Cut(entry, "=")
-		if ok {
+		if ok && (!strings.HasPrefix(key, "PG") || inherited[key]) {
 			env[key] = value
 		}
 	}
@@ -57,6 +72,13 @@ func pgConnEnv(dsn string) ([]string, string, error) {
 		env["PGSSLMODE"] = "prefer"
 	}
 	for key, value := range settings {
+		switch key {
+		case "host", "port", "dbname", "user", "password":
+			continue
+		}
+		if resolved, ok := cfg.RuntimeParams[key]; ok {
+			value = resolved
+		}
 		if variable, ok := postgresToolVariables[key]; ok {
 			env[variable] = value
 		} else if _, runtime := cfg.RuntimeParams[key]; !runtime && key != "ssl" {
@@ -100,6 +122,13 @@ func pgConnEnv(dsn string) ([]string, string, error) {
 	return result, cfg.Database, nil
 }
 
+// The tool's --dbname option expands connection strings. A single quoted
+// parameter makes even '=' and URI-shaped database names remain literal.
+func postgresToolDatabaseArgument(name string) string {
+	escaped := strings.ReplaceAll(strings.ReplaceAll(name, "\\", "\\\\"), "'", "\\'")
+	return "dbname='" + escaped + "'"
+}
+
 func postgresToolSettings(dsn string) (map[string]string, error) {
 	if strings.IndexByte(dsn, 0) >= 0 || dsn == "" {
 		return nil, errPostgresToolConnection
@@ -124,18 +153,38 @@ func postgresToolSettings(dsn string) (map[string]string, error) {
 			settings["password"] = password
 		}
 	}
-	query, err := url.ParseQuery(u.RawQuery)
-	if err != nil {
-		return nil, errPostgresToolConnection
-	}
-	for key, values := range query {
+	// PostgreSQL URI query values preserve '+' and resolve aliases in wire order.
+	lastTLSKey := ""
+	pairs := strings.Split(u.RawQuery, "&")
+	for i, pair := range pairs {
+		if pair == "" && i == len(pairs)-1 {
+			continue
+		}
+		rawKey, rawValue, ok := strings.Cut(pair, "=")
+		if !ok || strings.Contains(rawValue, "=") {
+			return nil, errPostgresToolConnection
+		}
+		key, err := url.PathUnescape(strings.Trim(rawKey, " "))
+		if err != nil {
+			return nil, errPostgresToolConnection
+		}
+		value, err := url.PathUnescape(strings.Trim(rawValue, " "))
+		if err != nil {
+			return nil, errPostgresToolConnection
+		}
 		if key == "database" {
 			key = "dbname"
 		}
-		settings[key] = values[len(values)-1]
+		if key == "ssl" || key == "sslmode" {
+			lastTLSKey = key
+		}
+		settings[key] = value
 	}
-	if settings["ssl"] == "true" && settings["sslmode"] == "" {
-		settings["sslmode"] = "require"
+	if settings["ssl"] == "true" {
+		delete(settings, "ssl")
+		if lastTLSKey == "ssl" {
+			settings["sslmode"] = "require"
+		}
 	}
 	return settings, nil
 }

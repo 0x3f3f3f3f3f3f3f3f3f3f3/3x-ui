@@ -1640,7 +1640,7 @@ func (s *ServerService) exportPostgresDB() ([]byte, error) {
 	if err != nil {
 		return nil, common.NewErrorf("invalid PostgreSQL DSN: %v", err)
 	}
-	cmd := exec.CommandContext(context.Background(), bin, "--format=custom", "--no-owner", "--no-privileges", "--dbname", dbname)
+	cmd := exec.CommandContext(context.Background(), bin, "--format=custom", "--no-owner", "--no-privileges", "--dbname", postgresToolDatabaseArgument(dbname))
 	cmd.Env = env
 	var out, stderr bytes.Buffer
 	cmd.Stdout = &out
@@ -1812,7 +1812,7 @@ func (s *ServerService) restorePostgresDump(file multipart.File, keepHostSetting
 
 	cmd := exec.CommandContext(context.Background(), bin,
 		"--clean", "--if-exists", "--no-owner", "--no-privileges",
-		"--single-transaction", "--dbname", dbname, tempPath,
+		"--single-transaction", "--dbname", postgresToolDatabaseArgument(dbname), tempPath,
 	)
 	cmd.Env = env
 	var stderr bytes.Buffer

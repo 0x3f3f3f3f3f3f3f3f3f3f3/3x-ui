@@ -20,6 +20,11 @@ import (
 
 func setupPrivatePostgresRestoreDatabase(t *testing.T) string {
 	t.Helper()
+	return setupPrivatePostgresRestoreDatabaseWithPrefix(t, "")
+}
+
+func setupPrivatePostgresRestoreDatabaseWithPrefix(t *testing.T, prefix string) string {
+	t.Helper()
 	dsn := os.Getenv("XUI_PG_RESTORE_TEST_DSN")
 	if dsn == "" {
 		t.Skip("set XUI_PG_RESTORE_TEST_DSN to a private fixture role with CREATE DATABASE")
@@ -37,6 +42,12 @@ func setupPrivatePostgresRestoreDatabase(t *testing.T) string {
 	}
 	defer admin.Close()
 	name := "xui_restore_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	if prefix != "" {
+		if _, err := admin.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize()); err != nil {
+			t.Fatal("could not create private restore isolation peer")
+		}
+		name = prefix + name
+	}
 	if _, err := admin.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize()); err != nil {
 		t.Fatal("could not create isolated PostgreSQL restore database")
 	}
@@ -119,5 +130,22 @@ func TestPostgresToolSessionOptionsPreserveValues(t *testing.T) {
 	result, err := cmd.Output()
 	if err != nil || string(result) != "with trailing \n" {
 		t.Fatalf("tool runtime option changed: %q/%v", result, err)
+	}
+}
+
+func TestPostgresToolExplicitTimezoneOverridesInheritedEnvironment(t *testing.T) {
+	setupPrivatePostgresRestoreDatabase(t)
+	t.Setenv("PGTZ", "UTC")
+	env, _, err := pgConnEnv(config.GetDBDSN() + " timezone='Asia/Tokyo'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "psql", "-X", "-At", "-c", "SHOW timezone")
+	cmd.Env = env
+	result, err := cmd.Output()
+	if err != nil || string(result) != "Asia/Tokyo\n" {
+		t.Fatalf("explicit timezone overridden by inherited environment: %q/%v", result, err)
 	}
 }
