@@ -30,7 +30,7 @@ jobs:
           make dist-stub
           go test -race -count=1 -v ./internal/database ./internal/web/service \
             -run '^TestInboundStableIdentity' | tee /tmp/inbound-identities-sqlite.log
-          for test in TestInboundStableIdentityDatabaseExport TestInboundStableIdentityHistoricalMigration TestInboundStableIdentityRejectsCorruptMigration TestInboundStableIdentityLifecycle TestInboundStableIdentityPublicCopyAndImport TestInboundStableIdentityPublicNativeEdits; do
+          for test in TestInboundStableIdentityRestoreStaging TestInboundStableIdentityDatabaseExport TestInboundStableIdentityHistoricalMigration TestInboundStableIdentityRejectsCorruptMigration TestInboundStableIdentityLifecycle TestInboundStableIdentityPublicCopyAndImport TestInboundStableIdentityPublicNativeEdits; do
             grep -q -- "^--- PASS: $test " /tmp/inbound-identities-sqlite.log
           done
       - name: Source snapshot and database replacement regressions (sqlite)
@@ -393,7 +393,7 @@ jobs:
           make dist-stub
           go test -race -count=1 -v ./internal/database ./internal/web/service \
             -run '^TestInboundStableIdentity' | tee /tmp/inbound-identities-postgres.log
-          for test in TestInboundStableIdentityDatabaseExport TestInboundStableIdentityHistoricalMigration TestInboundStableIdentityRejectsCorruptMigration TestInboundStableIdentityLifecycle TestInboundStableIdentityPublicCopyAndImport TestInboundStableIdentityPublicNativeEdits; do
+          for test in TestInboundStableIdentityRestoreStaging TestInboundStableIdentityDatabaseExport TestInboundStableIdentityHistoricalMigration TestInboundStableIdentityRejectsCorruptMigration TestInboundStableIdentityLifecycle TestInboundStableIdentityPublicCopyAndImport TestInboundStableIdentityPublicNativeEdits; do
             grep -q -- "^--- PASS: $test " /tmp/inbound-identities-postgres.log
           done
       - name: Source snapshot and database replacement regressions (postgres)

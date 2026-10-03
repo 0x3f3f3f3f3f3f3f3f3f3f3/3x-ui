@@ -312,3 +312,89 @@ func TestInboundStableIdentityDatabaseExport(t *testing.T) {
 		})
 	}
 }
+
+func TestInboundStableIdentityRestoreStaging(t *testing.T) {
+	active := inboundIdentityDB(t)
+	sentinel := model.Inbound{Tag: "active-resource", Port: 27301}
+	if err := active.Create(&sentinel).Error; err != nil {
+		t.Fatal(err)
+	}
+	activeID := storedInboundIdentity(t, active, sentinel.Id)
+	canonical := "c1f175b1-b2bd-461a-bd35-650c2249a1fb"
+	for _, mode := range []string{"missing", "nullable", "partial", "invalid", "duplicate"} {
+		t.Run(mode, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "staged.db")
+			staged, err := gorm.Open(sqlite.Open(path), &gorm.Config{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { handle, _ := staged.DB(); _ = handle.Close() })
+			if err := staged.AutoMigrate(&model.User{}, &model.Setting{}); err != nil {
+				t.Fatal(err)
+			}
+			column := ", stable_id TEXT"
+			if mode == "missing" {
+				column = ""
+			}
+			if err := staged.Exec("CREATE TABLE inbounds (id INTEGER PRIMARY KEY, tag TEXT, port INTEGER, settings TEXT, up BIGINT, down BIGINT" + column + ")").Error; err != nil {
+				t.Fatal(err)
+			}
+			const settings = `{"credential":"retained","opaque":9007199254740993}`
+			for i := 1; i <= 3; i++ {
+				row := map[string]any{"id": i, "tag": fmt.Sprintf("staged-%d", i), "port": 27310 + i, "settings": settings, "up": 111 * i, "down": 222 * i}
+				if mode == "partial" || mode == "invalid" || mode == "duplicate" {
+					row["stable_id"] = ""
+					if i == 3 {
+						row["stable_id"] = canonical
+					}
+					if i == 2 && mode == "invalid" {
+						row["stable_id"] = "invalid-resource"
+					} else if i == 2 && mode == "duplicate" {
+						row["stable_id"] = canonical
+					}
+				}
+				if err := staged.Table("inbounds").Create(row).Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+			err = PrepareSQLiteForMigration(path)
+			if storedInboundIdentity(t, active, sentinel.Id) != activeID || GetDB() != active {
+				t.Fatal("staging migration changed the active panel database")
+			}
+			if mode == "invalid" || mode == "duplicate" {
+				if err == nil {
+					t.Fatal("staging admitted corrupt retained identities")
+				}
+				var firstIDs []string
+				if err := staged.Table("inbounds").Where("id = 1").Pluck("stable_id", &firstIDs).Error; err != nil || len(firstIDs) != 1 || firstIDs[0] != "" {
+					t.Fatal("rejected staging did not roll back earlier identity writes")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("valid historical backup refused before restore: %v", err)
+			}
+			identities := map[int]string{}
+			seen := map[string]bool{}
+			for i := 1; i <= 3; i++ {
+				id := storedInboundIdentity(t, staged, i)
+				if seen[id] || mode == "partial" && i == 3 && id != canonical {
+					t.Fatal("staging changed or reused a retained identity")
+				}
+				identities[i], seen[id] = id, true
+				var row model.Inbound
+				if err := staged.First(&row, i).Error; err != nil || row.Settings != settings || row.Up != int64(111*i) || row.Down != int64(222*i) || row.Port != 27310+i || row.Tag != fmt.Sprintf("staged-%d", i) {
+					t.Fatal("staging changed exact business data")
+				}
+			}
+			if err := PrepareSQLiteForMigration(path); err != nil {
+				t.Fatal(err)
+			}
+			for i, id := range identities {
+				if storedInboundIdentity(t, staged, i) != id {
+					t.Fatal("repeated staging changed identity")
+				}
+			}
+		})
+	}
+}

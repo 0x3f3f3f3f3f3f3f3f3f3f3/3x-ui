@@ -6,10 +6,11 @@ Actual lifecycle and historical migration tests failed before implementation: no
 
 The model generates and validates UUIDs on creation. Before general index migration, a transaction reads historical identities in 256-row pages, fills missing values, preserves valid values and refuses invalid or duplicate values. JSON/form payloads omit the UUID. Public new-resource admission discards a copied UUID; ordinary edits recover the original identity from SQL, including the returned Go object.
 
-Six required parents pass with race detection on both private backends:
+Seven required parents pass with race detection on both private backends:
 
 | Parent | SQLite | PostgreSQL |
 | --- | --- | --- |
+| TestInboundStableIdentityRestoreStaging | PASS | PASS |
 | TestInboundStableIdentityDatabaseExport | PASS | PASS |
 | TestInboundStableIdentityHistoricalMigration | PASS | PASS |
 | TestInboundStableIdentityRejectsCorruptMigration | PASS | PASS |
@@ -30,3 +31,9 @@ Actual whole-database export additionally reproduced map insertion bypassing the
 The first full Go run failed a retained lost-ack test fixture because an OS-free sampled port matched its saved but inactive Tunnel port. The corrected fixture holds that socket while selecting another port, preserves all business-flow assertions, and passes separately with race detection on both databases (SQLite11.265s/PostgreSQL17.629s, all four children, zero skips/failures) before the final full rerun. The initial failed log and fixture remain retained.
 
 Final `make test-go` passes all 52 tested packages, including service278.417s, database44.386s, authority30.225s, subscription53.920s and the additional AmneziaWG device package1.085s. Both original historical writer probes and the verified Custom Xray are supplied. This is local full Go verification; ordinary full-run output is not a zero-skip protocol/platform claim.
+
+The sole fresh bounded review found one Important restore-staging regression and no Critical/Minor findings. `PrepareSQLiteForMigration` previously attempted index creation before partial identities were backfilled. The author reproducer failed (2.291s); the single correction pass shares an explicit-database transaction helper and runs it on the staged SQLite file before AutoMigrate. Staging missing/nullable/partial schemas, retained identities, exact business bytes, repeated preparation, corrupt/duplicate refusal and rollback pass; a sentinel proves the active SQLite or PostgreSQL database is untouched. The staged file remains SQLite in both environments because both upload paths consume that format.
+
+After correction, seven identity parents and affected preparation/restore gates pass with race detection in both environments: database23.684s/service22.557s under SQLite, database29.405s/service37.593s under PostgreSQL. Each broad run has21 passing parents and one explicit actual-core restore skip; that skipped parent was then supplied the verified core and passes separately (7.965s/10.489s), leaving22 distinct passing parents per environment. The existing owned-restart test internally selects SQLite in both environments; it is real SQLite backup/import/Tunnel/ledger proof, not end-to-end PostgreSQL restore proof. CI now requires all seven names. The six reviewer-declined parent boundaries are ruled individually in the retained ledger; no second review occurs.
+
+The single correction pass ends with fresh `make test-go` exit0 and all52 tested packages passing, including service275.275s, against the ten unchanged final source/test/CI hashes. Fresh vet/diff and seven required-name checks pass. The sole Important finding is addressed by the observed restore-staging RED→GREEN and full green suite; no second review was requested.

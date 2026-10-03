@@ -11,10 +11,14 @@ import (
 
 // Backfill before AutoMigrate creates the unique index on historical tables.
 func migrateInboundStableIDColumn() error {
-	if !db.Migrator().HasTable(&model.Inbound{}) {
+	return migrateInboundStableIDColumnForDatabase(db)
+}
+
+func migrateInboundStableIDColumnForDatabase(database *gorm.DB) error {
+	if !database.Migrator().HasTable(&model.Inbound{}) {
 		return nil
 	}
-	return db.Transaction(func(tx *gorm.DB) error {
+	return database.Transaction(func(tx *gorm.DB) error {
 		if !tx.Migrator().HasColumn(&model.Inbound{}, "stable_id") {
 			if err := tx.Migrator().AddColumn(&model.Inbound{}, "StableID"); err != nil {
 				return err

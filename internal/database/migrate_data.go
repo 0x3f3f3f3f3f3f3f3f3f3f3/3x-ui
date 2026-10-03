@@ -420,8 +420,9 @@ func tableWithIdColumn(db *gorm.DB, m any) (string, bool) {
 // PrepareSQLiteForMigration rejects SQLite files that are not a panel database
 // before the caller causes any downtime, then AutoMigrates the panel schema
 // onto the file so backups from older versions gain the newer tables and
-// columns the row copy reads. Data-level upgrades are not needed here: they
-// run dialect-agnostically on the destination via InitDB after the import.
+// columns the row copy reads. Stable inbound identities must be populated
+// before their unique index is created. Other data upgrades run on the
+// destination via InitDB after the import.
 func PrepareSQLiteForMigration(dbPath string) error {
 	gdb, err := gorm.Open(sqlite.Open(dbPath+"?_busy_timeout=10000"), &gorm.Config{Logger: logger.Discard})
 	if err != nil {
@@ -437,6 +438,9 @@ func PrepareSQLiteForMigration(dbPath string) error {
 		if !sqliteTableExists(sqlDB, table) {
 			return fmt.Errorf("not a 3x-ui panel database: required table %q is missing", table)
 		}
+	}
+	if err := migrateInboundStableIDColumnForDatabase(gdb); err != nil {
+		return fmt.Errorf("prepare inbound identities: %w", err)
 	}
 	for _, m := range migrationModels() {
 		if err := gdb.AutoMigrate(m); err != nil && !isIgnorableDuplicateColumnErr(gdb, err, m) {
