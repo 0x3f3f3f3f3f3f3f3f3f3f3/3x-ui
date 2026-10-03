@@ -3,6 +3,8 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -257,9 +259,8 @@ func testManagedScheduledResetRecovery(t *testing.T, ctx context.Context, proces
 	future := time.Now().UTC().AddDate(0, 0, 2)
 	now := time.Date(future.Year(), future.Month(), future.Day(), 0, 0, 0, 0, time.UTC)
 	xrayState.replace(nil)
-	svc := &ClientService{}
-	olderErr := svc.RunScheduledTrafficReset(ctx, "daily", now.AddDate(0, 0, -1))
-	newerErr := svc.RunScheduledTrafficReset(ctx, "daily", now)
+	olderErr := applyRestrictedPollingCalendar(t, ctx, "daily", now.AddDate(0, 0, -1))
+	newerErr := applyRestrictedPollingCalendar(t, ctx, "daily", now)
 	xrayState.replace(process)
 	for _, err := range []error{olderErr, newerErr} {
 		if err == nil || !strings.Contains(err.Error(), "managed core is not ready") {
@@ -276,7 +277,7 @@ func testManagedScheduledResetRecovery(t *testing.T, ctx context.Context, proces
 	var badOperation model.ClientTrafficResetBatch
 	for i := 1; i <= 9; i++ {
 		var err error
-		badOperation, err = captureScheduledTrafficReset(ctx, "weekly", now.AddDate(0, 0, 7*i))
+		badOperation, err = captureRestrictedPollingCalendar(ctx, "weekly", now.AddDate(0, 0, 7*i))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -431,8 +432,14 @@ func testManagedResetBatch(t *testing.T, ctx context.Context, process *xray.Proc
 	}
 	measured.checkpoints, measured.applications, measured.failApplyAt = 0, 0, 2
 	svc := &ClientService{}
-	if _, err := svc.BulkResetTrafficWithRequest(ctx, &InboundService{}, emails, "mixed-public"); !errors.Is(err, measured.failure) {
-		t.Fatalf("public batch concealed Runtime failure: %v", err)
+	if _, err := svc.BulkResetTrafficWithRequest(ctx, &InboundService{}, emails, "unowned-public-refusal"); !errors.Is(err, ErrAuthorityNotInitialized) || measured.checkpoints != 0 || measured.applications != 0 {
+		t.Fatalf("unowned public reset reached the restricted core: %v", err)
+	}
+	if row := trafficOf(t, legacy.Email); row.Up != 11 || row.Down != 22 || row.Enable {
+		t.Fatalf("unowned public refusal changed legacy traffic: %+v", row)
+	}
+	if _, err := applyRestrictedPollingBatch(ctx, emails, "mixed-public"); !errors.Is(err, measured.failure) {
+		t.Fatalf("restricted batch concealed Runtime failure: %v", err)
 	}
 	if err := db.First(&legacy, legacy.Id).Error; err != nil || !legacy.Enable {
 		t.Fatalf("committed legacy reset lost its re-enable after another member's Runtime failure: %+v, %v", legacy, err)
@@ -446,8 +453,8 @@ func testManagedResetBatch(t *testing.T, ctx context.Context, process *xray.Proc
 	if err := db.Model(&xray.ClientTraffic{}).Where("email = ?", legacy.Email).Update("up", 13).Error; err != nil {
 		t.Fatal(err)
 	}
-	if affected, err := svc.BulkResetTrafficWithRequest(ctx, &InboundService{}, emails, "mixed-public"); err != nil || affected != 1002 {
-		t.Fatalf("mixed public retry lost original result: affected=%d, %v", affected, err)
+	if affected, err := applyRestrictedPollingBatch(ctx, emails, "mixed-public"); err != nil || affected != 1002 {
+		t.Fatalf("restricted mixed retry lost original result: affected=%d, %v", affected, err)
 	}
 	if err := db.First(&legacy, legacy.Id).Error; err != nil || legacy.Enable {
 		t.Fatalf("duplicate batch cleared a later manual disable: %+v, %v", legacy, err)
@@ -470,7 +477,7 @@ func testManagedResetBatch(t *testing.T, ctx context.Context, process *xray.Proc
 	if err := db.First(&active, "stable_id = ?", activeID).Error; err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.BulkResetTrafficWithRequest(ctx, &InboundService{}, []string{legacy.Email, active.Email}, "disable-after-commit"); err != nil {
+	if _, err := applyRestrictedPollingBatch(ctx, []string{legacy.Email, active.Email}, "disable-after-commit"); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.First(&legacy, legacy.Id).Error; err != nil || !enabledAtCommit || legacy.Enable || legacy.TotalGB != 1700 {
@@ -482,7 +489,7 @@ func testManagedResetBatch(t *testing.T, ctx context.Context, process *xray.Proc
 	}
 	oldEmail := original.Email
 	xrayState.replace(nil)
-	_, stoppedErr := svc.BulkResetTrafficWithRequest(ctx, &InboundService{}, []string{oldEmail}, "before-core-recovery")
+	_, stoppedErr := applyRestrictedPollingBatch(ctx, []string{oldEmail}, "before-core-recovery")
 	xrayState.replace(process)
 	if stoppedErr == nil || !strings.Contains(stoppedErr.Error(), "managed core is not ready") {
 		t.Fatalf("stopped batch did not stay pending: %v", stoppedErr)
@@ -496,10 +503,56 @@ func testManagedResetBatch(t *testing.T, ctx context.Context, process *xray.Proc
 	if err := db.Model(&xray.ClientTraffic{}).Where("email = ?", oldEmail).Updates(map[string]any{"up": 37, "down": 0}).Error; err != nil {
 		t.Fatal(err)
 	}
-	if affected, err := svc.BulkResetTrafficWithRequest(ctx, &InboundService{}, []string{oldEmail}, "before-core-recovery"); err != nil || affected != 1 {
+	if affected, err := applyRestrictedPollingBatch(ctx, []string{oldEmail}, "before-core-recovery"); err != nil || affected != 1 {
 		t.Fatalf("renamed pending member did not recover: affected=%d, %v", affected, err)
 	}
 	if row := trafficOf(t, oldEmail); row.Up != 37 {
 		t.Fatalf("pending batch rebound a recycled email on recovery: %+v", row)
 	}
+}
+
+// This deliberately restricted fixture tests legacy cursor/SQL/application
+// transactions without a production authority owner. Public reset admission is
+// tested separately above and by source-owned live service fixtures. Reuse the
+// actual SQL selectors rather than inventing a second selector in test code.
+func applyRestrictedPollingBatch(ctx context.Context, emails []string, request string) (int, error) {
+	emails = trimmedUniqueEmails(emails)
+	slices.Sort(emails)
+	raw, err := json.Marshal(emails)
+	if err != nil {
+		return 0, err
+	}
+	digest := sha256.Sum256(raw)
+	var operation model.ClientTrafficResetBatch
+	if err := runSerializedTxContextForDatabase(ctx, database.GetDB(), func(tx *gorm.DB) error {
+		return selectClientTrafficResetBatchTx(tx, &operation, "bulk", emails, request, hex.EncodeToString(digest[:]))
+	}); err != nil {
+		return 0, err
+	}
+	affected, _, err := (&ClientService{}).applyTrafficResetBatch(ctx, &InboundService{}, operation)
+	return affected, err
+}
+
+func captureRestrictedPollingCalendar(ctx context.Context, period string, now time.Time) (model.ClientTrafficResetBatch, error) {
+	var operation model.ClientTrafficResetBatch
+	at, err := trafficResetCalendarWindow(period, now)
+	if err != nil {
+		return operation, err
+	}
+	zone := sha256.Sum256([]byte(now.Location().String()))
+	scope := fmt.Sprintf("calendar:%s:%x", period, zone[:8])
+	err = runSerializedTxContextForDatabase(ctx, database.GetDB(), func(tx *gorm.DB) error {
+		return selectScheduledTrafficResetTx(tx, &operation, period, now, scope, at)
+	})
+	return operation, err
+}
+
+func applyRestrictedPollingCalendar(t *testing.T, ctx context.Context, period string, now time.Time) error {
+	t.Helper()
+	operation, err := captureRestrictedPollingCalendar(ctx, period, now)
+	if err != nil {
+		return err
+	}
+	_, _, err = (&ClientService{}).applyTrafficResetBatch(ctx, &InboundService{}, operation)
+	return err
 }

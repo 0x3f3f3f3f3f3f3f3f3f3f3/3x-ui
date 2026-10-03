@@ -70,44 +70,7 @@ func captureScheduledTrafficReset(ctx context.Context, period string, now time.T
 	zone := sha256.Sum256([]byte(now.Location().String()))
 	scope := fmt.Sprintf("calendar:%s:%x", period, zone[:8])
 	err = runAuthorityResetCapture(ctx, "", authorityResetCalendarKey(scope, at), &operation, func(tx *gorm.DB) error {
-		tx = tx.WithContext(ctx)
-		err := tx.First(&operation, "scope = ? AND scheduled_at = ?", scope, at).Error
-		if err == nil {
-			return nil
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		var inbounds []model.Inbound
-		if err := monthlyTrafficResetQuery(tx.Where("traffic_reset = ?", period), period, now).Limit(100001).Find(&inbounds).Error; err != nil {
-			return err
-		}
-		if len(inbounds) > 100000 {
-			return errors.New("reset selection exceeds 100000 inbounds")
-		}
-		inboundIDs := make([]int, len(inbounds))
-		for i, inbound := range inbounds {
-			inboundIDs[i] = inbound.Id
-		}
-		targets, err := scheduledClientResetTargets(tx, period, now, inboundIDs)
-		if err != nil {
-			return err
-		}
-		rawTargets, err := json.Marshal(targets)
-		if err != nil {
-			return err
-		}
-		slices.Sort(inboundIDs)
-		rawInbounds, err := json.Marshal(inboundIDs)
-		if err != nil {
-			return err
-		}
-		operation = model.ClientTrafficResetBatch{RequestID: uuid.NewString(), Scope: scope, ScheduledAt: at, TargetsJSON: string(rawTargets), InboundIDsJSON: string(rawInbounds), ManagedIDsJSON: "[]"}
-		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&operation).Error; err != nil {
-			return err
-		}
-		operation = model.ClientTrafficResetBatch{}
-		return tx.First(&operation, "scope = ? AND scheduled_at = ?", scope, at).Error
+		return selectScheduledTrafficResetTx(tx.WithContext(ctx), &operation, period, now, scope, at)
 	}, func(original model.ClientTrafficResetBatch) error {
 		if original.Scope != scope || original.ScheduledAt != at {
 			return ErrClientPolicyLedger
@@ -115,6 +78,46 @@ func captureScheduledTrafficReset(ctx context.Context, period string, now time.T
 		return nil
 	})
 	return operation, err
+}
+
+func selectScheduledTrafficResetTx(tx *gorm.DB, operation *model.ClientTrafficResetBatch, period string, now time.Time, scope string, at int64) error {
+	err := tx.First(operation, "scope = ? AND scheduled_at = ?", scope, at).Error
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	var inbounds []model.Inbound
+	if err := monthlyTrafficResetQuery(tx.Where("traffic_reset = ?", period), period, now).Limit(100001).Find(&inbounds).Error; err != nil {
+		return err
+	}
+	if len(inbounds) > 100000 {
+		return errors.New("reset selection exceeds 100000 inbounds")
+	}
+	inboundIDs := make([]int, len(inbounds))
+	for i, inbound := range inbounds {
+		inboundIDs[i] = inbound.Id
+	}
+	targets, err := scheduledClientResetTargets(tx, period, now, inboundIDs)
+	if err != nil {
+		return err
+	}
+	rawTargets, err := json.Marshal(targets)
+	if err != nil {
+		return err
+	}
+	slices.Sort(inboundIDs)
+	rawInbounds, err := json.Marshal(inboundIDs)
+	if err != nil {
+		return err
+	}
+	*operation = model.ClientTrafficResetBatch{RequestID: uuid.NewString(), Scope: scope, ScheduledAt: at, TargetsJSON: string(rawTargets), InboundIDsJSON: string(rawInbounds), ManagedIDsJSON: "[]"}
+	if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(operation).Error; err != nil {
+		return err
+	}
+	*operation = model.ClientTrafficResetBatch{}
+	return tx.First(operation, "scope = ? AND scheduled_at = ?", scope, at).Error
 }
 
 func scheduledClientResetTargets(tx *gorm.DB, period string, now time.Time, inboundIDs []int) ([]clientResetTarget, error) {

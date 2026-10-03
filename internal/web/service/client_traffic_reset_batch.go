@@ -68,69 +68,74 @@ func captureClientTrafficResetBatch(ctx context.Context, scope string, emails []
 	hash := sha256.Sum256(selection)
 	fingerprint := hex.EncodeToString(hash[:])
 	err = runAuthorityResetCapture(ctx, authorityResetRequestKey(requestID), "", &operation, func(tx *gorm.DB) error {
-		tx = tx.WithContext(ctx)
-		err := tx.First(&operation, "request_id = ?", requestID).Error
-		if err == nil {
-			return validateResetBatchSelection(operation, scope, fingerprint)
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		selected := emails
-		if scope == "all" || scope == "inbound:-1" {
-			if err := tx.Raw("SELECT email FROM clients UNION SELECT email FROM client_traffics LIMIT 100001").Scan(&selected).Error; err != nil {
-				return err
-			}
-		} else if strings.HasPrefix(scope, "inbound:") {
-			id, err := strconv.Atoi(strings.TrimPrefix(scope, "inbound:"))
-			if err != nil || id <= 0 {
-				return errors.New("invalid reset inbound")
-			}
-			if err := tx.Table("client_inbounds ci").Select("DISTINCT c.email").Joins("JOIN clients c ON c.id = ci.client_id").Where("ci.inbound_id = ?", id).Limit(100001).Pluck("c.email", &selected).Error; err != nil {
-				return err
-			}
-		}
-		if len(selected) > 100000 {
-			return errors.New("reset selection exceeds 100000 clients")
-		}
-		records, err := clientRecordsByEmail(tx, selected)
-		if err != nil {
-			return err
-		}
-		traffic := make(map[string]bool)
-		for _, batch := range chunkStrings(selected, sqlInChunk) {
-			var found []string
-			if err := tx.Model(&xray.ClientTraffic{}).Where("email IN ?", batch).Pluck("email", &found).Error; err != nil {
-				return err
-			}
-			for _, email := range found {
-				traffic[email] = true
-			}
-		}
-		targets := make([]clientResetTarget, 0, len(selected))
-		for _, email := range selected {
-			if record := records[email]; record != nil {
-				targets = append(targets, clientResetTarget{ClientID: record.StableID, Email: email})
-			} else if traffic[email] {
-				targets = append(targets, clientResetTarget{Email: email})
-			}
-		}
-		raw, err := json.Marshal(targets)
-		if err != nil {
-			return err
-		}
-		operation = model.ClientTrafficResetBatch{RequestID: requestID, Scope: scope, SelectionHash: fingerprint, TargetsJSON: string(raw), ManagedIDsJSON: "[]"}
-		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&operation).Error; err != nil {
-			return err
-		}
-		if err := tx.First(&operation, "request_id = ?", requestID).Error; err != nil {
-			return err
-		}
-		return validateResetBatchSelection(operation, scope, fingerprint)
+		return selectClientTrafficResetBatchTx(tx.WithContext(ctx), &operation, scope, emails, requestID, fingerprint)
 	}, func(original model.ClientTrafficResetBatch) error {
 		return validateResetBatchSelection(original, scope, fingerprint)
 	})
 	return operation, err
+}
+
+// SQL selection is separate from source-owned admission; public callers enter
+// through runAuthorityResetCapture before invoking this transaction helper.
+func selectClientTrafficResetBatchTx(tx *gorm.DB, operation *model.ClientTrafficResetBatch, scope string, emails []string, requestID, fingerprint string) error {
+	err := tx.First(operation, "request_id = ?", requestID).Error
+	if err == nil {
+		return validateResetBatchSelection(*operation, scope, fingerprint)
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	selected := emails
+	if scope == "all" || scope == "inbound:-1" {
+		if err := tx.Raw("SELECT email FROM clients UNION SELECT email FROM client_traffics LIMIT 100001").Scan(&selected).Error; err != nil {
+			return err
+		}
+	} else if strings.HasPrefix(scope, "inbound:") {
+		id, err := strconv.Atoi(strings.TrimPrefix(scope, "inbound:"))
+		if err != nil || id <= 0 {
+			return errors.New("invalid reset inbound")
+		}
+		if err := tx.Table("client_inbounds ci").Select("DISTINCT c.email").Joins("JOIN clients c ON c.id = ci.client_id").Where("ci.inbound_id = ?", id).Limit(100001).Pluck("c.email", &selected).Error; err != nil {
+			return err
+		}
+	}
+	if len(selected) > 100000 {
+		return errors.New("reset selection exceeds 100000 clients")
+	}
+	records, err := clientRecordsByEmail(tx, selected)
+	if err != nil {
+		return err
+	}
+	traffic := make(map[string]bool)
+	for _, batch := range chunkStrings(selected, sqlInChunk) {
+		var found []string
+		if err := tx.Model(&xray.ClientTraffic{}).Where("email IN ?", batch).Pluck("email", &found).Error; err != nil {
+			return err
+		}
+		for _, email := range found {
+			traffic[email] = true
+		}
+	}
+	targets := make([]clientResetTarget, 0, len(selected))
+	for _, email := range selected {
+		if record := records[email]; record != nil {
+			targets = append(targets, clientResetTarget{ClientID: record.StableID, Email: email})
+		} else if traffic[email] {
+			targets = append(targets, clientResetTarget{Email: email})
+		}
+	}
+	raw, err := json.Marshal(targets)
+	if err != nil {
+		return err
+	}
+	*operation = model.ClientTrafficResetBatch{RequestID: requestID, Scope: scope, SelectionHash: fingerprint, TargetsJSON: string(raw), ManagedIDsJSON: "[]"}
+	if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(operation).Error; err != nil {
+		return err
+	}
+	if err := tx.First(operation, "request_id = ?", requestID).Error; err != nil {
+		return err
+	}
+	return validateResetBatchSelection(*operation, scope, fingerprint)
 }
 
 func validateResetBatchSelection(operation model.ClientTrafficResetBatch, scope, fingerprint string) error {

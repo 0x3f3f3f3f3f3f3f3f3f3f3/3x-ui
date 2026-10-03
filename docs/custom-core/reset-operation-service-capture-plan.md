@@ -54,7 +54,7 @@
 
 ## Task 3: Final regression/evidence and review
 
-**Files:** Update `docs/custom-core/issuance-journal-foundation.md`; retain logs/fixtures under existing evidence root and ignored plan workspace.
+**Files:** Update `docs/custom-core/issuance-journal-foundation.md`; retain logs/fixtures under existing evidence root and ignored plan workspace. The observed restricted polling fixture failure additionally requires extracting the unchanged pure SQL selectors in `client_traffic_reset_batch.go`/`client_traffic_reset_schedule.go` and correcting `client_policy_poll_test.go`; public source-owned admission remains intact (ledgered Task3 ruling).
 
 - [ ] Run appropriate complete reset/batch/calendar/authority history/recovery selections on SQLite and private isolated PostgreSQL with clean core; explicitly count forced SQLite paired cases. Run journal/service vet, diff and full make test-go. No unchanged native heavy rerun unless changes/failure/concern warrants it; prior native103 and core107 remain retained.
 - [ ] Record exact real RED/GREEN values, test/package counts/skips/backend scope, retained authority/probe/core provenance and the pending mixed/preparation/completion limits. Commit.
