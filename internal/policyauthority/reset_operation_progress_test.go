@@ -350,7 +350,11 @@ func retainedResetProgressFixture(t *testing.T, path, phase string) string {
 	t.Helper()
 	root := os.Getenv("RESET_OPERATION_PROGRESS_FIXTURE_DIR")
 	if root == "" {
-		root = t.TempDir()
+		var err error
+		root, err = os.MkdirTemp(t.TempDir(), "private-progress-fixtures-")
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := os.MkdirAll(root, 0700); err != nil {
 		t.Fatal(err)
