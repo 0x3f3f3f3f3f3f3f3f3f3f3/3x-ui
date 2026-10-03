@@ -30,9 +30,9 @@ Completion contract: with actual XRAY_E2E_BINARY, run `go test -race -count=1 -v
 
 Files create runtime/remote_authority_control.go, remote_authority_api.go and corresponding tests; extend existing node_authority_json.go exact object helpers as needed without weakening setup/manifest behavior.
 Interfaces: six typed Remote methods plus RemoteAuthorityAPI implementing the existing service authorityDemandAPI via structural Go interface; immutable cloned Capabilities, bound discovery challenge, BindAuthority verifies configured tuple/current boot only.
-- [ ] Add TestRemoteAuthorityControlRequiresVerifiedTLS / TestRemoteAuthorityControlRejectsAmbiguousPayloads / TestRemoteAuthorityAPIPreservesBinding. Actual pinned TLS/encrypted tokens/private opt-in/redirect/cancel/oversize/full uint64/current role/source/client/grant/duplicate aliases. Behavioral RED.
-- [ ] Implement exact request/result/nested protobuf field validation and verified transport; adapter pins source/boot/role and never rebinds or exposes mutable metadata. Existing remote/setup/discovery/ordinary envelopes GREEN.
-- [ ] Commit/task-done required named parents; document canonical wire field names and exact integers.
+- [x] Add TestRemoteAuthorityControlRequiresVerifiedTLS / TestRemoteAuthorityControlRejectsAmbiguousPayloads / TestRemoteAuthorityAPIPreservesBinding. Actual pinned TLS/encrypted tokens/private opt-in/redirect/cancel/oversize/full uint64/current role/source/client/grant/duplicate aliases. Behavioral RED.
+- [x] Implement exact request/result/nested protobuf field validation and verified transport; adapter pins source/boot/role and never rebinds or exposes mutable metadata. Existing remote/setup/discovery/ordinary envelopes GREEN.
+- [x] Commit/task-done required named parents; document canonical wire field names and exact integers.
 
 
 Completion contract: run `go test -race -count=1 -v -timeout 5m ./internal/web/runtime -run '^Test(RemoteAuthorityControlRequiresVerifiedTLS|RemoteAuthorityControlRejectsAmbiguousPayloads|RemoteAuthorityAPIPreservesBinding)$'`. Expected: all three literal parents PASS, zero FAIL/SKIP/no-tests; full runtime regression remains required. Canonical uint64 wire strings are lossless, not floats or permissive aliases.

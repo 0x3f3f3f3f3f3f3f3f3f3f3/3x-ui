@@ -150,9 +150,10 @@ func newNodeTransport(tlsCfg *tls.Config) *http.Transport {
 	}
 }
 
-// defaultNodeHTTPClient reaches nodes trusting the system CA store ("verify"
-// mode or plain http); shared so connections pool across nodes.
+// Private opt-in pools are separate: reusing an established connection skips
+// DialContext, so a later opt-out must never inherit an opted-in connection.
 var defaultNodeHTTPClient = &http.Client{Transport: newNodeTransport(nil)}
+var privateNodeHTTPClient = &http.Client{Transport: newNodeTransport(nil)}
 
 // nodeClients caches one client per node: heartbeat and traffic sync reach it
 // every few seconds, and a rebuilt client would open its own empty pool.
@@ -169,7 +170,7 @@ var (
 // nodeClientIdentity covers everything that decides how the node is trusted; the
 // proxy URL is a variant of it, so it stays out of the identity itself.
 func nodeClientIdentity(n *model.Node, mode string) string {
-	return fmt.Sprintf("%d|%s|%s|%s|%d|%s", n.Id, mode, n.Scheme, n.Address, n.Port, n.PinnedCertSha256)
+	return fmt.Sprintf("%d|%s|%s|%s|%d|%s|%t", n.Id, mode, n.Scheme, n.Address, n.Port, n.PinnedCertSha256, n.AllowPrivateAddress)
 }
 
 // dropNodeClients discards every cached client of one node except keep, so a
@@ -197,6 +198,9 @@ func HTTPClientForNode(n *model.Node, proxyURL string) (*http.Client, error) {
 			nodeClientsMu.Lock()
 			dropNodeClients(n.Id, "")
 			nodeClientsMu.Unlock()
+			if n.AllowPrivateAddress {
+				return privateNodeHTTPClient, nil
+			}
 			return defaultNodeHTTPClient, nil
 		}
 	}
