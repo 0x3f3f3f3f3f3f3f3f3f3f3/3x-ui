@@ -39,6 +39,70 @@ function requestBody(path: string): OpenApiRequestBody {
 }
 
 describe('generated OpenAPI request bodies', () => {
+  it('documents all six exact authority control request schemas', () => {
+    for (const [name, fields] of Object.entries({
+      requests: ['binding', 'limit'],
+      install: ['binding', 'grant'],
+      get: ['binding', 'clientId', 'grantId'],
+      pause: ['binding', 'clientId', 'grantId'],
+      seal: ['binding', 'clientId', 'grantId'],
+      renew: ['binding', 'renewal'],
+    })) {
+      const body = requestBody('/panel/api/server/clientPolicyAuthority/' + name);
+      expect(body.required).toBe(true);
+      const schema = body.content['application/json'].schema;
+      expect(schema).toMatchObject({ type: 'object', additionalProperties: false });
+      expect(schema.required).toEqual(fields);
+      expect(Object.keys(schema.properties ?? {})).toEqual(fields);
+      const binding = schema.properties?.binding;
+      expect(binding).toMatchObject({ type: 'object', additionalProperties: false });
+      expect(binding?.required).toEqual([
+        'expectedInstanceId',
+        'expectedBootId',
+        'authorityId',
+        'generation',
+        'nodeId',
+      ]);
+      expect(binding?.properties?.expectedBootId?.pattern).toBe('^[0-9a-fA-F]{32}$');
+    }
+    const grant = requestBody('/panel/api/server/clientPolicyAuthority/install').content[
+      'application/json'
+    ].schema.properties?.grant;
+    expect(grant?.properties?.capacity).toMatchObject({
+      type: 'string',
+      pattern: '^(0|[1-9][0-9]*)$',
+    });
+    expect(grant?.properties?.policyVersion?.type).toBe('string');
+    expect(grant?.properties?.authority?.properties?.generation?.type).toBe('string');
+    expect(grant?.required).toEqual([
+      'authority',
+      'instanceId',
+      'bootId',
+      'clientId',
+      'windowId',
+      'policyVersion',
+      'grantId',
+      'sequence',
+      'challengeId',
+      'capacity',
+      'upload',
+      'download',
+      'leaseDurationMillis',
+    ]);
+    const renewal = requestBody('/panel/api/server/clientPolicyAuthority/renew').content[
+      'application/json'
+    ].schema.properties?.renewal;
+    expect(renewal?.required).toEqual([
+      'expectedBootId',
+      'clientId',
+      'grantId',
+      'challengeId',
+      'sequence',
+      'leaseDurationMillis',
+    ]);
+    expect(renewal?.properties?.sequence?.type).toBe('string');
+  });
+
   it('documents strict delegation setup and its required binding', () => {
     const body = requestBody('/panel/api/server/clientPolicyDelegation');
     expect(body.required).toBe(true);

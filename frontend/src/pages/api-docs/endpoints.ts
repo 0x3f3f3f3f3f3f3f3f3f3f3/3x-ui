@@ -77,6 +77,280 @@ const delegatedNodeRoleSchema = {
   },
 };
 
+const identifier = {
+  type: 'string',
+  minLength: 1,
+  maxLength: 128,
+  pattern: '^[^ \\t\\r\\n\\u0000]+$',
+};
+const nonce = { type: 'string', pattern: '^[0-9a-fA-F]{32}$' };
+const amount = {
+  type: 'string',
+  pattern: '^(0|[1-9][0-9]*)$',
+  description:
+    'Canonical decimal uint64 string; no numeric JSON, signs, leading zeros or exponents. Operation-specific bounds also apply.',
+};
+const positive = {
+  ...amount,
+  pattern: '^[1-9][0-9]*$',
+  description: 'Canonical positive decimal string, at most 9223372036854775807.',
+};
+const object = (properties: Record<string, unknown>) => ({
+  type: 'object',
+  additionalProperties: false,
+  required: Object.keys(properties),
+  properties,
+});
+const role = object({
+  mode: { type: 'string', enum: ['delegated'] },
+  authorityId: identifier,
+  generation: {
+    type: 'integer',
+    format: 'int64',
+    minimum: 1,
+    description: 'Positive integer, at most 9223372036854775807.',
+  },
+  nodeId: identifier,
+});
+const bindingSchema = object({
+  expectedInstanceId: identifier,
+  expectedBootId: nonce,
+  authorityId: identifier,
+  generation: {
+    type: 'integer',
+    format: 'int64',
+    minimum: 1,
+    description: 'Positive integer, at most 9223372036854775807.',
+  },
+  nodeId: identifier,
+});
+const authoritySchema = object({
+  authorityId: identifier,
+  generation: positive,
+  nodeId: identifier,
+});
+const shareSchema = object({
+  unlimited: { type: 'boolean' },
+  rate: {
+    ...amount,
+    description:
+      '0..1099511627776 bytes/second. Unlimited requires rate and burst 0; limited values are both zero or both positive.',
+  },
+  burst: { ...amount, description: '0..1048576 bytes; coupled with rate and unlimited.' },
+});
+const grantSchema = object({
+  authority: authoritySchema,
+  instanceId: identifier,
+  bootId: nonce,
+  clientId: identifier,
+  windowId: identifier,
+  policyVersion: positive,
+  grantId: identifier,
+  sequence: positive,
+  challengeId: nonce,
+  capacity: {
+    ...amount,
+    description: 'Positive billed capacity, at most 9223372036854775807, independent of raw bytes.',
+  },
+  upload: shareSchema,
+  download: shareSchema,
+  leaseDurationMillis: { ...positive, description: 'Lease duration in milliseconds, 1..10000.' },
+});
+const renewalSchema = object({
+  expectedBootId: nonce,
+  clientId: identifier,
+  grantId: identifier,
+  challengeId: nonce,
+  sequence: positive,
+  leaseDurationMillis: { ...positive, description: 'Lease duration in milliseconds, 1..10000.' },
+});
+const usageSchema = object({
+  rawUpload: amount,
+  rawDownload: amount,
+  billedBytes: amount,
+  remainder: {
+    ...amount,
+    description: 'Fractional billing remainder, 0..999999; zero at full grant capacity.',
+  },
+});
+const stateSchema = object({
+  grant: grantSchema,
+  usage: usageSchema,
+  sequence: positive,
+  sealed: { type: 'boolean' },
+});
+const requestsSchema = object({
+  instanceId: identifier,
+  bootId: nonce,
+  requests: {
+    type: 'array',
+    maxItems: 128,
+    items: object({
+      requestId: nonce,
+      clientId: identifier,
+      policyVersion: positive,
+      previousGrantId: {
+        type: 'string',
+        maxLength: 128,
+        description: 'Empty before the first grant; otherwise the exact previous grant ID.',
+      },
+    }),
+  },
+});
+const identity = { instanceId: identifier, bootId: nonce, executionRole: role };
+const binding = {
+  expectedInstanceId: 'node-instance',
+  expectedBootId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  authorityId: 'coordinator',
+  generation: 3,
+  nodeId: 'node-a',
+};
+const authority = { authorityId: 'coordinator', generation: '3', nodeId: 'node-a' };
+const grant = {
+  authority,
+  instanceId: binding.expectedInstanceId,
+  bootId: binding.expectedBootId,
+  clientId: 'client-a',
+  windowId: 'window-a',
+  policyVersion: '1',
+  grantId: 'grant-a',
+  sequence: '1',
+  challengeId: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  capacity: '9007199254740993',
+  upload: { unlimited: true, rate: '0', burst: '0' },
+  download: { unlimited: true, rate: '0', burst: '0' },
+  leaseDurationMillis: '1000',
+};
+const renewal = {
+  expectedBootId: binding.expectedBootId,
+  clientId: grant.clientId,
+  grantId: grant.grantId,
+  challengeId: grant.challengeId,
+  sequence: '1',
+  leaseDurationMillis: '1000',
+};
+const grantRequest = { binding: bindingSchema, clientId: identifier, grantId: identifier };
+const resultIdentity = {
+  instanceId: binding.expectedInstanceId,
+  bootId: binding.expectedBootId,
+  executionRole: {
+    mode: 'delegated',
+    authorityId: binding.authorityId,
+    generation: binding.generation,
+    nodeId: binding.nodeId,
+  },
+};
+
+const commonDescription =
+  'Requires verified HTTPS and an admin/node-sync token, verified mTLS, or authenticated session with CSRF. The mandatory binding must match the current owned delegated source, boot and coordinator tuple. Local owners refuse. Wire/decoded requests and the complete response envelope are limited to 32 KiB. Every field is required, exact and unique; aliases, unknown fields and null refuse. Protobuf uint64 values are decimal strings; outer binding/role generation retains numeric JSON. An uncertain mutation or lost acknowledgement never permits capacity reuse. Global client mapping and multi-node policy products are separate following features.';
+
+const nodeAuthorityControlDefinitions = [
+  {
+    name: 'requests',
+    summary: 'Read a bounded page of boot-bound grant demand.',
+    request: { binding: bindingSchema, limit: { type: 'integer', minimum: 1, maximum: 128 } },
+    body: { binding, limit: 128 },
+    payload: 'requests',
+    schema: requestsSchema,
+    result: {
+      instanceId: binding.expectedInstanceId,
+      bootId: binding.expectedBootId,
+      requests: [],
+    },
+  },
+  {
+    name: 'install',
+    summary: 'Install an independently allocated journal execution grant.',
+    request: { binding: bindingSchema, grant: grantSchema },
+    body: { binding, grant },
+    payload: 'state',
+    schema: stateSchema,
+    result: {
+      grant,
+      usage: { rawUpload: '0', rawDownload: '0', billedBytes: '0', remainder: '0' },
+      sequence: '1',
+      sealed: false,
+    },
+  },
+  ...(['get', 'pause', 'seal'] as const).map((name) => ({
+    name,
+    summary:
+      name === 'get'
+        ? 'Read the exact execution grant and usage.'
+        : name === 'pause'
+          ? 'Pause a grant and retain existing sessions for bounded handoff.'
+          : 'Seal a grant and close its sessions.',
+    request: grantRequest,
+    body: { binding, clientId: grant.clientId, grantId: grant.grantId },
+    payload: 'state',
+    schema: stateSchema,
+    result: {
+      grant,
+      usage: { rawUpload: '0', rawDownload: '0', billedBytes: '0', remainder: '0' },
+      sequence: '1',
+      sealed: name !== 'get',
+    },
+  })),
+  {
+    name: 'renew',
+    summary: 'Acknowledge the exact monotonic grant renewal.',
+    request: { binding: bindingSchema, renewal: renewalSchema },
+    body: { binding, renewal },
+    payload: 'renewal',
+    schema: renewalSchema,
+    result: renewal,
+  },
+].map((entry) => ({
+  summary: entry.summary,
+  description: commonDescription,
+  body: JSON.stringify(entry.body, null, 2),
+  requestSchema: object(entry.request),
+  responseObjectSchema: object({ ...identity, [entry.payload]: entry.schema }),
+  response: JSON.stringify(
+    { success: true, msg: '', obj: { ...resultIdentity, [entry.payload]: entry.result } },
+    null,
+    2,
+  ),
+  errorResponse: JSON.stringify({
+    success: false,
+    msg: 'invalid or unavailable node authority discovery',
+    obj: null,
+  }),
+}));
+
+const nodeAuthorityControlEndpoints: Endpoint[] = [
+  {
+    method: 'POST',
+    path: '/panel/api/server/clientPolicyAuthority/requests',
+    ...nodeAuthorityControlDefinitions[0],
+  },
+  {
+    method: 'POST',
+    path: '/panel/api/server/clientPolicyAuthority/install',
+    ...nodeAuthorityControlDefinitions[1],
+  },
+  {
+    method: 'POST',
+    path: '/panel/api/server/clientPolicyAuthority/get',
+    ...nodeAuthorityControlDefinitions[2],
+  },
+  {
+    method: 'POST',
+    path: '/panel/api/server/clientPolicyAuthority/pause',
+    ...nodeAuthorityControlDefinitions[3],
+  },
+  {
+    method: 'POST',
+    path: '/panel/api/server/clientPolicyAuthority/seal',
+    ...nodeAuthorityControlDefinitions[4],
+  },
+  {
+    method: 'POST',
+    path: '/panel/api/server/clientPolicyAuthority/renew',
+    ...nodeAuthorityControlDefinitions[5],
+  },
+];
+
 // /inbounds/update replaces the whole row, so it takes the same payload as /add.
 const inboundBody =
   '{\n  "enable": true,\n  "remark": "VLESS-443",\n  "listen": "",\n  "port": 443,\n  "protocol": "vless",\n  "expiryTime": 0,\n  "total": 0,\n  "settings": {\n    "clients": [{ "id": "...", "email": "user1" }],\n    "decryption": "none",\n    "fallbacks": []\n  },\n  "streamSettings": {\n    "network": "tcp",\n    "security": "reality",\n    "realitySettings": { "show": false, "dest": "..." }\n  },\n  "sniffing": {\n    "enabled": true,\n    "destOverride": ["http", "tls"]\n  }\n}';
@@ -464,12 +738,13 @@ export const sections: readonly Section[] = [
         response:
           '{\n  "success": true,\n  "obj": {\n    "cpu": 12.5,\n    "mem": { "current": 2147483648, "total": 8589934592 },\n    "swap": { "current": 0, "total": 4294967296 },\n    "disk": { "current": 53687091200, "total": 268435456000 },\n    "netIO": { "up": 1073741824, "down": 2147483648 },\n    "xray": { "state": "running", "version": "v25.10.31" },\n    "tcpCount": 42,\n    "load": { "load1": 0.5, "load5": 0.3, "load15": 0.2 }\n  }\n}',
       },
+      ...nodeAuthorityControlEndpoints,
       {
         method: 'POST',
         path: '/panel/api/server/clientPolicyDelegation',
         summary: 'Configure a fresh stopped node to execute grants from its coordinator.',
         description:
-          'Requires HTTPS and an admin/node-sync token, verified mTLS, or an authenticated session with CSRF protection. Supply the exact coordinator authority ID, generation, and node ID. Setup requires a fresh stopped source with no consumed usage. The binding is immutable outside ordinary SQL/core restores; identical retries return the original instance and role, while changed bindings are refused. Requests and responses are limited to 32 KiB. This operation configures the execution role; the coordinator grant transport is developed separately.',
+          'Requires HTTPS and an admin/node-sync token, verified mTLS, or an authenticated session with CSRF protection. Supply the exact coordinator authority ID, generation, and node ID. Setup requires a fresh stopped source with no consumed usage. The binding is immutable outside ordinary SQL/core restores; identical retries return the original instance and role, while changed bindings are refused. Requests and responses are limited to 32 KiB. This operation configures the execution role; the six clientPolicyAuthority control endpoints execute independently allocated coordinator grants.',
         body: '{"authorityId":"coordinator","generation":3,"nodeId":"node-a"}',
         requestSchema: {
           type: 'object',

@@ -61,6 +61,52 @@ function responseObjectSchema(path: string, method = 'get'): OpenApiSchema {
 }
 
 describe('generated OpenAPI runtime contracts', () => {
+  it('documents all authority control responses with bound exact amounts', () => {
+    for (const name of ['requests', 'install', 'get', 'pause', 'seal', 'renew']) {
+      const schema = responseObjectSchema(
+        '/panel/api/server/clientPolicyAuthority/' + name,
+        'post',
+      );
+      const payload = name === 'requests' ? 'requests' : name === 'renew' ? 'renewal' : 'state';
+      expect(schema).toMatchObject({ type: 'object', additionalProperties: false });
+      expect(schema.required).toEqual(['instanceId', 'bootId', 'executionRole', payload]);
+      expect(schema.properties?.executionRole?.properties?.mode?.enum).toEqual(['delegated']);
+      if (payload === 'state') {
+        const state = schema.properties?.state;
+        expect(state?.required).toEqual(['grant', 'usage', 'sequence', 'sealed']);
+        expect(state?.properties?.grant?.properties?.capacity?.type).toBe('string');
+        expect(state?.properties?.usage?.required).toEqual([
+          'rawUpload',
+          'rawDownload',
+          'billedBytes',
+          'remainder',
+        ]);
+        for (const amount of Object.values(state?.properties?.usage?.properties ?? {}))
+          expect(amount.type).toBe('string');
+        expect(state?.properties?.sequence?.type).toBe('string');
+        expect(state?.properties?.sealed?.type).toBe('boolean');
+      } else if (payload === 'requests') {
+        expect(schema.properties?.requests?.required).toEqual(['instanceId', 'bootId', 'requests']);
+        expect(schema.properties?.requests?.properties?.requests?.type).toBe('array');
+        expect(schema.properties?.requests?.properties?.requests?.items?.required).toEqual([
+          'requestId',
+          'clientId',
+          'policyVersion',
+          'previousGrantId',
+        ]);
+      } else {
+        expect(schema.properties?.renewal?.required).toEqual([
+          'expectedBootId',
+          'clientId',
+          'grantId',
+          'challengeId',
+          'sequence',
+          'leaseDurationMillis',
+        ]);
+      }
+    }
+  });
+
   it('documents delegation identity and execution role discovery', () => {
     const setup = responseObjectSchema('/panel/api/server/clientPolicyDelegation', 'post');
     expect(setup.properties?.instanceId).toMatchObject({ type: 'string' });

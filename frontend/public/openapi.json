@@ -6526,6 +6526,2503 @@
         }
       }
     },
+    "/panel/api/server/clientPolicyAuthority/requests": {
+      "post": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Read a bounded page of boot-bound grant demand.",
+        "operationId": "post_panel_api_server_clientPolicyAuthority_requests",
+        "description": "Requires verified HTTPS and an admin/node-sync token, verified mTLS, or authenticated session with CSRF. The mandatory binding must match the current owned delegated source, boot and coordinator tuple. Local owners refuse. Wire/decoded requests and the complete response envelope are limited to 32 KiB. Every field is required, exact and unique; aliases, unknown fields and null refuse. Protobuf uint64 values are decimal strings; outer binding/role generation retains numeric JSON. An uncertain mutation or lost acknowledgement never permits capacity reuse. Global client mapping and multi-node policy products are separate following features.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "binding",
+                  "limit"
+                ],
+                "properties": {
+                  "binding": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "expectedInstanceId",
+                      "expectedBootId",
+                      "authorityId",
+                      "generation",
+                      "nodeId"
+                    ],
+                    "properties": {
+                      "expectedInstanceId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      },
+                      "expectedBootId": {
+                        "type": "string",
+                        "pattern": "^[0-9a-fA-F]{32}$"
+                      },
+                      "authorityId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      },
+                      "generation": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 1,
+                        "description": "Positive integer, at most 9223372036854775807."
+                      },
+                      "nodeId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      }
+                    }
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 128
+                  }
+                }
+              },
+              "example": {
+                "binding": {
+                  "expectedInstanceId": "node-instance",
+                  "expectedBootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "authorityId": "coordinator",
+                  "generation": 3,
+                  "nodeId": "node-a"
+                },
+                "limit": 128
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "instanceId",
+                        "bootId",
+                        "executionRole",
+                        "requests"
+                      ],
+                      "properties": {
+                        "instanceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                        },
+                        "bootId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-fA-F]{32}$"
+                        },
+                        "executionRole": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "mode",
+                            "authorityId",
+                            "generation",
+                            "nodeId"
+                          ],
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "delegated"
+                              ]
+                            },
+                            "authorityId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                            },
+                            "generation": {
+                              "type": "integer",
+                              "format": "int64",
+                              "minimum": 1,
+                              "description": "Positive integer, at most 9223372036854775807."
+                            },
+                            "nodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                            }
+                          }
+                        },
+                        "requests": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "instanceId",
+                            "bootId",
+                            "requests"
+                          ],
+                          "properties": {
+                            "instanceId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                            },
+                            "bootId": {
+                              "type": "string",
+                              "pattern": "^[0-9a-fA-F]{32}$"
+                            },
+                            "requests": {
+                              "type": "array",
+                              "maxItems": 128,
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "requestId",
+                                  "clientId",
+                                  "policyVersion",
+                                  "previousGrantId"
+                                ],
+                                "properties": {
+                                  "requestId": {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-fA-F]{32}$"
+                                  },
+                                  "clientId": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                  },
+                                  "policyVersion": {
+                                    "type": "string",
+                                    "pattern": "^[1-9][0-9]*$",
+                                    "description": "Canonical positive decimal string, at most 9223372036854775807."
+                                  },
+                                  "previousGrantId": {
+                                    "type": "string",
+                                    "maxLength": 128,
+                                    "description": "Empty before the first grant; otherwise the exact previous grant ID."
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "msg": "",
+                  "obj": {
+                    "instanceId": "node-instance",
+                    "bootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "executionRole": {
+                      "mode": "delegated",
+                      "authorityId": "coordinator",
+                      "generation": 3,
+                      "nodeId": "node-a"
+                    },
+                    "requests": {
+                      "instanceId": "node-instance",
+                      "bootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "requests": []
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "msg": "invalid or unavailable node authority discovery",
+                  "obj": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/server/clientPolicyAuthority/install": {
+      "post": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Install an independently allocated journal execution grant.",
+        "operationId": "post_panel_api_server_clientPolicyAuthority_install",
+        "description": "Requires verified HTTPS and an admin/node-sync token, verified mTLS, or authenticated session with CSRF. The mandatory binding must match the current owned delegated source, boot and coordinator tuple. Local owners refuse. Wire/decoded requests and the complete response envelope are limited to 32 KiB. Every field is required, exact and unique; aliases, unknown fields and null refuse. Protobuf uint64 values are decimal strings; outer binding/role generation retains numeric JSON. An uncertain mutation or lost acknowledgement never permits capacity reuse. Global client mapping and multi-node policy products are separate following features.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "binding",
+                  "grant"
+                ],
+                "properties": {
+                  "binding": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "expectedInstanceId",
+                      "expectedBootId",
+                      "authorityId",
+                      "generation",
+                      "nodeId"
+                    ],
+                    "properties": {
+                      "expectedInstanceId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      },
+                      "expectedBootId": {
+                        "type": "string",
+                        "pattern": "^[0-9a-fA-F]{32}$"
+                      },
+                      "authorityId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      },
+                      "generation": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 1,
+                        "description": "Positive integer, at most 9223372036854775807."
+                      },
+                      "nodeId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      }
+                    }
+                  },
+                  "grant": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "authority",
+                      "instanceId",
+                      "bootId",
+                      "clientId",
+                      "windowId",
+                      "policyVersion",
+                      "grantId",
+                      "sequence",
+                      "challengeId",
+                      "capacity",
+                      "upload",
+                      "download",
+                      "leaseDurationMillis"
+                    ],
+                    "properties": {
+                      "authority": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "authorityId",
+                          "generation",
+                          "nodeId"
+                        ],
+                        "properties": {
+                          "authorityId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                          },
+                          "generation": {
+                            "type": "string",
+                            "pattern": "^[1-9][0-9]*$",
+                            "description": "Canonical positive decimal string, at most 9223372036854775807."
+                          },
+                          "nodeId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                          }
+                        }
+                      },
+                      "instanceId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      },
+                      "bootId": {
+                        "type": "string",
+                        "pattern": "^[0-9a-fA-F]{32}$"
+                      },
+                      "clientId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      },
+                      "windowId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      },
+                      "policyVersion": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]*$",
+                        "description": "Canonical positive decimal string, at most 9223372036854775807."
+                      },
+                      "grantId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      },
+                      "sequence": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]*$",
+                        "description": "Canonical positive decimal string, at most 9223372036854775807."
+                      },
+                      "challengeId": {
+                        "type": "string",
+                        "pattern": "^[0-9a-fA-F]{32}$"
+                      },
+                      "capacity": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "description": "Positive billed capacity, at most 9223372036854775807, independent of raw bytes."
+                      },
+                      "upload": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "unlimited",
+                          "rate",
+                          "burst"
+                        ],
+                        "properties": {
+                          "unlimited": {
+                            "type": "boolean"
+                          },
+                          "rate": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9][0-9]*)$",
+                            "description": "0..1099511627776 bytes/second. Unlimited requires rate and burst 0; limited values are both zero or both positive."
+                          },
+                          "burst": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9][0-9]*)$",
+                            "description": "0..1048576 bytes; coupled with rate and unlimited."
+                          }
+                        }
+                      },
+                      "download": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "unlimited",
+                          "rate",
+                          "burst"
+                        ],
+                        "properties": {
+                          "unlimited": {
+                            "type": "boolean"
+                          },
+                          "rate": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9][0-9]*)$",
+                            "description": "0..1099511627776 bytes/second. Unlimited requires rate and burst 0; limited values are both zero or both positive."
+                          },
+                          "burst": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9][0-9]*)$",
+                            "description": "0..1048576 bytes; coupled with rate and unlimited."
+                          }
+                        }
+                      },
+                      "leaseDurationMillis": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]*$",
+                        "description": "Lease duration in milliseconds, 1..10000."
+                      }
+                    }
+                  }
+                }
+              },
+              "example": {
+                "binding": {
+                  "expectedInstanceId": "node-instance",
+                  "expectedBootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "authorityId": "coordinator",
+                  "generation": 3,
+                  "nodeId": "node-a"
+                },
+                "grant": {
+                  "authority": {
+                    "authorityId": "coordinator",
+                    "generation": "3",
+                    "nodeId": "node-a"
+                  },
+                  "instanceId": "node-instance",
+                  "bootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "clientId": "client-a",
+                  "windowId": "window-a",
+                  "policyVersion": "1",
+                  "grantId": "grant-a",
+                  "sequence": "1",
+                  "challengeId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "capacity": "9007199254740993",
+                  "upload": {
+                    "unlimited": true,
+                    "rate": "0",
+                    "burst": "0"
+                  },
+                  "download": {
+                    "unlimited": true,
+                    "rate": "0",
+                    "burst": "0"
+                  },
+                  "leaseDurationMillis": "1000"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "instanceId",
+                        "bootId",
+                        "executionRole",
+                        "state"
+                      ],
+                      "properties": {
+                        "instanceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                        },
+                        "bootId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-fA-F]{32}$"
+                        },
+                        "executionRole": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "mode",
+                            "authorityId",
+                            "generation",
+                            "nodeId"
+                          ],
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "delegated"
+                              ]
+                            },
+                            "authorityId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                            },
+                            "generation": {
+                              "type": "integer",
+                              "format": "int64",
+                              "minimum": 1,
+                              "description": "Positive integer, at most 9223372036854775807."
+                            },
+                            "nodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                            }
+                          }
+                        },
+                        "state": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "grant",
+                            "usage",
+                            "sequence",
+                            "sealed"
+                          ],
+                          "properties": {
+                            "grant": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "authority",
+                                "instanceId",
+                                "bootId",
+                                "clientId",
+                                "windowId",
+                                "policyVersion",
+                                "grantId",
+                                "sequence",
+                                "challengeId",
+                                "capacity",
+                                "upload",
+                                "download",
+                                "leaseDurationMillis"
+                              ],
+                              "properties": {
+                                "authority": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "authorityId",
+                                    "generation",
+                                    "nodeId"
+                                  ],
+                                  "properties": {
+                                    "authorityId": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                    },
+                                    "generation": {
+                                      "type": "string",
+                                      "pattern": "^[1-9][0-9]*$",
+                                      "description": "Canonical positive decimal string, at most 9223372036854775807."
+                                    },
+                                    "nodeId": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                    }
+                                  }
+                                },
+                                "instanceId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                },
+                                "bootId": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-fA-F]{32}$"
+                                },
+                                "clientId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                },
+                                "windowId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                },
+                                "policyVersion": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "description": "Canonical positive decimal string, at most 9223372036854775807."
+                                },
+                                "grantId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                },
+                                "sequence": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "description": "Canonical positive decimal string, at most 9223372036854775807."
+                                },
+                                "challengeId": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-fA-F]{32}$"
+                                },
+                                "capacity": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Positive billed capacity, at most 9223372036854775807, independent of raw bytes."
+                                },
+                                "upload": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "unlimited",
+                                    "rate",
+                                    "burst"
+                                  ],
+                                  "properties": {
+                                    "unlimited": {
+                                      "type": "boolean"
+                                    },
+                                    "rate": {
+                                      "type": "string",
+                                      "pattern": "^(0|[1-9][0-9]*)$",
+                                      "description": "0..1099511627776 bytes/second. Unlimited requires rate and burst 0; limited values are both zero or both positive."
+                                    },
+                                    "burst": {
+                                      "type": "string",
+                                      "pattern": "^(0|[1-9][0-9]*)$",
+                                      "description": "0..1048576 bytes; coupled with rate and unlimited."
+                                    }
+                                  }
+                                },
+                                "download": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "unlimited",
+                                    "rate",
+                                    "burst"
+                                  ],
+                                  "properties": {
+                                    "unlimited": {
+                                      "type": "boolean"
+                                    },
+                                    "rate": {
+                                      "type": "string",
+                                      "pattern": "^(0|[1-9][0-9]*)$",
+                                      "description": "0..1099511627776 bytes/second. Unlimited requires rate and burst 0; limited values are both zero or both positive."
+                                    },
+                                    "burst": {
+                                      "type": "string",
+                                      "pattern": "^(0|[1-9][0-9]*)$",
+                                      "description": "0..1048576 bytes; coupled with rate and unlimited."
+                                    }
+                                  }
+                                },
+                                "leaseDurationMillis": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "description": "Lease duration in milliseconds, 1..10000."
+                                }
+                              }
+                            },
+                            "usage": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "rawUpload",
+                                "rawDownload",
+                                "billedBytes",
+                                "remainder"
+                              ],
+                              "properties": {
+                                "rawUpload": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Canonical decimal uint64 string; no numeric JSON, signs, leading zeros or exponents. Operation-specific bounds also apply."
+                                },
+                                "rawDownload": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Canonical decimal uint64 string; no numeric JSON, signs, leading zeros or exponents. Operation-specific bounds also apply."
+                                },
+                                "billedBytes": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Canonical decimal uint64 string; no numeric JSON, signs, leading zeros or exponents. Operation-specific bounds also apply."
+                                },
+                                "remainder": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Fractional billing remainder, 0..999999; zero at full grant capacity."
+                                }
+                              }
+                            },
+                            "sequence": {
+                              "type": "string",
+                              "pattern": "^[1-9][0-9]*$",
+                              "description": "Canonical positive decimal string, at most 9223372036854775807."
+                            },
+                            "sealed": {
+                              "type": "boolean"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "msg": "",
+                  "obj": {
+                    "instanceId": "node-instance",
+                    "bootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "executionRole": {
+                      "mode": "delegated",
+                      "authorityId": "coordinator",
+                      "generation": 3,
+                      "nodeId": "node-a"
+                    },
+                    "state": {
+                      "grant": {
+                        "authority": {
+                          "authorityId": "coordinator",
+                          "generation": "3",
+                          "nodeId": "node-a"
+                        },
+                        "instanceId": "node-instance",
+                        "bootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        "clientId": "client-a",
+                        "windowId": "window-a",
+                        "policyVersion": "1",
+                        "grantId": "grant-a",
+                        "sequence": "1",
+                        "challengeId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        "capacity": "9007199254740993",
+                        "upload": {
+                          "unlimited": true,
+                          "rate": "0",
+                          "burst": "0"
+                        },
+                        "download": {
+                          "unlimited": true,
+                          "rate": "0",
+                          "burst": "0"
+                        },
+                        "leaseDurationMillis": "1000"
+                      },
+                      "usage": {
+                        "rawUpload": "0",
+                        "rawDownload": "0",
+                        "billedBytes": "0",
+                        "remainder": "0"
+                      },
+                      "sequence": "1",
+                      "sealed": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "msg": "invalid or unavailable node authority discovery",
+                  "obj": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/server/clientPolicyAuthority/get": {
+      "post": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Read the exact execution grant and usage.",
+        "operationId": "post_panel_api_server_clientPolicyAuthority_get",
+        "description": "Requires verified HTTPS and an admin/node-sync token, verified mTLS, or authenticated session with CSRF. The mandatory binding must match the current owned delegated source, boot and coordinator tuple. Local owners refuse. Wire/decoded requests and the complete response envelope are limited to 32 KiB. Every field is required, exact and unique; aliases, unknown fields and null refuse. Protobuf uint64 values are decimal strings; outer binding/role generation retains numeric JSON. An uncertain mutation or lost acknowledgement never permits capacity reuse. Global client mapping and multi-node policy products are separate following features.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "binding",
+                  "clientId",
+                  "grantId"
+                ],
+                "properties": {
+                  "binding": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "expectedInstanceId",
+                      "expectedBootId",
+                      "authorityId",
+                      "generation",
+                      "nodeId"
+                    ],
+                    "properties": {
+                      "expectedInstanceId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      },
+                      "expectedBootId": {
+                        "type": "string",
+                        "pattern": "^[0-9a-fA-F]{32}$"
+                      },
+                      "authorityId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      },
+                      "generation": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 1,
+                        "description": "Positive integer, at most 9223372036854775807."
+                      },
+                      "nodeId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      }
+                    }
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                  },
+                  "grantId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                  }
+                }
+              },
+              "example": {
+                "binding": {
+                  "expectedInstanceId": "node-instance",
+                  "expectedBootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "authorityId": "coordinator",
+                  "generation": 3,
+                  "nodeId": "node-a"
+                },
+                "clientId": "client-a",
+                "grantId": "grant-a"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "instanceId",
+                        "bootId",
+                        "executionRole",
+                        "state"
+                      ],
+                      "properties": {
+                        "instanceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                        },
+                        "bootId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-fA-F]{32}$"
+                        },
+                        "executionRole": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "mode",
+                            "authorityId",
+                            "generation",
+                            "nodeId"
+                          ],
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "delegated"
+                              ]
+                            },
+                            "authorityId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                            },
+                            "generation": {
+                              "type": "integer",
+                              "format": "int64",
+                              "minimum": 1,
+                              "description": "Positive integer, at most 9223372036854775807."
+                            },
+                            "nodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                            }
+                          }
+                        },
+                        "state": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "grant",
+                            "usage",
+                            "sequence",
+                            "sealed"
+                          ],
+                          "properties": {
+                            "grant": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "authority",
+                                "instanceId",
+                                "bootId",
+                                "clientId",
+                                "windowId",
+                                "policyVersion",
+                                "grantId",
+                                "sequence",
+                                "challengeId",
+                                "capacity",
+                                "upload",
+                                "download",
+                                "leaseDurationMillis"
+                              ],
+                              "properties": {
+                                "authority": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "authorityId",
+                                    "generation",
+                                    "nodeId"
+                                  ],
+                                  "properties": {
+                                    "authorityId": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                    },
+                                    "generation": {
+                                      "type": "string",
+                                      "pattern": "^[1-9][0-9]*$",
+                                      "description": "Canonical positive decimal string, at most 9223372036854775807."
+                                    },
+                                    "nodeId": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                    }
+                                  }
+                                },
+                                "instanceId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                },
+                                "bootId": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-fA-F]{32}$"
+                                },
+                                "clientId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                },
+                                "windowId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                },
+                                "policyVersion": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "description": "Canonical positive decimal string, at most 9223372036854775807."
+                                },
+                                "grantId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                },
+                                "sequence": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "description": "Canonical positive decimal string, at most 9223372036854775807."
+                                },
+                                "challengeId": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-fA-F]{32}$"
+                                },
+                                "capacity": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Positive billed capacity, at most 9223372036854775807, independent of raw bytes."
+                                },
+                                "upload": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "unlimited",
+                                    "rate",
+                                    "burst"
+                                  ],
+                                  "properties": {
+                                    "unlimited": {
+                                      "type": "boolean"
+                                    },
+                                    "rate": {
+                                      "type": "string",
+                                      "pattern": "^(0|[1-9][0-9]*)$",
+                                      "description": "0..1099511627776 bytes/second. Unlimited requires rate and burst 0; limited values are both zero or both positive."
+                                    },
+                                    "burst": {
+                                      "type": "string",
+                                      "pattern": "^(0|[1-9][0-9]*)$",
+                                      "description": "0..1048576 bytes; coupled with rate and unlimited."
+                                    }
+                                  }
+                                },
+                                "download": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "unlimited",
+                                    "rate",
+                                    "burst"
+                                  ],
+                                  "properties": {
+                                    "unlimited": {
+                                      "type": "boolean"
+                                    },
+                                    "rate": {
+                                      "type": "string",
+                                      "pattern": "^(0|[1-9][0-9]*)$",
+                                      "description": "0..1099511627776 bytes/second. Unlimited requires rate and burst 0; limited values are both zero or both positive."
+                                    },
+                                    "burst": {
+                                      "type": "string",
+                                      "pattern": "^(0|[1-9][0-9]*)$",
+                                      "description": "0..1048576 bytes; coupled with rate and unlimited."
+                                    }
+                                  }
+                                },
+                                "leaseDurationMillis": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "description": "Lease duration in milliseconds, 1..10000."
+                                }
+                              }
+                            },
+                            "usage": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "rawUpload",
+                                "rawDownload",
+                                "billedBytes",
+                                "remainder"
+                              ],
+                              "properties": {
+                                "rawUpload": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Canonical decimal uint64 string; no numeric JSON, signs, leading zeros or exponents. Operation-specific bounds also apply."
+                                },
+                                "rawDownload": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Canonical decimal uint64 string; no numeric JSON, signs, leading zeros or exponents. Operation-specific bounds also apply."
+                                },
+                                "billedBytes": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Canonical decimal uint64 string; no numeric JSON, signs, leading zeros or exponents. Operation-specific bounds also apply."
+                                },
+                                "remainder": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Fractional billing remainder, 0..999999; zero at full grant capacity."
+                                }
+                              }
+                            },
+                            "sequence": {
+                              "type": "string",
+                              "pattern": "^[1-9][0-9]*$",
+                              "description": "Canonical positive decimal string, at most 9223372036854775807."
+                            },
+                            "sealed": {
+                              "type": "boolean"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "msg": "",
+                  "obj": {
+                    "instanceId": "node-instance",
+                    "bootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "executionRole": {
+                      "mode": "delegated",
+                      "authorityId": "coordinator",
+                      "generation": 3,
+                      "nodeId": "node-a"
+                    },
+                    "state": {
+                      "grant": {
+                        "authority": {
+                          "authorityId": "coordinator",
+                          "generation": "3",
+                          "nodeId": "node-a"
+                        },
+                        "instanceId": "node-instance",
+                        "bootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        "clientId": "client-a",
+                        "windowId": "window-a",
+                        "policyVersion": "1",
+                        "grantId": "grant-a",
+                        "sequence": "1",
+                        "challengeId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        "capacity": "9007199254740993",
+                        "upload": {
+                          "unlimited": true,
+                          "rate": "0",
+                          "burst": "0"
+                        },
+                        "download": {
+                          "unlimited": true,
+                          "rate": "0",
+                          "burst": "0"
+                        },
+                        "leaseDurationMillis": "1000"
+                      },
+                      "usage": {
+                        "rawUpload": "0",
+                        "rawDownload": "0",
+                        "billedBytes": "0",
+                        "remainder": "0"
+                      },
+                      "sequence": "1",
+                      "sealed": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "msg": "invalid or unavailable node authority discovery",
+                  "obj": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/server/clientPolicyAuthority/pause": {
+      "post": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Pause a grant and retain existing sessions for bounded handoff.",
+        "operationId": "post_panel_api_server_clientPolicyAuthority_pause",
+        "description": "Requires verified HTTPS and an admin/node-sync token, verified mTLS, or authenticated session with CSRF. The mandatory binding must match the current owned delegated source, boot and coordinator tuple. Local owners refuse. Wire/decoded requests and the complete response envelope are limited to 32 KiB. Every field is required, exact and unique; aliases, unknown fields and null refuse. Protobuf uint64 values are decimal strings; outer binding/role generation retains numeric JSON. An uncertain mutation or lost acknowledgement never permits capacity reuse. Global client mapping and multi-node policy products are separate following features.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "binding",
+                  "clientId",
+                  "grantId"
+                ],
+                "properties": {
+                  "binding": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "expectedInstanceId",
+                      "expectedBootId",
+                      "authorityId",
+                      "generation",
+                      "nodeId"
+                    ],
+                    "properties": {
+                      "expectedInstanceId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      },
+                      "expectedBootId": {
+                        "type": "string",
+                        "pattern": "^[0-9a-fA-F]{32}$"
+                      },
+                      "authorityId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      },
+                      "generation": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 1,
+                        "description": "Positive integer, at most 9223372036854775807."
+                      },
+                      "nodeId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      }
+                    }
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                  },
+                  "grantId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                  }
+                }
+              },
+              "example": {
+                "binding": {
+                  "expectedInstanceId": "node-instance",
+                  "expectedBootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "authorityId": "coordinator",
+                  "generation": 3,
+                  "nodeId": "node-a"
+                },
+                "clientId": "client-a",
+                "grantId": "grant-a"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "instanceId",
+                        "bootId",
+                        "executionRole",
+                        "state"
+                      ],
+                      "properties": {
+                        "instanceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                        },
+                        "bootId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-fA-F]{32}$"
+                        },
+                        "executionRole": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "mode",
+                            "authorityId",
+                            "generation",
+                            "nodeId"
+                          ],
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "delegated"
+                              ]
+                            },
+                            "authorityId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                            },
+                            "generation": {
+                              "type": "integer",
+                              "format": "int64",
+                              "minimum": 1,
+                              "description": "Positive integer, at most 9223372036854775807."
+                            },
+                            "nodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                            }
+                          }
+                        },
+                        "state": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "grant",
+                            "usage",
+                            "sequence",
+                            "sealed"
+                          ],
+                          "properties": {
+                            "grant": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "authority",
+                                "instanceId",
+                                "bootId",
+                                "clientId",
+                                "windowId",
+                                "policyVersion",
+                                "grantId",
+                                "sequence",
+                                "challengeId",
+                                "capacity",
+                                "upload",
+                                "download",
+                                "leaseDurationMillis"
+                              ],
+                              "properties": {
+                                "authority": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "authorityId",
+                                    "generation",
+                                    "nodeId"
+                                  ],
+                                  "properties": {
+                                    "authorityId": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                    },
+                                    "generation": {
+                                      "type": "string",
+                                      "pattern": "^[1-9][0-9]*$",
+                                      "description": "Canonical positive decimal string, at most 9223372036854775807."
+                                    },
+                                    "nodeId": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                    }
+                                  }
+                                },
+                                "instanceId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                },
+                                "bootId": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-fA-F]{32}$"
+                                },
+                                "clientId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                },
+                                "windowId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                },
+                                "policyVersion": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "description": "Canonical positive decimal string, at most 9223372036854775807."
+                                },
+                                "grantId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                },
+                                "sequence": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "description": "Canonical positive decimal string, at most 9223372036854775807."
+                                },
+                                "challengeId": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-fA-F]{32}$"
+                                },
+                                "capacity": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Positive billed capacity, at most 9223372036854775807, independent of raw bytes."
+                                },
+                                "upload": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "unlimited",
+                                    "rate",
+                                    "burst"
+                                  ],
+                                  "properties": {
+                                    "unlimited": {
+                                      "type": "boolean"
+                                    },
+                                    "rate": {
+                                      "type": "string",
+                                      "pattern": "^(0|[1-9][0-9]*)$",
+                                      "description": "0..1099511627776 bytes/second. Unlimited requires rate and burst 0; limited values are both zero or both positive."
+                                    },
+                                    "burst": {
+                                      "type": "string",
+                                      "pattern": "^(0|[1-9][0-9]*)$",
+                                      "description": "0..1048576 bytes; coupled with rate and unlimited."
+                                    }
+                                  }
+                                },
+                                "download": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "unlimited",
+                                    "rate",
+                                    "burst"
+                                  ],
+                                  "properties": {
+                                    "unlimited": {
+                                      "type": "boolean"
+                                    },
+                                    "rate": {
+                                      "type": "string",
+                                      "pattern": "^(0|[1-9][0-9]*)$",
+                                      "description": "0..1099511627776 bytes/second. Unlimited requires rate and burst 0; limited values are both zero or both positive."
+                                    },
+                                    "burst": {
+                                      "type": "string",
+                                      "pattern": "^(0|[1-9][0-9]*)$",
+                                      "description": "0..1048576 bytes; coupled with rate and unlimited."
+                                    }
+                                  }
+                                },
+                                "leaseDurationMillis": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "description": "Lease duration in milliseconds, 1..10000."
+                                }
+                              }
+                            },
+                            "usage": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "rawUpload",
+                                "rawDownload",
+                                "billedBytes",
+                                "remainder"
+                              ],
+                              "properties": {
+                                "rawUpload": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Canonical decimal uint64 string; no numeric JSON, signs, leading zeros or exponents. Operation-specific bounds also apply."
+                                },
+                                "rawDownload": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Canonical decimal uint64 string; no numeric JSON, signs, leading zeros or exponents. Operation-specific bounds also apply."
+                                },
+                                "billedBytes": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Canonical decimal uint64 string; no numeric JSON, signs, leading zeros or exponents. Operation-specific bounds also apply."
+                                },
+                                "remainder": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Fractional billing remainder, 0..999999; zero at full grant capacity."
+                                }
+                              }
+                            },
+                            "sequence": {
+                              "type": "string",
+                              "pattern": "^[1-9][0-9]*$",
+                              "description": "Canonical positive decimal string, at most 9223372036854775807."
+                            },
+                            "sealed": {
+                              "type": "boolean"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "msg": "",
+                  "obj": {
+                    "instanceId": "node-instance",
+                    "bootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "executionRole": {
+                      "mode": "delegated",
+                      "authorityId": "coordinator",
+                      "generation": 3,
+                      "nodeId": "node-a"
+                    },
+                    "state": {
+                      "grant": {
+                        "authority": {
+                          "authorityId": "coordinator",
+                          "generation": "3",
+                          "nodeId": "node-a"
+                        },
+                        "instanceId": "node-instance",
+                        "bootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        "clientId": "client-a",
+                        "windowId": "window-a",
+                        "policyVersion": "1",
+                        "grantId": "grant-a",
+                        "sequence": "1",
+                        "challengeId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        "capacity": "9007199254740993",
+                        "upload": {
+                          "unlimited": true,
+                          "rate": "0",
+                          "burst": "0"
+                        },
+                        "download": {
+                          "unlimited": true,
+                          "rate": "0",
+                          "burst": "0"
+                        },
+                        "leaseDurationMillis": "1000"
+                      },
+                      "usage": {
+                        "rawUpload": "0",
+                        "rawDownload": "0",
+                        "billedBytes": "0",
+                        "remainder": "0"
+                      },
+                      "sequence": "1",
+                      "sealed": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "msg": "invalid or unavailable node authority discovery",
+                  "obj": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/server/clientPolicyAuthority/seal": {
+      "post": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Seal a grant and close its sessions.",
+        "operationId": "post_panel_api_server_clientPolicyAuthority_seal",
+        "description": "Requires verified HTTPS and an admin/node-sync token, verified mTLS, or authenticated session with CSRF. The mandatory binding must match the current owned delegated source, boot and coordinator tuple. Local owners refuse. Wire/decoded requests and the complete response envelope are limited to 32 KiB. Every field is required, exact and unique; aliases, unknown fields and null refuse. Protobuf uint64 values are decimal strings; outer binding/role generation retains numeric JSON. An uncertain mutation or lost acknowledgement never permits capacity reuse. Global client mapping and multi-node policy products are separate following features.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "binding",
+                  "clientId",
+                  "grantId"
+                ],
+                "properties": {
+                  "binding": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "expectedInstanceId",
+                      "expectedBootId",
+                      "authorityId",
+                      "generation",
+                      "nodeId"
+                    ],
+                    "properties": {
+                      "expectedInstanceId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      },
+                      "expectedBootId": {
+                        "type": "string",
+                        "pattern": "^[0-9a-fA-F]{32}$"
+                      },
+                      "authorityId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      },
+                      "generation": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 1,
+                        "description": "Positive integer, at most 9223372036854775807."
+                      },
+                      "nodeId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      }
+                    }
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                  },
+                  "grantId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                  }
+                }
+              },
+              "example": {
+                "binding": {
+                  "expectedInstanceId": "node-instance",
+                  "expectedBootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "authorityId": "coordinator",
+                  "generation": 3,
+                  "nodeId": "node-a"
+                },
+                "clientId": "client-a",
+                "grantId": "grant-a"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "instanceId",
+                        "bootId",
+                        "executionRole",
+                        "state"
+                      ],
+                      "properties": {
+                        "instanceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                        },
+                        "bootId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-fA-F]{32}$"
+                        },
+                        "executionRole": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "mode",
+                            "authorityId",
+                            "generation",
+                            "nodeId"
+                          ],
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "delegated"
+                              ]
+                            },
+                            "authorityId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                            },
+                            "generation": {
+                              "type": "integer",
+                              "format": "int64",
+                              "minimum": 1,
+                              "description": "Positive integer, at most 9223372036854775807."
+                            },
+                            "nodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                            }
+                          }
+                        },
+                        "state": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "grant",
+                            "usage",
+                            "sequence",
+                            "sealed"
+                          ],
+                          "properties": {
+                            "grant": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "authority",
+                                "instanceId",
+                                "bootId",
+                                "clientId",
+                                "windowId",
+                                "policyVersion",
+                                "grantId",
+                                "sequence",
+                                "challengeId",
+                                "capacity",
+                                "upload",
+                                "download",
+                                "leaseDurationMillis"
+                              ],
+                              "properties": {
+                                "authority": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "authorityId",
+                                    "generation",
+                                    "nodeId"
+                                  ],
+                                  "properties": {
+                                    "authorityId": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                    },
+                                    "generation": {
+                                      "type": "string",
+                                      "pattern": "^[1-9][0-9]*$",
+                                      "description": "Canonical positive decimal string, at most 9223372036854775807."
+                                    },
+                                    "nodeId": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                    }
+                                  }
+                                },
+                                "instanceId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                },
+                                "bootId": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-fA-F]{32}$"
+                                },
+                                "clientId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                },
+                                "windowId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                },
+                                "policyVersion": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "description": "Canonical positive decimal string, at most 9223372036854775807."
+                                },
+                                "grantId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                                },
+                                "sequence": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "description": "Canonical positive decimal string, at most 9223372036854775807."
+                                },
+                                "challengeId": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-fA-F]{32}$"
+                                },
+                                "capacity": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Positive billed capacity, at most 9223372036854775807, independent of raw bytes."
+                                },
+                                "upload": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "unlimited",
+                                    "rate",
+                                    "burst"
+                                  ],
+                                  "properties": {
+                                    "unlimited": {
+                                      "type": "boolean"
+                                    },
+                                    "rate": {
+                                      "type": "string",
+                                      "pattern": "^(0|[1-9][0-9]*)$",
+                                      "description": "0..1099511627776 bytes/second. Unlimited requires rate and burst 0; limited values are both zero or both positive."
+                                    },
+                                    "burst": {
+                                      "type": "string",
+                                      "pattern": "^(0|[1-9][0-9]*)$",
+                                      "description": "0..1048576 bytes; coupled with rate and unlimited."
+                                    }
+                                  }
+                                },
+                                "download": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "unlimited",
+                                    "rate",
+                                    "burst"
+                                  ],
+                                  "properties": {
+                                    "unlimited": {
+                                      "type": "boolean"
+                                    },
+                                    "rate": {
+                                      "type": "string",
+                                      "pattern": "^(0|[1-9][0-9]*)$",
+                                      "description": "0..1099511627776 bytes/second. Unlimited requires rate and burst 0; limited values are both zero or both positive."
+                                    },
+                                    "burst": {
+                                      "type": "string",
+                                      "pattern": "^(0|[1-9][0-9]*)$",
+                                      "description": "0..1048576 bytes; coupled with rate and unlimited."
+                                    }
+                                  }
+                                },
+                                "leaseDurationMillis": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "description": "Lease duration in milliseconds, 1..10000."
+                                }
+                              }
+                            },
+                            "usage": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "rawUpload",
+                                "rawDownload",
+                                "billedBytes",
+                                "remainder"
+                              ],
+                              "properties": {
+                                "rawUpload": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Canonical decimal uint64 string; no numeric JSON, signs, leading zeros or exponents. Operation-specific bounds also apply."
+                                },
+                                "rawDownload": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Canonical decimal uint64 string; no numeric JSON, signs, leading zeros or exponents. Operation-specific bounds also apply."
+                                },
+                                "billedBytes": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Canonical decimal uint64 string; no numeric JSON, signs, leading zeros or exponents. Operation-specific bounds also apply."
+                                },
+                                "remainder": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "description": "Fractional billing remainder, 0..999999; zero at full grant capacity."
+                                }
+                              }
+                            },
+                            "sequence": {
+                              "type": "string",
+                              "pattern": "^[1-9][0-9]*$",
+                              "description": "Canonical positive decimal string, at most 9223372036854775807."
+                            },
+                            "sealed": {
+                              "type": "boolean"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "msg": "",
+                  "obj": {
+                    "instanceId": "node-instance",
+                    "bootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "executionRole": {
+                      "mode": "delegated",
+                      "authorityId": "coordinator",
+                      "generation": 3,
+                      "nodeId": "node-a"
+                    },
+                    "state": {
+                      "grant": {
+                        "authority": {
+                          "authorityId": "coordinator",
+                          "generation": "3",
+                          "nodeId": "node-a"
+                        },
+                        "instanceId": "node-instance",
+                        "bootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        "clientId": "client-a",
+                        "windowId": "window-a",
+                        "policyVersion": "1",
+                        "grantId": "grant-a",
+                        "sequence": "1",
+                        "challengeId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        "capacity": "9007199254740993",
+                        "upload": {
+                          "unlimited": true,
+                          "rate": "0",
+                          "burst": "0"
+                        },
+                        "download": {
+                          "unlimited": true,
+                          "rate": "0",
+                          "burst": "0"
+                        },
+                        "leaseDurationMillis": "1000"
+                      },
+                      "usage": {
+                        "rawUpload": "0",
+                        "rawDownload": "0",
+                        "billedBytes": "0",
+                        "remainder": "0"
+                      },
+                      "sequence": "1",
+                      "sealed": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "msg": "invalid or unavailable node authority discovery",
+                  "obj": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/server/clientPolicyAuthority/renew": {
+      "post": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Acknowledge the exact monotonic grant renewal.",
+        "operationId": "post_panel_api_server_clientPolicyAuthority_renew",
+        "description": "Requires verified HTTPS and an admin/node-sync token, verified mTLS, or authenticated session with CSRF. The mandatory binding must match the current owned delegated source, boot and coordinator tuple. Local owners refuse. Wire/decoded requests and the complete response envelope are limited to 32 KiB. Every field is required, exact and unique; aliases, unknown fields and null refuse. Protobuf uint64 values are decimal strings; outer binding/role generation retains numeric JSON. An uncertain mutation or lost acknowledgement never permits capacity reuse. Global client mapping and multi-node policy products are separate following features.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "binding",
+                  "renewal"
+                ],
+                "properties": {
+                  "binding": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "expectedInstanceId",
+                      "expectedBootId",
+                      "authorityId",
+                      "generation",
+                      "nodeId"
+                    ],
+                    "properties": {
+                      "expectedInstanceId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      },
+                      "expectedBootId": {
+                        "type": "string",
+                        "pattern": "^[0-9a-fA-F]{32}$"
+                      },
+                      "authorityId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      },
+                      "generation": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 1,
+                        "description": "Positive integer, at most 9223372036854775807."
+                      },
+                      "nodeId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      }
+                    }
+                  },
+                  "renewal": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "expectedBootId",
+                      "clientId",
+                      "grantId",
+                      "challengeId",
+                      "sequence",
+                      "leaseDurationMillis"
+                    ],
+                    "properties": {
+                      "expectedBootId": {
+                        "type": "string",
+                        "pattern": "^[0-9a-fA-F]{32}$"
+                      },
+                      "clientId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      },
+                      "grantId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                      },
+                      "challengeId": {
+                        "type": "string",
+                        "pattern": "^[0-9a-fA-F]{32}$"
+                      },
+                      "sequence": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]*$",
+                        "description": "Canonical positive decimal string, at most 9223372036854775807."
+                      },
+                      "leaseDurationMillis": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]*$",
+                        "description": "Lease duration in milliseconds, 1..10000."
+                      }
+                    }
+                  }
+                }
+              },
+              "example": {
+                "binding": {
+                  "expectedInstanceId": "node-instance",
+                  "expectedBootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "authorityId": "coordinator",
+                  "generation": 3,
+                  "nodeId": "node-a"
+                },
+                "renewal": {
+                  "expectedBootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "clientId": "client-a",
+                  "grantId": "grant-a",
+                  "challengeId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "sequence": "1",
+                  "leaseDurationMillis": "1000"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "instanceId",
+                        "bootId",
+                        "executionRole",
+                        "renewal"
+                      ],
+                      "properties": {
+                        "instanceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                        },
+                        "bootId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-fA-F]{32}$"
+                        },
+                        "executionRole": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "mode",
+                            "authorityId",
+                            "generation",
+                            "nodeId"
+                          ],
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "delegated"
+                              ]
+                            },
+                            "authorityId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                            },
+                            "generation": {
+                              "type": "integer",
+                              "format": "int64",
+                              "minimum": 1,
+                              "description": "Positive integer, at most 9223372036854775807."
+                            },
+                            "nodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                            }
+                          }
+                        },
+                        "renewal": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "expectedBootId",
+                            "clientId",
+                            "grantId",
+                            "challengeId",
+                            "sequence",
+                            "leaseDurationMillis"
+                          ],
+                          "properties": {
+                            "expectedBootId": {
+                              "type": "string",
+                              "pattern": "^[0-9a-fA-F]{32}$"
+                            },
+                            "clientId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                            },
+                            "grantId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[^ \\t\\r\\n\\u0000]+$"
+                            },
+                            "challengeId": {
+                              "type": "string",
+                              "pattern": "^[0-9a-fA-F]{32}$"
+                            },
+                            "sequence": {
+                              "type": "string",
+                              "pattern": "^[1-9][0-9]*$",
+                              "description": "Canonical positive decimal string, at most 9223372036854775807."
+                            },
+                            "leaseDurationMillis": {
+                              "type": "string",
+                              "pattern": "^[1-9][0-9]*$",
+                              "description": "Lease duration in milliseconds, 1..10000."
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "msg": "",
+                  "obj": {
+                    "instanceId": "node-instance",
+                    "bootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "executionRole": {
+                      "mode": "delegated",
+                      "authorityId": "coordinator",
+                      "generation": 3,
+                      "nodeId": "node-a"
+                    },
+                    "renewal": {
+                      "expectedBootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "clientId": "client-a",
+                      "grantId": "grant-a",
+                      "challengeId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "sequence": "1",
+                      "leaseDurationMillis": "1000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "msg": "invalid or unavailable node authority discovery",
+                  "obj": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/panel/api/server/clientPolicyDelegation": {
       "post": {
         "tags": [
@@ -6533,7 +9030,7 @@
         ],
         "summary": "Configure a fresh stopped node to execute grants from its coordinator.",
         "operationId": "post_panel_api_server_clientPolicyDelegation",
-        "description": "Requires HTTPS and an admin/node-sync token, verified mTLS, or an authenticated session with CSRF protection. Supply the exact coordinator authority ID, generation, and node ID. Setup requires a fresh stopped source with no consumed usage. The binding is immutable outside ordinary SQL/core restores; identical retries return the original instance and role, while changed bindings are refused. Requests and responses are limited to 32 KiB. This operation configures the execution role; the coordinator grant transport is developed separately.",
+        "description": "Requires HTTPS and an admin/node-sync token, verified mTLS, or an authenticated session with CSRF protection. Supply the exact coordinator authority ID, generation, and node ID. Setup requires a fresh stopped source with no consumed usage. The binding is immutable outside ordinary SQL/core restores; identical retries return the original instance and role, while changed bindings are refused. Requests and responses are limited to 32 KiB. This operation configures the execution role; the six clientPolicyAuthority control endpoints execute independently allocated coordinator grants.",
         "requestBody": {
           "required": true,
           "content": {

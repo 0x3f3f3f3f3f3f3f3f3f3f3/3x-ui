@@ -25,6 +25,7 @@ func NewNodeAuthorityAPIController(g *gin.RouterGroup) {
 	api.Use(middleware.ConfigEnvelopeMiddlewareWithLimit(panelruntime.NodeAuthorityMessageLimit), middleware.CSRFMiddleware())
 	api.POST("/server/clientPolicyAuthority", discoverNodeAuthority)
 	api.POST("/server/clientPolicyDelegation", configureNodeDelegation)
+	registerNodeAuthorityControls(api)
 }
 
 func configureNodeDelegation(c *gin.Context) {

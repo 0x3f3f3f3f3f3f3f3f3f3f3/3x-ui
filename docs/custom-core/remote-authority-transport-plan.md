@@ -41,9 +41,9 @@ Completion contract: run `go test -race -count=1 -v -timeout 5m ./internal/web/r
 
 Files controller/node_authority_control.go and tests, node_authority.go route wiring, api.go/api_auth_test.go exact inventory, frontend endpoint source/generated artifacts/contract tests.
 Interfaces: six distinct POST endpoints (/server/clientPolicyAuthority/{requests,install,get,pause,seal,renew}) consume typed bounded envelopes in existing auth/TLS/CSRF chain and return opaque public errors.
-- [ ] Add TestNodeAuthorityControlHTTPAuthenticationAndBounds, all six methods/scopes/session-CSRF/duplicates/aliases/null/type/wire-decoded limits. RED before route support; catalog contracts RED before declaration.
-- [ ] Implement routes/strict decode/opaque errors and exact node-sync inventory + complete request/result schemas. Both database boundary races and runtime/catalog/typecheck pass.
-- [ ] Commit/task-done literal parents and exact scope inventory.
+- [x] Add TestNodeAuthorityControlHTTPAuthenticationAndBounds, all six methods/scopes/session-CSRF/duplicates/aliases/null/type/wire-decoded limits. RED before route support; catalog contracts RED before declaration.
+- [x] Implement routes/strict decode/opaque errors and exact node-sync inventory + complete request/result schemas. Both database boundary races and runtime/catalog/typecheck pass.
+- [x] Commit/task-done literal parents and exact scope inventory.
 
 
 Completion contract: run `go test -race -count=1 -v -timeout 5m ./internal/web/controller ./internal/web/runtime -run '^Test(NodeAuthorityControlHTTPAuthenticationAndBounds|NodeSyncScopeAllowlistMatchesRemoteInventory|RemoteAuthorityControlRequiresVerifiedTLS|RemoteAuthorityControlRejectsAmbiguousPayloads|RemoteAuthorityAPIPreservesBinding)$'` on both databases. Expected: five named parents PASS across the packages, no FAIL/SKIP/no-tests. Run owning frontend request/runtime contracts, generation+artifact equality and typecheck. Expected: all named contract tests PASS, compiler exit0, exact generated file match.
