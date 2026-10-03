@@ -114,8 +114,10 @@ func captureAuthorityDirectResetTx(tx *gorm.DB, state *durableAuthorityState, id
 	if err := validateAuthorityDirectResetSourceTx(tx, state.SourceID); err != nil {
 		return nil, err
 	}
-	if err := validateLocalClientPolicyResetScope(tx, ids); err != nil {
-		return nil, err
+	for _, batch := range chunkStrings(ids, 1000) {
+		if err := validateLocalClientPolicyResetScope(tx, batch); err != nil {
+			return nil, err
+		}
 	}
 	for _, id := range ids {
 		account, err := state.Journal.LookupAccount(id)
@@ -239,6 +241,9 @@ func applyAuthorityDirectReset(ctx context.Context, ids []string, request string
 	}
 	lock.Lock()
 	defer lock.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := checkDatabaseRestoreRestart(nil); err != nil {
 		return err
 	}
@@ -251,16 +256,6 @@ func applyAuthorityDirectReset(ctx context.Context, ids []string, request string
 		defer func() { resultErr = errors.Join(resultErr, state.Journal.Close()) }()
 	}
 	process := currentXrayProcess()
-	if managedAuthorityForProcess(process) != nil {
-		defer func() {
-			if resultErr != nil && process.IsRunning() {
-				stop, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				defer cancel()
-				resultErr = errors.Join(resultErr, stopManagedProcess(stop, process))
-				(&XrayService{}).SetToNeedRestart()
-			}
-		}()
-	}
 	var capture *policyauthority.ResetOperationCapture
 	if err := runSerializedTxContextForDatabase(ctx, expected, func(tx *gorm.DB) error {
 		var err error
@@ -286,6 +281,18 @@ func applyAuthorityDirectReset(ctx context.Context, ids []string, request string
 	})
 	if err != nil || capture == nil {
 		return err
+	}
+	// The private helper owns cleanup once execution starts. Only a failure
+	// persisting completion after its successful application needs outer cleanup.
+	if managedAuthorityForProcess(process) != nil {
+		defer func() {
+			if resultErr != nil && process.IsRunning() {
+				stop, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				resultErr = errors.Join(resultErr, stopManagedProcess(stop, process))
+				(&XrayService{}).SetToNeedRestart()
+			}
+		}()
 	}
 	return runSerializedTxContextForDatabase(ctx, expected, func(tx *gorm.DB) error {
 		if err := validateAuthorityDirectResetSourceTx(tx, state.SourceID); err != nil {

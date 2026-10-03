@@ -36,7 +36,7 @@ Files: evidence in docs/custom-core/issuance-journal-foundation.md and this plan
 
 - [x] Step1: Run broader affected races including polling and legacy lock ordering, explicit actual old writers, full make test-go, journal/service vet and diff. Expected: all pass, backend-only/optional fixtures described accurately.
 - [x] Step2: Record final evidence and remaining parent scope; commit/task-done with real public witness. Expected: final source green.
-- [ ] Step3: One fresh complete bounded diff review; re-grade every finding and rule all declined boundaries; one author RED/GREEN correction pass for Critical/Important and green suite, no second review. Expected: no unaddressed bounded blockers, parent remains active. Preserve workspace.
+- [x] Step3: One fresh complete bounded diff review; re-grade every finding and rule all declined boundaries; one author RED/GREEN correction pass for Critical/Important and green suite, no second review. Expected: no unaddressed bounded blockers, parent remains active. Preserve workspace.
 
 ## Review Focus
 
