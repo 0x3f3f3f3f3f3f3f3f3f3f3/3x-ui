@@ -59,6 +59,13 @@ func TestRemoteAuthorityDiscoveryRequiresVerifiedTLS(t *testing.T) {
 	if result, err := NewRemote(node, nil).DiscoverAuthority(context.Background(), request); err != nil || result == nil || result.Capabilities.BootId != request.ExpectedBootID || !reached.Load() {
 		t.Fatalf("verified real TLS/encrypted-token discovery failed: %v", err)
 	}
+	t.Run("existing-default-https-scheme", func(t *testing.T) {
+		copy := *node
+		copy.Scheme = ""
+		if result, err := NewRemote(&copy, nil).DiscoverAuthority(context.Background(), request); err != nil || result == nil {
+			t.Fatal("existing default verified HTTPS scheme was rejected")
+		}
+	})
 	for _, tc := range []struct {
 		name   string
 		mutate func(*model.Node)

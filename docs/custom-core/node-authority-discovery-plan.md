@@ -28,9 +28,9 @@ Interfaces: AuthorityDiscoveryRequest{ExpectedInstanceID,ExpectedBootID}; NodeAu
 Files: modify internal/web/runtime/remote.go; create remote_authority.go and remote_authority_test.go.
 Interfaces: consumes Task1 DTO; Remote.DiscoverAuthority(ctx,request). Existing do delegates to a private response-limit variant, preserving64MiB default. New authority response capped32KiB.
 
-- [ ] Step1: add TestRemoteAuthorityDiscoveryRequiresVerifiedTLS and TestRemoteAuthorityDiscoveryRejectsInvalidResponse. Real TLS pin/token/private opt-in positive transport; reject HTTP, skip, disabled/transitive node, malformed/oversized/unknown JSON, wrong boot/instance/challenge/capability and canceled request. Expected behavior RED before implementation.
-- [ ] Step2: implement verified HTTPS preconditions, strict bounded envelope/DTO decode and binding validation using existing credential transport. Expected focused cases PASS and unchanged existing remote/TLS/envelope tests.
-- [ ] Step3: commit/task-done runtime package tests. Expected PASS; no large-response allowance regression.
+- [x] Step1: add TestRemoteAuthorityDiscoveryRequiresVerifiedTLS and TestRemoteAuthorityDiscoveryRejectsInvalidResponse. Real TLS pin/token/private opt-in positive transport; reject HTTP, skip, disabled/transitive node, malformed/oversized/unknown JSON, wrong boot/instance/challenge/capability and canceled request. Expected behavior RED before implementation.
+- [x] Step2: implement verified HTTPS preconditions, strict bounded envelope/DTO decode and binding validation using existing credential transport. Expected focused cases PASS and unchanged existing remote/TLS/envelope tests.
+- [x] Step3: commit/task-done runtime package tests. Expected PASS; no large-response allowance regression.
 
 ## Task 3: Authenticated bounded node HTTP route
 

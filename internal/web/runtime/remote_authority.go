@@ -9,7 +9,7 @@ import (
 )
 
 func (r *Remote) DiscoverAuthority(ctx context.Context, request AuthorityDiscoveryRequest) (*NodeAuthorityDiscovery, error) {
-	if ctx == nil || request.Validate() != nil || r == nil || r.node == nil || !r.node.Enable || r.node.Transitive || r.node.Scheme != "https" {
+	if ctx == nil || request.Validate() != nil || r == nil || r.node == nil || !r.node.Enable || r.node.Transitive || r.node.Scheme != "" && r.node.Scheme != "https" {
 		return nil, ErrNodeAuthorityDiscovery
 	}
 	if err := ctx.Err(); err != nil {

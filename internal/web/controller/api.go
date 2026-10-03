@@ -93,28 +93,29 @@ var monitorScopeAllow = map[string]struct{}{
 // nodeSyncScopeAllow is the node-sync route/method allowlist relative to
 // /panel/api; Gin patterns prevent concrete parameters broadening authority.
 var nodeSyncScopeAllow = map[string]map[string]struct{}{
-	"/server/status":               {http.MethodGet: {}},
-	"/inbounds/list":               {http.MethodGet: {}},
-	"/inbounds/add":                {http.MethodPost: {}},
-	"/inbounds/del/:id":            {http.MethodPost: {}},
-	"/inbounds/update/:id":         {http.MethodPost: {}},
-	"/clients/add":                 {http.MethodPost: {}},
-	"/clients/del/:email":          {http.MethodPost: {}},
-	"/clients/:email/detach":       {http.MethodPost: {}},
-	"/clients/update/:email":       {http.MethodPost: {}},
-	"/server/restartXrayService":   {http.MethodPost: {}},
-	"/server/getWebCertFiles":      {http.MethodGet: {}},
-	"/server/descendants":          {http.MethodGet: {}},
-	"/clients/resetTraffic/:email": {http.MethodPost: {}},
-	"/inbounds/resetAllTraffics":   {http.MethodPost: {}},
-	"/inbounds/:id/resetTraffic":   {http.MethodPost: {}},
-	"/clients/onlinesByGuid":       {http.MethodPost: {}},
-	"/clients/onlines":             {http.MethodPost: {}},
-	"/clients/lastOnline":          {http.MethodPost: {}},
-	"/inbounds/pushClientTraffics": {http.MethodPost: {}},
-	"/server/clientIps":            {http.MethodGet: {}, http.MethodPost: {}},
-	"/clients/clientIpsByGuid":     {http.MethodPost: {}},
-	"/hosts/list":                  {http.MethodGet: {}},
+	"/server/clientPolicyAuthority": {http.MethodPost: {}},
+	"/server/status":                {http.MethodGet: {}},
+	"/inbounds/list":                {http.MethodGet: {}},
+	"/inbounds/add":                 {http.MethodPost: {}},
+	"/inbounds/del/:id":             {http.MethodPost: {}},
+	"/inbounds/update/:id":          {http.MethodPost: {}},
+	"/clients/add":                  {http.MethodPost: {}},
+	"/clients/del/:email":           {http.MethodPost: {}},
+	"/clients/:email/detach":        {http.MethodPost: {}},
+	"/clients/update/:email":        {http.MethodPost: {}},
+	"/server/restartXrayService":    {http.MethodPost: {}},
+	"/server/getWebCertFiles":       {http.MethodGet: {}},
+	"/server/descendants":           {http.MethodGet: {}},
+	"/clients/resetTraffic/:email":  {http.MethodPost: {}},
+	"/inbounds/resetAllTraffics":    {http.MethodPost: {}},
+	"/inbounds/:id/resetTraffic":    {http.MethodPost: {}},
+	"/clients/onlinesByGuid":        {http.MethodPost: {}},
+	"/clients/onlines":              {http.MethodPost: {}},
+	"/clients/lastOnline":           {http.MethodPost: {}},
+	"/inbounds/pushClientTraffics":  {http.MethodPost: {}},
+	"/server/clientIps":             {http.MethodGet: {}, http.MethodPost: {}},
+	"/clients/clientIpsByGuid":      {http.MethodPost: {}},
+	"/hosts/list":                   {http.MethodGet: {}},
 }
 
 // enforceTokenScope applies explicit allowlists to monitor and node-sync tokens.
@@ -168,6 +169,8 @@ func relAPIPath(fullPath string) string {
 
 // initRouter sets up the API routes for inbounds, server, and other endpoints.
 func (a *APIController) initRouter(g *gin.RouterGroup) {
+	// This bounded control route registers before the ordinary envelope chain.
+	NewNodeAuthorityAPIController(g)
 	// Main API group
 	api := g.Group("/panel/api")
 	api.Use(a.checkAPIAuth)

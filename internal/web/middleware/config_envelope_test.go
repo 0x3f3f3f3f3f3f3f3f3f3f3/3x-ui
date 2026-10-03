@@ -28,6 +28,49 @@ func envelopeTestEngine(t *testing.T, onHandler func()) *gin.Engine {
 	return engine
 }
 
+func TestConfigEnvelopeExplicitLimit(t *testing.T) {
+	const limit = 128
+	for _, tc := range []struct {
+		name       string
+		body       []byte
+		compressed bool
+		wantOK     bool
+	}{
+		{"exact-plain", bytes.Repeat([]byte("a"), limit), false, true},
+		{"oversize-plain", bytes.Repeat([]byte("a"), limit+1), false, false},
+		{"oversize-decompressed", bytes.Repeat([]byte("a"), limit*2), true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			engine := gin.New()
+			reached := false
+			engine.Use(ConfigEnvelopeMiddlewareWithLimit(limit))
+			engine.POST("/echo", func(c *gin.Context) {
+				reached = true
+				raw, _ := io.ReadAll(c.Request.Body)
+				c.String(http.StatusOK, "%s", raw)
+			})
+			wire := tc.body
+			if tc.compressed {
+				wire = wirecodec.Compress(tc.body)
+			}
+			req := httptest.NewRequest(http.MethodPost, "/echo", bytes.NewReader(wire))
+			if tc.compressed {
+				req.Header.Set("Content-Encoding", wirecodec.EncodingZstd)
+				req.Header.Set(wirecodec.HashHeader, wirecodec.Sha256Hex(tc.body))
+			}
+			w := httptest.NewRecorder()
+			engine.ServeHTTP(w, req)
+			if tc.wantOK {
+				if !reached || w.Code != http.StatusOK || w.Body.String() != string(tc.body) {
+					t.Fatal("exact-size envelope lost its original body")
+				}
+			} else if reached || w.Code == http.StatusOK {
+				t.Fatal("oversized wire/decompressed envelope reached its handler")
+			}
+		})
+	}
+}
+
 func TestConfigEnvelope_DecompressesAndVerifies(t *testing.T) {
 	engine := envelopeTestEngine(t, nil)
 
