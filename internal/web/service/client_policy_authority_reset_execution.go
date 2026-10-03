@@ -230,7 +230,12 @@ func recoverAuthorityPreparedResetTx(tx *gorm.DB, journal *policyauthority.Journ
 	if err := recoverAuthorityResetBatchTx(tx, operation); err != nil {
 		return err
 	}
-	for _, reset := range snapshot.Resets {
+	return recoverAuthorityPreparedResetRowsTx(tx, journal, source, snapshot.Resets, snapshot.ResetAt)
+}
+
+// A zero common effect time uses each original semantic row's protected time.
+func recoverAuthorityPreparedResetRowsTx(tx *gorm.DB, journal *policyauthority.Journal, source string, resets []model.ClientPolicyReset, at int64) error {
+	for _, reset := range resets {
 		account, err := journal.LookupAccount(reset.ClientID)
 		if err != nil {
 			return err
@@ -241,7 +246,11 @@ func recoverAuthorityPreparedResetTx(tx *gorm.DB, journal *policyauthority.Journ
 		if err := recoverAuthoritySemanticResetTx(tx, &reset); err != nil {
 			return err
 		}
-		if err := recordClientTrafficResetTimes(tx, []string{reset.ClientID}, snapshot.ResetAt); err != nil {
+		effectTime := at
+		if effectTime == 0 {
+			effectTime = reset.CreatedAt
+		}
+		if err := recordClientTrafficResetTimes(tx, []string{reset.ClientID}, effectTime); err != nil {
 			return err
 		}
 		if account.Deleted {

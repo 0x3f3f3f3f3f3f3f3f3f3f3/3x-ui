@@ -46,9 +46,7 @@ func ResetLocalClientPolicies(ctx context.Context, clientIDs []string, requestID
 	if err != nil {
 		return err
 	}
-	return applyLocalClientPolicyReset(ctx, ids, func(instanceID string) ([]clientpolicy.Policy, error) {
-		return PrepareClientPolicyResets(instanceID, ids, requestID)
-	})
+	return applyAuthorityDirectReset(ctx, ids, requestID)
 }
 
 func applyLocalClientPolicyReset(ctx context.Context, ids []string, prepare func(string) ([]clientpolicy.Policy, error)) (resultErr error) {

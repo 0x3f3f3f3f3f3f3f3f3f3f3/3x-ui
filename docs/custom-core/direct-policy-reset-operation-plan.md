@@ -10,7 +10,7 @@
 
 ## Task 1: Real direct capture, preparation and completion
 
-Files: create internal/web/service/client_policy_authority_direct_reset.go and client_policy_authority_direct_reset_test.go; modify client_policy_reset_runtime.go and client_policy_reset.go.
+Files: create internal/web/service/client_policy_authority_direct_reset.go and client_policy_authority_direct_reset_test.go; modify client_policy_reset_runtime.go, client_policy_reset.go and client_policy_authority_reset_execution.go to extract the existing common semantic-row projection needed by direct ordinary retries.
 
 Consumes: existing source-owned authority resolver, journal capture/progress APIs and private managed reset helper. Produces: direct typed key/capture/preparation decoders and application wrapper; original raw policy request is unchanged.
 

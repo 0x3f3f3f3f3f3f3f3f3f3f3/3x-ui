@@ -164,7 +164,7 @@ func prepareClientPolicyResetBatch(tx *gorm.DB, source model.ClientPolicySource,
 			return nil, ErrClientPolicyLedger
 		}
 		if !retries[client.StableID] {
-			reset = &model.ClientPolicyReset{ClientID: client.StableID, RequestID: requestID, InstanceID: source.InstanceID, Epoch: receipt.Epoch, Sequence: receipt.Sequence, RawUpload: receipt.RawUpload, RawDownload: receipt.RawDownload, BilledBytes: receipt.BilledBytes, Remainder: receipt.Remainder, UncertainBytes: receipt.UncertainBytes}
+			reset = &model.ClientPolicyReset{ClientID: client.StableID, RequestID: requestID, InstanceID: source.InstanceID, Epoch: receipt.Epoch, Sequence: receipt.Sequence, RawUpload: receipt.RawUpload, RawDownload: receipt.RawDownload, BilledBytes: receipt.BilledBytes, Remainder: receipt.Remainder, UncertainBytes: receipt.UncertainBytes, CreatedAt: at}
 		}
 		policy, err := prepareClientPolicyRecord(tx, client, reset)
 		if err != nil {
