@@ -45,7 +45,7 @@ Consumes: equivalent pgConnEnv; existing actual-core activation/restore lease/pr
 - [x] Step1: Add TestManagedAuthorityActualPostgresRestorePreservesConsumption and TestManagedAuthorityActualPostgresRestorePreservesPreparedReset with literal actual payload/usage/window/grant assertions before and after old SQL/core restoration. Include current/later policy and canonical credential/membership preservation. Run actual PG/core cases first. Expected RED for any missing restoration invariant; PASS already-correct behavior is characterization, not an invented feature RED.
 - [x] Step2: Add TestManagedAuthorityActualPostgresRestoreFailureKeepsOwnedRuntime for real invalid/archive transaction failure and observable listener/database ownership. Fix only reproduced restore defects under TDD. Expected safe original runtime for preflight rejection; closed uncertain execution.
 - [x] Step3: Require exact actual PG parents in CI with installed tools/private fixture DSN; run affected both-backend races, actual native/shared HTTP regressions, full make test-go with exact writer probes and fresh vet/diff/input checks. Expected observed required PASS with no hidden skips; record original failures honestly.
-- [ ] Step4: Commit/task-done with the seven exact actual connection/tool/restore parents. Expected observed required PASS without skip.
+- [x] Step4: Commit/task-done with the seven exact actual connection/tool/restore parents. Expected observed required PASS without skip.
 
 ## Phase finishing
 
