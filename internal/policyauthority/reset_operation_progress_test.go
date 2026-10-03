@@ -777,3 +777,119 @@ func TestResetOperationProgressFileExhaustionPreservesAllWitnesses(t *testing.T)
 	}
 	assertResetProgressFundedState(t, j, account, grant)
 }
+
+func TestResetOperationProgressActualOldWriters(t *testing.T) {
+	schema5 := os.Getenv("RESET_OPERATION_SCHEMA5_WRITER_PROBE")
+	schema4 := os.Getenv("RESET_OPERATION_OLD_WRITER_PROBE")
+	if schema5 == "" || schema4 == "" {
+		t.Skip("set both retained original schema-5 and schema-4 writer probe paths")
+	}
+	j, id, grant, path := resetCaptureFixture(t)
+	account, err := j.Account("canonical-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	capture, prepared, completed := resetProgressRequests(id)
+	if err := j.CaptureResetOperation(capture); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Close(); err != nil {
+		t.Fatal(err)
+	}
+	originalResetWriter(t, schema5, retainedResetProgressFixture(t, path, "unprepared-schema5"), id, true)
+	j, err = Open(path, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rejected := prepared
+	rejected.CaptureDigest = strings.Repeat("b", 64)
+	if err := j.PrepareResetOperation(rejected); !errors.Is(err, ErrRequest) {
+		t.Fatalf("invalid preparation committed: %v", err)
+	}
+	if err := j.Close(); err != nil {
+		t.Fatal(err)
+	}
+	originalResetWriter(t, schema5, retainedResetProgressFixture(t, path, "rejected-preparation-schema5"), id, true)
+	originalOpen := openJournal
+	openJournal = func(path string, mode os.FileMode, options *bolt.Options) (*bolt.DB, error) {
+		copyOptions := *options
+		copyOptions.OpenFile = func(path string, _ int, _ os.FileMode) (*os.File, error) { return os.Open(path) }
+		return originalOpen(path, mode, &copyOptions)
+	}
+	readOnly, err := Open(path, id)
+	openJournal = originalOpen
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := readOnly.PrepareResetOperation(prepared); !errors.Is(err, ErrJournal) {
+		t.Fatalf("read-only preparation committed: %v", err)
+	}
+	if err := readOnly.Close(); err != nil {
+		t.Fatal(err)
+	}
+	originalResetWriter(t, schema5, retainedResetProgressFixture(t, path, "failed-preparation-schema5"), id, true)
+	j, err = Open(path, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := j.PrepareResetOperation(prepared); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, probe := range []struct{ name, path string }{{"schema5", schema5}, {"schema4", schema4}} {
+		retained := retainedResetProgressFixture(t, path, "prepared-schema6-old-"+probe.name)
+		originalResetWriter(t, probe.path, retained, id, false)
+		reopened, err := Open(retained, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, err := reopened.LookupResetPreparation(prepared.RequestID)
+		if err != nil || p != prepared {
+			_ = reopened.Close()
+			t.Fatalf("old writer changed preparation: %v", err)
+		}
+		if _, err := reopened.LookupResetCompletion(completed.RequestID); !errors.Is(err, ErrNotFound) {
+			_ = reopened.Close()
+			t.Fatalf("old writer invented completion: %v", err)
+		}
+		assertResetProgressFundedState(t, reopened, account, grant)
+		if err := reopened.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	j, err = Open(path, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := j.CompleteResetOperation(completed); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, probe := range []struct{ name, path string }{{"schema5", schema5}, {"schema4", schema4}} {
+		retained := retainedResetProgressFixture(t, path, "completed-schema6-old-"+probe.name)
+		originalResetWriter(t, probe.path, retained, id, false)
+		reopened, err := Open(retained, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c, err := reopened.LookupResetCompletion(completed.RequestID)
+		if err != nil || c != completed {
+			_ = reopened.Close()
+			t.Fatalf("old writer changed completion: %v", err)
+		}
+		if err := reopened.PrepareResetOperation(prepared); err != nil {
+			t.Fatal(err)
+		}
+		if err := reopened.CompleteResetOperation(completed); err != nil {
+			t.Fatal(err)
+		}
+		assertResetProgressFundedState(t, reopened, account, grant)
+		if err := reopened.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
