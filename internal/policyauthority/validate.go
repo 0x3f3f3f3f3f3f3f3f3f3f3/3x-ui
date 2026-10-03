@@ -20,7 +20,7 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 		}
 	}
 	var meta metadata
-	if err := get(tx, "metadata", "state", &meta); err != nil || meta.Schema != 4 && meta.Schema != 5 {
+	if err := get(tx, "metadata", "state", &meta); err != nil || meta.Schema < 4 || meta.Schema > 6 {
 		return ErrJournal
 	}
 	if meta.Identity != j.id {
@@ -35,6 +35,9 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 		return err
 	}
 	if err := j.validateResetOperations(tx, meta); err != nil {
+		return err
+	}
+	if err := validateResetProgress(tx, meta); err != nil {
 		return err
 	}
 	accounts := make(map[string]Account)

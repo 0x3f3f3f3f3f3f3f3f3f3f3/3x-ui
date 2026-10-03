@@ -43,10 +43,11 @@
 
 ## Task 2: Actual schema-5 old writer and panel compatibility
 
-**Files:** Extend `internal/policyauthority/reset_operation_progress_test.go`; preserve original-source build script/closure under this plan's ignored workspace. Update `docs/custom-core/issuance-journal-foundation.md` with exact evidence and limits.
+**Files:** Extend `internal/policyauthority/reset_operation_progress_test.go`; create `internal/web/service/client_policy_authority_progress_test.go`; preserve original-source build script/closure under this plan's ignored workspace. Update `docs/custom-core/issuance-journal-foundation.md` with exact evidence and limits.
 
 **Interfaces:** Consume Task1 storage and the pre-change schema-5 source checkpoint. Build ordinary `Journal.Open/Close` using its unchanged original package/module/license and selected dependency closure. Preserve the earlier schema-4 probe and all fixtures.
 
 - [ ] Build/hash the actual schema-5 probe. It opens closed schema-5 captures before preparation and after rejected/read-only-failed preparation; it rejects copied committed schema-6 preparation and completion fixtures before writing. The actual schema-4 probe also rejects the same schema-6 copies. Compare fixture bytes and reopened exact accounting/witnesses.
+- [ ] Add `TestAuthoritySchema6ProgressPreservesMigrationRecoveryAndFundedState`: create the actual migrated history fixture, issue a finite owned grant, store an opaque storage-only capture/preparation/completion chain, close/reopen through the private authority manifest, remove the original SQL batch/reset-time projection and recover it through `recoverAuthorityDesiredState`. Compare the exact original migration operation/time, full funded account/grant and progress witnesses. Run on SQLite and private isolated PostgreSQL. This proves schema-6 compatibility with existing migration recovery, not service interpretation of prepared effects.
 - [ ] Run full journal race/static gates, appropriate authority migration/history/reset selections on SQLite and private isolated PostgreSQL, and `make test-go` with current clean core/probes. Identify PostgreSQL-only tests and explicitly forced SQLite paired imports; do not equate skips with acceptance.
 - [ ] Commit final bounded evidence. Perform one fresh final plan review and one correction pass. Retain all source/probe/log/fixture artifacts. Continue the separately designed service capture/prepared/completed integration; do not claim the parent restore task or whole project complete.
