@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -197,10 +198,31 @@ func TestManagedAuthorityCalendarPreparationFailureStopsOriginalFlow(t *testing.
 	if err := db.Model(client).Update("traffic_reset", "daily").Error; err != nil {
 		t.Fatal(err)
 	}
+	injected := errors.New("calendar preparation read failed")
+	const callback = "test:fail-calendar-preparation"
+	var failPreparation atomic.Bool
+	if err := db.Callback().Query().Before("gorm:query").Register(callback, func(tx *gorm.DB) {
+		if failPreparation.Load() && tx.Statement.Table == "client_traffic_reset_batches" {
+			tx.AddError(injected)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var process *xray.Process
+	t.Cleanup(func() {
+		if process != nil && process.IsRunning() {
+			if err := stopManagedProcess(context.Background(), process); err != nil {
+				t.Error(err)
+			}
+		}
+		if err := db.Callback().Query().Remove(callback); err != nil {
+			t.Error(err)
+		}
+	})
 	if err := svc.RestartXray(true); err != nil {
 		t.Fatal(err)
 	}
-	process := currentXrayProcess()
+	process = currentXrayProcess()
 	flow, err := net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", tunnel.Port), time.Second)
 	if err != nil {
 		t.Fatal(err)
@@ -213,16 +235,7 @@ func TestManagedAuthorityCalendarPreparationFailureStopsOriginalFlow(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	injected := errors.New("calendar preparation read failed")
-	const callback = "test:fail-calendar-preparation"
-	if err := db.Callback().Query().Before("gorm:query").Register(callback, func(tx *gorm.DB) {
-		if tx.Statement.Table == "client_traffic_reset_batches" {
-			tx.AddError(injected)
-		}
-	}); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Callback().Query().Remove(callback) })
+	failPreparation.Store(true)
 	_, _, err = (&ClientService{}).applyTrafficResetBatch(ctx, &InboundService{}, batch)
 	if !errors.Is(err, injected) {
 		t.Fatalf("calendar preparation failure was not reported: %v", err)
@@ -231,9 +244,7 @@ func TestManagedAuthorityCalendarPreparationFailureStopsOriginalFlow(t *testing.
 		t.Fatal("failed calendar preparation retained active core permissions")
 	}
 	managedActivationClosed(t, flow)
-	if err := db.Callback().Query().Remove(callback); err != nil {
-		t.Fatal(err)
-	}
+	failPreparation.Store(false)
 	if err := db.First(&batch, "request_id = ?", batch.RequestID).Error; err != nil {
 		t.Fatal(err)
 	}

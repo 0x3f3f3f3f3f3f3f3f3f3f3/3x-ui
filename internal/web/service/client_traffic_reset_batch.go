@@ -67,7 +67,7 @@ func captureClientTrafficResetBatch(ctx context.Context, scope string, emails []
 	}
 	hash := sha256.Sum256(selection)
 	fingerprint := hex.EncodeToString(hash[:])
-	err = runSerializedTx(func(tx *gorm.DB) error {
+	err = runAuthorityResetCapture(ctx, authorityResetRequestKey(requestID), "", &operation, func(tx *gorm.DB) error {
 		tx = tx.WithContext(ctx)
 		err := tx.First(&operation, "request_id = ?", requestID).Error
 		if err == nil {
@@ -127,6 +127,8 @@ func captureClientTrafficResetBatch(ctx context.Context, scope string, emails []
 			return err
 		}
 		return validateResetBatchSelection(operation, scope, fingerprint)
+	}, func(original model.ClientTrafficResetBatch) error {
+		return validateResetBatchSelection(original, scope, fingerprint)
 	})
 	return operation, err
 }

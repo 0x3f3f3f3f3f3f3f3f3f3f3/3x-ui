@@ -57,7 +57,12 @@ func authorityMigrationFixture(t *testing.T) (string, string, string) {
 		t.Fatal(err)
 	}
 	t.Logf("retained stopped legacy execution fixture: %s", dir)
-	path := filepath.Join(dir, "state.db")
+	t.Setenv("XUI_DB_FOLDER", dir)
+	stateDir := filepath.Join(dir, "client-policy")
+	if err := os.Mkdir(stateDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(stateDir, "state.db")
 	if err := clientpolicy.CreateStore(path, "migration-source"); err != nil {
 		t.Fatal(err)
 	}

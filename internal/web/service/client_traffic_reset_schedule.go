@@ -69,7 +69,7 @@ func captureScheduledTrafficReset(ctx context.Context, period string, now time.T
 	}
 	zone := sha256.Sum256([]byte(now.Location().String()))
 	scope := fmt.Sprintf("calendar:%s:%x", period, zone[:8])
-	err = runSerializedTx(func(tx *gorm.DB) error {
+	err = runAuthorityResetCapture(ctx, "", authorityResetCalendarKey(scope, at), &operation, func(tx *gorm.DB) error {
 		tx = tx.WithContext(ctx)
 		err := tx.First(&operation, "scope = ? AND scheduled_at = ?", scope, at).Error
 		if err == nil {
@@ -108,6 +108,11 @@ func captureScheduledTrafficReset(ctx context.Context, period string, now time.T
 		}
 		operation = model.ClientTrafficResetBatch{}
 		return tx.First(&operation, "scope = ? AND scheduled_at = ?", scope, at).Error
+	}, func(original model.ClientTrafficResetBatch) error {
+		if original.Scope != scope || original.ScheduledAt != at {
+			return ErrClientPolicyLedger
+		}
+		return nil
 	})
 	return operation, err
 }
