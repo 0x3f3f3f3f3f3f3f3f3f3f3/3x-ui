@@ -32,8 +32,12 @@ Consumes: Task1 strict envelope and current retained account/history. Produces: 
 
 ## Task 3: Current regression and sole review
 
-Files: evidence in docs/custom-core/issuance-journal-foundation.md and this plan/ledger.
+Files: evidence in docs/custom-core/issuance-journal-foundation.md and this plan/ledger; adapt the deliberately unowned polling fixture in client_policy_poll_test.go to its private direct-reset pipeline while asserting public refusal; require all28 direct/batch/calendar/lock regression parents explicitly in both jobs of .github/workflows/custom-core.yml.
 
-- [ ] Step1: Run broader affected races including polling and legacy lock ordering, explicit actual old writers, full make test-go, journal/service vet and diff. Expected: all pass, backend-only/optional fixtures described accurately.
-- [ ] Step2: Record final evidence and remaining parent scope; commit/task-done with real public witness. Expected: final source green.
+- [x] Step1: Run broader affected races including polling and legacy lock ordering, explicit actual old writers, full make test-go, journal/service vet and diff. Expected: all pass, backend-only/optional fixtures described accurately.
+- [x] Step2: Record final evidence and remaining parent scope; commit/task-done with real public witness. Expected: final source green.
 - [ ] Step3: One fresh complete bounded diff review; re-grade every finding and rule all declined boundaries; one author RED/GREEN correction pass for Critical/Important and green suite, no second review. Expected: no unaddressed bounded blockers, parent remains active. Preserve workspace.
+
+## Review Focus
+
+Check raw-request compatibility and canonical UUID-set identity, including overlapping historical cohorts and later desired/reset edits. Verify capture/preparation ordering around actual SQL commit failure, core failure and completion; no SQL transaction across RPC or metadata-only acknowledgement. Check source/owner/database pinning, strict typed namespace recovery, usage/version/fingerprint bounds, deleted identities and numeric-ID/email reuse. Inspect the common batch projection and explicit fresh CreatedAt change for regressions outside direct reset. Check that the deliberately unowned 1001-client fixture retains its original lower-pipeline assertions while public admission still refuses, and that both CI jobs require actual-core passes. Distinguish existing bounded evidence from unverified public scale, independent process/database/journal replacement, automatic renewal and complete parent distribution/platform acceptance.

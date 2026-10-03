@@ -358,7 +358,18 @@ func testManagedResetBatch(t *testing.T, ctx context.Context, process *xray.Proc
 	if err := db.Model(&model.ClientRecord{}).Where("1 = 1").Update("total_gb", 9000).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := ResetLocalClientPolicies(ctx, append(slices.Clone(ids), "missing-client"), "unknown-member"); !errors.Is(err, clientpolicy.ErrUnknownClient) || measured.checkpoints != 0 {
+	var priorResets int64
+	if err := db.Model(&model.ClientPolicyReset{}).Count(&priorResets).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := ResetLocalClientPolicies(ctx, ids, "unowned-direct-refusal"); !errors.Is(err, ErrAuthorityNotInitialized) || measured.checkpoints != 0 || measured.applications != 0 {
+		t.Fatalf("unowned public direct reset reached the restricted core: checkpoints=%d, applies=%d, %v", measured.checkpoints, measured.applications, err)
+	}
+	var afterRefusal int64
+	if err := db.Model(&model.ClientPolicyReset{}).Count(&afterRefusal).Error; err != nil || afterRefusal != priorResets {
+		t.Fatalf("unowned public direct reset changed SQL resets: before=%d, after=%d, %v", priorResets, afterRefusal, err)
+	}
+	if err := applyRestrictedPollingDirectReset(ctx, append(slices.Clone(ids), "missing-client"), "unknown-member"); !errors.Is(err, clientpolicy.ErrUnknownClient) || measured.checkpoints != 0 {
 		t.Fatalf("unknown batch member reached the data plane: checkpoints=%d, %v", measured.checkpoints, err)
 	}
 	injected := errors.New("last reset insert failed")
@@ -373,7 +384,7 @@ func testManagedResetBatch(t *testing.T, ctx context.Context, process *xray.Proc
 	}); err != nil {
 		t.Fatal(err)
 	}
-	resetErr := ResetLocalClientPolicies(ctx, ids, "all-clients")
+	resetErr := applyRestrictedPollingDirectReset(ctx, ids, "all-clients")
 	if err := db.Callback().Create().Remove("test:batch-last-insert"); err != nil {
 		t.Fatal(err)
 	}
@@ -386,7 +397,7 @@ func testManagedResetBatch(t *testing.T, ctx context.Context, process *xray.Proc
 	}
 	measured.checkpoints, measured.applications = 0, 0
 	measured.failure, measured.failApplyAt = errors.New("second Runtime batch unavailable"), 2
-	if err := ResetLocalClientPolicies(ctx, ids, "all-clients"); !errors.Is(err, measured.failure) || measured.checkpoints != 1 || measured.applications != 2 {
+	if err := applyRestrictedPollingDirectReset(ctx, ids, "all-clients"); !errors.Is(err, measured.failure) || measured.checkpoints != 1 || measured.applications != 2 {
 		t.Fatalf("batch repeated checkpoints or concealed partial application: checkpoints=%d, applies=%d, error=%v", measured.checkpoints, measured.applications, err)
 	}
 	if err := db.Model(&model.ClientPolicyReset{}).Count(&count).Error; err != nil || count != 1002 {
@@ -396,7 +407,7 @@ func testManagedResetBatch(t *testing.T, ctx context.Context, process *xray.Proc
 		t.Fatal(err)
 	}
 	measured.checkpoints, measured.applications, measured.failApplyAt = 0, 0, 0
-	if err := ResetLocalClientPolicies(ctx, ids, "all-clients"); err != nil || measured.checkpoints != 1 {
+	if err := applyRestrictedPollingDirectReset(ctx, ids, "all-clients"); err != nil || measured.checkpoints != 1 {
 		t.Fatalf("batch retry: checkpoints=%d, %v", measured.checkpoints, err)
 	}
 	if err := db.Model(&model.ClientPolicyReset{}).Count(&count).Error; err != nil || count != 1002 {
@@ -525,6 +536,15 @@ func testManagedResetBatch(t *testing.T, ctx context.Context, process *xray.Proc
 	if row := trafficOf(t, oldEmail); row.Up != 37 {
 		t.Fatalf("pending batch rebound a recycled email on recovery: %+v", row)
 	}
+}
+
+// This fixture has a SQL grant projection but no production owner. Keep the
+// direct reset SQL/checkpoint/application checks on the private lower pipeline;
+// the public call above must refuse this incomplete ownership before mutation.
+func applyRestrictedPollingDirectReset(ctx context.Context, ids []string, request string) error {
+	return applyLocalClientPolicyReset(ctx, ids, func(instanceID string) ([]clientpolicy.Policy, error) {
+		return PrepareClientPolicyResets(instanceID, ids, request)
+	})
 }
 
 // This deliberately restricted fixture tests legacy cursor/SQL/application
