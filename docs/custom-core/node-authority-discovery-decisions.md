@@ -20,6 +20,8 @@ These decisions apply to this bounded authenticated discovery checkpoint. The or
 
 8. Ruling: full SQLite controller/runtime/middleware plus affected auth/scope/discovery/Remote/envelope cases under PostgreSQL, and actual owned/restore/remote-scope service/sub on both — unrelated SQLite-specific legacy controller fixtures cannot serve PostgreSQL acceptance — cost if wrong: legacy whole-controller PostgreSQL portability remains an explicit parent gap; no test assertion removed.
 
+9. Ruling: do not rerun unchanged production/native/full service suites solely for test-helper isolation — preserve full catalog snapshot and verify changed fixture with full SQLite controller and repeated/scoped PostgreSQL races — cost if wrong: final artifact provenance must preserve both snapshots rather than falsely attribute old full build to changed test helper.
+
 ## Sole final review
 
-The review is pending the final task completion contract. No review acceptance is claimed.
+The review follows the final task completion contract. No review acceptance is claimed.
