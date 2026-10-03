@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/policyauthority"
+	panelruntime "github.com/mhsanaei/3x-ui/v3/internal/web/runtime"
 )
 
 var ErrAuthorityNotInitialized = errors.New("durable policy authority is missing or its migration is incomplete")
@@ -20,26 +21,28 @@ var ErrAuthorityNotInitialized = errors.New("durable policy authority is missing
 type durableAuthorityState struct {
 	Journal  *policyauthority.Journal
 	SourceID string
+	Role     panelruntime.NodeExecutionRole
 }
 
 type authorityManifest struct {
-	Schema         uint64                   `json:"schema"`
-	Identity       policyauthority.Identity `json:"identity"`
-	SourceID       string                   `json:"sourceId"`
-	SnapshotDigest string                   `json:"snapshotDigest"`
-	Phase          string                   `json:"phase"`
+	Schema         uint64                          `json:"schema"`
+	Identity       policyauthority.Identity        `json:"identity"`
+	SourceID       string                          `json:"sourceId"`
+	SnapshotDigest string                          `json:"snapshotDigest"`
+	Phase          string                          `json:"phase"`
+	ExecutionRole  *panelruntime.NodeExecutionRole `json:"executionRole,omitempty"`
 }
 
 var authorityInitializationMu sync.Mutex
 var publishAuthorityManifest = writeAuthorityManifest
 
 func initializeAuthorityState(dir, sourceID string, snapshot authorityMigrationSnapshot) (*durableAuthorityState, error) {
-	if !filepath.IsAbs(dir) || filepath.Clean(dir) != dir || !validPolicySourceKey(sourceID) {
+	return initializeAuthorityStateWithRole(dir, sourceID, snapshot, panelruntime.NodeExecutionRole{Mode: panelruntime.NodeExecutionLocal})
+}
+
+func initializeAuthorityStateWithRole(dir, sourceID string, snapshot authorityMigrationSnapshot, role panelruntime.NodeExecutionRole) (*durableAuthorityState, error) {
+	if !filepath.IsAbs(dir) || filepath.Clean(dir) != dir || !validPolicySourceKey(sourceID) || role.Validate() != nil {
 		return nil, ErrAuthorityNotInitialized
-	}
-	digest, err := authoritySnapshotDigest(snapshot)
-	if err != nil {
-		return nil, err
 	}
 	authorityInitializationMu.Lock()
 	defer authorityInitializationMu.Unlock()
@@ -50,6 +53,25 @@ func initializeAuthorityState(dir, sourceID string, snapshot authorityMigrationS
 		return nil, err
 	}
 	manifest, err := readAuthorityManifest(dir)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	if err != nil || manifest.Schema == 2 {
+		for _, record := range snapshot.Records {
+			if record.Kind == "execution-role" {
+				return nil, ErrAuthorityNotInitialized
+			}
+		}
+		rawRole, roleErr := json.Marshal(role)
+		if roleErr != nil {
+			return nil, roleErr
+		}
+		snapshot.Records = append(append([]policyauthority.MigrationRecord(nil), snapshot.Records...), policyauthority.MigrationRecord{Kind: "execution-role", Key: sourceID, Value: rawRole})
+	}
+	digest, digestErr := authoritySnapshotDigest(snapshot)
+	if digestErr != nil {
+		return nil, digestErr
+	}
 	if errors.Is(err, os.ErrNotExist) {
 		if _, err := os.Lstat(filepath.Join(dir, "journal.db")); !errors.Is(err, os.ErrNotExist) {
 			return nil, ErrAuthorityNotInitialized
@@ -58,14 +80,14 @@ func initializeAuthorityState(dir, sourceID string, snapshot authorityMigrationS
 		if _, err := rand.Read(nonce); err != nil {
 			return nil, err
 		}
-		manifest = authorityManifest{Schema: 1, Identity: policyauthority.Identity{AuthorityID: hex.EncodeToString(nonce), Generation: 1}, SourceID: sourceID, SnapshotDigest: digest, Phase: "preparing"}
+		manifest = authorityManifest{Schema: 2, Identity: policyauthority.Identity{AuthorityID: hex.EncodeToString(nonce), Generation: 1}, SourceID: sourceID, SnapshotDigest: digest, Phase: "preparing", ExecutionRole: &role}
 		if err := publishAuthorityManifest(dir, manifest, true); err != nil {
 			return nil, err
 		}
 	} else if err != nil {
 		return nil, err
 	}
-	if manifest.SourceID != sourceID || manifest.SnapshotDigest != digest {
+	if manifest.SourceID != sourceID || manifest.SnapshotDigest != digest || manifest.role() != role {
 		return nil, policyauthority.ErrIdentity
 	}
 	path := filepath.Join(dir, "journal.db")
@@ -90,6 +112,10 @@ func initializeAuthorityState(dir, sourceID string, snapshot authorityMigrationS
 		_ = journal.Close()
 		return nil, err
 	}
+	if err := checkAuthorityExecutionRole(journal, manifest); err != nil {
+		_ = journal.Close()
+		return nil, err
+	}
 	if manifest.Phase == "preparing" {
 		manifest.Phase = "committed"
 		if err := publishAuthorityManifest(dir, manifest, false); err != nil {
@@ -97,7 +123,7 @@ func initializeAuthorityState(dir, sourceID string, snapshot authorityMigrationS
 			return nil, err
 		}
 	}
-	return &durableAuthorityState{Journal: journal, SourceID: sourceID}, nil
+	return &durableAuthorityState{Journal: journal, SourceID: sourceID, Role: manifest.role()}, nil
 }
 func openAuthorityState(dir string) (*durableAuthorityState, error) {
 	return loadAuthorityState(dir, false)
@@ -145,7 +171,41 @@ func loadAuthorityState(dir string, prepared bool) (*durableAuthorityState, erro
 		_ = journal.Close()
 		return nil, fmt.Errorf("%w: migration binding: %w", ErrAuthorityNotInitialized, err)
 	}
-	return &durableAuthorityState{Journal: journal, SourceID: manifest.SourceID}, nil
+	if err := checkAuthorityExecutionRole(journal, manifest); err != nil {
+		_ = journal.Close()
+		return nil, err
+	}
+	return &durableAuthorityState{Journal: journal, SourceID: manifest.SourceID, Role: manifest.role()}, nil
+}
+
+func (m authorityManifest) role() panelruntime.NodeExecutionRole {
+	if m.ExecutionRole != nil {
+		return *m.ExecutionRole
+	}
+	return panelruntime.NodeExecutionRole{Mode: panelruntime.NodeExecutionLocal}
+}
+
+// The independent journal pins the role as original migration evidence. A
+// syntactically valid manifest edit or schema downgrade cannot change issuers.
+func checkAuthorityExecutionRole(journal *policyauthority.Journal, manifest authorityManifest) error {
+	records, err := journal.MigrationPage("execution-role", "", "", 2)
+	if err != nil {
+		return err
+	}
+	if manifest.Schema == 1 {
+		if len(records) != 0 {
+			return policyauthority.ErrIdentity
+		}
+		return nil
+	}
+	if len(records) != 1 || records[0].Key != manifest.SourceID {
+		return policyauthority.ErrIdentity
+	}
+	var role panelruntime.NodeExecutionRole
+	if json.Unmarshal(records[0].Value, &role) != nil || role != manifest.role() || role.Validate() != nil {
+		return policyauthority.ErrIdentity
+	}
+	return nil
 }
 
 func checkAuthorityDirectory(dir string) error {
@@ -173,12 +233,24 @@ func readAuthorityManifest(dir string) (authorityManifest, error) {
 	if err != nil {
 		return manifest, err
 	}
+	fields, err := panelruntime.DecodeNodeAuthorityObject(bytes.NewReader(raw), "schema", "identity", "sourceId", "snapshotDigest", "phase", "executionRole")
+	if err != nil {
+		return manifest, ErrAuthorityNotInitialized
+	}
+	if _, err := panelruntime.DecodeNodeAuthorityObject(bytes.NewReader(fields["identity"]), "authorityId", "generation"); err != nil {
+		return manifest, ErrAuthorityNotInitialized
+	}
+	if role := fields["executionRole"]; role != nil {
+		if _, err := panelruntime.DecodeNodeAuthorityObject(bytes.NewReader(role), "mode", "authorityId", "generation", "nodeId"); err != nil {
+			return manifest, ErrAuthorityNotInitialized
+		}
+	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&manifest); err != nil {
 		return manifest, ErrAuthorityNotInitialized
 	}
-	if decoder.Decode(new(any)) != io.EOF || manifest.Schema != 1 || manifest.Identity.Generation != 1 || len(manifest.Identity.AuthorityID) != 32 || !validPolicySourceKey(manifest.SourceID) || len(manifest.SnapshotDigest) != 64 || manifest.Phase != "preparing" && manifest.Phase != "committed" {
+	if decoder.Decode(new(any)) != io.EOF || manifest.Schema != 1 && manifest.Schema != 2 || manifest.Schema == 1 && manifest.ExecutionRole != nil || manifest.Schema == 2 && manifest.ExecutionRole == nil || manifest.role().Validate() != nil || manifest.Identity.Generation != 1 || len(manifest.Identity.AuthorityID) != 32 || !validPolicySourceKey(manifest.SourceID) || len(manifest.SnapshotDigest) != 64 || manifest.Phase != "preparing" && manifest.Phase != "committed" {
 		return manifest, ErrAuthorityNotInitialized
 	}
 	if _, err := hex.DecodeString(manifest.Identity.AuthorityID); err != nil {

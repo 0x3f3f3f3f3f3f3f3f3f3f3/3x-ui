@@ -153,7 +153,7 @@ func (j *Journal) MigrationRecord(kind, key string) (MigrationRecord, error) {
 
 func validMigrationRecord(record MigrationRecord) bool {
 	switch record.Kind {
-	case "sources", "totals", "receipts", "resets", "reset-times", "reset-batches", "tombstones", "client-policy", "orphan-execution", "legacy-traffic", "execution-state", "execution-clients":
+	case "sources", "totals", "receipts", "resets", "reset-times", "reset-batches", "tombstones", "client-policy", "orphan-execution", "legacy-traffic", "execution-state", "execution-clients", "execution-role":
 	default:
 		return false
 	}

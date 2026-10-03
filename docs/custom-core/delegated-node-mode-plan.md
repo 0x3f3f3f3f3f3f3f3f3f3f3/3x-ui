@@ -15,15 +15,15 @@ Snell/mieru/SSH, multiplier billing, directional rates and TCP/UDP Tunnel remain
 
 Role/schema/identity mismatches after SQL/core rollback must refuse, never default to local. Preparing/committed publication retries must preserve the exact role. A delegated owner with no local controller must still validate same process/socket/boot and close safely. Actual admission with no grant cannot pass business bytes, even after restart. Setup/response JSON must reject duplicate/case-alias/null fields and require actual verified TLS/auth.
 
-## Task1: Durable fresh execution role
+## Task 1: Durable fresh execution role
 
-Files: runtime/node_execution_role.go; service/client_policy_authority_state.go; service/node_delegation.go; service/client_policy_authority_migration.go; service/client_policy_authority_fresh.go; tests service/node_delegation_test.go and existing authority state tests.
+Files: runtime/node_execution_role.go and node_authority_json.go; policyauthority/migration.go; service/client_policy_authority_state.go; service/node_delegation.go; service/client_policy_authority_migration.go; service/client_policy_authority_fresh.go; tests service/node_delegation_test.go and existing authority state tests.
 Interfaces: NodeExecutionRole{Mode,AuthorityID,Generation,NodeID}, Validate(); NodeDelegationRequest{AuthorityID,Generation,NodeID}, Validate(); ClientPolicyNodeService.ConfigureDelegation(ctx,request) returns *NodeDelegationResult{InstanceID,Role}/error. durableAuthorityState.Role explicit local/delegated value; authorityManifest schema2 contains ExecutionRole, schema1 has no role and is legacy local; initializeAuthorityStateWithRole consumes role while existing initializer selects local.
-- [ ] Add TestNodeDelegationFreshManifestAndRetries / TestNodeDelegationRejectsActivatedOrUnsafeState. Fresh stopped source, exact retry, changed tuple/source, interrupted preparing publication, activated SQL/core/journal, active restore, bad private file/identity/missing schema2 role refuse. Expected behavior RED before role support.
-- [ ] Implement strict schema2 manifest role plus valid schema1 legacy local, create-only fresh setup under lifecycle/restore/source admission, immutable role checks/resume. Expected named parents PASS without reducing old journal/identity assertions.
-- [ ] Commit/task-done named parents plus authority state tests; log all rulings. Expected pass.
+- [x] Add TestNodeDelegationFreshManifestAndRetries / TestNodeDelegationRejectsActivatedOrUnsafeState. Fresh stopped source, exact retry, changed tuple/source, interrupted preparing publication, activated SQL/core/journal, active restore, bad private file/identity/missing schema2 role refuse. Expected behavior RED before role support.
+- [x] Implement strict schema2 manifest role plus valid schema1 legacy local, create-only fresh setup under lifecycle/restore/source admission, immutable role checks/resume. Expected named parents PASS without reducing old journal/identity assertions.
+- [x] Commit/task-done named parents plus authority state tests; log all rulings. Expected pass.
 
-## Task2: Owned delegated bootstrap
+## Task 2: Owned delegated bootstrap
 
 Files: service/client_policy_authority_factory.go, client_policy_authority_startup_completion.go, client_policy_authority_update.go, node_authority.go; runtime/node_authority.go; service/node_delegation_runtime_test.go.
 Interfaces: Task1 role consumed by managedAuthority. Delegated bootstrap initializes existing immutable policy seeds, binds the actual core to role tuple and enables demand before business listeners, without newAuthorityController. DiscoverAuthority produces executionRole and delegated tuple; Validate accepts omitted legacy local role and requires valid delegated tuple.
@@ -31,7 +31,7 @@ Interfaces: Task1 role consumed by managedAuthority. Delegated bootstrap initial
 - [ ] Implement role-specific startup/owned validation/stop/checkpoint with safe refusal of unsupported delegated local reset/hot-update paths; retain ordinary local behavior. Expected required actual parents pass0skip, no background local issuer.
 - [ ] Commit/task-done actual parents with verified core plus local discovery parents. Expected no-skip pass.
 
-## Task3: Typed HTTPS delegation setup
+## Task 3: Typed HTTPS delegation setup
 
 Files: controller/node_authority.go and node_delegation_test.go; runtime/remote_authority.go and remote_delegation_test.go; frontend API source/generated OpenAPI; exact api_auth_test inventory.
 Interfaces: POST /panel/api/server/clientPolicyDelegation consumes strict exact flat fields authorityId/generation/nodeId, shared existing TLS/auth32KiB/envelope/CSRF chain. Remote.ConfigureDelegation(ctx,request) verified direct HTTPS and strict bounded response; no generic core RPC.
@@ -39,7 +39,7 @@ Interfaces: POST /panel/api/server/clientPolicyDelegation consumes strict exact 
 - [ ] Implement typed setup and catalog/schema/inventory contracts. Expected both HTTP/client boundaries plus existing auth/envelope/catalog/frontend tests PASS.
 - [ ] Commit/task-done affected named parents. Expected pass.
 
-## Task4: Actual HTTPS startup and acceptance
+## Task 4: Actual HTTPS startup and acceptance
 
 Files: sub/node_delegation_http_runtime_test.go, custom-core.yml, testing/decisions docs and parent plan.
 Interfaces: consumes Tasks1-3, runs setup before first managed source activation, separate real production API auth router.
