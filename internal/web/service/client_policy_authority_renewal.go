@@ -26,10 +26,11 @@ type authorityRenewalTrigger struct {
 }
 
 type authorityRenewalCaptureSnapshot struct {
-	Schema   int
-	At       int64
-	Zone     string
-	Triggers []authorityRenewalTrigger
+	Schema     int
+	At         int64
+	Zone       string
+	Triggers   []authorityRenewalTrigger
+	Generation int `json:",omitempty"`
 }
 
 type authorityRenewalEffect struct {
@@ -80,13 +81,21 @@ func authorityRenewalIDs(snapshot authorityRenewalCaptureSnapshot) []string {
 }
 
 func decodeAuthorityRenewalCapture(capture policyauthority.ResetOperationCapture, journal *policyauthority.Journal, source string) (authorityRenewalCaptureSnapshot, error) {
+	snapshot, err := decodeAuthorityRenewalCaptureEnvelope(capture, journal, source)
+	if err == nil && snapshot.Generation > 0 {
+		err = validateAuthorityRenewalPredecessor(journal, source, snapshot)
+	}
+	return snapshot, err
+}
+
+func decodeAuthorityRenewalCaptureEnvelope(capture policyauthority.ResetOperationCapture, journal *policyauthority.Journal, source string) (authorityRenewalCaptureSnapshot, error) {
 	var snapshot authorityRenewalCaptureSnapshot
 	if journal == nil || capture.Identity != journal.Identity() || capture.SourceID != source || capture.CalendarKey != "" {
 		return snapshot, ErrClientPolicyLedger
 	}
 	decoder := json.NewDecoder(strings.NewReader(capture.Snapshot))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&snapshot) != nil || decoder.Decode(new(any)) != io.EOF || snapshot.Schema != 1 || snapshot.At <= 0 || len(snapshot.Triggers) == 0 || len(snapshot.Triggers) > 1000 {
+	if decoder.Decode(&snapshot) != nil || decoder.Decode(new(any)) != io.EOF || !validAuthorityRenewalGeneration(snapshot) || snapshot.At <= 0 || len(snapshot.Triggers) == 0 || len(snapshot.Triggers) > 1000 {
 		return snapshot, ErrClientPolicyLedger
 	}
 	if _, err := time.LoadLocation(snapshot.Zone); err != nil {
@@ -97,7 +106,7 @@ func decodeAuthorityRenewalCapture(capture policyauthority.ResetOperationCapture
 			return snapshot, ErrClientPolicyLedger
 		}
 	}
-	if capture.RequestID != authorityRenewalKey(source, snapshot.Zone, snapshot.Triggers) {
+	if capture.RequestID != authorityRenewalGenerationKey(source, snapshot.Zone, snapshot.Triggers, snapshot.Generation) {
 		return snapshot, ErrClientPolicyLedger
 	}
 	return snapshot, nil
@@ -109,11 +118,15 @@ func validAuthorityRenewalFingerprint(raw string) bool {
 }
 
 func decodeAuthorityRenewalPreparation(prepared policyauthority.ResetOperationPreparation, capture policyauthority.ResetOperationCapture, journal *policyauthority.Journal, source string) (authorityRenewalPreparationSnapshot, error) {
-	var snapshot authorityRenewalPreparationSnapshot
 	original, err := decodeAuthorityRenewalCapture(capture, journal, source)
 	if err != nil {
-		return snapshot, err
+		return authorityRenewalPreparationSnapshot{}, err
 	}
+	return decodeAuthorityRenewalPreparationEnvelope(prepared, capture, original, source)
+}
+
+func decodeAuthorityRenewalPreparationEnvelope(prepared policyauthority.ResetOperationPreparation, capture policyauthority.ResetOperationCapture, original authorityRenewalCaptureSnapshot, source string) (authorityRenewalPreparationSnapshot, error) {
+	var snapshot authorityRenewalPreparationSnapshot
 	if prepared.Identity != capture.Identity || prepared.SourceID != source || prepared.RequestID != capture.RequestID || prepared.CaptureDigest != authorityResetSnapshotDigest(capture.Snapshot) {
 		return snapshot, ErrClientPolicyLedger
 	}

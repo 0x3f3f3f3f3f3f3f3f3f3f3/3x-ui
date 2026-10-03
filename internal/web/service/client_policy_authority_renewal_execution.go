@@ -46,17 +46,34 @@ func captureAuthorityClientRenewalTx(tx *gorm.DB, state *durableAuthorityState, 
 			return nil, err
 		}
 	}
-	key := authorityRenewalKey(state.SourceID, snapshot.Zone, triggers)
-	capture, err := state.Journal.LookupResetOperation(key)
-	if err == nil {
+	var capture policyauthority.ResetOperationCapture
+	var key string
+	for {
+		if err := tx.Statement.Context.Err(); err != nil {
+			return nil, err
+		}
+		key = authorityRenewalGenerationKey(state.SourceID, snapshot.Zone, triggers, snapshot.Generation)
+		var err error
+		capture, err = state.Journal.LookupResetOperation(key)
+		if errors.Is(err, policyauthority.ErrNotFound) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
 		original, err := decodeAuthorityRenewalCapture(capture, state.Journal, state.SourceID)
 		if err != nil || !slices.Equal(original.Triggers, triggers) || original.Zone != snapshot.Zone {
 			return nil, ErrClientPolicyLedger
 		}
-		return &capture, nil
-	}
-	if !errors.Is(err, policyauthority.ErrNotFound) {
-		return nil, err
+		next, err := nextAuthorityRenewalSelection(state.Journal, state.SourceID, capture, original, now, location)
+		if err != nil || !next {
+			return &capture, err
+		}
+		if snapshot.Generation == maxAuthorityRenewalGeneration {
+			return nil, ErrClientPolicyLedger
+		}
+		snapshot.Schema, snapshot.Generation = 2, snapshot.Generation+1
+		snapshot.At = max(snapshot.At, original.At)
 	}
 	raw, err := json.Marshal(snapshot)
 	if err != nil {
