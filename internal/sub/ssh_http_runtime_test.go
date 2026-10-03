@@ -44,6 +44,22 @@ type sshHTTPHarness struct {
 
 func sshHTTPPort(t *testing.T) int {
 	t.Helper()
+	for attempt := 0; attempt < 128; attempt++ {
+		port := nativeHTTPPortCandidate(t)
+		var configured int64
+		if err := database.GetDB().Model(&model.Inbound{}).Where("port = ?", port).Count(&configured).Error; err != nil {
+			t.Fatal(err)
+		}
+		if configured == 0 {
+			return port
+		}
+	}
+	t.Fatal("cannot select a port outside configured native listeners")
+	return 0
+}
+
+var nativeHTTPPortCandidate = func(t *testing.T) int {
+	t.Helper()
 	l, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -564,4 +580,28 @@ func TestSSHHTTPAuthorizedReverseAndStrictNativeOutbound(t *testing.T) {
 	nativeOutbound["settings"].(map[string]any)["hostKey"] = host.PublicKey
 	save()
 	sshHTTPEcho(t, connect(), "restored-pin")
+}
+
+func TestNativeHTTPPortExcludesConfiguredUnstartedListeners(t *testing.T) {
+	seedSubDB(t)
+	configured := model.Inbound{Protocol: "tunnel", Listen: "127.0.0.1", Port: 32123, Enable: true, Tag: "configured-unstarted", Settings: "{}", StreamSettings: "{}"}
+	if err := database.GetDB().Create(&configured).Error; err != nil {
+		t.Fatal(err)
+	}
+	original := nativeHTTPPortCandidate
+	t.Cleanup(func() { nativeHTTPPortCandidate = original })
+	candidates := []int{32123, 32123, 32124}
+	attempts := 0
+	nativeHTTPPortCandidate = func(t *testing.T) int {
+		t.Helper()
+		if attempts >= len(candidates) {
+			t.Fatal("port picker failed to accept available candidate")
+		}
+		p := candidates[attempts]
+		attempts++
+		return p
+	}
+	if selected := sshHTTPPort(t); selected != 32124 || attempts != 3 {
+		t.Fatalf("configured unstarted port reused: selected=%d attempts=%d", selected, attempts)
+	}
 }
