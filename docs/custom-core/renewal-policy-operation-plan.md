@@ -54,7 +54,7 @@ Consumes: Task1 strict original triggers/effects and retained account history. P
 
 Files: evidence in issuance-journal-foundation.md, this plan/ledger and required actual-core CI tests in .github/workflows/custom-core.yml.
 
-- [ ] Step1: Require every new owned renewal parent in both CI jobs; run broad affected races, full make test-go with actual core/original writer probes, journal/service vet/diff. Expected: all mandatory checks pass; every failure/skip and restricted fixture is reported honestly.
-- [ ] Step2: Record evidence/remaining parent scope, commit/task-done with real owned renewal witness. Expected: final product source green; no whole-parent completion claim.
+- [x] Step1: Require every new owned renewal parent in both CI jobs; run broad affected races, full make test-go with actual core/original writer probes, journal/service vet/diff. Expected: all mandatory checks pass; every failure/skip and restricted fixture is reported honestly.
+- [x] Step2: Record evidence/remaining parent scope, commit/task-done with real owned renewal witness. Expected: final product source green; no whole-parent completion claim.
 - [ ] Step3: One fresh entire bounded diff review; re-grade findings and rule every declined boundary; one author Critical/Important RED/GREEN correction pass plus green suite, no second review. Expected: no bounded blockers; workspace preserved.
 - [ ] Step4: Normal authorized feature push and independent remote SHA verification after milestone checks. Expected: remote/local SHA identical, no force/default merge/release/deploy; continue remaining parent work.
