@@ -543,6 +543,49 @@ func TestResetOperationCaptureRetainsSelectionAcrossReopen(t *testing.T) {
 	}
 }
 
+func TestResetOperationCaptureRetainsValidJSONNumbersAcrossReopen(t *testing.T) {
+	for _, snapshot := range []string{`{"n":1e400}`, `{"n":-1e400}`, `{"nested":[{"n":1e-400}]}`, `{"n":` + strings.Repeat("9", 400) + `}`} {
+		t.Run(snapshot[:min(24, len(snapshot))], func(t *testing.T) {
+			j, id, grant, path := resetCaptureFixture(t)
+			account, err := j.Account("canonical-client")
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := ResetOperationCapture{Identity: id, SourceID: "reset-source", RequestID: "valid-number", Snapshot: snapshot}
+			if err := j.CaptureResetOperation(r); err != nil {
+				t.Fatalf("valid JSON number rejected at capture: %v", err)
+			}
+			got, err := j.LookupResetOperation(r.RequestID)
+			if err != nil || got != r {
+				t.Fatalf("number changed at lookup: exact=%v err=%v", got == r, err)
+			}
+			if err := j.Close(); err != nil {
+				t.Fatal(err)
+			}
+			j, err = Open(path, id)
+			if err != nil {
+				t.Fatalf("valid JSON capture prevents journal reopening: %v", err)
+			}
+			defer j.Close()
+			got, err = j.LookupResetOperation(r.RequestID)
+			if err != nil || got != r {
+				t.Fatalf("number changed after reopen: exact=%v err=%v", got == r, err)
+			}
+			if err := j.CaptureResetOperation(r); err != nil {
+				t.Fatalf("valid number exact retry: %v", err)
+			}
+			after, err := j.Account("canonical-client")
+			if err != nil || after != account {
+				t.Fatalf("number capture changed account: exact=%v err=%v", after == account, err)
+			}
+			retained, err := j.Grant(grant.GrantID)
+			if err != nil || retained != grant {
+				t.Fatalf("number capture changed grant: exact=%v err=%v", retained == grant, err)
+			}
+		})
+	}
+}
+
 func TestResetOperationCaptureRecordExhaustionPreservesFundedState(t *testing.T) {
 	j, id, grant, path := resetCaptureFixture(t)
 	account, err := j.Account("canonical-client")

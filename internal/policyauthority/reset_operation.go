@@ -361,6 +361,7 @@ func (j *Journal) validateResetOperations(tx *bolt.Tx, meta metadata) error {
 			return ErrJournal
 		}
 		decoder := json.NewDecoder(&resetChunkReader{tx: tx, header: h})
+		decoder.UseNumber()
 		first, err := decoder.Token()
 		if err != nil || first != json.Delim('{') {
 			return ErrJournal
