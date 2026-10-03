@@ -27,15 +27,8 @@ func NewNodeAuthorityAPIController(g *gin.RouterGroup) {
 }
 
 func discoverNodeAuthority(c *gin.Context) {
-	var request panelruntime.AuthorityDiscoveryRequest
-	decoder := json.NewDecoder(c.Request.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
-		pureJsonMsg(c, http.StatusBadRequest, false, panelruntime.ErrNodeAuthorityDiscovery.Error())
-		return
-	}
-	var extra any
-	if decoder.Decode(&extra) != io.EOF || request.Validate() != nil {
+	request, err := decodeAuthorityDiscoveryRequest(c.Request.Body)
+	if err != nil {
 		pureJsonMsg(c, http.StatusBadRequest, false, panelruntime.ErrNodeAuthorityDiscovery.Error())
 		return
 	}
@@ -46,4 +39,47 @@ func discoverNodeAuthority(c *gin.Context) {
 		return
 	}
 	jsonObj(c, result, nil)
+}
+
+// Token decoding preserves field identity: duplicate or case-alias fields must
+// never overwrite an expected boot and turn a bound call into initial discovery.
+func decodeAuthorityDiscoveryRequest(body io.Reader) (panelruntime.AuthorityDiscoveryRequest, error) {
+	var request panelruntime.AuthorityDiscoveryRequest
+	decoder := json.NewDecoder(body)
+	token, err := decoder.Token()
+	if err != nil || token != json.Delim('{') {
+		return request, panelruntime.ErrNodeAuthorityDiscovery
+	}
+	seen := make(map[string]bool, 2)
+	for decoder.More() {
+		token, err := decoder.Token()
+		key, ok := token.(string)
+		if err != nil || !ok || seen[key] {
+			return request, panelruntime.ErrNodeAuthorityDiscovery
+		}
+		var target *string
+		switch key {
+		case "expectedInstanceId":
+			target = &request.ExpectedInstanceID
+		case "expectedBootId":
+			target = &request.ExpectedBootID
+		default:
+			return request, panelruntime.ErrNodeAuthorityDiscovery
+		}
+		seen[key] = true
+		token, err = decoder.Token()
+		value, ok := token.(string)
+		if err != nil || !ok {
+			return request, panelruntime.ErrNodeAuthorityDiscovery
+		}
+		*target = value
+	}
+	token, err = decoder.Token()
+	if err != nil || token != json.Delim('}') {
+		return request, panelruntime.ErrNodeAuthorityDiscovery
+	}
+	if _, err := decoder.Token(); err != io.EOF || request.Validate() != nil {
+		return request, panelruntime.ErrNodeAuthorityDiscovery
+	}
+	return request, nil
 }

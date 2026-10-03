@@ -42,6 +42,13 @@ func TestNodeAuthorityDiscoveryHTTPAuthenticationAndBounds(t *testing.T) {
 		{name: "partial-binding", scope: model.ApiScopeAdmin, body: []byte(`{"expectedInstanceId":"source"}`), status: 400},
 		{name: "unknown-field", scope: model.ApiScopeAdmin, body: []byte(`{"unknown":true}`), status: 400},
 		{name: "trailing-json", scope: model.ApiScopeAdmin, body: []byte(`{} {}`), status: 400},
+		{name: "stale-binding-erased-by-duplicates", scope: model.ApiScopeAdmin, body: []byte(`{"expectedInstanceId":"previous-instance","expectedBootId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","expectedInstanceId":"","expectedBootId":""}`), status: 400},
+		{name: "duplicate-same-value", scope: model.ApiScopeAdmin, body: []byte(`{"expectedInstanceId":"","expectedInstanceId":""}`), status: 400},
+		{name: "stale-binding-erased-by-case-aliases", scope: model.ApiScopeAdmin, body: []byte(`{"expectedInstanceId":"previous-instance","expectedBootId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","ExpectedInstanceId":"","ExpectedBootId":""}`), status: 400},
+		{name: "case-alias-without-duplicate", scope: model.ApiScopeAdmin, body: []byte(`{"ExpectedInstanceId":"","ExpectedBootId":""}`), status: 400},
+		{name: "root-null", scope: model.ApiScopeAdmin, body: []byte(`null`), status: 400},
+		{name: "null-field-values", scope: model.ApiScopeAdmin, body: []byte(`{"expectedInstanceId":null,"expectedBootId":null}`), status: 400},
+		{name: "compressed-duplicate-fields", scope: model.ApiScopeAdmin, body: []byte(`{"expectedBootId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","expectedBootId":""}`), compressed: true, status: 400},
 		{name: "oversize-wire", scope: model.ApiScopeAdmin, body: large, status: 413},
 		{name: "oversize-decoded", scope: model.ApiScopeAdmin, body: large, compressed: true, status: 400},
 	} {

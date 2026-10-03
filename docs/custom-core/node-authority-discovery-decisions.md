@@ -1,8 +1,8 @@
 # Node authority discovery decisions
 
-These decisions apply to this bounded authenticated discovery checkpoint. The original native protocols, billing, rates, Tunnel and remaining project obligations persist. Workspaces and raw evidence are retained under the original autonomous authorization.
+Original authorization permits autonomous ordinary development/test/docs/feature pushes. Evidence and workspaces are retained. These decisions bound discovery; remaining native protocols, billing/rates/Tunnel and full project obligations persist.
 
-## Implementation rulings
+## Rulings in execution order
 
 1. Ruling: original autonomous ordinary-engineering authorization supplies design/spec choices and inline execution without renewed approval menus; preserve workspaces/evidence — cost if wrong: sole phase review can reject unsupported design; full parent remains required.
 
@@ -22,6 +22,22 @@ These decisions apply to this bounded authenticated discovery checkpoint. The or
 
 9. Ruling: do not rerun unchanged production/native/full service suites solely for test-helper isolation — preserve full catalog snapshot and verify changed fixture with full SQLite controller and repeated/scoped PostgreSQL races — cost if wrong: final artifact provenance must preserve both snapshots rather than falsely attribute old full build to changed test helper.
 
-## Sole final review
+10. Final: Ruling: Delegated execution, remote grants, coordinator quota/rate shares, global/node policy UI and multi-node outage recovery remain the next mandatory parent phase — discovery does not allocate allowances and existing scope guards remain — cost if wrong: this checkpoint cannot supply coordinated enforcement; full parent remains incomplete.
 
-The review follows the final task completion contract. No review acceptance is claimed.
+11. Final: Ruling: Sidecar migration and commercial-device/platform acceptance remain mandatory later parent work — current native regressions verify the scoped local protocols only — cost if wrong: those environments remain unproven and cannot be claimed complete.
+
+12. Final: Ruling: Whole-controller PostgreSQL portability is not repaired by this discovery phase — retained SQLite-only/shared-ID fixture failures are distinguished from final affected authentication/discovery coverage — cost if wrong: broader legacy PostgreSQL controller compatibility needs its own parent repair, not a false green result.
+
+13. Final: Ruling: Hosted CI execution is not claimed; authorized feature publication and independent SHA equality are required after correction — local workflow validation and gates cannot substitute for hosted CI — cost if wrong: remote runner behavior remains an evidence boundary.
+
+14. Final: Ruling: The32KiB endpoint cap is a wire/decoded-output cap before JSON decoding, not a peak-memory claim — retain existing codec global decompression ceiling without changing shared behavior in this phase — cost if wrong: authenticated compressed requests can allocate up to the larger codec ceiling.
+
+15. Final: Ruling: Server metadata uses the pinned unchanged core and its fixed capability/version bounds; remote total response stays32KiB capped — no supported oversized server metadata trigger was established — cost if wrong: future metadata expansion requires a server serialized-response cap before advertising this contract.
+
+16. Final: Ruling: Existing WithCurrentDB lifecycle RLock can block outside the RPC timeout; supported restore/restart replacements are independently fenced — preserve existing helper with no demonstrated discovery-specific violation — cost if wrong: unsupported direct replacement can delay cancellation, requiring context-aware lifecycle admission.
+
+17. Final: Ruling: Transport trusts the authenticated node and private owned host environment — Byzantine-node behavior and privileged host substitution require separate threat model/parent fencing — cost if wrong: credentials or host compromise can falsify observations despite TLS.
+
+## Sole review and correction
+
+The one fresh reviewer found no Critical issues, one Important issue and no separate Minors. I1 remains Important by actual effect: ambiguous JSON could erase a stale expected binding and silently request a current boot, although authentication still applies. Seven HTTP subcases reproduced200 instead of400 (RED0.616s). The exact-key/unique-field/root-object/string-only token decoder passes all seven and the original boundaries under race (GREEN2.993s). The single author correction pass is closed: both affected/owned backend suites, native5 each, corrected full52-package Go, vet/diff/current16-source+core checks pass. No second review is requested. Every declined item is ruled above with its cost.
