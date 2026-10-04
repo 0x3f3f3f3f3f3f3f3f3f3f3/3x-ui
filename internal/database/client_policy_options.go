@@ -7,7 +7,7 @@ func migrateClientPolicyOptionsColumns() error {
 	if !m.HasTable(&model.ClientRecord{}) {
 		return nil
 	}
-	for _, column := range []string{"policy_upload_bytes_per_second", "policy_download_bytes_per_second", "policy_multiplier", "desired_policy_version", "policy_fingerprint"} {
+	for _, column := range []string{"policy_upload_bytes_per_second", "policy_download_bytes_per_second", "policy_multiplier", "policy_scope", "desired_policy_version", "policy_fingerprint"} {
 		if !m.HasColumn(&model.ClientRecord{}, column) {
 			if err := m.AddColumn(&model.ClientRecord{}, column); err != nil {
 				return err

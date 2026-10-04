@@ -119,6 +119,9 @@ func fingerprintClientPolicy(client model.ClientRecord, reset *model.ClientPolic
 	if err != nil {
 		return policy, "", err
 	}
+	if client.Policy.EffectiveScope() == model.ClientPolicyScopeGlobal {
+		raw = append([]byte("global\x00"), raw...)
+	}
 	hash := sha256.Sum256(raw)
 	fingerprint := hex.EncodeToString(hash[:])
 	return policy, fingerprint, nil
@@ -129,15 +132,11 @@ func prepareClientPolicyRecord(tx *gorm.DB, client model.ClientRecord, reset *mo
 	if err != nil {
 		return policy, err
 	}
-	version := client.DesiredPolicyVersion
-	if version < 0 || version == 0 && client.PolicyFingerprint != "" || version > 0 && client.PolicyFingerprint == "" {
-		return policy, ErrClientPolicyLedger
+	version, changed, err := nextClientPolicyVersion(client.DesiredPolicyVersion, client.PolicyFingerprint, fingerprint)
+	if err != nil {
+		return policy, err
 	}
-	if client.PolicyFingerprint != fingerprint {
-		if version == math.MaxInt64 {
-			return policy, clientpolicy.ErrOverflow
-		}
-		version++
+	if changed {
 		if err := tx.Table("clients").Where("id = ?", client.Id).Updates(map[string]any{
 			"desired_policy_version": version, "policy_fingerprint": fingerprint,
 		}).Error; err != nil {
@@ -146,4 +145,17 @@ func prepareClientPolicyRecord(tx *gorm.DB, client model.ClientRecord, reset *mo
 	}
 	policy.Version = uint64(version)
 	return policy, nil
+}
+
+func nextClientPolicyVersion(version int64, previous, fingerprint string) (int64, bool, error) {
+	if version < 0 || version == 0 && previous != "" || version > 0 && previous == "" {
+		return 0, false, ErrClientPolicyLedger
+	}
+	if previous != fingerprint {
+		if version == math.MaxInt64 {
+			return 0, false, clientpolicy.ErrOverflow
+		}
+		return version + 1, true, nil
+	}
+	return version, false, nil
 }

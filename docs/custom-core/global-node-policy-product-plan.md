@@ -6,10 +6,10 @@ This plan implements original requirements section12 after mapping publication. 
 
 Add `node|global` scope to client policy model/API/generated frontend schemas, with legacy absent scope preserving existing node semantics. Add node account records tied to parent UUID, actual enrolled node/source and separate stable canonical account UUID; accounts never appear as duplicate ordinary clients. Join both database registries and exact migration/export/restore tests. Refactor full effective policy preparation so canonical global and node accounts each have monotonic versions/fingerprints without bypassing deletion/reset/current-DB guards. Keep unproven remote attachments fenced. Own positive REDs for legacy compatibility, scope validation, independent accounts, composite uniqueness, transactional rollback and decimal-string output; pass both SQL backends before commit.
 
-- [ ] Owning positive RED for legacy scope compatibility and independent canonical node accounts.
-- [ ] Implement scope validation, account identity and policy preparation without changing legacy node fingerprint bytes.
-- [ ] Both schema/migration registries and actual SQL roundtrip owners preserve the new accounts.
-- [ ] Both backend owning tests, affected runtime/vet/contracts and current hashes pass; commit/task completion.
+- [x] Owning positive RED for legacy scope compatibility and independent canonical node accounts.
+- [x] Implement scope validation, account identity and policy preparation without changing legacy node fingerprint bytes.
+- [x] Both schema/migration registries and actual SQL roundtrip owners preserve the new accounts.
+- [x] Both backend owning tests, affected runtime/vet/contracts and current hashes pass; commit/task completion.
 
 ## Task 2: Retained managed coordinator and bounded allocation strategy
 

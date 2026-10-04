@@ -52,6 +52,7 @@ func migrationModels() []any {
 		&model.LegacyTrafficConfigSource{},
 		&model.InboundClientIps{},
 		&model.ClientRecord{},
+		&model.ClientPolicyNodeAccount{},
 		&model.ClientPolicyTombstone{},
 		&model.ClientPolicySource{},
 		&model.ClientPolicyTotal{},
@@ -111,6 +112,7 @@ func MigrateData(srcPath, dstDSN string) error {
 	}
 	defer src.Rollback()
 	hasPolicyTombstones := src.Migrator().HasTable(&model.ClientPolicyTombstone{})
+	hasNodeAccounts := src.Migrator().HasTable(&model.ClientPolicyNodeAccount{})
 	policyTables := []any{&model.ClientPolicySource{}, &model.ClientPolicyTotal{}, &model.ClientPolicyReceipt{}}
 	policyTableCount := 0
 	for _, m := range policyTables {
@@ -173,6 +175,9 @@ func MigrateData(srcPath, dstDSN string) error {
 		}
 
 		for _, m := range migrationModels() {
+			if _, ok := m.(*model.ClientPolicyNodeAccount); ok && !hasNodeAccounts {
+				continue
+			}
 			if _, ok := m.(*model.ClientPolicyAuthorityProjection); ok && !hasAuthorityProjections {
 				continue
 			}

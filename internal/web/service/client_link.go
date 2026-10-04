@@ -22,7 +22,7 @@ import (
 // (the no-attached-inbound fallback) so the two paths cannot diverge.
 func applyClientRecordMerge(row *model.ClientRecord, incoming *model.ClientRecord) {
 	if incoming.Policy != nil {
-		row.Policy = incoming.Policy.Clone()
+		row.Policy = model.MergeClientPolicyOptions(row.Policy, incoming.Policy)
 	}
 	if incoming.UUID != "" {
 		row.UUID = incoming.UUID

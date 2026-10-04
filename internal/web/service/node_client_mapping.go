@@ -42,9 +42,45 @@ func mappingDesiredPolicy(tx *gorm.DB, request panelruntime.NodeClientMappingReq
 	var client model.ClientRecord
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("stable_id = ?", request.LocalClientID).First(&client).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errClientMappingInactive
+			var account model.ClientPolicyNodeAccount
+			if err := tx.First(&account, "client_id = ?", request.LocalClientID).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return nil, errClientMappingInactive
+				}
+				return nil, err
+			}
+			if account.NodeID != request.Binding.NodeID || account.SourceID != request.Binding.ExpectedInstanceID {
+				return nil, errClientMappingInactive
+			}
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&client, "stable_id = ?", account.ParentClientID).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return nil, errClientMappingInactive
+				}
+				return nil, err
+			}
+			// Preparation locks parent before account. Match that order and reread
+			// the immutable identity after acquiring the parent lock.
+			var locked model.ClientPolicyNodeAccount
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&locked, "client_id = ?", account.ClientID).Error; err != nil {
+				return nil, err
+			}
+			if locked.ParentClientID != account.ParentClientID || locked.NodeID != account.NodeID || locked.SourceID != account.SourceID {
+				return nil, ErrClientPolicyLedger
+			}
+			account = locked
+			if client.Policy.EffectiveScope() != model.ClientPolicyScopeNode {
+				return nil, errClientMappingInactive
+			}
+			if err := rejectDeletedClientPolicies(tx, []string{account.ParentClientID}); err != nil {
+				if errors.Is(err, clientpolicy.ErrRevoked) {
+					return nil, errClientMappingInactive
+				}
+				return nil, err
+			}
+			client.StableID, client.DesiredPolicyVersion, client.PolicyFingerprint = account.ClientID, account.DesiredPolicyVersion, account.PolicyFingerprint
+		} else {
+			return nil, err
 		}
-		return nil, err
 	}
 	if client.DesiredPolicyVersion <= 0 || uint64(client.DesiredPolicyVersion) != request.LocalPolicyVersion {
 		return nil, errClientMappingInactive

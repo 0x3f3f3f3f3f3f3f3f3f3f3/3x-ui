@@ -3,6 +3,7 @@ package database
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"gorm.io/driver/postgres"
@@ -37,8 +38,13 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	if err := src.AutoMigrate(&model.ClientPolicyTombstone{}); err != nil {
 		t.Fatal(err)
 	}
-	clients := []model.ClientRecord{{Email: "one", Policy: &model.ClientPolicyOptions{UploadBytesPerSecond: 262144, DownloadBytesPerSecond: 1048576, Multiplier: "1.5"}, DesiredPolicyVersion: 7, PolicyFingerprint: "stored-policy-fingerprint"}, {Email: "two"}}
+	global := model.ClientPolicyScopeGlobal
+	clients := []model.ClientRecord{{Email: "one", Policy: &model.ClientPolicyOptions{Scope: &global, UploadBytesPerSecond: 262144, DownloadBytesPerSecond: 1048576, Multiplier: "1.5"}, DesiredPolicyVersion: 7, PolicyFingerprint: "stored-policy-fingerprint"}, {Email: "two"}}
 	if err := src.Create(&clients).Error; err != nil {
+		t.Fatal(err)
+	}
+	nodeAccount := model.ClientPolicyNodeAccount{ParentClientID: clients[0].StableID, NodeID: "original-node", SourceID: "original-node-source", DesiredPolicyVersion: 9007199254740993, PolicyFingerprint: "retained-node-account-fingerprint"}
+	if err := src.Create(&nodeAccount).Error; err != nil {
 		t.Fatal(err)
 	}
 	source := model.ClientPolicySource{InstanceID: "migrated-source", NodeKey: "local", Epoch: 3, Sequence: 17, HandoffBootID: "original-boot", HandoffProcessID: "original-process", HandoffBatchID: "original-final"}
@@ -91,7 +97,7 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	if err := dst.First(&gotClient, clients[0].Id).Error; err != nil || gotClient.StableID != clients[0].StableID {
 		t.Fatal("identity migration lost stable mapping")
 	}
-	if gotClient.Policy == nil || *gotClient.Policy != *clients[0].Policy || gotClient.DesiredPolicyVersion != 7 || gotClient.PolicyFingerprint != "stored-policy-fingerprint" {
+	if !reflect.DeepEqual(gotClient.Policy, clients[0].Policy) || gotClient.DesiredPolicyVersion != 7 || gotClient.PolicyFingerprint != "stored-policy-fingerprint" {
 		t.Fatalf("policy migration lost settings/version: %+v", gotClient)
 	}
 	assertDeletion := func(db *gorm.DB) {
@@ -122,6 +128,14 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	assertHandoff(dst)
 	assertAuthority := func(db *gorm.DB) {
 		t.Helper()
+		var account model.ClientPolicyNodeAccount
+		if err := db.First(&account, "client_id = ?", nodeAccount.ClientID).Error; err != nil || account != nodeAccount {
+			t.Fatalf("migration lost independent account identity or exact version: %+v/%v", account, err)
+		}
+		var parent model.ClientRecord
+		if err := db.First(&parent, "stable_id = ?", clients[0].StableID).Error; err != nil || parent.Policy.EffectiveScope() != global {
+			t.Fatalf("migration lost explicit scope: %+v/%v", parent, err)
+		}
 		var got model.ClientPolicyAuthorityProjection
 		if err := db.First(&got, "client_id = ?", projection.ClientID).Error; err != nil || got != projection {
 			t.Fatalf("migration lost authority projection identity/usage/holds: %+v %v", got, err)
@@ -151,6 +165,16 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	assertHandoff(restoredDB)
 	assertAuthority(restoredDB)
 	assertAuthority(src)
+	if err := src.Migrator().DropTable(&model.ClientPolicyNodeAccount{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateData(path, os.Getenv("XUI_DB_DSN")); err != nil {
+		t.Fatalf("pre-node-account schema migration: %v", err)
+	}
+	var nodeAccountCount int64
+	if err := dst.Model(&model.ClientPolicyNodeAccount{}).Count(&nodeAccountCount).Error; err != nil || nodeAccountCount != 0 || src.Migrator().HasTable(&model.ClientPolicyNodeAccount{}) {
+		t.Fatalf("old schema fabricated accounts or modified source: %d/%v", nodeAccountCount, err)
+	}
 	if err := src.Migrator().DropTable(&model.ClientPolicyAuthorityProjection{}); err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +290,7 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	if err := src.Migrator().DropColumn(&model.ClientRecord{}, "StableID"); err != nil {
 		t.Fatal(err)
 	}
-	for _, column := range []string{"policy_upload_bytes_per_second", "policy_download_bytes_per_second", "policy_multiplier", "desired_policy_version", "policy_fingerprint"} {
+	for _, column := range []string{"policy_upload_bytes_per_second", "policy_download_bytes_per_second", "policy_multiplier", "policy_scope", "desired_policy_version", "policy_fingerprint"} {
 		if err := src.Migrator().DropColumn(&model.ClientRecord{}, column); err != nil {
 			t.Fatal(err)
 		}
@@ -282,7 +306,7 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 		t.Fatal("legacy clients have missing/shared identities")
 	}
 	if migrated[0].Policy != nil || migrated[0].DesiredPolicyVersion != 0 {
-		t.Fatal("legacy migration activated policy options or a version")
+		t.Fatalf("legacy migration activated policy options or a version: policy=%+v version=%d", migrated[0].Policy, migrated[0].DesiredPolicyVersion)
 	}
 	if src.Migrator().HasColumn(&model.ClientRecord{}, "StableID") {
 		t.Fatal("migration modified source schema")

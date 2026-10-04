@@ -78,6 +78,7 @@ export const ClientTrafficSchema = z.object({
 });
 
 export const ClientPolicyOptionsSchema = z.object({
+  scope: z.enum(['node', 'global']).optional(),
   uploadBytesPerSecond: z
     .number()
     .int()

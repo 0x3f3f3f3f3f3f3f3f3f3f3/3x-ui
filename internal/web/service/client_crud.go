@@ -928,6 +928,9 @@ func (s *ClientService) Update(inboundSvc *InboundService, id int, updated model
 			fields["policy_upload_bytes_per_second"] = updated.Policy.UploadBytesPerSecond
 			fields["policy_download_bytes_per_second"] = updated.Policy.DownloadBytesPerSecond
 			fields["policy_multiplier"] = updated.Policy.Multiplier
+			if updated.Policy.Scope != nil {
+				fields["policy_scope"] = string(*updated.Policy.Scope)
+			}
 		}
 		if err := runSerializedTx(func(tx *gorm.DB) error {
 			var current model.ClientRecord

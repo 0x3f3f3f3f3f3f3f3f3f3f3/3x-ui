@@ -3,6 +3,16 @@ import { describe, expect, it } from 'vitest';
 import { ClientPolicyOptionsSchema } from '@/schemas/client';
 
 describe('client policy wire validation', () => {
+  it('preserves optional scope and rejects unknown scope', () => {
+    const legacy = { uploadBytesPerSecond: 0, downloadBytesPerSecond: 0, multiplier: '2' };
+    expect(ClientPolicyOptionsSchema.parse(legacy)).toEqual(legacy);
+    for (const scope of ['node', 'global']) {
+      expect(ClientPolicyOptionsSchema.parse({ ...legacy, scope })).toEqual({ ...legacy, scope });
+    }
+    for (const scope of ['', 'GLOBAL', 'global ', 'all']) {
+      expect(ClientPolicyOptionsSchema.safeParse({ ...legacy, scope }).success).toBe(false);
+    }
+  });
   it.each(['0', '-1', '1000.000001', '0.1234567', '1e2', ' 1', '1.'])(
     'rejects unsupported multiplier %s',
     (multiplier) => {

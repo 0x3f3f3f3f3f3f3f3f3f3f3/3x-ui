@@ -2007,6 +2007,34 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "ClientPolicyNodeAccount": {
+    "description": "This retained identity is separate from ordinary clients and allocation authority.\nReplacing a node's original source must not create another allowance.",
+    "properties": {
+      "clientId": {
+        "type": "string"
+      },
+      "desiredPolicyVersion": {
+        "type": "string"
+      },
+      "nodeId": {
+        "type": "string"
+      },
+      "parentClientId": {
+        "type": "string"
+      },
+      "sourceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "clientId",
+      "desiredPolicyVersion",
+      "nodeId",
+      "parentClientId",
+      "sourceId"
+    ],
+    "type": "object"
+  },
   "ClientPolicyOptions": {
     "properties": {
       "downloadBytesPerSecond": {
@@ -2014,6 +2042,14 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "integer"
       },
       "multiplier": {
+        "type": "string"
+      },
+      "scope": {
+        "enum": [
+          "node",
+          "global"
+        ],
+        "nullable": true,
         "type": "string"
       },
       "uploadBytesPerSecond": {

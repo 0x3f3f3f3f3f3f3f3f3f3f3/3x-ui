@@ -533,9 +533,17 @@ export const EXAMPLES: Record<string, unknown> = {
     "frozen": "0",
     "unallocated": "1.5"
   },
+  "ClientPolicyNodeAccount": {
+    "clientId": "",
+    "desiredPolicyVersion": "",
+    "nodeId": "",
+    "parentClientId": "",
+    "sourceId": ""
+  },
   "ClientPolicyOptions": {
     "downloadBytesPerSecond": 0,
     "multiplier": "",
+    "scope": "node",
     "uploadBytesPerSecond": 0
   },
   "ClientPolicyUsage": {

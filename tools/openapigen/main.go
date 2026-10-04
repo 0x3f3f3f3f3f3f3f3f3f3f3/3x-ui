@@ -35,6 +35,7 @@ func run(root, outDir string) error {
 				"Node",
 				"ClientReverse",
 				"ClientPolicyOptions",
+				"ClientPolicyNodeAccount",
 				"Client",
 				"ClientRecord",
 				"ClientInbound",
@@ -42,8 +43,11 @@ func run(root, outDir string) error {
 				"Host",
 				"SubBalancer",
 			),
-			AliasAllow: setOf("Protocol"),
+			AliasAllow: setOf("Protocol", "ClientPolicyScope"),
 			Overrides: map[string][]walkOverride{
+				"ClientPolicyNodeAccount": {
+					{Field: "DesiredPolicyVersion", Kind: KindString},
+				},
 				"Inbound": {
 					{Field: "Settings", Kind: KindAny},
 					{Field: "StreamSettings", Kind: KindAny},
@@ -92,7 +96,8 @@ func run(root, outDir string) error {
 			AliasAllow: setOf("GeoKind"),
 		},
 		{
-			Path: resolveRel(root, "internal/web/service"),
+			Path:       resolveRel(root, "internal/web/service"),
+			AliasAllow: setOf("ProcessState", "addrFamily", "staticEgressResolver", "trafficLocalApplyAction", "transportBits"),
 			StructAllow: setOf(
 				"InboundOption",
 				"HappLinkResult",

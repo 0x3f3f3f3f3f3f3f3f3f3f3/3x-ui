@@ -72,6 +72,7 @@ func TestClientPolicyOptionsRejectInvalidWrites(t *testing.T) {
 	for _, policy := range []string{
 		`{"multiplier":"0"}`, `{"multiplier":"1.0000001"}`, `{"multiplier":"1000.1"}`,
 		`{"multiplier":"NaN"}`, `{"uploadBytesPerSecond":-1}`, `{"downloadBytesPerSecond":1099511627777}`,
+		`{"scope":""}`, `{"scope":"all"}`, `{"scope":"GLOBAL"}`, `{"scope":"global "}`,
 	} {
 		var client model.Client
 		if err := json.Unmarshal([]byte(`{"email":"invalid-policy","enable":true,"policy":`+policy+`}`), &client); err != nil {

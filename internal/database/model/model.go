@@ -936,6 +936,7 @@ type ClientRecord struct {
 	DesiredPolicyVersion int64                `json:"desiredPolicyVersion,omitempty" gorm:"default:0;<-:create"`
 	PolicyFingerprint    string               `json:"-" gorm:"default:'';<-:create"`
 	Policy               *ClientPolicyOptions `json:"policy,omitempty" gorm:"embedded;embeddedPrefix:policy_"`
+	PolicyScope          *ClientPolicyScope   `json:"-" gorm:"column:policy_scope;size:8"`
 
 	Id                     int    `json:"id" gorm:"primaryKey;autoIncrement"`
 	StableID               string `json:"clientId" gorm:"column:stable_id;uniqueIndex;<-:create"`

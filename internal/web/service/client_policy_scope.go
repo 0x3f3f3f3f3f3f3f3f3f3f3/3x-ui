@@ -102,7 +102,7 @@ func guardRemoteClientPolicyAttachments(tx *gorm.DB, inboundID int, existing map
 			}
 			continue
 		}
-		changed := client.Policy != nil && !sameClientPolicy(client.Policy, record.Policy)
+		changed := client.Policy != nil && !sameClientPolicy(model.MergeClientPolicyOptions(record.Policy, client.Policy), record.Policy)
 		if localOwnedResource && remote[record.Id] {
 			return remoteClientPolicyScopeError()
 		}
@@ -119,10 +119,15 @@ func remoteClientPolicyScopeError() error {
 }
 
 func sameClientPolicy(a, b *model.ClientPolicyOptions) bool {
-	return a == nil && b == nil || a != nil && b != nil && *a == *b
+	return a == nil && b == nil || a != nil && b != nil &&
+		a.UploadBytesPerSecond == b.UploadBytesPerSecond && a.DownloadBytesPerSecond == b.DownloadBytesPerSecond &&
+		a.Multiplier == b.Multiplier && a.EffectiveScope() == b.EffectiveScope()
 }
 
 func guardClientPolicyTargets(tx *gorm.DB, record *model.ClientRecord, policy *model.ClientPolicyOptions, inboundIDs []int, attaching bool) error {
+	if record != nil && policy != nil {
+		policy = model.MergeClientPolicyOptions(record.Policy, policy)
+	}
 	localOwnedResource := false
 	for _, batch := range chunkInts(inboundIDs, 400) {
 		var count int64
