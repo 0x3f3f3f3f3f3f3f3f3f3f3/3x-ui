@@ -217,14 +217,15 @@ func (e *Engine) Close() error {
 }
 
 type Session struct {
-	client      *clientState
-	metadata    Metadata
-	ctx         context.Context
-	cancel      context.CancelFunc
-	closeFn     func()
-	closed      atomic.Bool
-	cleanupMu   sync.Mutex
-	stopContext func() bool
+	payloadPending uint64 // guarded by client.mu
+	client         *clientState
+	metadata       Metadata
+	ctx            context.Context
+	cancel         context.CancelFunc
+	closeFn        func()
+	closed         atomic.Bool
+	cleanupMu      sync.Mutex
+	stopContext    func() bool
 }
 
 func (e *Engine) Open(ctx context.Context, metadata Metadata, closeFn func()) (*Session, error) {
@@ -353,7 +354,7 @@ func (s *Session) Admit(direction Direction, n uint64) error {
 			}
 		}
 		if c.reasonsLocked(now) != 0 {
-			sessions := c.sessionsLocked()
+			sessions := c.restrictionSessionsLocked(now)
 			c.mu.Unlock()
 			closeSessions(sessions)
 			return ErrRestricted
@@ -432,7 +433,7 @@ func (s *Session) Admit(direction Direction, n uint64) error {
 			var sessions []*Session
 			if c.reasonsLocked(now) != 0 {
 				if !c.canRefillAuthorityLocked(now) {
-					sessions = c.sessionsLocked()
+					sessions = c.restrictionSessionsLocked(now)
 				}
 				c.notifyLocked()
 			}

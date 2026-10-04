@@ -78,13 +78,14 @@ func (d *DefaultDispatcher) manageLink(ctx context.Context, destination net.Dest
 }
 
 type managedReader struct {
-	Reader     buf.Reader
-	session    *clientpolicy.Session
-	datagram   bool
-	mu         sync.Mutex
-	pending    buf.MultiBuffer
-	pendingErr error
-	closed     atomic.Bool
+	Reader       buf.Reader
+	session      *clientpolicy.Session
+	datagram     bool
+	mu           sync.Mutex
+	pending      buf.MultiBuffer
+	pendingErr   error
+	deliveryDone func()
+	closed       atomic.Bool
 }
 
 func (r *managedReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
@@ -99,6 +100,10 @@ func (r *managedReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 			r.releasePending()
 		}
 	}()
+	if finish := r.deliveryDone; finish != nil {
+		r.deliveryDone = nil
+		finish()
+	}
 	if r.closed.Load() {
 		return nil, io.EOF
 	}
@@ -126,7 +131,8 @@ func (r *managedReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 			}
 			r.pending, part = buf.SplitSize(r.pending, int32(limit))
 		}
-		if err := r.session.Admit(clientpolicy.Upload, uint64(part.Len())); err != nil {
+		finish, err := r.session.AdmitPayload(clientpolicy.Upload, uint64(part.Len()))
+		if err != nil {
 			if !atomicPacket && errors.Is(err, clientpolicy.ErrPacketTooLarge) {
 				r.pending = append(part, r.pending...)
 				continue
@@ -136,6 +142,9 @@ func (r *managedReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 			r.pending = nil
 			return nil, err
 		}
+		// A stream forwarder consumes the returned buffer before asking for the
+		// next one. Keep quota closure behind that boundary; Interrupt also joins it.
+		r.deliveryDone = finish
 		if r.pending.IsEmpty() {
 			return part, r.pendingErr
 		}
@@ -144,10 +153,15 @@ func (r *managedReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 }
 
 func (r *managedReader) releasePending() {
+	var finish func()
 	if r.mu.TryLock() {
 		buf.ReleaseMulti(r.pending)
 		r.pending = nil
+		finish, r.deliveryDone = r.deliveryDone, nil
 		r.mu.Unlock()
+	}
+	if finish != nil {
+		finish()
 	}
 }
 
@@ -181,7 +195,8 @@ func (w *managedWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			}
 			mb, part = buf.SplitSize(mb, int32(limit))
 		}
-		if err := w.session.Admit(clientpolicy.Download, uint64(part.Len())); err != nil {
+		finish, err := w.session.AdmitPayload(clientpolicy.Download, uint64(part.Len()))
+		if err != nil {
 			if !atomicPacket && errors.Is(err, clientpolicy.ErrPacketTooLarge) {
 				mb = append(part, mb...)
 				continue
@@ -190,7 +205,9 @@ func (w *managedWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			buf.ReleaseMulti(mb)
 			return err
 		}
-		if err := w.Writer.WriteMultiBuffer(part); err != nil {
+		err = w.Writer.WriteMultiBuffer(part)
+		finish()
+		if err != nil {
 			buf.ReleaseMulti(mb)
 			return err
 		}

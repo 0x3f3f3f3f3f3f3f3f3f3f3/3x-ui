@@ -39,7 +39,7 @@ func (s *Session) StreamChunkSize(direction Direction) (uint64, error) {
 		}
 	}
 	if c.reasonsLocked(time.Now()) != 0 {
-		closed = c.sessionsLocked()
+		closed = c.restrictionSessionsLocked(time.Now())
 		return 0, ErrRestricted
 	}
 	if c.engine.bootID != "" {

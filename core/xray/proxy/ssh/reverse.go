@@ -357,7 +357,8 @@ func (w *reverseWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		}
 		var part buf.MultiBuffer
 		mb, part = buf.SplitSize(mb, int32(limit))
-		if err := w.session.Admit(w.direction, uint64(part.Len())); err != nil {
+		finish, err := w.session.AdmitPayload(w.direction, uint64(part.Len()))
+		if err != nil {
 			if errors.Is(err, clientpolicy.ErrPacketTooLarge) {
 				mb = append(part, mb...)
 				continue
@@ -372,6 +373,7 @@ func (w *reverseWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			}
 		}
 		buf.ReleaseMulti(part)
+		finish()
 		if err != nil {
 			buf.ReleaseMulti(mb)
 			return err
