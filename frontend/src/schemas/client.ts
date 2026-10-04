@@ -404,6 +404,7 @@ export function hasForbiddenClientChars(value: string): boolean {
 }
 
 export const ClientFormSchema = z.object({
+  policyScope: z.enum(['node', 'global']).default('node'),
   policyUploadBytesPerSecond: ClientPolicyOptionsSchema.shape.uploadBytesPerSecond
     .nullable()
     .default(null),

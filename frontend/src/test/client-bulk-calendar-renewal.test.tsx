@@ -8,6 +8,8 @@ import { chooseSelectOption, renderWithProviders } from './test-utils';
 const { bulkCreate } = vi.hoisted(() => ({ bulkCreate: vi.fn() }));
 vi.mock('@/hooks/useClients', () => ({ useClients: () => ({ bulkCreate }) }));
 
+// Four full submissions retain their individual waitFor deadlines; allow the
+// complete workflow enough time on slower jsdom runners.
 it('keeps bulk renewal disabled by default and requires explicit cutoff selection without changing first-use duration', async () => {
   bulkCreate.mockResolvedValue(new Msg(true, '', { created: 1, skipped: [] }));
   const post = vi.spyOn(HttpUtil, 'post').mockImplementation(async (url, body) => {
@@ -110,4 +112,4 @@ it('keeps bulk renewal disabled by default and requires explicit cutoff selectio
   } finally {
     post.mockRestore();
   }
-});
+}, 15_000);

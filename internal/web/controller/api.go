@@ -179,6 +179,7 @@ func relAPIPath(fullPath string) string {
 func (a *APIController) initRouter(g *gin.RouterGroup) {
 	// This bounded control route registers before the ordinary envelope chain.
 	NewNodeAuthorityAPIController(g)
+	NewManagedPolicyAPIController(g)
 	// Main API group
 	api := g.Group("/panel/api")
 	api.Use(a.checkAPIAuth)

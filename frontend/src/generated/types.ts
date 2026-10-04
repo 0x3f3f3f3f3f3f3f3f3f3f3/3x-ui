@@ -878,6 +878,58 @@ export interface MLKEM768Response {
   seed: string;
 }
 
+export interface ManagedPolicyAccountPage {
+  accounts: ManagedPolicyAccountStatus[];
+  nextNode: string;
+  pendingEnrollment: boolean;
+  scope: string;
+}
+
+export interface ManagedPolicyAccountPageRequest {
+  afterNode: string;
+  limit: number;
+  parentClientId: string;
+}
+
+export interface ManagedPolicyAccountStatus {
+  budget: ClientPolicyBudget;
+  clientId: string;
+  deleted: boolean;
+  enrolled: boolean;
+  nodeId: string;
+  policyPending: boolean;
+  policyVersion: string;
+  quotaBytes: string;
+  quotaUnlimited: boolean;
+  remaining?: string | null;
+  scope: string;
+  usage: ClientPolicyUsage;
+  windowUsed: string;
+}
+
+export interface ManagedPolicyCoordinatorStatus {
+  active: boolean;
+  authorityId: string;
+  generation: string;
+}
+
+export interface ManagedPolicyEnrollmentRequest {
+  inventoryId: number;
+  localClientId: string;
+  localPolicyVersion: string;
+  nodeId: string;
+  parentClientId: string;
+  sourceId: string;
+}
+
+export interface ManagedPolicyEnrollmentResult {
+  clientId: string;
+  connected: boolean;
+  localPolicyVersion: string;
+  nodeId: string;
+  policyVersion: string;
+}
+
 export interface Msg {
   msg: string;
   obj: unknown;

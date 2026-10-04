@@ -1054,7 +1054,15 @@
         "multiplier": "Billing multiplier",
         "multiplierHint": "Applies to new upload and download traffic. Blank means 1; existing billed usage is unchanged.",
         "multiplierInvalid": "Enter a multiplier greater than 0 and no more than 1000, with up to 6 decimal places.",
-        "localOnly": "Traffic policy currently requires local listeners. Remote or unknown bindings are read-only; cross-node limits and billing are not yet supported. Detach remote listeners and save before editing policy."
+        "localOnly": "Traffic policy currently requires local listeners. Remote or unknown bindings are read-only; cross-node limits and billing are not yet supported. Detach remote listeners and save before editing policy.",
+        "scope": "Policy scope",
+        "statusUnavailable": "Account status unavailable",
+        "enrollmentPending": "Awaiting node enrollment",
+        "accountClosed": "Account closed",
+        "moreAccounts": "More node accounts",
+        "scopeNode": "Independent on each node",
+        "scopeGlobal": "Shared across enrolled nodes",
+        "scopeHint": "Node scope gives each node its own quota and limits. Global scope shares one quota and directional limits across enrolled nodes. Enrollment is required before a managed node can carry traffic."
       },
       "attachedInboundsHelp": "Optional. You can create the client first, then assign a Tunnel or attach other inbounds later.",
       "mieruUsername": "mieru username",

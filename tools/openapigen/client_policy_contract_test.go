@@ -32,6 +32,11 @@ func TestGeneratePolicyScopeAndAccountContracts(t *testing.T) {
 		if !strings.Contains(text, "ClientPolicyNodeAccount") {
 			t.Errorf("canonical account contract missing from %s", file)
 		}
+		for _, name := range []string{"ManagedPolicyCoordinatorStatus", "ManagedPolicyAccountPageRequest", "ManagedPolicyAccountStatus", "ManagedPolicyAccountPage", "ManagedPolicyEnrollmentRequest", "ManagedPolicyEnrollmentResult"} {
+			if !strings.Contains(text, name) {
+				t.Errorf("product account contract %s missing from %s", name, file)
+			}
+		}
 	}
 	zod, err := os.ReadFile(filepath.Join(out, "zod.ts"))
 	if err != nil {

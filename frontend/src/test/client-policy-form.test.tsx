@@ -56,6 +56,29 @@ async function submitPolicyForm(save: ReturnType<typeof vi.fn>) {
 }
 
 describe('client shared traffic policy form', () => {
+  it('preserves an explicit global scope through the save boundary', async () => {
+    const policy = {
+      scope: 'global',
+      uploadBytesPerSecond: 1024,
+      downloadBytesPerSecond: 2048,
+      multiplier: '1.5',
+    };
+    const save = openPolicyForm(policy);
+    expect(await screen.findByRole('combobox', { name: /^Policy scope/ })).toBeTruthy();
+    expect((await submitPolicyForm(save)).policy).toEqual(policy);
+  });
+
+  it('selects a shared global quota without losing legacy defaults', async () => {
+    const save = openPolicyForm();
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: /^Policy scope/ }));
+    fireEvent.click(await screen.findByText('Shared across enrolled nodes'));
+    expect((await submitPolicyForm(save)).policy).toEqual({
+      scope: 'global',
+      uploadBytesPerSecond: 0,
+      downloadBytesPerSecond: 0,
+      multiplier: '',
+    });
+  });
   it('creates a legacy remote client without introducing policy fields', async () => {
     const save = openPolicyForm(undefined, 'add', { nodeId: 7 });
     fireEvent.click(screen.getByRole('button', { name: 'Select all' }));

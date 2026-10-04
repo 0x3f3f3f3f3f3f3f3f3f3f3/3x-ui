@@ -938,6 +938,64 @@ export const MLKEM768ResponseSchema = z.object({
 });
 export type MLKEM768Response = z.infer<typeof MLKEM768ResponseSchema>;
 
+export const ManagedPolicyAccountPageSchema = z.object({
+  accounts: z.array(z.lazy(() => ManagedPolicyAccountStatusSchema)),
+  nextNode: z.string(),
+  pendingEnrollment: z.boolean(),
+  scope: z.enum(['node', 'global']),
+});
+export type ManagedPolicyAccountPage = z.infer<typeof ManagedPolicyAccountPageSchema>;
+
+export const ManagedPolicyAccountPageRequestSchema = z.object({
+  afterNode: z.string(),
+  limit: z.number().int(),
+  parentClientId: z.string(),
+});
+export type ManagedPolicyAccountPageRequest = z.infer<typeof ManagedPolicyAccountPageRequestSchema>;
+
+export const ManagedPolicyAccountStatusSchema = z.object({
+  budget: z.lazy(() => ClientPolicyBudgetSchema),
+  clientId: z.string(),
+  deleted: z.boolean(),
+  enrolled: z.boolean(),
+  nodeId: z.string(),
+  policyPending: z.boolean(),
+  policyVersion: z.string(),
+  quotaBytes: z.string(),
+  quotaUnlimited: z.boolean(),
+  remaining: z.string().nullable().optional(),
+  scope: z.enum(['node', 'global']),
+  usage: z.lazy(() => ClientPolicyUsageSchema),
+  windowUsed: z.string(),
+});
+export type ManagedPolicyAccountStatus = z.infer<typeof ManagedPolicyAccountStatusSchema>;
+
+export const ManagedPolicyCoordinatorStatusSchema = z.object({
+  active: z.boolean(),
+  authorityId: z.string(),
+  generation: z.string(),
+});
+export type ManagedPolicyCoordinatorStatus = z.infer<typeof ManagedPolicyCoordinatorStatusSchema>;
+
+export const ManagedPolicyEnrollmentRequestSchema = z.object({
+  inventoryId: z.number().int(),
+  localClientId: z.string(),
+  localPolicyVersion: z.string(),
+  nodeId: z.string(),
+  parentClientId: z.string(),
+  sourceId: z.string(),
+});
+export type ManagedPolicyEnrollmentRequest = z.infer<typeof ManagedPolicyEnrollmentRequestSchema>;
+
+export const ManagedPolicyEnrollmentResultSchema = z.object({
+  clientId: z.string(),
+  connected: z.boolean(),
+  localPolicyVersion: z.string(),
+  nodeId: z.string(),
+  policyVersion: z.string(),
+});
+export type ManagedPolicyEnrollmentResult = z.infer<typeof ManagedPolicyEnrollmentResultSchema>;
+
 export const MsgSchema = z.object({
   msg: z.string(),
   obj: z.unknown(),

@@ -815,6 +815,42 @@ export const sections: readonly Section[] = [
       },
       ...nodeAuthorityControlEndpoints,
       {
+        method: 'GET',
+        path: '/panel/api/server/clientPolicyCoordinator',
+        summary: 'Read the explicitly activated traffic policy coordinator status.',
+        description:
+          'Requires an admin token or an authenticated session. Reading inactive status creates no account or allowance. Authority generations are decimal strings.',
+        responseSchema: 'ManagedPolicyCoordinatorStatus',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/clientPolicyCoordinator/activate',
+        summary: 'Explicitly activate the traffic policy coordinator.',
+        description:
+          'Requires HTTPS and an admin token or an authenticated session with CSRF protection. Submit an empty JSON object. Identical retries retain the original allocation owner; replaced or restored state cannot create a fresh allowance. Node-sync and monitor tokens cannot activate it. Requests and responses are limited to 32 KiB.',
+        requestSchema: { type: 'object', additionalProperties: false, properties: {} },
+        responseSchema: 'ManagedPolicyCoordinatorStatus',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/clientPolicyCoordinator/accounts',
+        summary: 'Read original global or independent node account balances.',
+        description:
+          'Requires HTTPS and an admin token or an authenticated session with CSRF protection. This read operation never provisions an account. Page size is 1–128; afterNode is the previous node cursor. Usage, fractional billing, held budget, remaining allowance and policy versions use exact decimal strings. An empty pending result does not grant traffic. Requests and responses are limited to 32 KiB.',
+        requestSchema: { $ref: '#/components/schemas/ManagedPolicyAccountPageRequest' },
+        responseSchema: 'ManagedPolicyAccountPage',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/clientPolicyCoordinator/enroll',
+        summary:
+          'Enroll a fresh client on an authenticated inventory node and connect its traffic controller.',
+        description:
+          'Requires HTTPS and an admin token or an authenticated session with CSRF protection. Activate the coordinator explicitly, then configure the fresh stopped node using clientPolicyDelegation with the exact coordinator identity. Supply its inventory ID, original node/source identities, parent client UUID and actual local client UUID/version. LocalPolicyVersion is a canonical positive decimal string up to 9223372036854775807. Global and local policy versions may differ. Matching effective policies and original node evidence are required; consumed accounts require a separate handoff. Exact retries recover committed enrollment after lost replies. A failed connection retains all outstanding allowance. Requests and responses are limited to 32 KiB.',
+        requestSchema: { $ref: '#/components/schemas/ManagedPolicyEnrollmentRequest' },
+        responseSchema: 'ManagedPolicyEnrollmentResult',
+      },
+      {
         method: 'POST',
         path: '/panel/api/server/clientPolicyDelegation',
         summary: 'Configure a fresh stopped node to execute grants from its coordinator.',

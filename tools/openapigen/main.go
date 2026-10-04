@@ -100,6 +100,12 @@ func run(root, outDir string) error {
 			AliasAllow: setOf("ProcessState", "addrFamily", "staticEgressResolver", "trafficLocalApplyAction", "transportBits"),
 			StructAllow: setOf(
 				"InboundOption",
+				"ManagedPolicyCoordinatorStatus",
+				"ManagedPolicyAccountPageRequest",
+				"ManagedPolicyAccountStatus",
+				"ManagedPolicyAccountPage",
+				"ManagedPolicyEnrollmentRequest",
+				"ManagedPolicyEnrollmentResult",
 				"HappLinkResult",
 				"ClientSlim",
 				"ClientRenewalPreviewRequest",

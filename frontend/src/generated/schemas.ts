@@ -3747,6 +3747,196 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "ManagedPolicyAccountPage": {
+    "properties": {
+      "accounts": {
+        "items": {
+          "$ref": "#/components/schemas/ManagedPolicyAccountStatus"
+        },
+        "type": "array"
+      },
+      "nextNode": {
+        "type": "string"
+      },
+      "pendingEnrollment": {
+        "type": "boolean"
+      },
+      "scope": {
+        "enum": [
+          "node",
+          "global"
+        ],
+        "type": "string"
+      }
+    },
+    "required": [
+      "accounts",
+      "nextNode",
+      "pendingEnrollment",
+      "scope"
+    ],
+    "type": "object"
+  },
+  "ManagedPolicyAccountPageRequest": {
+    "properties": {
+      "afterNode": {
+        "type": "string"
+      },
+      "limit": {
+        "type": "integer"
+      },
+      "parentClientId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "afterNode",
+      "limit",
+      "parentClientId"
+    ],
+    "type": "object"
+  },
+  "ManagedPolicyAccountStatus": {
+    "properties": {
+      "budget": {
+        "$ref": "#/components/schemas/ClientPolicyBudget"
+      },
+      "clientId": {
+        "type": "string"
+      },
+      "deleted": {
+        "type": "boolean"
+      },
+      "enrolled": {
+        "type": "boolean"
+      },
+      "nodeId": {
+        "type": "string"
+      },
+      "policyPending": {
+        "type": "boolean"
+      },
+      "policyVersion": {
+        "type": "string"
+      },
+      "quotaBytes": {
+        "type": "string"
+      },
+      "quotaUnlimited": {
+        "type": "boolean"
+      },
+      "remaining": {
+        "nullable": true,
+        "type": "string"
+      },
+      "scope": {
+        "enum": [
+          "node",
+          "global"
+        ],
+        "type": "string"
+      },
+      "usage": {
+        "$ref": "#/components/schemas/ClientPolicyUsage"
+      },
+      "windowUsed": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "budget",
+      "clientId",
+      "deleted",
+      "enrolled",
+      "nodeId",
+      "policyPending",
+      "policyVersion",
+      "quotaBytes",
+      "quotaUnlimited",
+      "scope",
+      "usage",
+      "windowUsed"
+    ],
+    "type": "object"
+  },
+  "ManagedPolicyCoordinatorStatus": {
+    "description": "ManagedPolicyCoordinatorStatus describes the explicitly activated owner.\nGenerations use decimal strings to preserve all integer bits in web clients.",
+    "properties": {
+      "active": {
+        "type": "boolean"
+      },
+      "authorityId": {
+        "type": "string"
+      },
+      "generation": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "active",
+      "authorityId",
+      "generation"
+    ],
+    "type": "object"
+  },
+  "ManagedPolicyEnrollmentRequest": {
+    "properties": {
+      "inventoryId": {
+        "type": "integer"
+      },
+      "localClientId": {
+        "type": "string"
+      },
+      "localPolicyVersion": {
+        "type": "string"
+      },
+      "nodeId": {
+        "type": "string"
+      },
+      "parentClientId": {
+        "type": "string"
+      },
+      "sourceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "inventoryId",
+      "localClientId",
+      "localPolicyVersion",
+      "nodeId",
+      "parentClientId",
+      "sourceId"
+    ],
+    "type": "object"
+  },
+  "ManagedPolicyEnrollmentResult": {
+    "properties": {
+      "clientId": {
+        "type": "string"
+      },
+      "connected": {
+        "type": "boolean"
+      },
+      "localPolicyVersion": {
+        "type": "string"
+      },
+      "nodeId": {
+        "type": "string"
+      },
+      "policyVersion": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "clientId",
+      "connected",
+      "localPolicyVersion",
+      "nodeId",
+      "policyVersion"
+    ],
+    "type": "object"
+  },
   "Msg": {
     "properties": {
       "msg": {

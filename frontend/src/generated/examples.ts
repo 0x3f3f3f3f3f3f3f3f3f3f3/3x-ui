@@ -965,6 +965,86 @@ export const EXAMPLES: Record<string, unknown> = {
     "client": "mlkem768-client",
     "seed": "mlkem768-seed"
   },
+  "ManagedPolicyAccountPage": {
+    "accounts": [
+      {
+        "budget": {
+          "allocated": "65536",
+          "frozen": "0",
+          "unallocated": "1.5"
+        },
+        "clientId": "",
+        "deleted": false,
+        "enrolled": false,
+        "nodeId": "",
+        "policyPending": false,
+        "policyVersion": "",
+        "quotaBytes": "",
+        "quotaUnlimited": false,
+        "remaining": null,
+        "scope": "node",
+        "usage": {
+          "billed": "4718592.5",
+          "download": "2097152",
+          "uncertain": "0",
+          "upload": "1048576"
+        },
+        "windowUsed": ""
+      }
+    ],
+    "nextNode": "",
+    "pendingEnrollment": false,
+    "scope": "node"
+  },
+  "ManagedPolicyAccountPageRequest": {
+    "afterNode": "",
+    "limit": 0,
+    "parentClientId": ""
+  },
+  "ManagedPolicyAccountStatus": {
+    "budget": {
+      "allocated": "65536",
+      "frozen": "0",
+      "unallocated": "1.5"
+    },
+    "clientId": "",
+    "deleted": false,
+    "enrolled": false,
+    "nodeId": "",
+    "policyPending": false,
+    "policyVersion": "",
+    "quotaBytes": "",
+    "quotaUnlimited": false,
+    "remaining": null,
+    "scope": "node",
+    "usage": {
+      "billed": "4718592.5",
+      "download": "2097152",
+      "uncertain": "0",
+      "upload": "1048576"
+    },
+    "windowUsed": ""
+  },
+  "ManagedPolicyCoordinatorStatus": {
+    "active": false,
+    "authorityId": "",
+    "generation": ""
+  },
+  "ManagedPolicyEnrollmentRequest": {
+    "inventoryId": 0,
+    "localClientId": "",
+    "localPolicyVersion": "",
+    "nodeId": "",
+    "parentClientId": "",
+    "sourceId": ""
+  },
+  "ManagedPolicyEnrollmentResult": {
+    "clientId": "",
+    "connected": false,
+    "localPolicyVersion": "",
+    "nodeId": "",
+    "policyVersion": ""
+  },
   "Msg": {
     "msg": "",
     "obj": null,

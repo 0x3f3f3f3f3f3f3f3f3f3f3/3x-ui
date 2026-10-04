@@ -40,6 +40,7 @@ import { useClientHwids } from '@/hooks/useClientHwids';
 import { DateTimePicker, SelectAllClearButtons } from '@/components/form';
 import { FormField } from '@/components/form/rhf';
 import ClientHwidListModal from '@/components/clients/ClientHwidList';
+import ManagedPolicyAccounts from '@/components/clients/ManagedPolicyAccounts';
 import { TLS_FLOW_CONTROL, TRAFFIC_RESETS } from '@/schemas/primitives';
 import type {
   ClientRecord,
@@ -145,6 +146,7 @@ type Values = ClientFormValues & {
 };
 
 const EMPTY: Values = {
+  policyScope: 'node',
   policyUploadBytesPerSecond: null,
   policyDownloadBytesPerSecond: null,
   policyMultiplier: '',
@@ -408,6 +410,7 @@ export default function ClientFormModal({
         policyUploadBytesPerSecond: client.policy?.uploadBytesPerSecond ?? null,
         policyDownloadBytesPerSecond: client.policy?.downloadBytesPerSecond ?? null,
         policyMultiplier: client.policy?.multiplier ?? '',
+        policyScope: client.policy?.scope ?? 'node',
         reset: Number(client.reset) || 0,
         resetDay: Number(client.resetDay) || 0,
         resetWeekday: Number(client.resetWeekday) || 0,
@@ -698,6 +701,7 @@ export default function ClientFormModal({
   async function onSubmit() {
     const values = methods.getValues();
     const policyChanged =
+      values.policyScope !== (client?.policy?.scope ?? 'node') ||
       values.policyUploadBytesPerSecond !== (client?.policy?.uploadBytesPerSecond ?? null) ||
       values.policyDownloadBytesPerSecond !== (client?.policy?.downloadBytesPerSecond ?? null) ||
       values.policyMultiplier !== (client?.policy?.multiplier ?? '');
@@ -714,6 +718,7 @@ export default function ClientFormModal({
     }
     const schema = isEdit ? ClientFormSchema : ClientCreateFormSchema;
     const validated = schema.safeParse({
+      policyScope: values.policyScope,
       policyUploadBytesPerSecond: values.policyUploadBytesPerSecond,
       policyDownloadBytesPerSecond: values.policyDownloadBytesPerSecond,
       policyMultiplier: values.policyMultiplier,
@@ -834,11 +839,15 @@ export default function ClientFormModal({
     if (
       !policyUnsupported &&
       (client?.policy != null ||
+        values.policyScope === 'global' ||
         values.policyUploadBytesPerSecond != null ||
         values.policyDownloadBytesPerSecond != null ||
         values.policyMultiplier !== '')
     ) {
       clientPayload.policy = {
+        ...(client?.policy?.scope != null || values.policyScope === 'global'
+          ? { scope: values.policyScope }
+          : {}),
         uploadBytesPerSecond: values.policyUploadBytesPerSecond ?? 0,
         downloadBytesPerSecond: values.policyDownloadBytesPerSecond ?? 0,
         multiplier: values.policyMultiplier,
@@ -1094,6 +1103,22 @@ export default function ClientFormModal({
                         <Typography.Paragraph type="secondary">
                           {t('pages.clients.policy.localOnly')}
                         </Typography.Paragraph>
+                      )}
+                      <FormField
+                        name="policyScope"
+                        label={t('pages.clients.policy.scope')}
+                        tooltip={t('pages.clients.policy.scopeHint')}
+                      >
+                        <Select
+                          disabled={policyUnsupported}
+                          options={[
+                            { value: 'node', label: t('pages.clients.policy.scopeNode') },
+                            { value: 'global', label: t('pages.clients.policy.scopeGlobal') },
+                          ]}
+                        />
+                      </FormField>
+                      {isEdit && client?.clientId && client.policy?.scope != null && (
+                        <ManagedPolicyAccounts parentClientId={client.clientId} />
                       )}
                       <Row gutter={16}>
                         <Col xs={24} md={8}>

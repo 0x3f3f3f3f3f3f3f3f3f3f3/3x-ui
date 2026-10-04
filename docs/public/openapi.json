@@ -3773,6 +3773,196 @@
         ],
         "type": "object"
       },
+      "ManagedPolicyAccountPage": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/ManagedPolicyAccountStatus"
+            },
+            "type": "array"
+          },
+          "nextNode": {
+            "type": "string"
+          },
+          "pendingEnrollment": {
+            "type": "boolean"
+          },
+          "scope": {
+            "enum": [
+              "node",
+              "global"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "accounts",
+          "nextNode",
+          "pendingEnrollment",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "ManagedPolicyAccountPageRequest": {
+        "properties": {
+          "afterNode": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "parentClientId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "afterNode",
+          "limit",
+          "parentClientId"
+        ],
+        "type": "object"
+      },
+      "ManagedPolicyAccountStatus": {
+        "properties": {
+          "budget": {
+            "$ref": "#/components/schemas/ClientPolicyBudget"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "enrolled": {
+            "type": "boolean"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "policyPending": {
+            "type": "boolean"
+          },
+          "policyVersion": {
+            "type": "string"
+          },
+          "quotaBytes": {
+            "type": "string"
+          },
+          "quotaUnlimited": {
+            "type": "boolean"
+          },
+          "remaining": {
+            "nullable": true,
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "node",
+              "global"
+            ],
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/ClientPolicyUsage"
+          },
+          "windowUsed": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "budget",
+          "clientId",
+          "deleted",
+          "enrolled",
+          "nodeId",
+          "policyPending",
+          "policyVersion",
+          "quotaBytes",
+          "quotaUnlimited",
+          "scope",
+          "usage",
+          "windowUsed"
+        ],
+        "type": "object"
+      },
+      "ManagedPolicyCoordinatorStatus": {
+        "description": "ManagedPolicyCoordinatorStatus describes the explicitly activated owner.\nGenerations use decimal strings to preserve all integer bits in web clients.",
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "authorityId": {
+            "type": "string"
+          },
+          "generation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "active",
+          "authorityId",
+          "generation"
+        ],
+        "type": "object"
+      },
+      "ManagedPolicyEnrollmentRequest": {
+        "properties": {
+          "inventoryId": {
+            "type": "integer"
+          },
+          "localClientId": {
+            "type": "string"
+          },
+          "localPolicyVersion": {
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "parentClientId": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "inventoryId",
+          "localClientId",
+          "localPolicyVersion",
+          "nodeId",
+          "parentClientId",
+          "sourceId"
+        ],
+        "type": "object"
+      },
+      "ManagedPolicyEnrollmentResult": {
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "connected": {
+            "type": "boolean"
+          },
+          "localPolicyVersion": {
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "policyVersion": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "clientId",
+          "connected",
+          "localPolicyVersion",
+          "nodeId",
+          "policyVersion"
+        ],
+        "type": "object"
+      },
       "Msg": {
         "properties": {
           "msg": {
@@ -9385,6 +9575,230 @@
                   "success": false,
                   "msg": "invalid or unavailable node authority discovery",
                   "obj": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/server/clientPolicyCoordinator": {
+      "get": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Read the explicitly activated traffic policy coordinator status.",
+        "operationId": "get_panel_api_server_clientPolicyCoordinator",
+        "description": "Requires an admin token or an authenticated session. Reading inactive status creates no account or allowance. Authority generations are decimal strings.",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/ManagedPolicyCoordinatorStatus"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "active": false,
+                    "authorityId": "",
+                    "generation": ""
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/server/clientPolicyCoordinator/activate": {
+      "post": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Explicitly activate the traffic policy coordinator.",
+        "operationId": "post_panel_api_server_clientPolicyCoordinator_activate",
+        "description": "Requires HTTPS and an admin token or an authenticated session with CSRF protection. Submit an empty JSON object. Identical retries retain the original allocation owner; replaced or restored state cannot create a fresh allowance. Node-sync and monitor tokens cannot activate it. Requests and responses are limited to 32 KiB.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/ManagedPolicyCoordinatorStatus"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "active": false,
+                    "authorityId": "",
+                    "generation": ""
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/server/clientPolicyCoordinator/accounts": {
+      "post": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Read original global or independent node account balances.",
+        "operationId": "post_panel_api_server_clientPolicyCoordinator_accounts",
+        "description": "Requires HTTPS and an admin token or an authenticated session with CSRF protection. This read operation never provisions an account. Page size is 1–128; afterNode is the previous node cursor. Usage, fractional billing, held budget, remaining allowance and policy versions use exact decimal strings. An empty pending result does not grant traffic. Requests and responses are limited to 32 KiB.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagedPolicyAccountPageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/ManagedPolicyAccountPage"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "accounts": [
+                      {
+                        "budget": {
+                          "allocated": "65536",
+                          "frozen": "0",
+                          "unallocated": "1.5"
+                        },
+                        "clientId": "",
+                        "deleted": false,
+                        "enrolled": false,
+                        "nodeId": "",
+                        "policyPending": false,
+                        "policyVersion": "",
+                        "quotaBytes": "",
+                        "quotaUnlimited": false,
+                        "remaining": null,
+                        "scope": "node",
+                        "usage": {
+                          "billed": "4718592.5",
+                          "download": "2097152",
+                          "uncertain": "0",
+                          "upload": "1048576"
+                        },
+                        "windowUsed": ""
+                      }
+                    ],
+                    "nextNode": "",
+                    "pendingEnrollment": false,
+                    "scope": "node"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/server/clientPolicyCoordinator/enroll": {
+      "post": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Enroll a fresh client on an authenticated inventory node and connect its traffic controller.",
+        "operationId": "post_panel_api_server_clientPolicyCoordinator_enroll",
+        "description": "Requires HTTPS and an admin token or an authenticated session with CSRF protection. Activate the coordinator explicitly, then configure the fresh stopped node using clientPolicyDelegation with the exact coordinator identity. Supply its inventory ID, original node/source identities, parent client UUID and actual local client UUID/version. LocalPolicyVersion is a canonical positive decimal string up to 9223372036854775807. Global and local policy versions may differ. Matching effective policies and original node evidence are required; consumed accounts require a separate handoff. Exact retries recover committed enrollment after lost replies. A failed connection retains all outstanding allowance. Requests and responses are limited to 32 KiB.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagedPolicyEnrollmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/ManagedPolicyEnrollmentResult"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "clientId": "",
+                    "connected": false,
+                    "localPolicyVersion": "",
+                    "nodeId": "",
+                    "policyVersion": ""
+                  }
                 }
               }
             }

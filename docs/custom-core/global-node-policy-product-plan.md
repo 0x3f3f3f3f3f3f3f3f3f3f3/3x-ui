@@ -24,10 +24,10 @@ Create/open the independently anchored coordinator journal under existing origin
 
 Expose explicit coordinator/account status and enrollment via existing authenticated inventory and generated source contracts; retain TLS/token/CSRF/opaque bounds. Wire client scope form and usage display to actual API state, with English/Chinese locale keys and pending/held/remaining information. Compile or reuse a test helper subprocess per physical node: independent SQL/runtime/original node journal plus real Custom Xray and production TLS handlers. Parent has separate coordinator SQL/journal. Use private0600 ephemeral fixture credentials without printing them. Literal actual parents prove global canonical identity/version inequality, simultaneous TCP/UDP, exact multiplier/fraction settlement, global quota exhaustion, measured aggregate direction/burst bounds and independent node-scope quotas. Extend native Snell/mieru/SSH business tests to managed enrollment. No shared process-wide DB/manager or invented successful grants. Both backends, current native gates, frontend tests/build/typecheck/generation equality and source/core hashes.
 
-- [ ] Own protected actual HTTP scope/account API and source contract RED.
-- [ ] Wire scope/account UI, generated schemas and English/Chinese locale keys to real backend state.
-- [ ] Run two independent physical-node helper processes with real native cores and protected TLS routes.
-- [ ] Both backend actual quota/rates/multiplier/TCP/UDP/native protocol gates and frontend build/typecheck/contracts pass; commit/task completion.
+- [x] Own protected actual HTTP scope/account API and source contract RED.
+- [x] Wire scope/account UI, generated schemas and English/Chinese locale keys to real backend state.
+- [x] Run two independent physical-node helper processes with real native cores and protected TLS routes.
+- [x] Both backend actual quota/rates/multiplier/TCP/UDP/native protocol gates and frontend build/typecheck/contracts pass; commit/task completion.
 
 ## Task 4: Fault semantics, publication and next original work
 
