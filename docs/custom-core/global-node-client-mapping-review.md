@@ -23,3 +23,5 @@ Explicit scope rulings from this review, including costs:
 - Original native interoperability, sidecar migration, exports/notifications, distribution/platform and final A–H work: remain open; preserved native gates do not complete them.
 
 No second reviewer or additional review round is requested. The original whole-project objective continues after this phase's authorized feature publication.
+
+Publication: author correction `7320f3668cdd3a95ac19f687065b7724a179438b` was normally pushed to the existing feature/custom-xray-unified-policy ref. Independent ls-remote returned the exact same SHA. A manually mistyped repository address was rejected before the successful origin-based push; no force/default merge/release/deployment occurred. All task checklists and original ledger now close this mapping phase. The original whole-project work continues immediately with explicit global/node policy accounts and managed coordinator integration.
