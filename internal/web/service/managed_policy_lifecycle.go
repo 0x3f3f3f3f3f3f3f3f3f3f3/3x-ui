@@ -60,6 +60,9 @@ func ResumeManagedPolicyCoordinator(ctx context.Context) error {
 	if err != nil || c == nil {
 		return err
 	}
+	if err := c.reconcileDeletions(ctx, nil); err != nil {
+		return err
+	}
 	return c.ResumeNodes(ctx)
 }
 

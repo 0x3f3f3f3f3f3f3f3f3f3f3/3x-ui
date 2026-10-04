@@ -78,13 +78,23 @@ func (s *ManagedPolicyCoordinatorService) Accounts(ctx context.Context, request 
 		defer c.mu.Unlock()
 		err = c.withCurrent(ctx, func(tx *gorm.DB) error {
 			var parent model.ClientRecord
-			if err := tx.First(&parent, "stable_id = ?", request.ParentClientID).Error; err != nil {
-				return err
+			parentErr := tx.First(&parent, "stable_id = ?", request.ParentClientID).Error
+			if parentErr != nil && !errors.Is(parentErr, gorm.ErrRecordNotFound) {
+				return parentErr
 			}
 			result.Scope = string(parent.Policy.EffectiveScope())
 			page, err := c.state.Journal.ManagedAccountPage(request.ParentClientID, request.AfterNode, request.Limit)
 			if err != nil {
 				return err
+			}
+			if parentErr != nil {
+				// A missing SQL row cannot authorize a live account. Historical
+				// membership remains readable only after original revocation.
+				first, err := c.state.Journal.ManagedAccountPage(request.ParentClientID, "", 1)
+				if err != nil || len(first) != 1 || !first[0].Account.Deleted {
+					return ErrClientPolicyLedger
+				}
+				result.Scope = first[0].Origin.Scope
 			}
 			result.PendingEnrollment = len(page) == 0 && request.AfterNode == ""
 			var connections []model.ClientPolicyCoordinatorNode
@@ -96,6 +106,9 @@ func (s *ManagedPolicyCoordinatorService) Accounts(ctx context.Context, request 
 			}
 			for _, snapshot := range page {
 				origin, account := snapshot.Origin, snapshot.Account
+				if parentErr != nil && !account.Deleted {
+					return ErrClientPolicyLedger
+				}
 				row := ManagedPolicyAccountStatus{ClientID: origin.ClientID, Scope: origin.Scope, NodeID: origin.NodeID, PolicyVersion: strconv.FormatUint(account.Policy.Version, 10), Deleted: account.Deleted, QuotaUnlimited: account.Policy.QuotaUnlimited, QuotaBytes: strconv.FormatUint(account.Policy.QuotaBytes, 10), Usage: formatClientPolicyUsage(int64(account.Usage.RawUpload), int64(account.Usage.RawDownload), int64(account.Usage.BilledBytes), int64(account.Usage.Remainder), int64(account.FrozenBilled)), WindowUsed: formatClientPolicyBilled(int64(account.WindowUsed), int64(account.WindowRemainder)), Budget: *formatClientPolicyBudget(&account)}
 				withoutHeld := account
 				withoutHeld.HeldCapacity, withoutHeld.HeldRemainder = 0, 0
@@ -104,18 +117,20 @@ func (s *ManagedPolicyCoordinatorService) Accounts(ctx context.Context, request 
 					zero := "0"
 					row.Remaining, row.Budget.Unallocated = &zero, &zero
 				}
-				policy, policyErr := mappingDesiredPolicy(tx, panelruntime.NodeClientMappingRequest{LocalClientID: origin.ClientID, LocalPolicyVersion: account.Policy.Version, Binding: panelruntime.NodeAuthorityControlBinding{NodeID: origin.NodeID, ExpectedInstanceID: origin.SourceID}})
-				if policyErr != nil {
-					if !errors.Is(policyErr, errClientMappingInactive) {
-						return policyErr
+				if !account.Deleted {
+					policy, policyErr := mappingDesiredPolicy(tx, panelruntime.NodeClientMappingRequest{LocalClientID: origin.ClientID, LocalPolicyVersion: account.Policy.Version, Binding: panelruntime.NodeAuthorityControlBinding{NodeID: origin.NodeID, ExpectedInstanceID: origin.SourceID}})
+					if policyErr != nil {
+						if !errors.Is(policyErr, errClientMappingInactive) {
+							return policyErr
+						}
+						row.PolicyPending = true
+					} else {
+						digest, err := panelruntime.EffectiveClientPolicyDigest(policy)
+						if err != nil {
+							return err
+						}
+						row.PolicyPending = string(parent.Policy.EffectiveScope()) != origin.Scope || digest != origin.PolicyDigest
 					}
-					row.PolicyPending = true
-				} else {
-					digest, err := panelruntime.EffectiveClientPolicyDigest(policy)
-					if err != nil {
-						return err
-					}
-					row.PolicyPending = string(parent.Policy.EffectiveScope()) != origin.Scope || digest != origin.PolicyDigest
 				}
 				candidates := connections
 				if origin.Scope == "node" {

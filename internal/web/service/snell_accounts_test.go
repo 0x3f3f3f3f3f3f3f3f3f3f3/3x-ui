@@ -446,7 +446,7 @@ func TestSnellPanelBulkAttachReadsCurrentPSKInsideWriter(t *testing.T) {
 	inbounds, clients := &InboundService{}, &ClientService{}
 	owner := passwordOwner(t, "bulk-attach-native-owner")
 	db := database.GetDB()
-	if err := db.Model(owner).Update("snell_psk", "before-native-psk").Error; err != nil {
+	if err := db.Model(&owner).Update("snell_psk", "before-native-psk").Error; err != nil {
 		t.Fatal(err)
 	}
 	listener, _, err := inbounds.AddInbound(&model.Inbound{Protocol: model.Snell, Port: 24822, Settings: `{"version":6,"clients":[]}`})

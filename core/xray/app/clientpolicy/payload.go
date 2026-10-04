@@ -22,7 +22,7 @@ func (s *Session) AdmitPayload(direction Direction, n uint64) (func(), error) {
 		s.payloadPending--
 		now := time.Now()
 		var closed []*Session
-		if c.reasonsLocked(now) != 0 && !c.canRefillAuthorityLocked(now) {
+		if c.reasonsLocked(now) != 0 && !c.canRefillAuthorityLocked(now) && !c.transitionPendingLocked(now) {
 			closed = c.restrictionSessionsLocked(now)
 		}
 		c.mu.Unlock()

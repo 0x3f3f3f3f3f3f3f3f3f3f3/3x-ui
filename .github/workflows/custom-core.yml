@@ -2,9 +2,9 @@ name: Custom core
 on:
   push:
     branches: [feature/custom-xray-unified-policy, feature/paired-custom-core-distribution]
-    paths: ["core/**", "internal/distribution/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/prepare-core-test-geodata.py", "tools/run-go-test-batches.py", "tools/test-ci-test-tools.py", "tools/build-paired-package.sh", "tools/packagegen/**", "tools/packageverify/**", "tools/packagedeps/**", "tools/frontend-dependencies*.mjs", "tools/frontenddepsverify/**", "tools/install-paired-package.sh", "install.sh", "update.sh", "x-ui.sh", "tools/build-client-mapping-capability-fixture.sh", "tools/verify-client-mapping-completion.py", "tools/test-client-mapping-completion.py", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "tools/build-ssh-capability-fixture.sh", "tools/verify-native-ssh-panel.py", "tools/build-snell-capability-fixture.sh", "tools/verify-native-snell-panel.py", "tools/verify-policy-tunnel-completion.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
+    paths: ["core/**", "internal/distribution/**", "internal/policyauthority/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/prepare-core-test-geodata.py", "tools/run-go-test-batches.py", "tools/test-ci-test-tools.py", "tools/build-paired-package.sh", "tools/packagegen/**", "tools/packageverify/**", "tools/packagedeps/**", "tools/frontend-dependencies*.mjs", "tools/frontenddepsverify/**", "tools/install-paired-package.sh", "install.sh", "update.sh", "x-ui.sh", "tools/build-client-mapping-capability-fixture.sh", "tools/verify-client-mapping-completion.py", "tools/test-client-mapping-completion.py", "tools/verify-managed-policy-completion.py", "tools/test-managed-policy-completion.py", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "tools/build-ssh-capability-fixture.sh", "tools/verify-native-ssh-panel.py", "tools/build-snell-capability-fixture.sh", "tools/verify-native-snell-panel.py", "tools/verify-policy-tunnel-completion.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
   pull_request:
-    paths: ["core/**", "internal/distribution/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/prepare-core-test-geodata.py", "tools/run-go-test-batches.py", "tools/test-ci-test-tools.py", "tools/build-paired-package.sh", "tools/packagegen/**", "tools/packageverify/**", "tools/packagedeps/**", "tools/frontend-dependencies*.mjs", "tools/frontenddepsverify/**", "tools/install-paired-package.sh", "install.sh", "update.sh", "x-ui.sh", "tools/build-client-mapping-capability-fixture.sh", "tools/verify-client-mapping-completion.py", "tools/test-client-mapping-completion.py", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "tools/build-ssh-capability-fixture.sh", "tools/verify-native-ssh-panel.py", "tools/build-snell-capability-fixture.sh", "tools/verify-native-snell-panel.py", "tools/verify-policy-tunnel-completion.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
+    paths: ["core/**", "internal/distribution/**", "internal/policyauthority/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/prepare-core-test-geodata.py", "tools/run-go-test-batches.py", "tools/test-ci-test-tools.py", "tools/build-paired-package.sh", "tools/packagegen/**", "tools/packageverify/**", "tools/packagedeps/**", "tools/frontend-dependencies*.mjs", "tools/frontenddepsverify/**", "tools/install-paired-package.sh", "install.sh", "update.sh", "x-ui.sh", "tools/build-client-mapping-capability-fixture.sh", "tools/verify-client-mapping-completion.py", "tools/test-client-mapping-completion.py", "tools/verify-managed-policy-completion.py", "tools/test-managed-policy-completion.py", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "tools/build-ssh-capability-fixture.sh", "tools/verify-native-ssh-panel.py", "tools/build-snell-capability-fixture.sh", "tools/verify-native-snell-panel.py", "tools/verify-policy-tunnel-completion.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
 permissions:
   contents: read
 env:
@@ -128,6 +128,20 @@ jobs:
         run: bash tools/build-custom-core.sh
       - name: Build original pre-mapping private core
         run: bash tools/build-client-mapping-capability-fixture.sh
+      - name: Managed original account and four actual older writer fences
+        run: |
+          set -euo pipefail
+          go test -json -race -count=1 -timeout 10m ./internal/policyauthority -run '^TestManaged' | tee /tmp/managed-original-journal.jsonl
+          python3 - <<'PYCODE'
+          import json
+          from pathlib import Path
+          events = [json.loads(line) for line in Path('/tmp/managed-original-journal.jsonl').read_text().splitlines()]
+          assert not any(e['Action'] in ('fail', 'skip') for e in events)
+          assert sum(e['Action'] == 'pass' and e.get('Test') == 'TestManagedAccountFencesFourActualOlderWriters' for e in events) == 1
+          for populated in ('false', 'true'):
+              assert sum(e['Action'] == 'pass' and e.get('Test') == f'TestManagedAccountFencesFourActualOlderWriters/{populated}' for e in events) == 1, populated
+          assert sum(e['Action'] == 'pass' and 'Test' not in e for e in events) == 1
+          PYCODE
       - name: Original mapping journal fence and private history proof
         run: |
           set -euo pipefail
@@ -161,6 +175,22 @@ jobs:
             echo 'required node authority discovery/delegation test failed or skipped' >&2
             exit 1
           fi
+      - name: Managed original product and two physical node faults (sqlite)
+        env:
+          XUI_DB_TYPE: sqlite
+          XUI_DB_DSN: ""
+          XUI_TEST_PG_DSN: ""
+          XUI_PG_RESTORE_TEST_DSN: ""
+        run: |
+          set -euo pipefail
+          make dist-stub
+          python3 tools/test-managed-policy-completion.py
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -json -race -count=1 -timeout 10m ./internal/sub \
+            -run '^Test(ManagedPolicyTwoPhysicalNodesActual.*|MieruHTTPExportRealCoreLifecycle|SnellHTTPExportRealCoreTCPUDPQUICAndSharedLifecycle|SSHHTTPExportRealOpenSSHAndSharedLifecycle|SSHHTTPAuthorizedReverseAndStrictNativeOutbound|ClientPolicyBulkHTTPNativeBindingsAndTunnelAccounting)$' | tee /tmp/managed-physical-sqlite.jsonl
+          python3 tools/verify-managed-policy-completion.py physical sqlite /tmp/managed-physical-sqlite.jsonl build/custom-xray
+          go test -json -race -count=1 -timeout 10m ./internal/policyauthority ./internal/web/service ./internal/web/controller ./tools/openapigen \
+            -run '^Test(ManagedPolicyProduct.*|ManagedAccountPagesReadOriginalParentAndAtomicBalances|ClientMappingAccountLookupUsesOriginalReverseProof|GeneratePolicyScopeAndAccountContracts|WalkPackagesExportsAllowedStructsWithoutDIInterfaces|IntegerSchemaFormats)$' | tee /tmp/managed-product-sqlite.jsonl
+          python3 tools/verify-managed-policy-completion.py product sqlite /tmp/managed-product-sqlite.jsonl build/custom-xray
       - name: Canonical client mapping and actual TCP UDP billing (sqlite)
         env:
           XUI_DB_TYPE: sqlite
@@ -533,6 +563,20 @@ jobs:
             echo 'required node authority discovery/delegation test failed or skipped' >&2
             exit 1
           fi
+      - name: Managed original product and two physical node faults (postgres)
+        env:
+          XUI_DB_TYPE: postgres
+          XUI_TEST_PG_DSN: ${{ env.XUI_DB_DSN }}
+        run: |
+          set -euo pipefail
+          make dist-stub
+          python3 tools/test-managed-policy-completion.py
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -json -race -count=1 -timeout 10m ./internal/sub \
+            -run '^Test(ManagedPolicyTwoPhysicalNodesActual.*|MieruHTTPExportRealCoreLifecycle|SnellHTTPExportRealCoreTCPUDPQUICAndSharedLifecycle|SSHHTTPExportRealOpenSSHAndSharedLifecycle|SSHHTTPAuthorizedReverseAndStrictNativeOutbound|ClientPolicyBulkHTTPNativeBindingsAndTunnelAccounting)$' | tee /tmp/managed-physical-postgres.jsonl
+          python3 tools/verify-managed-policy-completion.py physical postgres /tmp/managed-physical-postgres.jsonl build/custom-xray
+          go test -json -race -count=1 -timeout 10m ./internal/policyauthority ./internal/web/service ./internal/web/controller ./tools/openapigen \
+            -run '^Test(ManagedPolicyProduct.*|ManagedAccountPagesReadOriginalParentAndAtomicBalances|ClientMappingAccountLookupUsesOriginalReverseProof|GeneratePolicyScopeAndAccountContracts|WalkPackagesExportsAllowedStructsWithoutDIInterfaces|IntegerSchemaFormats)$' | tee /tmp/managed-product-postgres.jsonl
+          python3 tools/verify-managed-policy-completion.py product postgres /tmp/managed-product-postgres.jsonl build/custom-xray
       - name: Canonical client mapping and actual TCP UDP billing (postgres)
         env:
           XUI_DB_TYPE: postgres

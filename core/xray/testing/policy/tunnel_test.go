@@ -158,7 +158,7 @@ func TestTunnelQuotaStopsExistingFlowsAndReconnectAtHundredMiB(t *testing.T) {
 	}
 	e := s.GetFeature((*clientpolicy.Manager)(nil)).(*clientpolicy.Engine)
 	snap, _ := e.Snapshot("quota")
-	if snap.Reasons != clientpolicy.ReasonQuota || snap.ActiveSessions != 0 || snap.Usage.BilledBytes != 104857600 || snap.Usage.RawUpload+snap.Usage.RawDownload != 52428800 {
+	if snap.Reasons != clientpolicy.ReasonQuota|clientpolicy.ReasonAuthority || snap.ActiveSessions != 0 || snap.Usage.BilledBytes != 104857600 || snap.Usage.RawUpload+snap.Usage.RawDownload != 52428800 {
 		t.Fatalf("quota did not stop at exact admitted budget: %+v sent=%d received=%d", snap, sent, received)
 	}
 	if received > snap.Usage.RawDownload || snap.Usage.RawDownload-received > 65536 || sent < snap.Usage.RawUpload || sent-snap.Usage.RawUpload > 65536 {

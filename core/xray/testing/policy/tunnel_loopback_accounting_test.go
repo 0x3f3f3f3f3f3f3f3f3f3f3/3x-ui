@@ -208,7 +208,7 @@ func TestTunnelLoopbackQuotaUsesPayloadOnce(t *testing.T) {
 	}
 	snap, err = engine.Snapshot("owner")
 	want = clientpolicy.Usage{RawUpload: 20, RawDownload: 20, BilledBytes: 60}
-	if err != nil || snap.Usage != want || snap.Reasons != clientpolicy.ReasonQuota || snap.ActiveSessions != 0 || received.Load() != 20 {
+	if err != nil || snap.Usage != want || snap.Reasons != clientpolicy.ReasonQuota|clientpolicy.ReasonAuthority || snap.ActiveSessions != 0 || received.Load() != 20 {
 		t.Fatalf("quota leaked payload: %+v %v target=%d", snap, err, received.Load())
 	}
 }

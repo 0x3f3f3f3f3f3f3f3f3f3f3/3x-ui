@@ -13,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/app/proxyman/command"
 	"github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/proxy"
+	"github.com/xtls/xray-core/testing/testauthority"
 )
 
 func TestPasswordMixedAliasesShareDirectionalRates(t *testing.T) {
@@ -49,7 +50,7 @@ func TestPasswordMixedAliasesShareDirectionalRates(t *testing.T) {
 			} else {
 				policy.DownloadRate = 1
 			}
-			if err := engine.Apply(policy); err != nil {
+			if err := testauthority.Apply(t, engine, policy); err != nil {
 				t.Fatal(err)
 			}
 			exchange(t, first, bytes.Repeat([]byte{'b'}, 65536))
@@ -89,7 +90,7 @@ func TestPasswordMixedAliasesShareDirectionalRates(t *testing.T) {
 			policy.Version++
 			policy.UploadRate, policy.DownloadRate = 0, 0
 			policy.Multiplier = 500000
-			if err := engine.Apply(policy); err != nil {
+			if err := testauthority.Apply(t, engine, policy); err != nil {
 				t.Fatal(err)
 			}
 			for range 2 {

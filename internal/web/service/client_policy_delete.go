@@ -116,6 +116,23 @@ func confirmAbsentClientPolicyDeletions(ctx context.Context, instanceID string, 
 }
 
 func reconcileDeletedClientPolicies(clientIDs []string) (resultErr error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	coordinator, err := getManagedPolicyCoordinator(ctx, false)
+	if err != nil {
+		return err
+	}
+	if coordinator != nil {
+		for _, batch := range chunkStrings(clientIDs, sqlInChunk) {
+			resultErr = errors.Join(resultErr, coordinator.reconcileDeletions(ctx, batch))
+		}
+		if len(clientIDs) == 0 {
+			resultErr = coordinator.reconcileDeletions(ctx, nil)
+		}
+		if resultErr != nil {
+			return resultErr
+		}
+	}
 	lock.Lock()
 	defer lock.Unlock()
 	process := currentXrayProcess()
@@ -134,10 +151,7 @@ func reconcileDeletedClientPolicies(clientIDs []string) (resultErr error) {
 	if err := json.Unmarshal(process.GetConfig().ClientPolicy, &config); err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 	var ids []string
-	var err error
 	if len(clientIDs) == 0 {
 		ids, err = pendingClientPolicyDeletions(ctx, config.InstanceID, "", true)
 	} else {

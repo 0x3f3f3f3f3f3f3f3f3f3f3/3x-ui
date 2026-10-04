@@ -10,6 +10,7 @@ import (
 
 	"github.com/xtls/xray-core/app/clientpolicy"
 	command "github.com/xtls/xray-core/app/clientpolicy/command"
+	"github.com/xtls/xray-core/testing/testauthority"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -34,7 +35,7 @@ func TestQuotaWindowConfigAndPrivateAPIKeepRealTunnelHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	echo, listen := tcpEcho(t), port(t)
-	start(t, fmt.Sprintf(`{"log":{"loglevel":"error"},"api":{"tag":"control","listen":%q,"services":["ClientPolicyServiceV1"]},"clientPolicy":{"stateFile":%q,"instanceId":"quota-window","policies":[{"clientId":"owner","version":2,"enabled":true,"multiplierMicros":500000,"burstBytes":65536,"quotaBytes":2,"quotaBaselineBytes":100,"quotaBaselineRemainder":500000}]},"inbounds":[{"tag":"owned","listen":"127.0.0.1","port":%d,"protocol":"tunnel","settings":{"network":"tcp","address":"127.0.0.1","port":%d,"clientId":"owner"}}],"outbounds":[{"protocol":"freedom","settings":{"finalRules":[{"action":"allow","ip":["127.0.0.1"]}]}}]}`, socket, state, listen, echo.Addr().(*net.TCPAddr).Port))
+	instance := start(t, fmt.Sprintf(`{"log":{"loglevel":"error"},"api":{"tag":"control","listen":%q,"services":["ClientPolicyServiceV1"]},"clientPolicy":{"stateFile":%q,"instanceId":"quota-window","policies":[{"clientId":"owner","version":2,"enabled":true,"multiplierMicros":500000,"burstBytes":65536,"quotaBytes":2,"quotaBaselineBytes":100,"quotaBaselineRemainder":500000}]},"inbounds":[{"tag":"owned","listen":"127.0.0.1","port":%d,"protocol":"tunnel","settings":{"network":"tcp","address":"127.0.0.1","port":%d,"clientId":"owner"}}],"outbounds":[{"protocol":"freedom","settings":{"finalRules":[{"action":"allow","ip":["127.0.0.1"]}]}}]}`, socket, state, listen, echo.Addr().(*net.TCPAddr).Port))
 	c, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", listen))
 	if err != nil {
 		t.Fatal(err)
@@ -50,9 +51,8 @@ func TestQuotaWindowConfigAndPrivateAPIKeepRealTunnelHistory(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	changed := &clientpolicy.PolicyConfig{ClientId: "owner", Version: 3, Enabled: true, MultiplierMicros: 500000, BurstBytes: 65536, QuotaBytes: 2, QuotaBaselineBytes: 101, QuotaBaselineRemainder: 500000}
-	if _, err := api.ApplyPolicies(ctx, &command.ApplyRequest{Policies: []*clientpolicy.PolicyConfig{changed}}); err != nil {
-		t.Fatal(err)
-	}
+	engine := instance.GetFeature((*clientpolicy.Manager)(nil)).(*clientpolicy.Engine)
+	applyFixturePolicyRPC(t, ctx, api, engine, changed)
 	exchange(t, c, []byte{2})
 	got, err := api.GetClient(ctx, &command.ClientRequest{ClientId: "owner"})
 	if err != nil || got.Policy.QuotaBaselineBytes != 101 || got.Policy.QuotaBaselineRemainder != 500000 || got.Usage.RawUpload != 203 || got.Usage.RawDownload != 2 || got.Usage.BilledBytes != 102 || got.Usage.Remainder != 500000 {
@@ -67,6 +67,15 @@ func TestQuotaWindowConfigAndPrivateAPIKeepRealTunnelHistory(t *testing.T) {
 	if _, err := api.InitializeClient(ctx, &command.InitializeRequest{Policy: changed, Usage: &command.Usage{RawUpload: 201, BilledBytes: 100, Remainder: 500000}}); err != nil {
 		t.Fatal(err)
 	}
+	got, err = api.GetClient(ctx, &command.ClientRequest{ClientId: "seeded"})
+	if err != nil || got.Reasons != uint32(clientpolicy.ReasonAuthority) {
+		t.Fatalf("seeded usage invented execution authority: %+v/%v", got, err)
+	}
+	seeded, _, err := engine.GetClient("seeded")
+	if err != nil {
+		t.Fatal(err)
+	}
+	testauthority.Grant(t, engine, seeded)
 	got, err = api.GetClient(ctx, &command.ClientRequest{ClientId: "seeded"})
 	if err != nil || got.Reasons != 0 || got.Policy.QuotaBaselineBytes != 100 || got.Policy.QuotaBaselineRemainder != 500000 {
 		t.Fatalf("initialization discarded the quota baseline: %+v %v", got, err)

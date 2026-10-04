@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -33,14 +34,23 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/testpg"
 	"github.com/mhsanaei/3x-ui/v3/internal/util/crypto"
 	"github.com/mhsanaei/3x-ui/v3/internal/web/controller"
+	"github.com/mhsanaei/3x-ui/v3/internal/web/global"
 	panelruntime "github.com/mhsanaei/3x-ui/v3/internal/web/runtime"
 	"github.com/mhsanaei/3x-ui/v3/internal/web/service"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
+	"github.com/robfig/cron/v3"
 )
 
+type managedPhysicalWebContext struct{ cron *cron.Cron }
+
+func (s *managedPhysicalWebContext) GetCron() *cron.Cron     { return s.cron }
+func (s *managedPhysicalWebContext) GetCtx() context.Context { return context.Background() }
+func (s *managedPhysicalWebContext) GetWSHub() any           { return nil }
+
 type managedProductHTTPPeer struct {
-	server *httptest.Server
-	token  string
+	server    *httptest.Server
+	token     string
+	partition atomic.Bool
 }
 
 func managedFixtureSecret(t *testing.T) string {
@@ -73,13 +83,22 @@ func newManagedProductHTTPPeerWithToken(t *testing.T, token string) *managedProd
 	if err := database.GetDB().Create(&model.ApiToken{Name: "managed-physical-admin", Token: crypto.HashTokenSHA256(token), Scope: model.ApiScopeAdmin, Enabled: true}).Error; err != nil {
 		t.Fatal(err)
 	}
+	peer := &managedProductHTTPPeer{token: token}
 	router := gin.New()
+	router.Use(managedPhysicalPartitionMiddleware(peer))
 	router.Use(sessions.Sessions("3x-ui", cookie.NewStore([]byte(managedFixtureSecret(t)))))
-	controller.NewManagedPolicyAPIController(router.Group(""))
-	controller.NewNodeAuthorityAPIController(router.Group(""))
+	previousServer := global.GetWebServer()
+	scheduler := cron.New()
+	global.SetWebServer(&managedPhysicalWebContext{cron: scheduler})
+	t.Cleanup(func() {
+		scheduler.Stop()
+		global.SetWebServer(previousServer)
+	})
+	controller.NewAPIController(router.Group(""))
 	server := httptest.NewTLSServer(router)
 	t.Cleanup(server.Close)
-	return &managedProductHTTPPeer{server: server, token: token}
+	peer.server = server
+	return peer
 }
 
 func managedProductRPC[Result any](t *testing.T, peer *managedProductHTTPPeer, method, suffix string, payload any) Result {
@@ -127,12 +146,14 @@ type managedPhysicalManifest struct {
 }
 
 type managedPhysicalNode struct {
-	manifest managedPhysicalManifest
-	token    string
-	process  *exec.Cmd
-	input    io.WriteCloser
-	done     chan struct{}
-	waitErr  error
+	manifest        managedPhysicalManifest
+	token           string
+	process         *exec.Cmd
+	input           io.WriteCloser
+	done            chan struct{}
+	waitErr         error
+	manifestPath    string
+	controlSequence uint64
 }
 
 func startManagedPhysicalNode(t *testing.T, coordinator service.ManagedPolicyCoordinatorStatus, nodeID, multiplier string, quota int64) *managedPhysicalNode {
@@ -168,7 +189,7 @@ func startManagedPhysicalNodeProfile(t *testing.T, coordinator service.ManagedPo
 	if err != nil {
 		t.Fatal(err)
 	}
-	node := &managedPhysicalNode{token: cfg.Token, process: cmd, input: input, done: make(chan struct{})}
+	node := &managedPhysicalNode{token: cfg.Token, process: cmd, input: input, done: make(chan struct{}), manifestPath: cfg.ManifestPath}
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -356,10 +377,12 @@ func runManagedPhysicalNode(t *testing.T, configPath string) {
 		t.Fatal(err)
 	}
 	scanner := bufio.NewScanner(os.Stdin)
+	var sequence uint64
 	for scanner.Scan() {
 		if scanner.Text() == "quit" {
 			return
 		}
+		sequence = runManagedPhysicalControl(t, scanner.Text(), sequence, cfg.ManifestPath, h, node, peer, &manifest)
 	}
 	if err := scanner.Err(); err != nil {
 		t.Fatal(err)

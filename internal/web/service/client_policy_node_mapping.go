@@ -89,9 +89,24 @@ func (s *ClientPolicyNodeMappingService) AuthorityAPI(ctx context.Context, api *
 				request := panelruntime.NodeClientMappingRequest{Binding: panelruntime.NodeAuthorityControlBinding{ExpectedInstanceID: caps.InstanceId, ExpectedBootID: caps.BootId, AuthorityID: m.Authority.AuthorityID, Generation: m.Authority.Generation, NodeID: m.NodeID}, GlobalClientID: m.GlobalClientID, LocalClientID: m.LocalClientID, GlobalPolicyVersion: m.GlobalPolicyVersion, LocalPolicyVersion: m.LocalPolicyVersion, ExpectedPolicyDigest: m.PolicyDigest}
 				if err := s.currentPolicy(tx, request); err != nil {
 					if errors.Is(err, errClientMappingInactive) {
-						continue
+						account, accountErr := s.journal.Account(m.GlobalClientID)
+						if accountErr != nil {
+							return accountErr
+						}
+						if !account.Deleted {
+							continue
+						}
+						if _, originErr := s.journal.ManagedAccountOrigin(m.GlobalClientID); originErr != nil {
+							if errors.Is(originErr, policyauthority.ErrNotFound) {
+								continue
+							}
+							return originErr
+						}
+						// Original revoked mappings still translate authentic final
+						// receipts. Journal issuance/renewal refuse deleted accounts.
+					} else {
+						return err
 					}
-					return err
 				}
 				mappings = append(mappings, m)
 			}

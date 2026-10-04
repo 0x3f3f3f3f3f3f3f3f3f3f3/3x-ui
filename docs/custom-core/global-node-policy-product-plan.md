@@ -33,8 +33,8 @@ Expose explicit coordinator/account status and enrollment via existing authentic
 
 Actual coordinator outage, partition/lease expiry, duplicate/out-of-order reports, node/coordinator restart, deletion and original-anchor restore never replenish held resources or multiply receipts twice. Use clear state/reasons in actual product flows. Current exact literal parent checks refuse nested skips, absent/duplicate owners, wrong backends and missing real binaries. Full Go/three old writers, owning races/vet/YAML/current hashes and clean paired validation pass before one phase review. Resolve material findings in one author pass, retain all declined behaviors with costs/rulings, then normal authorized feature push and independent exact SHA. Continue consumed-source handoff, appended policy-version proofs, multi-source historical dedup, durable legacy/global/node/group/calendar/manual RAW reset acknowledgements and remaining original sidecar/distribution/scale/external-client/final acceptance without a phase-only final.
 
-- [ ] Own actual outage/partition/expiry/restart/delete/original-source recovery without budget replenishment or duplicate billing.
-- [ ] Exact CI/backend parents, zero mandatory skips and final frozen source/binary/probe hashes pass.
+- [x] Own actual outage/partition/expiry/restart/delete/original-source recovery without budget replenishment or duplicate billing.
+- [x] Exact CI/backend parents, zero mandatory skips and final frozen source/binary/probe hashes pass.
 - [ ] Full Go/old writers/vet/frontend/YAML/paired checks pass; commit/task completion.
 - [ ] One phase review and one author correction, normal authorized feature push and exact remote SHA; continue original handoff/version/reset/sidecar/distribution/scale/final work.
 

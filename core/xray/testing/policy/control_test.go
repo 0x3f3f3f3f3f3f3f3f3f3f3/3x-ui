@@ -35,7 +35,7 @@ func TestPrivateControlAPIChangesExistingFlowAndExportsCommittedLedger(t *testin
 	socket := privateSocket(t)
 	echo := tcpEcho(t)
 	listen := port(t)
-	start(t, fmt.Sprintf(`{"log":{"loglevel":"error"},"api":{"tag":"control","listen":%q,"services":["ClientPolicyServiceV1"]},"clientPolicy":{"policies":[{"clientId":"api-owner","version":1,"enabled":true,"multiplierMicros":1000000,"burstBytes":65536,"uploadBytesPerSecond":1}]},"inbounds":[{"tag":"owned","listen":"127.0.0.1","port":%d,"protocol":"tunnel","settings":{"network":"tcp","address":"127.0.0.1","port":%d,"clientId":"api-owner"}}],"outbounds":[{"protocol":"freedom","settings":{"finalRules":[{"action":"allow","ip":["127.0.0.1"]}]}}]}`, socket, listen, echo.Addr().(*net.TCPAddr).Port))
+	instance := start(t, fmt.Sprintf(`{"log":{"loglevel":"error"},"api":{"tag":"control","listen":%q,"services":["ClientPolicyServiceV1"]},"clientPolicy":{"policies":[{"clientId":"api-owner","version":1,"enabled":true,"multiplierMicros":1000000,"burstBytes":65536,"uploadBytesPerSecond":1}]},"inbounds":[{"tag":"owned","listen":"127.0.0.1","port":%d,"protocol":"tunnel","settings":{"network":"tcp","address":"127.0.0.1","port":%d,"clientId":"api-owner"}}],"outbounds":[{"protocol":"freedom","settings":{"finalRules":[{"action":"allow","ip":["127.0.0.1"]}]}}]}`, socket, listen, echo.Addr().(*net.TCPAddr).Port))
 	conn, err := grpc.NewClient("unix://"+socket, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		t.Fatal(err)
@@ -75,9 +75,8 @@ func TestPrivateControlAPIChangesExistingFlowAndExportsCommittedLedger(t *testin
 	}
 	changed := &clientpolicy.PolicyConfig{ClientId: "api-owner", Version: 2, Enabled: true, MultiplierMicros: 2000000, BurstBytes: 65536}
 	began := time.Now()
-	if _, err := api.ApplyPolicies(ctx, &command.ApplyRequest{Policies: []*clientpolicy.PolicyConfig{changed}}); err != nil {
-		t.Fatal(err)
-	}
+	engine := instance.GetFeature((*clientpolicy.Manager)(nil)).(*clientpolicy.Engine)
+	applyFixturePolicyRPC(t, ctx, api, engine, changed)
 	select {
 	case err := <-done:
 		if err != nil || !bytes.Equal(reply, payload) {
