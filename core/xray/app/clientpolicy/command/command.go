@@ -81,6 +81,7 @@ func (s *service) GetCapabilities(ctx context.Context, _ *Empty) (*Capabilities,
 	if c.Persistent && c.BootID != "" {
 		features = append(features, "boot-bound-execution-grants-v1", "monotonic-grant-renewal-v1", "bounded-grant-handoff-v1", "on-demand-authority-requests-v1")
 		features = append(features, "dormant-monotone-usage-reconciliation-v1")
+		features = append(features, "client-authority-history-v1")
 	}
 	return &Capabilities{ApiVersion: 1, CoreVersion: core.VersionStatement()[0], InstanceId: c.InstanceID, Epoch: c.Epoch, Capabilities: features, ReservationRawBytes: c.ReservationRawBytes, BootId: c.BootID}, nil
 }
@@ -144,7 +145,7 @@ func (s *service) GetClient(ctx context.Context, r *ClientRequest) (*ClientState
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	return &ClientState{FirstUsedAt: snap.FirstUsedAt, Policy: policyConfig(p), Usage: usage(snap.Usage), UncertainBytes: snap.UncertainBytes, Reasons: uint32(snap.Reasons), ActiveSessions: uint32(snap.ActiveSessions)}, nil
+	return &ClientState{AuthorityGrantHistory: snap.AuthorityGrantHistory, FirstUsedAt: snap.FirstUsedAt, Policy: policyConfig(p), Usage: usage(snap.Usage), UncertainBytes: snap.UncertainBytes, Reasons: uint32(snap.Reasons), ActiveSessions: uint32(snap.ActiveSessions)}, nil
 }
 
 func (s *service) ApplyPolicies(ctx context.Context, r *ApplyRequest) (*Empty, error) {

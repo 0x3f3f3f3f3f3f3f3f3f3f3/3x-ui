@@ -20,6 +20,11 @@ import (
 )
 
 func TestNodeAuthorityControlHTTPAuthenticationAndBounds(t *testing.T) {
+	testNodeAuthorityControlHTTPAuthenticationAndBounds(t, []string{"requests", "install", "get", "pause", "seal", "renew"})
+}
+
+func testNodeAuthorityControlHTTPAuthenticationAndBounds(t *testing.T, operations []string) {
+	t.Helper()
 	engine, _ := newAPIAuthTestEngine(t)
 	t.Logf("node authority control backend: %s", database.GetDB().Dialector.Name())
 	NewNodeAuthorityAPIController(engine.Group(""))
@@ -35,6 +40,7 @@ func TestNodeAuthorityControlHTTPAuthenticationAndBounds(t *testing.T) {
 	grant := `{"authority":` + authority + `,` + ids + `,"challengeId":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","policyVersion":"1","sequence":"1","capacity":"9007199254740993","upload":` + share + `,"download":` + share + `,"leaseDurationMillis":"1000"}`
 	renewal := `{"expectedBootId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","clientId":"client-a","grantId":"grant-a","challengeId":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","sequence":"1","leaseDurationMillis":"1000"}`
 	bodies := map[string]string{
+		"enroll":   `{"binding":` + binding + `,"globalClientId":"11111111-1111-4111-8111-111111111111","localClientId":"22222222-2222-4222-8222-222222222222","globalPolicyVersion":"7","localPolicyVersion":"1","expectedPolicyDigest":"` + strings.Repeat("a", 64) + `"}`,
 		"requests": `{"binding":` + binding + `,"limit":1}`,
 		"install":  `{"binding":` + binding + `,"grant":` + grant + `}`,
 		"get":      `{"binding":` + binding + `,"clientId":"client-a","grantId":"grant-a"}`,
@@ -71,7 +77,7 @@ func TestNodeAuthorityControlHTTPAuthenticationAndBounds(t *testing.T) {
 		engine.ServeHTTP(w, req)
 		return w
 	}
-	for _, op := range []string{"requests", "install", "get", "pause", "seal", "renew"} {
+	for _, op := range operations {
 		body := []byte(bodies[op])
 		if !json.Valid(body) {
 			t.Fatal("invalid literal fixture", op)
@@ -193,7 +199,7 @@ func TestNodeAuthorityControlHTTPAuthenticationAndBounds(t *testing.T) {
 	for _, cookie := range last {
 		cookies = append(cookies, cookie)
 	}
-	for _, op := range []string{"requests", "install", "get", "pause", "seal", "renew"} {
+	for _, op := range operations {
 		for _, withToken := range []bool{false, true} {
 			t.Run(op+"/session-"+map[bool]string{false: "missing", true: "csrf"}[withToken], func(t *testing.T) {
 				csrf := ""

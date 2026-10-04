@@ -15,6 +15,12 @@ import (
 // Keep lifecycle, SQL connection admission and the owned API across one bounded
 // operation. A lost reply is an error even if the core committed the mutation.
 func withOwnedNodeAuthority(ctx context.Context, binding panelruntime.NodeAuthorityControlBinding, operation func(context.Context, *managedAuthority, panelruntime.NodeAuthorityControlIdentity) error) error {
+	return withOwnedNodeAuthoritySQL(ctx, binding, func(ctx context.Context, owner *managedAuthority, _ *gorm.DB, identity panelruntime.NodeAuthorityControlIdentity) error {
+		return operation(ctx, owner, identity)
+	})
+}
+
+func withOwnedNodeAuthoritySQL(ctx context.Context, binding panelruntime.NodeAuthorityControlBinding, operation func(context.Context, *managedAuthority, *gorm.DB, panelruntime.NodeAuthorityControlIdentity) error) error {
 	if ctx == nil || binding.Validate() != nil {
 		return panelruntime.ErrNodeAuthorityDiscovery
 	}
@@ -36,7 +42,7 @@ func withOwnedNodeAuthority(ctx context.Context, binding panelruntime.NodeAuthor
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	return database.WithCurrentDB(owner.db, func(current *gorm.DB) error {
-		return database.WithConnection(current.WithContext(ctx), func(_ *gorm.DB) error {
+		return database.WithConnection(current.WithContext(ctx), func(connection *gorm.DB) error {
 			if err := owner.validateStartupOwner(ctx); err != nil {
 				return err
 			}
@@ -48,7 +54,7 @@ func withOwnedNodeAuthority(ctx context.Context, binding panelruntime.NodeAuthor
 			if err := identity.Validate(binding); err != nil {
 				return err
 			}
-			err := operation(ctx, owner, identity)
+			err := operation(ctx, owner, connection, identity)
 			return errors.Join(err, owner.validateStartupOwner(ctx))
 		})
 	})

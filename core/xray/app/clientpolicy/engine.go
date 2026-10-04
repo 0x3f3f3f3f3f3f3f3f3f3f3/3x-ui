@@ -129,7 +129,7 @@ func (e *Engine) Snapshot(id string) (Snapshot, error) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return Snapshot{FirstUsedAt: c.firstUsedAt, InstanceID: e.instanceID, Epoch: e.epoch, Sequence: c.sequence, UncertainBytes: c.uncertain, Usage: c.usage, PolicyVersion: c.policy.Version, Reasons: c.reasonsLocked(time.Now()), ActiveSessions: c.activeSessionsLocked()}, nil
+	return Snapshot{AuthorityGrantHistory: c.grant != nil || c.previousGrant != nil, FirstUsedAt: c.firstUsedAt, InstanceID: e.instanceID, Epoch: e.epoch, Sequence: c.sequence, UncertainBytes: c.uncertain, Usage: c.usage, PolicyVersion: c.policy.Version, Reasons: c.reasonsLocked(time.Now()), ActiveSessions: c.activeSessionsLocked()}, nil
 }
 
 func (e *Engine) Remove(id string) error { return e.RemoveVersion(id, 0) }

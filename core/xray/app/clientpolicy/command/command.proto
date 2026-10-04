@@ -58,6 +58,7 @@ message ClientState {
  uint32 reasons = 4;
  uint32 active_sessions = 5;
  int64 first_used_at = 6;
+ bool authority_grant_history = 7;
 }
 message ApplyRequest { repeated xray.app.clientpolicy.PolicyConfig policies = 1; }
 message InitializeRequest { xray.app.clientpolicy.PolicyConfig policy = 1; Usage usage = 2; }

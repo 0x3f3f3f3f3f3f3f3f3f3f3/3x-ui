@@ -61,6 +61,45 @@ function responseObjectSchema(path: string, method = 'get'): OpenApiSchema {
 }
 
 describe('generated OpenAPI runtime contracts', () => {
+  it('documents immutable client enrollment with exact identity and version pairs', () => {
+    const path = '/panel/api/server/clientPolicyAuthority/enroll';
+    const schema = responseObjectSchema(path, 'post');
+    expect(schema.required).toEqual(['instanceId', 'bootId', 'executionRole', 'mapping']);
+    expect(schema.properties?.executionRole?.properties?.mode?.enum).toEqual(['delegated']);
+    const mapping = schema.properties?.mapping;
+    expect(mapping).toMatchObject({ type: 'object', additionalProperties: false });
+    expect(mapping?.required).toEqual([
+      'authority',
+      'nodeAnchor',
+      'nodeId',
+      'sourceId',
+      'globalClientId',
+      'localClientId',
+      'globalPolicyVersion',
+      'localPolicyVersion',
+      'policyDigest',
+    ]);
+    for (const name of ['globalPolicyVersion', 'localPolicyVersion']) {
+      expect(mapping?.properties?.[name]).toMatchObject({ type: 'string' });
+    }
+    for (const name of ['authority', 'nodeAnchor']) {
+      expect(mapping?.properties?.[name]?.properties?.generation).toMatchObject({ type: 'string' });
+    }
+    const example = operation(path, 'post').responses['200']?.content?.['application/json']
+      ?.example as {
+      obj: {
+        mapping: {
+          globalClientId: string;
+          localClientId: string;
+          globalPolicyVersion: string;
+          localPolicyVersion: string;
+        };
+      };
+    };
+    expect(example.obj.mapping.globalClientId).not.toBe(example.obj.mapping.localClientId);
+    expect(example.obj.mapping.globalPolicyVersion).toBe('7');
+    expect(example.obj.mapping.localPolicyVersion).toBe('1');
+  });
   it('documents all authority control responses with bound exact amounts', () => {
     for (const name of ['requests', 'install', 'get', 'pause', 'seal', 'renew']) {
       const schema = responseObjectSchema(

@@ -50,7 +50,7 @@ func (e *Engine) GetClient(id string) (Policy, Snapshot, error) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.policy, Snapshot{FirstUsedAt: c.firstUsedAt, InstanceID: e.instanceID, Epoch: e.epoch, Sequence: c.sequence, Usage: c.usage, UncertainBytes: c.uncertain, PolicyVersion: c.policy.Version, Reasons: c.reasonsLocked(time.Now()), ActiveSessions: c.activeSessionsLocked()}, nil
+	return c.policy, Snapshot{AuthorityGrantHistory: c.grant != nil || c.previousGrant != nil, FirstUsedAt: c.firstUsedAt, InstanceID: e.instanceID, Epoch: e.epoch, Sequence: c.sequence, Usage: c.usage, UncertainBytes: c.uncertain, PolicyVersion: c.policy.Version, Reasons: c.reasonsLocked(time.Now()), ActiveSessions: c.activeSessionsLocked()}, nil
 }
 
 func (e *Engine) Connections(id string) ([]Connection, error) {

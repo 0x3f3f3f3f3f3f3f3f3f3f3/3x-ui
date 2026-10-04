@@ -321,6 +321,81 @@ const nodeAuthorityControlDefinitions = [
 const nodeAuthorityControlEndpoints: Endpoint[] = [
   {
     method: 'POST',
+    path: '/panel/api/server/clientPolicyAuthority/enroll',
+    summary: 'Bind a canonical client to an owned node client with matching enforcement policy.',
+    description:
+      'Requires HTTPS and an admin/node-sync token, verified mTLS, or an authenticated session with CSRF protection. Supply the exact source, boot, coordinator and node binding plus both stable client UUIDs and policy versions. The node proves its current SQL and private-core policy, requires authority-history support, and commits the immutable binding in its original journal. First enrollment requires a fresh client with no usage, reset or grant history. Identical committed retries recover the same evidence after use; changed identities or policies are refused. The operation issues no execution grant. Requests and responses are limited to 32 KiB. New mapping integers are canonical positive decimal strings, bounded to 9223372036854775807.',
+    requestSchema: object({
+      binding: bindingSchema,
+      globalClientId: { type: 'string', format: 'uuid' },
+      localClientId: { type: 'string', format: 'uuid' },
+      globalPolicyVersion: positive,
+      localPolicyVersion: positive,
+      expectedPolicyDigest: { type: 'string', pattern: '^[0-9a-f]{64}$' },
+    }),
+    responseObjectSchema: object({
+      ...identity,
+      mapping: object({
+        authority: object({ authorityId: identifier, generation: positive }),
+        nodeAnchor: object({ authorityId: identifier, generation: positive }),
+        nodeId: identifier,
+        sourceId: identifier,
+        globalClientId: { type: 'string', format: 'uuid' },
+        localClientId: { type: 'string', format: 'uuid' },
+        globalPolicyVersion: positive,
+        localPolicyVersion: positive,
+        policyDigest: { type: 'string', pattern: '^[0-9a-f]{64}$' },
+      }),
+    }),
+    body: JSON.stringify(
+      {
+        binding,
+        globalClientId: '11111111-1111-4111-8111-111111111111',
+        localClientId: '22222222-2222-4222-8222-222222222222',
+        globalPolicyVersion: '7',
+        localPolicyVersion: '1',
+        expectedPolicyDigest: 'a'.repeat(64),
+      },
+      null,
+      2,
+    ),
+    response: JSON.stringify(
+      {
+        success: true,
+        msg: '',
+        obj: {
+          instanceId: binding.expectedInstanceId,
+          bootId: binding.expectedBootId,
+          executionRole: {
+            mode: 'delegated',
+            authorityId: binding.authorityId,
+            generation: binding.generation,
+            nodeId: binding.nodeId,
+          },
+          mapping: {
+            authority: { authorityId: binding.authorityId, generation: String(binding.generation) },
+            nodeAnchor: { authorityId: 'original-node-anchor', generation: '1' },
+            nodeId: binding.nodeId,
+            sourceId: binding.expectedInstanceId,
+            globalClientId: '11111111-1111-4111-8111-111111111111',
+            localClientId: '22222222-2222-4222-8222-222222222222',
+            globalPolicyVersion: '7',
+            localPolicyVersion: '1',
+            policyDigest: 'a'.repeat(64),
+          },
+        },
+      },
+      null,
+      2,
+    ),
+    errorResponse: JSON.stringify({
+      success: false,
+      msg: 'invalid or unavailable node authority discovery',
+      obj: null,
+    }),
+  },
+  {
+    method: 'POST',
     path: '/panel/api/server/clientPolicyAuthority/requests',
     ...nodeAuthorityControlDefinitions[0],
   },

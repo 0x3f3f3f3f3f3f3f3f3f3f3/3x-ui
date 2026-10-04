@@ -13,6 +13,7 @@ import (
 )
 
 func registerNodeAuthorityControls(api *gin.RouterGroup) {
+	registerNodeClientMapping(api)
 	node := &service.ClientPolicyNodeService{}
 	api.POST("/server/clientPolicyAuthority/requests", func(c *gin.Context) { handleNodeAuthorityControl(c, node.ReadAuthorityRequests) })
 	api.POST("/server/clientPolicyAuthority/install", func(c *gin.Context) { handleNodeAuthorityControl(c, node.InstallAuthorityGrant) })

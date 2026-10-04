@@ -146,6 +146,7 @@ func TestCheckAPIAuth_AcceptsVerifiedClientCert(t *testing.T) {
 
 func TestNodeSyncScopeAllowlistMatchesRemoteInventory(t *testing.T) {
 	expected := map[string]map[string]struct{}{
+		"/server/clientPolicyAuthority/enroll":   {http.MethodPost: {}},
 		"/server/clientPolicyAuthority/requests": {http.MethodPost: {}},
 		"/server/clientPolicyAuthority/install":  {http.MethodPost: {}},
 		"/server/clientPolicyAuthority/get":      {http.MethodPost: {}},

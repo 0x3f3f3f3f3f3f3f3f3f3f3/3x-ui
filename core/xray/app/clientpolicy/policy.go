@@ -84,13 +84,14 @@ type Metadata struct {
 }
 
 type Snapshot struct {
-	FirstUsedAt    int64  `json:"firstUsedAt,omitempty"`
-	InstanceID     string `json:"instanceId"`
-	Epoch          uint64 `json:"epoch"`
-	Sequence       uint64 `json:"sequence"`
-	UncertainBytes uint64 `json:"uncertainBytes"`
-	Usage          Usage  `json:"usage"`
-	PolicyVersion  uint64 `json:"policyVersion"`
-	Reasons        Reason `json:"reasons"`
-	ActiveSessions int    `json:"activeSessions"`
+	AuthorityGrantHistory bool   `json:"authorityGrantHistory,omitempty"`
+	FirstUsedAt           int64  `json:"firstUsedAt,omitempty"`
+	InstanceID            string `json:"instanceId"`
+	Epoch                 uint64 `json:"epoch"`
+	Sequence              uint64 `json:"sequence"`
+	UncertainBytes        uint64 `json:"uncertainBytes"`
+	Usage                 Usage  `json:"usage"`
+	PolicyVersion         uint64 `json:"policyVersion"`
+	Reasons               Reason `json:"reasons"`
+	ActiveSessions        int    `json:"activeSessions"`
 }

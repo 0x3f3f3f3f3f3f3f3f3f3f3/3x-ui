@@ -1111,15 +1111,16 @@ func (x *Usage) GetRemainder() uint64 {
 }
 
 type ClientState struct {
-	state          protoimpl.MessageState     `protogen:"open.v1"`
-	Policy         *clientpolicy.PolicyConfig `protobuf:"bytes,1,opt,name=policy,proto3" json:"policy,omitempty"`
-	Usage          *Usage                     `protobuf:"bytes,2,opt,name=usage,proto3" json:"usage,omitempty"`
-	UncertainBytes uint64                     `protobuf:"varint,3,opt,name=uncertain_bytes,json=uncertainBytes,proto3" json:"uncertain_bytes,omitempty"`
-	Reasons        uint32                     `protobuf:"varint,4,opt,name=reasons,proto3" json:"reasons,omitempty"`
-	ActiveSessions uint32                     `protobuf:"varint,5,opt,name=active_sessions,json=activeSessions,proto3" json:"active_sessions,omitempty"`
-	FirstUsedAt    int64                      `protobuf:"varint,6,opt,name=first_used_at,json=firstUsedAt,proto3" json:"first_used_at,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                 protoimpl.MessageState     `protogen:"open.v1"`
+	Policy                *clientpolicy.PolicyConfig `protobuf:"bytes,1,opt,name=policy,proto3" json:"policy,omitempty"`
+	Usage                 *Usage                     `protobuf:"bytes,2,opt,name=usage,proto3" json:"usage,omitempty"`
+	UncertainBytes        uint64                     `protobuf:"varint,3,opt,name=uncertain_bytes,json=uncertainBytes,proto3" json:"uncertain_bytes,omitempty"`
+	Reasons               uint32                     `protobuf:"varint,4,opt,name=reasons,proto3" json:"reasons,omitempty"`
+	ActiveSessions        uint32                     `protobuf:"varint,5,opt,name=active_sessions,json=activeSessions,proto3" json:"active_sessions,omitempty"`
+	FirstUsedAt           int64                      `protobuf:"varint,6,opt,name=first_used_at,json=firstUsedAt,proto3" json:"first_used_at,omitempty"`
+	AuthorityGrantHistory bool                       `protobuf:"varint,7,opt,name=authority_grant_history,json=authorityGrantHistory,proto3" json:"authority_grant_history,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *ClientState) Reset() {
@@ -1192,6 +1193,13 @@ func (x *ClientState) GetFirstUsedAt() int64 {
 		return x.FirstUsedAt
 	}
 	return 0
+}
+
+func (x *ClientState) GetAuthorityGrantHistory() bool {
+	if x != nil {
+		return x.AuthorityGrantHistory
+	}
+	return false
 }
 
 type ApplyRequest struct {
@@ -1873,14 +1881,15 @@ const file_app_clientpolicy_command_command_proto_rawDesc = "" +
 	"raw_upload\x18\x01 \x01(\x04R\trawUpload\x12!\n" +
 	"\fraw_download\x18\x02 \x01(\x04R\vrawDownload\x12!\n" +
 	"\fbilled_bytes\x18\x03 \x01(\x04R\vbilledBytes\x12\x1c\n" +
-	"\tremainder\x18\x04 \x01(\x04R\tremainder\"\x99\x02\n" +
+	"\tremainder\x18\x04 \x01(\x04R\tremainder\"\xd1\x02\n" +
 	"\vClientState\x12;\n" +
 	"\x06policy\x18\x01 \x01(\v2#.xray.app.clientpolicy.PolicyConfigR\x06policy\x12=\n" +
 	"\x05usage\x18\x02 \x01(\v2'.xray.app.clientpolicy.command.v1.UsageR\x05usage\x12'\n" +
 	"\x0funcertain_bytes\x18\x03 \x01(\x04R\x0euncertainBytes\x12\x18\n" +
 	"\areasons\x18\x04 \x01(\rR\areasons\x12'\n" +
 	"\x0factive_sessions\x18\x05 \x01(\rR\x0eactiveSessions\x12\"\n" +
-	"\rfirst_used_at\x18\x06 \x01(\x03R\vfirstUsedAt\"O\n" +
+	"\rfirst_used_at\x18\x06 \x01(\x03R\vfirstUsedAt\x126\n" +
+	"\x17authority_grant_history\x18\a \x01(\bR\x15authorityGrantHistory\"O\n" +
 	"\fApplyRequest\x12?\n" +
 	"\bpolicies\x18\x01 \x03(\v2#.xray.app.clientpolicy.PolicyConfigR\bpolicies\"\x8f\x01\n" +
 	"\x11InitializeRequest\x12;\n" +
