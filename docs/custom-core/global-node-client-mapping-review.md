@@ -1,0 +1,25 @@
+# Mapping phase review and author correction
+
+The sole fresh review covers e0e8b6cb..41c3fac3 after all four implementation tasks and full owning task-done logs complete. The earlier typed-transport phase remains closed. Verdict: C0/I2/M0, two fixes required before publication. Reviewed96 source inputs/five binaries and both17/native5 backend logs match; no optional skip is credited as required acceptance.
+
+Important finding1: retained immutable mapping A remained in the journal after deletion or a canonical version advance. The current factory returned immediately on A's invalidation, preventing independently valid mapping B from rebuilding on the same node. Important finding2: one obsolete local-version demand returned an error for the entire128-entry page, including when valid B had already been selected within limit1. Both are per-client isolation defects, not requests to implement mutable policy proofs.
+
+The reviewer reproduced both against unchanged41c3fac3 using read-only overlays and an actual two-client single-node enrollment fixture; the fixture is not two-node business evidence. Meaningful failures and overlay provenance, plus initial sandbox and fixture setup failures, remain in the external evidence directory.
+
+One author correction introduces a private expected-invalidation result for missing/deleted/version-stale desired clients, deleted/version-stale canonical accounts and pending policy fingerprints. The factory filters only that result. SQL failures, malformed policy/reset evidence, authority identity mismatches and inconsistent original journal policy still abort. The physical-node helper now propagates deletion-query errors separately instead of collapsing them into an account-state refusal. Immutable mappings and original late-settlement evidence remain retained; previously pinned valid historical grant access is not rewritten. Current factory refuses new access for an inactive account.
+
+Demand translation fetches all128 bounded requests, filters unknown or obsolete clients, then returns at most the requested number of independently valid cloned demands. Grant install/state version checks remain strict. Regression cases include obsolete A before and after limit1, actual fresh B enrollment, pending A SQL fingerprint, canonical A version advance/deletion, unchanged original A/B evidence, no peer query for deleted A, an actual peer query for valid B, and a deletion-table SQL fault that aborts factory loading.
+
+Author owning RED first exposed the demand defect and a test ChangePolicy signature setup error; the corrected fixture RED independently fails both original parents. First two-parent GREEN passes. All failures are retained. Final frozen96-input/five-binary author snapshot is `client-mapping-author-isolation-final-source-inputs.json`; final SQLite17 parents/service15.920s/controller3.309s/runtime2.392s/sub12.805s, PostgreSQL17 parents55.323s/5.108s/2.398s/17.947s and full runtime76 literal parents (75 ordinary tests plus one fuzz seed owner)5.861s pass without FAIL/SKIP/no-tests. Corrected full Go52 package results/3109 ordinary Test PASS parents exits0; its101 conditional skipped cases are explicitly listed and not counted. All96 inputs/five binaries match in `client-mapping-author-isolation-current-acceptance.json`. Normal publication follows. Initial final-gate attempts hit actual disk exhaustion during linking and journal exhaustion fixtures; none count as acceptance. After compiler quiescence, the original audited cache script removed279 unchanged old compiler archives/1074664300bytes with a fsynced itemized record. Sources, modules, binaries, fixtures and all evidence remain retained. Retests use distinct post-disk log paths.
+
+Explicit scope rulings from this review, including costs:
+
+- Global/node model/API/UI and managed coordinator: defer to the prepared next product; mapping alone is not a global policy product. Existing scope guards remain.
+- Actual two-node quota/rate/burst/outage and distributed fractional settlement: defer; single-node real2x and synthetic wire preservation do not establish aggregate enforcement.
+- Consumed-source adoption and mutable version proofs: defer; the individual changed/consumed client remains unavailable. Cross-client disruption is fixed here.
+- Authority loss/replacement, source clones, multi-source history and old-boot settlement: defer; original anchors remain mandatory and uncertain capacity may remain held. SQL projection roundtrips establish projection preservation only.
+- Waiter saturation, fairness beyond one128-entry page and scale/performance: defer to original performance work; bounded page filtering does not promise queue fairness.
+- Closed transport semantics: do not reopen that phase; its original owning acceptance remains required.
+- Original native interoperability, sidecar migration, exports/notifications, distribution/platform and final A–H work: remain open; preserved native gates do not complete them.
+
+No second reviewer or additional review round is requested. The original whole-project objective continues after this phase's authorized feature publication.

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
@@ -87,6 +88,9 @@ func (s *ClientPolicyNodeMappingService) AuthorityAPI(ctx context.Context, api *
 				}
 				request := panelruntime.NodeClientMappingRequest{Binding: panelruntime.NodeAuthorityControlBinding{ExpectedInstanceID: caps.InstanceId, ExpectedBootID: caps.BootId, AuthorityID: m.Authority.AuthorityID, Generation: m.Authority.Generation, NodeID: m.NodeID}, GlobalClientID: m.GlobalClientID, LocalClientID: m.LocalClientID, GlobalPolicyVersion: m.GlobalPolicyVersion, LocalPolicyVersion: m.LocalPolicyVersion, ExpectedPolicyDigest: m.PolicyDigest}
 				if err := s.currentPolicy(tx, request); err != nil {
+					if errors.Is(err, errClientMappingInactive) {
+						continue
+					}
 					return err
 				}
 				mappings = append(mappings, m)
@@ -127,7 +131,7 @@ func (s *ClientPolicyNodeMappingService) currentPolicy(tx *gorm.DB, request pane
 		return err
 	}
 	if account.Deleted || account.Policy.Version != request.GlobalPolicyVersion {
-		return ErrClientPolicyLedger
+		return errClientMappingInactive
 	}
 	global := request
 	global.LocalClientID, global.LocalPolicyVersion = request.GlobalClientID, request.GlobalPolicyVersion

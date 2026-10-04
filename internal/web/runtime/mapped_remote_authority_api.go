@@ -82,7 +82,7 @@ func (a *MappedRemoteAuthorityAPI) ReadAuthorityRequests(ctx context.Context, bi
 			continue
 		}
 		if demand.PolicyVersion != m.LocalPolicyVersion {
-			return nil, ErrNodeAuthorityDiscovery
+			continue
 		}
 		if len(result.Requests) >= int(limit) {
 			continue

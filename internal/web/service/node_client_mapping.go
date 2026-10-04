@@ -15,6 +15,9 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// Expected per-client invalidation is distinct from SQL or authority failures.
+var errClientMappingInactive = errors.New("client mapping does not authorize current policy")
+
 func (*ClientPolicyNodeService) EnrollClientMapping(ctx context.Context, request panelruntime.NodeClientMappingRequest) (*panelruntime.NodeClientMappingResult, error) {
 	return ownedNodeClientMapping(ctx, request, enrollOwnedNodeClientMapping)
 }
@@ -38,18 +41,30 @@ func ownedNodeClientMapping(ctx context.Context, request panelruntime.NodeClient
 func mappingDesiredPolicy(tx *gorm.DB, request panelruntime.NodeClientMappingRequest) (*clientpolicy.PolicyConfig, error) {
 	var client model.ClientRecord
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("stable_id = ?", request.LocalClientID).First(&client).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errClientMappingInactive
+		}
 		return nil, err
 	}
-	if client.DesiredPolicyVersion <= 0 || uint64(client.DesiredPolicyVersion) != request.LocalPolicyVersion || rejectDeletedClientPolicies(tx, []string{request.LocalClientID}) != nil {
-		return nil, ErrClientPolicyLedger
+	if client.DesiredPolicyVersion <= 0 || uint64(client.DesiredPolicyVersion) != request.LocalPolicyVersion {
+		return nil, errClientMappingInactive
+	}
+	if err := rejectDeletedClientPolicies(tx, []string{request.LocalClientID}); err != nil {
+		if errors.Is(err, clientpolicy.ErrRevoked) {
+			return nil, errClientMappingInactive
+		}
+		return nil, err
 	}
 	resets, err := latestClientPolicyResets(tx, []string{request.LocalClientID})
 	if err != nil {
 		return nil, err
 	}
 	p, fingerprint, err := fingerprintClientPolicy(client, resets[request.LocalClientID])
-	if err != nil || fingerprint != client.PolicyFingerprint {
-		return nil, ErrManagedConfigStale
+	if err != nil {
+		return nil, err
+	}
+	if fingerprint != client.PolicyFingerprint {
+		return nil, errClientMappingInactive
 	}
 	return &clientpolicy.PolicyConfig{ClientId: p.ClientID, Version: uint64(client.DesiredPolicyVersion), Enabled: p.Enabled, MultiplierMicros: p.Multiplier, QuotaBytes: p.QuotaBytes, UploadBytesPerSecond: p.UploadRate, DownloadBytesPerSecond: p.DownloadRate, BurstBytes: p.BurstBytes, ExpiresAt: p.ExpiresAt, QuotaBaselineBytes: p.QuotaBaselineBytes, QuotaBaselineRemainder: p.QuotaBaselineRemainder}, nil
 }

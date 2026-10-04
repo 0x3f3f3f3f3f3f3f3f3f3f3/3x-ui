@@ -17,6 +17,8 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/policyauthority"
 	panelruntime "github.com/mhsanaei/3x-ui/v3/internal/web/runtime"
+	"github.com/xtls/xray-core/app/clientpolicy"
+	"google.golang.org/protobuf/proto"
 	"gorm.io/gorm"
 )
 
@@ -49,7 +51,9 @@ func TestCoordinatorClientMappingPinsOriginalJournal(t *testing.T) {
 		t.Fatal(err)
 	}
 	var changeDuringProof atomic.Bool
+	var peerCalls atomic.Int32
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		peerCalls.Add(1)
 		var result any
 		var err error
 		if req.URL.Path == "/panel/api/server/clientPolicyAuthority" {
@@ -66,6 +70,12 @@ func TestCoordinatorClientMappingPinsOriginalJournal(t *testing.T) {
 			}
 			if err == nil && changeDuringProof.CompareAndSwap(true, false) {
 				err = database.GetDB().Table("clients").Where("stable_id = ?", r.GlobalClientID).Update("total_gb", 9999).Error
+			}
+		} else if req.URL.Path == "/panel/api/server/clientPolicyAuthority/get" {
+			var body panelruntime.NodeAuthorityGrantRequest
+			err = json.NewDecoder(req.Body).Decode(&body)
+			if err == nil {
+				result, err = f.node.GetAuthorityGrant(req.Context(), body)
 			}
 		} else {
 			w.WriteHeader(404)
@@ -160,10 +170,105 @@ func TestCoordinatorClientMappingPinsOriginalJournal(t *testing.T) {
 	if result, err := svc.Enroll(context.Background(), pinned, bad); err == nil || result != nil {
 		t.Fatal("unknown global identity admitted")
 	}
+	localB := *f.client
+	localB.Id, localB.StableID, localB.Email = 0, "44444444-4444-4444-8444-444444444444", "mapping-local-b"
+	localB.DesiredPolicyVersion = 1
+	_, localFingerprint, err := fingerprintClientPolicy(localB, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	localB.PolicyFingerprint = localFingerprint
+	if err := database.GetDB().Create(&localB).Error; err != nil {
+		t.Fatal(err)
+	}
+	actualA, err := f.owner.api.GetClient(context.Background(), r.LocalClientID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policyB := proto.Clone(actualA.Policy).(*clientpolicy.PolicyConfig)
+	policyB.ClientId = localB.StableID
+	if err := f.owner.api.Apply(context.Background(), []*clientpolicy.PolicyConfig{policyB}); err != nil {
+		t.Fatal(err)
+	}
+	localSeed := account.Seed
+	localSeed.ClientID = localB.StableID
+	if err := f.owner.state.Journal.AddAccount(localSeed); err != nil {
+		t.Fatal(err)
+	}
+	globalB := global
+	globalB.Id, globalB.StableID, globalB.Email = 0, "55555555-5555-4555-8555-555555555555", "mapping-global-b"
+	_, globalFingerprint, err := fingerprintClientPolicy(globalB, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	globalB.PolicyFingerprint = globalFingerprint
+	if err := database.GetDB().Create(&globalB).Error; err != nil {
+		t.Fatal(err)
+	}
+	globalSeed := seed
+	globalSeed.ClientID = globalB.StableID
+	if err := f.journal.AddAccount(globalSeed); err != nil {
+		t.Fatal(err)
+	}
+	requestB := r
+	requestB.LocalClientID, requestB.GlobalClientID = localB.StableID, globalB.StableID
+	proofB, err := svc.Enroll(context.Background(), pinned, requestB)
+	if err != nil || proofB == nil {
+		t.Fatal("second actual node policy enrollment failed", err)
+	}
+	assertValidB := func() {
+		t.Helper()
+		if result, err := svc.AuthorityAPI(context.Background(), pinned); err != nil || result == nil {
+			t.Fatal("inactive A blocked independently proven B", err)
+		}
+		storedB, err := f.journal.LookupClientMapping(policyauthority.ClientMappingCoordinator, requestB.Binding.ExpectedInstanceID, requestB.LocalClientID)
+		if err != nil || storedB != proofB.Mapping {
+			t.Fatal("filtering erased or retargeted B evidence", err)
+		}
+	}
+	assertValidB()
+	if err := database.GetDB().Table("clients").Where("stable_id = ?", r.GlobalClientID).Update("total_gb", 9999).Error; err != nil {
+		t.Fatal(err)
+	}
+	assertValidB()
+	if err := database.GetDB().Table("clients").Where("stable_id = ?", r.GlobalClientID).Update("total_gb", 10000).Error; err != nil {
+		t.Fatal(err)
+	}
+	advanced := seed.Policy
+	advanced.Version++
+	if _, err := f.journal.ChangePolicy(policyauthority.ChangeRequest{Identity: f.journal.Identity(), ClientID: r.GlobalClientID, RequestID: "mapping-a-version-ahead", ExpectedVersion: seed.Policy.Version, Policy: advanced}); err != nil {
+		t.Fatal(err)
+	}
+	assertValidB()
+	if result, err := svc.Enroll(context.Background(), pinned, r); err == nil || result != nil {
+		t.Fatal("obsolete A regained enrollment authority")
+	}
 	if err := f.journal.Tombstone(r.GlobalClientID); err != nil {
 		t.Fatal(err)
 	}
+	assertValidB()
+	filtered, err := svc.AuthorityAPI(context.Background(), pinned)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforePeer := peerCalls.Load()
+	if result, err := filtered.GetAuthorityGrant(context.Background(), r.GlobalClientID, "unknown-grant"); err == nil || result != nil || peerCalls.Load() != beforePeer {
+		t.Fatal("deleted A retained grant access in current factory")
+	}
+	if result, err := filtered.GetAuthorityGrant(context.Background(), requestB.GlobalClientID, "unknown-grant"); err == nil || result != nil || peerCalls.Load() != beforePeer+1 {
+		t.Fatal("valid B could not reach its actual node grant operation", err)
+	}
+	retained, err = f.journal.LookupClientMapping(policyauthority.ClientMappingCoordinator, r.Binding.ExpectedInstanceID, r.LocalClientID)
+	if err != nil || retained != stored {
+		t.Fatal("filtering erased original inactive A evidence", err)
+	}
+	if err := database.GetDB().Migrator().DropTable(&model.ClientPolicyTombstone{}); err != nil {
+		t.Fatal(err)
+	}
 	if result, err := svc.AuthorityAPI(context.Background(), pinned); err == nil || result != nil {
-		t.Fatal("deleted global account retained execution API")
+		t.Fatal("database failure was silently filtered")
+	}
+	if err := database.GetDB().AutoMigrate(&model.ClientPolicyTombstone{}); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -27,7 +27,7 @@ func TestMappedRemoteAuthorityAPITranslatesCanonicalIdentity(t *testing.T) {
 		t.Fatal("invalid literal mapping evidence")
 	}
 	var calls atomic.Int32
-	var staleBoot, changedVersion atomic.Bool
+	var staleBoot, changedVersion, obsoleteAfterLimit atomic.Bool
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		calls.Add(1)
 		if req.URL.Path == "/panel/api/server/clientPolicyAuthority" {
@@ -57,10 +57,16 @@ func TestMappedRemoteAuthorityAPITranslatesCanonicalIdentity(t *testing.T) {
 				w.WriteHeader(400)
 				return
 			}
-			response := `{"success":true,"obj":{` + controlRemoteIdentityJSON() + `,"requests":{"instanceId":"private-node-instance","bootId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","requests":[{"requestId":"dddddddddddddddddddddddddddddddd","clientId":"00000000-0000-4000-8000-000000000001","policyVersion":"1","previousGrantId":""},{"requestId":"cccccccccccccccccccccccccccccccc","clientId":"22222222-2222-4222-8222-222222222222","policyVersion":"1","previousGrantId":"prior-a"}]}}}`
+			unknown := `{"requestId":"dddddddddddddddddddddddddddddddd","clientId":"00000000-0000-4000-8000-000000000001","policyVersion":"1","previousGrantId":""}`
+			first := `{"requestId":"cccccccccccccccccccccccccccccccc","clientId":"22222222-2222-4222-8222-222222222222","policyVersion":"1","previousGrantId":"prior-a"}`
+			second := `{"requestId":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","clientId":"44444444-4444-4444-8444-444444444444","policyVersion":"1","previousGrantId":"prior-b"}`
 			if changedVersion.Load() {
-				response = strings.ReplaceAll(response, `"policyVersion":"1"`, `"policyVersion":"2"`)
+				first = strings.Replace(first, `"policyVersion":"1"`, `"policyVersion":"2"`, 1)
 			}
+			if obsoleteAfterLimit.Load() {
+				first, second = second, first
+			}
+			response := `{"success":true,"obj":{` + controlRemoteIdentityJSON() + `,"requests":{"instanceId":"private-node-instance","bootId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","requests":[` + unknown + `,` + first + `,` + second + `]}}}`
 			_, _ = w.Write([]byte(response))
 			return
 		case "install":
@@ -97,7 +103,9 @@ func TestMappedRemoteAuthorityAPITranslatesCanonicalIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mappings := []policyauthority.ClientMapping{proof.Mapping}
+	secondMapping := proof.Mapping
+	secondMapping.LocalClientID, secondMapping.GlobalClientID = "44444444-4444-4444-8444-444444444444", "55555555-5555-4555-8555-555555555555"
+	mappings := []policyauthority.ClientMapping{proof.Mapping, secondMapping}
 	api, err := NewMappedRemoteAuthorityAPI(pinned, mappings)
 	if err != nil || api == nil {
 		t.Fatalf("canonical/local mapping adapter unavailable: %v", err)
@@ -170,8 +178,12 @@ func TestMappedRemoteAuthorityAPITranslatesCanonicalIdentity(t *testing.T) {
 		}
 	}
 	changedVersion.Store(true)
-	if result, err := api.ReadAuthorityRequests(context.Background(), authority, 1); err == nil || result != nil {
-		t.Fatal("changed local demand version accepted")
+	for _, afterLimit := range []bool{false, true} {
+		obsoleteAfterLimit.Store(afterLimit)
+		result, err := api.ReadAuthorityRequests(context.Background(), authority, 1)
+		if err != nil || result == nil || len(result.Requests) != 1 || result.Requests[0].ClientId != secondMapping.GlobalClientID || result.Requests[0].PolicyVersion != 7 || result.Requests[0].PreviousGrantId != "prior-b" {
+			t.Fatalf("obsolete client blocked unrelated valid demand (after limit=%t): %+v/%v", afterLimit, result, err)
+		}
 	}
 	if result, err := api.GetAuthorityGrant(context.Background(), r.GlobalClientID, "grant-a"); err == nil || result != nil {
 		t.Fatal("changed local grant version accepted")
