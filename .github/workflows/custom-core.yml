@@ -2,9 +2,9 @@ name: Custom core
 on:
   push:
     branches: [feature/custom-xray-unified-policy, feature/paired-custom-core-distribution]
-    paths: ["core/**", "internal/distribution/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/prepare-core-test-geodata.py", "tools/run-go-test-batches.py", "tools/test-ci-test-tools.py", "tools/build-paired-package.sh", "tools/packagegen/**", "tools/packageverify/**", "tools/packagedeps/**", "tools/frontend-dependencies*.mjs", "tools/frontenddepsverify/**", "tools/install-paired-package.sh", "install.sh", "update.sh", "x-ui.sh", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "tools/build-ssh-capability-fixture.sh", "tools/verify-native-ssh-panel.py", "tools/build-snell-capability-fixture.sh", "tools/verify-native-snell-panel.py", "tools/verify-policy-tunnel-completion.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
+    paths: ["core/**", "internal/distribution/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/prepare-core-test-geodata.py", "tools/run-go-test-batches.py", "tools/test-ci-test-tools.py", "tools/build-paired-package.sh", "tools/packagegen/**", "tools/packageverify/**", "tools/packagedeps/**", "tools/frontend-dependencies*.mjs", "tools/frontenddepsverify/**", "tools/install-paired-package.sh", "install.sh", "update.sh", "x-ui.sh", "tools/build-client-mapping-capability-fixture.sh", "tools/verify-client-mapping-completion.py", "tools/test-client-mapping-completion.py", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "tools/build-ssh-capability-fixture.sh", "tools/verify-native-ssh-panel.py", "tools/build-snell-capability-fixture.sh", "tools/verify-native-snell-panel.py", "tools/verify-policy-tunnel-completion.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
   pull_request:
-    paths: ["core/**", "internal/distribution/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/prepare-core-test-geodata.py", "tools/run-go-test-batches.py", "tools/test-ci-test-tools.py", "tools/build-paired-package.sh", "tools/packagegen/**", "tools/packageverify/**", "tools/packagedeps/**", "tools/frontend-dependencies*.mjs", "tools/frontenddepsverify/**", "tools/install-paired-package.sh", "install.sh", "update.sh", "x-ui.sh", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "tools/build-ssh-capability-fixture.sh", "tools/verify-native-ssh-panel.py", "tools/build-snell-capability-fixture.sh", "tools/verify-native-snell-panel.py", "tools/verify-policy-tunnel-completion.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
+    paths: ["core/**", "internal/distribution/**", "internal/database/**", "internal/web/service/**", "internal/web/controller/**", "internal/web/job/**", "internal/web/runtime/**", "internal/web/web.go", "internal/xray/**", "tools/build-custom-core.sh", "tools/prepare-core-test-geodata.py", "tools/run-go-test-batches.py", "tools/test-ci-test-tools.py", "tools/build-paired-package.sh", "tools/packagegen/**", "tools/packageverify/**", "tools/packagedeps/**", "tools/frontend-dependencies*.mjs", "tools/frontenddepsverify/**", "tools/install-paired-package.sh", "install.sh", "update.sh", "x-ui.sh", "tools/build-client-mapping-capability-fixture.sh", "tools/verify-client-mapping-completion.py", "tools/test-client-mapping-completion.py", "tools/build-mieru-capability-fixture.sh", "tools/verify-native-mieru-panel.py", "tools/build-ssh-capability-fixture.sh", "tools/verify-native-ssh-panel.py", "tools/build-snell-capability-fixture.sh", "tools/verify-native-snell-panel.py", "tools/verify-policy-tunnel-completion.py", "internal/sub/**", "internal/util/link/**", "frontend/**", "go.mod", "go.sum", ".github/workflows/custom-core.yml"]
 permissions:
   contents: read
 env:
@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v7
         with:
           go-version: 1.27.1
@@ -124,6 +126,26 @@ jobs:
           PYCODE
       - name: Build custom core
         run: bash tools/build-custom-core.sh
+      - name: Build original pre-mapping private core
+        run: bash tools/build-client-mapping-capability-fixture.sh
+      - name: Original mapping journal fence and private history proof
+        run: |
+          set -euo pipefail
+          go test -race -count=1 -v ./internal/policyauthority -run '^TestClientMapping' | tee /tmp/client-mapping-journal.log
+          go -C core/xray test -race -count=1 -v ./app/clientpolicy ./app/clientpolicy/command -run '^TestClientAuthorityHistory' | tee /tmp/client-mapping-history.log
+          python3 - <<'PYCODE'
+          import re
+          from pathlib import Path
+          required = {
+              '/tmp/client-mapping-journal.log': ['TestClientMappingRetainsBothAnchorsAndUsedRetry', 'TestClientMappingRefusesRetargetAndHiddenHistory', 'TestClientMappingFencesOlderWritersAndCorruption', 'TestClientMappingPreservesResetProgressFence', 'TestClientMappingRefusesInitialSourceAndHistoricalGrant', 'TestClientMappingPagesAcrossNodesWithoutResettingGlobalBalance', 'TestClientMappingCursorFitsMaximumSource', 'TestClientMappingConcurrentRetryCommitsOnce', 'TestClientMappingRejectsCorruption'],
+              '/tmp/client-mapping-history.log': ['TestClientAuthorityHistorySurvivesSealAndReopen', 'TestClientAuthorityHistoryPrivateRPC'],
+          }
+          for path, names in required.items():
+              log = Path(path).read_text()
+              passed = re.findall(r'^--- PASS: (Test\w+) ', log, re.M)
+              assert all(passed.count(name) == 1 for name in names), path
+              assert not re.search(r'^\s*--- (FAIL|SKIP):|^FAIL(?:\s|$)|no tests to run', log, re.M), path
+          PYCODE
       - name: Owned node authority discovery and delegation (sqlite)
         run: |
           set -euo pipefail
@@ -139,6 +161,17 @@ jobs:
             echo 'required node authority discovery/delegation test failed or skipped' >&2
             exit 1
           fi
+      - name: Canonical client mapping and actual TCP UDP billing (sqlite)
+        env:
+          XUI_DB_TYPE: sqlite
+          XRAY_PRE_MAPPING_BINARY: ${{ github.workspace }}/build/pre-client-mapping-xray
+        run: |
+          set -euo pipefail
+          python3 tools/test-client-mapping-completion.py
+          make dist-stub
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race -count=1 -v -timeout 10m ./internal/web/service ./internal/web/controller ./internal/web/runtime ./internal/sub \
+            -run '^Test(NodeClientMappingRequiresOwnedFreshPolicy|NodeClientMappingPreservesOriginalEvidence|CoordinatorClientMappingPinsOriginalJournal|NodeClientMappingHTTPAuthenticationAndBounds|ClientMappingEffectivePolicyDigestIgnoresOnlyIdentityAndVersion|NodeClientMappingJSONCanonicalAndBounded|RemoteClientMappingRequiresVerifiedProof|MappedRemoteAuthorityAPITranslatesCanonicalIdentity|NodeClientMappingHTTPActualCanonicalGrant)$' | tee /tmp/client-mapping-sqlite.log
+          python3 tools/verify-client-mapping-completion.py sqlite /tmp/client-mapping-sqlite.log
       - name: Typed authority transport and native business acceptance (sqlite)
         env:
           XUI_DB_TYPE: sqlite
@@ -426,6 +459,8 @@ jobs:
       XUI_DB_DSN: "host=127.0.0.1 port=5432 user=postgres password=postgres dbname=xui_policy sslmode=disable"
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v7
         with:
           go-version: 1.27.1
@@ -459,6 +494,8 @@ jobs:
           done
       - name: Build custom core for database bootstrap
         run: bash tools/build-custom-core.sh
+      - name: Build original pre-mapping private core
+        run: bash tools/build-client-mapping-capability-fixture.sh
       - name: Install actual PostgreSQL 16 restore clients
         run: |
           sudo apt-get update
@@ -496,6 +533,27 @@ jobs:
             echo 'required node authority discovery/delegation test failed or skipped' >&2
             exit 1
           fi
+      - name: Canonical client mapping and actual TCP UDP billing (postgres)
+        env:
+          XUI_DB_TYPE: postgres
+          XRAY_PRE_MAPPING_BINARY: ${{ github.workspace }}/build/pre-client-mapping-xray
+        run: |
+          set -euo pipefail
+          python3 tools/test-client-mapping-completion.py
+          make dist-stub
+          XRAY_E2E_BINARY="$PWD/build/custom-xray" go test -race -count=1 -v -timeout 10m ./internal/web/service ./internal/web/controller ./internal/web/runtime ./internal/sub \
+            -run '^Test(NodeClientMappingRequiresOwnedFreshPolicy|NodeClientMappingPreservesOriginalEvidence|CoordinatorClientMappingPinsOriginalJournal|NodeClientMappingHTTPAuthenticationAndBounds|ClientMappingEffectivePolicyDigestIgnoresOnlyIdentityAndVersion|NodeClientMappingJSONCanonicalAndBounded|RemoteClientMappingRequiresVerifiedProof|MappedRemoteAuthorityAPITranslatesCanonicalIdentity|NodeClientMappingHTTPActualCanonicalGrant)$' | tee /tmp/client-mapping-postgres.log
+          python3 tools/verify-client-mapping-completion.py postgres /tmp/client-mapping-postgres.log
+          go test -race -count=1 -v -timeout 3m ./internal/database -run '^Test(MigrationModelsMatchPanelModels|ClientPolicyCrossDatabaseMigration)$' | tee /tmp/client-mapping-migration.log
+          python3 - <<'PYCODE'
+          import re
+          from pathlib import Path
+          log = Path('/tmp/client-mapping-migration.log').read_text()
+          passed = re.findall(r'^--- PASS: (Test\w+) ', log, re.M)
+          assert passed.count('TestMigrationModelsMatchPanelModels') == 1
+          assert passed.count('TestClientPolicyCrossDatabaseMigration') == 1
+          assert not re.search(r'^\s*--- (FAIL|SKIP):|^FAIL(?:\s|$)|no tests to run', log, re.M)
+          PYCODE
       - name: Typed authority transport and native business acceptance (postgres)
         env:
           XUI_DB_TYPE: postgres

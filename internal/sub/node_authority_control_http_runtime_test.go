@@ -43,6 +43,7 @@ type nodeControlHTTPPeer struct {
 	remote                           *panelruntime.Remote
 	server                           *httptest.Server
 	loseInstall, lostSuccess, outage atomic.Bool
+	loseEnroll, lostEnrollSuccess    atomic.Bool
 }
 
 func newNodeControlHTTPPeer(t *testing.T) *nodeControlHTTPPeer {
@@ -69,13 +70,20 @@ func newNodeControlHTTPPeer(t *testing.T) *nodeControlHTTPPeer {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
-		if r.URL.Path == "/panel/api/server/clientPolicyAuthority/install" && peer.loseInstall.CompareAndSwap(true, false) {
+		lostInstall := r.URL.Path == "/panel/api/server/clientPolicyAuthority/install" && peer.loseInstall.CompareAndSwap(true, false)
+		lostEnroll := r.URL.Path == "/panel/api/server/clientPolicyAuthority/enroll" && peer.loseEnroll.CompareAndSwap(true, false)
+		if lostInstall || lostEnroll {
 			reply := httptest.NewRecorder()
 			router.ServeHTTP(reply, r)
 			var envelope struct {
 				Success bool `json:"success"`
 			}
-			peer.lostSuccess.Store(reply.Code == 200 && json.Unmarshal(reply.Body.Bytes(), &envelope) == nil && envelope.Success)
+			succeeded := reply.Code == 200 && json.Unmarshal(reply.Body.Bytes(), &envelope) == nil && envelope.Success
+			if lostInstall {
+				peer.lostSuccess.Store(succeeded)
+			} else {
+				peer.lostEnrollSuccess.Store(succeeded)
+			}
 			conn, _, err := w.(http.Hijacker).Hijack()
 			if err != nil {
 				t.Error(err)

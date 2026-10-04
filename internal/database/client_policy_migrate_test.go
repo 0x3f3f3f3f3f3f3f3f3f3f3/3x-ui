@@ -48,11 +48,12 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	receipt := model.ClientPolicyReceipt{FirstUsedAt: 123450, InstanceID: source.InstanceID, ClientID: total.ClientID, Epoch: 2, Sequence: 17, PolicyVersion: 4, RawUpload: 11, RawDownload: 22, BilledBytes: 66, UncertainBytes: 5, Remainder: 1234}
 	reset := model.ClientPolicyReset{ClientID: clients[0].StableID, RequestID: "migrated-reset", InstanceID: source.InstanceID, Epoch: 2, Sequence: 10, RawUpload: 4, RawDownload: 5, BilledBytes: 9, Remainder: 500000, UncertainBytes: 2, PolicyVersion: 3, CreatedAt: 123456}
 	projection := model.ClientPolicyAuthorityProjection{ClientID: clients[0].StableID, AuthorityID: "original-authority", Generation: 3, Revision: 17, AccountJSON: `{"usage":{"rawUpload":11,"rawDownload":22,"billedBytes":66,"remainder":1234},"heldCapacity":40}`}
+	mapping := model.ClientPolicyNodeMapping{AuthorityID: projection.AuthorityID, Generation: 3, SourceID: source.InstanceID, LocalClientID: "22222222-2222-4222-8222-222222222222", GlobalClientID: clients[0].StableID, NodeID: "original-node", MappingJSON: `{"projection":"original-node-evidence"}`}
 	batch := model.ClientTrafficResetBatch{RequestID: "migrated-batch", Scope: "calendar:daily:original", ScheduledAt: 123000, InboundIDsJSON: `[3,8]`, SelectionHash: "selected-members", TargetsJSON: `[{"clientId":"original-identity","email":"original-email","enableLegacy":true}]`, ManagedIDsJSON: `["original-identity"]`, Applied: true, Affected: 1, CreatedAt: 123456}
 	resetTime := model.ClientTrafficResetTime{ClientID: clients[0].StableID, EffectiveAt: 123456}
 	deleted := model.ClientPolicyTombstone{ClientID: "zz-deleted", CreatedAt: 123400}
 	deletionReceipt := model.ClientPolicyReceipt{InstanceID: source.InstanceID, ClientID: deleted.ClientID, DeletionAbsent: true, SeedUpload: 7, SeedDownload: 8, SeedBilled: 15}
-	for _, row := range []any{&source, &pendingSource, &finalReceipt, &total, &receipt, &reset, &projection, &batch, &resetTime, &deleted, &deletionReceipt} {
+	for _, row := range []any{&source, &pendingSource, &finalReceipt, &total, &receipt, &reset, &projection, &mapping, &batch, &resetTime, &deleted, &deletionReceipt} {
 		if err := src.Create(row).Error; err != nil {
 			t.Fatal(err)
 		}
@@ -124,6 +125,10 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 		var got model.ClientPolicyAuthorityProjection
 		if err := db.First(&got, "client_id = ?", projection.ClientID).Error; err != nil || got != projection {
 			t.Fatalf("migration lost authority projection identity/usage/holds: %+v %v", got, err)
+		}
+		var gotMapping model.ClientPolicyNodeMapping
+		if err := db.First(&gotMapping, "source_id = ? AND local_client_id = ?", mapping.SourceID, mapping.LocalClientID).Error; err != nil || gotMapping != mapping {
+			t.Fatalf("migration lost node mapping projection: %+v %v", gotMapping, err)
 		}
 	}
 	assertAuthority(dst)

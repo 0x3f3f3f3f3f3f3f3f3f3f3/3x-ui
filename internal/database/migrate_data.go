@@ -58,6 +58,7 @@ func migrationModels() []any {
 		&model.ClientPolicyReceipt{},
 		&model.ClientPolicyReset{},
 		&model.ClientPolicyAuthorityProjection{},
+		&model.ClientPolicyNodeMapping{},
 		&model.ClientTrafficResetBatch{},
 		&model.ClientTrafficResetTime{},
 		&model.ClientInbound{},
