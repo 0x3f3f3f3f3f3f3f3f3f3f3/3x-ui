@@ -20,11 +20,14 @@ func (j *Journal) validate(tx *bolt.Tx) error {
 		}
 	}
 	var meta metadata
-	if err := get(tx, "metadata", "state", &meta); err != nil || meta.Schema < 4 || meta.Schema > 7 {
+	if err := get(tx, "metadata", "state", &meta); err != nil || meta.Schema < 4 || meta.Schema > 8 {
 		return ErrJournal
 	}
 	if meta.Identity != j.id {
 		return ErrIdentity
+	}
+	if err := validateManagedAccounts(tx, meta); err != nil {
+		return err
 	}
 	if err := validateClientMappings(tx, meta); err != nil {
 		return err

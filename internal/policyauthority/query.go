@@ -4,10 +4,66 @@ import (
 	"encoding/json"
 	"errors"
 	bolt "go.etcd.io/bbolt"
+	"strconv"
 	"strings"
 )
 
 var ErrNotFound = errors.New("authority record not found")
+
+// GrantPage retains issuance and cumulative receipts, including sealed grants.
+// Recovery filters the bounded page without manufacturing execution evidence.
+func (j *Journal) GrantPage(after string, limit int) ([]Grant, error) {
+	if j == nil || j.closed.Load() {
+		return nil, ErrJournal
+	}
+	if limit < 1 || limit > 128 {
+		return nil, ErrRequest
+	}
+	if after != "" {
+		prefix := j.id.AuthorityID + ":"
+		if !strings.HasPrefix(after, prefix) {
+			return nil, ErrRequest
+		}
+		sequence, err := strconv.ParseUint(strings.TrimPrefix(after, prefix), 10, 64)
+		if err != nil || sequence == 0 || !bounded(sequence) || after != prefix+strconv.FormatUint(sequence, 10) {
+			return nil, ErrRequest
+		}
+	}
+	page := make([]Grant, 0, limit)
+	err := j.db.View(func(tx *bolt.Tx) error {
+		var meta metadata
+		if err := get(tx, "metadata", "state", &meta); err != nil {
+			return err
+		}
+		if meta.Identity != j.id || meta.Schema < 4 || meta.Schema > 8 {
+			return ErrJournal
+		}
+		b := tx.Bucket([]byte("grants"))
+		if b == nil {
+			return ErrJournal
+		}
+		cursor := b.Cursor()
+		k, v := cursor.First()
+		if after != "" {
+			k, v = cursor.Seek([]byte(after))
+			if string(k) == after {
+				k, v = cursor.Next()
+			}
+		}
+		for ; k != nil && len(page) < limit; k, v = cursor.Next() {
+			var grant Grant
+			if len(v) == 0 || len(v) > maxRecordBytes || json.Unmarshal(v, &grant) != nil || grant.Sequence == 0 || grant.Sequence > meta.Sequence || grant.GrantID != string(k) || grant.GrantID != j.id.AuthorityID+":"+strconv.FormatUint(grant.Sequence, 10) || grant.Request.Binding.Identity != j.id {
+				return ErrJournal
+			}
+			page = append(page, grant)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return page, nil
+}
 
 func (j *Journal) ChangePage(clientID, after string, limit int) ([]Change, error) {
 	if j == nil || j.closed.Load() || !key(clientID) || after != "" && !key(after) || limit < 1 || limit > 1000 {
@@ -181,6 +237,9 @@ func (j *Journal) CheckActiveGrant(id string, boot NodeBoot) error {
 			return ErrIncarnation
 		}
 		if err := j.checkBinding(tx, grant.Request.Binding); err != nil {
+			return err
+		}
+		if err := managedIssuanceBinding(tx, grant.Request.Binding); err != nil {
 			return err
 		}
 		var account Account

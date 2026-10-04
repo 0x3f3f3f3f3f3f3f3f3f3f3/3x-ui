@@ -131,7 +131,7 @@ func (j *Journal) CaptureResetOperation(request ResetOperationCapture) error {
 			}
 		}
 		if resetJournalSchema(meta) == 4 {
-			if meta.Schema == 7 {
+			if meta.Schema >= 7 {
 				meta.MappingBaseSchema = 5
 			} else {
 				meta.Schema = 5

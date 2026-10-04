@@ -319,6 +319,9 @@ func (j *Journal) Issue(request Request) (Grant, error) {
 		if err := j.checkBinding(tx, request.Binding); err != nil {
 			return err
 		}
+		if err := managedIssuanceBinding(tx, request.Binding); err != nil {
+			return err
+		}
 		var account Account
 		if err := get(tx, "accounts", request.Binding.ClientID, &account); err != nil {
 			return err
@@ -481,6 +484,13 @@ func (j *Journal) AddAccount(seed Seed) error {
 		return ErrRequest
 	}
 	return j.update(func(tx *bolt.Tx) error {
+		var meta metadata
+		if err := get(tx, "metadata", "state", &meta); err != nil {
+			return err
+		}
+		if meta.Schema == 8 {
+			return ErrRequest
+		}
 		accounts := tx.Bucket([]byte("accounts"))
 		if accounts.Get([]byte(seed.ClientID)) != nil {
 			var prior Account

@@ -47,6 +47,14 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	if err := src.Create(&nodeAccount).Error; err != nil {
 		t.Fatal(err)
 	}
+	coordinator := model.ClientPolicyCoordinatorSource{NodeKey: "managed-coordinator", InstanceID: "original-control-identity", Activated: true}
+	if err := src.Create(&coordinator).Error; err != nil {
+		t.Fatal(err)
+	}
+	connection := model.ClientPolicyCoordinatorNode{NodeID: "original-node", SourceID: "original-node-source", InventoryID: 17}
+	if err := src.Create(&connection).Error; err != nil {
+		t.Fatal(err)
+	}
 	source := model.ClientPolicySource{InstanceID: "migrated-source", NodeKey: "local", Epoch: 3, Sequence: 17, HandoffBootID: "original-boot", HandoffProcessID: "original-process", HandoffBatchID: "original-final"}
 	pendingSource := model.ClientPolicySource{InstanceID: "pending-source", NodeKey: "pending-node", HandoffBootID: "interrupted-boot"}
 	finalReceipt := model.LegacyTrafficReceipt{ProcessID: "original-process", Sequence: 3, BatchID: "original-final"}
@@ -128,6 +136,14 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	assertHandoff(dst)
 	assertAuthority := func(db *gorm.DB) {
 		t.Helper()
+		var control model.ClientPolicyCoordinatorSource
+		if err := db.First(&control, "node_key = ?", coordinator.NodeKey).Error; err != nil || control != coordinator {
+			t.Fatalf("migration lost original control identity/activation: %+v/%v", control, err)
+		}
+		var connected model.ClientPolicyCoordinatorNode
+		if err := db.First(&connected, "node_id = ?", connection.NodeID).Error; err != nil || connected != connection {
+			t.Fatalf("migration lost configured coordinator connection: %+v/%v", connected, err)
+		}
 		var account model.ClientPolicyNodeAccount
 		if err := db.First(&account, "client_id = ?", nodeAccount.ClientID).Error; err != nil || account != nodeAccount {
 			t.Fatalf("migration lost independent account identity or exact version: %+v/%v", account, err)
@@ -165,6 +181,26 @@ func TestClientPolicyCrossDatabaseMigration(t *testing.T) {
 	assertHandoff(restoredDB)
 	assertAuthority(restoredDB)
 	assertAuthority(src)
+	if err := src.Migrator().DropTable(&model.ClientPolicyCoordinatorNode{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateData(path, os.Getenv("XUI_DB_DSN")); err != nil {
+		t.Fatalf("pre-coordinator-connection schema migration: %v", err)
+	}
+	var connectionCount int64
+	if err := dst.Model(&model.ClientPolicyCoordinatorNode{}).Count(&connectionCount).Error; err != nil || connectionCount != 0 || src.Migrator().HasTable(&model.ClientPolicyCoordinatorNode{}) {
+		t.Fatalf("old schema fabricated connection or modified source: %d/%v", connectionCount, err)
+	}
+	if err := src.Migrator().DropTable(&model.ClientPolicyCoordinatorSource{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateData(path, os.Getenv("XUI_DB_DSN")); err != nil {
+		t.Fatalf("pre-coordinator schema migration: %v", err)
+	}
+	var coordinatorCount int64
+	if err := dst.Model(&model.ClientPolicyCoordinatorSource{}).Count(&coordinatorCount).Error; err != nil || coordinatorCount != 0 || src.Migrator().HasTable(&model.ClientPolicyCoordinatorSource{}) {
+		t.Fatalf("old schema fabricated control identity or modified source: %d/%v", coordinatorCount, err)
+	}
 	if err := src.Migrator().DropTable(&model.ClientPolicyNodeAccount{}); err != nil {
 		t.Fatal(err)
 	}

@@ -317,6 +317,9 @@ const (
 // startTask schedules background jobs (Xray checks, traffic jobs, cron
 // jobs) which the panel relies on for periodic maintenance and monitoring.
 func (s *Server) startTask(restartXray bool, loc *time.Location) {
+	if err := service.ResumeManagedPolicyCoordinator(s.ctx); err != nil {
+		logger.Warning("resume managed policy coordinator failed:", err)
+	}
 	if restartXray {
 		err := s.xrayService.RestartXray(true)
 		if err != nil {
@@ -797,6 +800,9 @@ func (s *Server) StopPanelOnly() error {
 
 func (s *Server) stop(stopXray bool, stopTgBot bool) error {
 	s.cancel()
+	coordinatorCtx, coordinatorCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	coordinatorErr := service.StopManagedPolicyCoordinator(coordinatorCtx)
+	coordinatorCancel()
 	_ = s.xrayService.PublishRuntimeHealth(true)
 	if stopXray {
 		_ = s.xrayService.StopXray()
@@ -837,7 +843,7 @@ func (s *Server) stop(stopXray bool, stopTgBot bool) error {
 	if s.listener != nil {
 		err2 = s.listener.Close()
 	}
-	return common.Combine(err1, err2)
+	return common.Combine(coordinatorErr, common.Combine(err1, err2))
 }
 
 // GetCtx returns the server's context for cancellation and deadline management.

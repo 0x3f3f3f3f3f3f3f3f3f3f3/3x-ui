@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
+	"github.com/mhsanaei/3x-ui/v3/internal/logger"
 	"gorm.io/gorm"
 )
 
@@ -17,8 +18,9 @@ var ErrDatabaseRestoreInProgress = database.ErrRestoreInProgress
 var errDatabaseRestoreOwnerExpired = errors.New("database restore owner is no longer active")
 
 type databaseRestoreOwner struct {
-	source *gorm.DB
-	lease  *database.RestoreLease
+	source            *gorm.DB
+	lease             *database.RestoreLease
+	resumeCoordinator atomic.Bool
 }
 
 var activeDatabaseRestore atomic.Pointer[databaseRestoreOwner]
@@ -37,16 +39,25 @@ func acquireDatabaseRestore() (*databaseRestoreOwner, error) {
 func (owner *databaseRestoreOwner) release() {
 	owner.resumeDatabase()
 	lock.Lock()
-	defer lock.Unlock()
-	owner.releaseLocked()
+	released := owner.releaseLocked()
+	lock.Unlock()
+	if released && owner.resumeCoordinator.Swap(false) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := ResumeManagedPolicyCoordinator(ctx); err != nil {
+			logger.Warning("resume managed policy coordinator after restore failed:", err)
+		}
+	}
 }
 
-func (owner *databaseRestoreOwner) releaseLocked() {
+func (owner *databaseRestoreOwner) releaseLocked() bool {
 	owner.resumeDatabase()
 	if activeDatabaseRestore.Load() == owner {
 		activeDatabaseRestore.Store(nil)
 		databaseRestoreMutex.Unlock()
+		return true
 	}
+	return false
 }
 
 func checkDatabaseRestoreRestart(owner *databaseRestoreOwner) error {
@@ -65,7 +76,11 @@ func (s *ServerService) restartCoreAfterDatabaseRestore(owner *databaseRestoreOw
 		return err
 	}
 	owner.resumeDatabase()
-	return s.xrayService.restartXray(true, owner)
+	if err := s.xrayService.restartXray(true, owner); err != nil {
+		return err
+	}
+	owner.resumeCoordinator.Store(true)
+	return nil
 }
 
 func (owner *databaseRestoreOwner) fenceDatabase() error {
@@ -93,14 +108,17 @@ func (s *ServerService) stopCoreForDatabaseRestore() error {
 	lock.Lock()
 	defer lock.Unlock()
 	isManuallyStopped.Store(true)
-	process := currentXrayProcess()
-	if process == nil || !process.IsRunning() {
-		return nil
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if owner := activeDatabaseRestore.Load(); owner != nil && owner.lease != nil {
 		ctx = owner.lease.Context(ctx)
+	}
+	if err := StopManagedPolicyCoordinator(ctx); err != nil {
+		return err
+	}
+	process := currentXrayProcess()
+	if process == nil || !process.IsRunning() {
+		return nil
 	}
 	if err := stopManagedAuthority(ctx, process); err != nil {
 		return err

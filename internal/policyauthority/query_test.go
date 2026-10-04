@@ -8,6 +8,85 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
+func TestGrantPagesRetainOriginalReceiptsForBoundedRecovery(t *testing.T) {
+	j, id, boot, path := journalFixture(t)
+	issued := make(map[string]Grant)
+	for i := range 19 {
+		request := issueRequest(id, boot, fmt.Sprintf("recover-%02d", i), 1)
+		request.Upload, request.Download = Direction{}, Direction{}
+		grant, err := j.Issue(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			if err := j.Report(Report{Binding: grant.Request.Binding, GrantID: grant.GrantID, Sequence: 1, Usage: Usage{RawUpload: 1, BilledBytes: 1}, Seal: true}); err != nil {
+				t.Fatal(err)
+			}
+			grant, err = j.Grant(grant.GrantID)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		issued[grant.GrantID] = grant
+	}
+	if err := j.Close(); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := Open(path, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	api, ok := any(opened).(interface {
+		GrantPage(string, int) ([]Grant, error)
+	})
+	if !ok {
+		t.Fatal("original grants cannot be read in bounded pages after coordinator restart")
+	}
+	seen, cursor := make(map[string]bool), ""
+	for {
+		page, err := api.GrantPage(cursor, 3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page) > 3 {
+			t.Fatal("grant recovery page exceeded its bound")
+		}
+		for _, grant := range page {
+			if seen[grant.GrantID] || issued[grant.GrantID] != grant {
+				t.Fatal("grant recovery page lost or duplicated original receipt")
+			}
+			seen[grant.GrantID] = true
+		}
+		if len(page) < 3 {
+			break
+		}
+		cursor = page[len(page)-1].GrantID
+	}
+	if len(seen) != len(issued) {
+		t.Fatalf("recovery missed original grants: %d/%d", len(seen), len(issued))
+	}
+	for _, limit := range []int{0, 129} {
+		if _, err := api.GrantPage("", limit); err == nil {
+			t.Fatal("unbounded grant page accepted")
+		}
+	}
+	for _, cursor := range []string{"foreign:1", id.AuthorityID + ":01", id.AuthorityID + ":0"} {
+		if _, err := api.GrantPage(cursor, 1); err == nil {
+			t.Fatal("noncanonical recovery cursor accepted")
+		}
+	}
+	page, err := api.GrantPage("", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page[0].Request.RequestID = "caller-only"
+	got, err := api.GrantPage("", 1)
+	if err != nil || got[0].Request.RequestID == "caller-only" {
+		t.Fatal("caller mutated original grant")
+	}
+}
+
 func TestGrantQueriesRecoverCommittedRequestAndCurrentReceipt(t *testing.T) {
 	j, id, boot, path := journalFixture(t)
 	r := issueRequest(id, boot, "query-request", 60)

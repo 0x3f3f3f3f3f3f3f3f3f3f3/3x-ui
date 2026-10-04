@@ -124,7 +124,7 @@ func (j *Journal) PrepareResetOperation(request ResetOperationPreparation) error
 				return err
 			}
 		}
-		if meta.Schema == 7 {
+		if meta.Schema >= 7 {
 			meta.MappingBaseSchema = 6
 		} else {
 			meta.Schema = 6

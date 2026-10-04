@@ -158,11 +158,8 @@ func (a *authorityExecution) Settle(ctx context.Context, grantID string, seal, p
 	}
 	report := policyauthority.Report{Binding: grant.Request.Binding, GrantID: grantID, Sequence: state.Sequence, Usage: policyauthority.Usage{RawUpload: state.Usage.RawUpload, RawDownload: state.Usage.RawDownload, BilledBytes: state.Usage.BilledBytes, Remainder: state.Usage.Remainder}, Seal: state.Sealed}
 	return runSerializedTxContextForDatabase(ctx, a.db, func(tx *gorm.DB) error {
-		account, err := a.journal.Account(report.Binding.ClientID)
+		account, err := lockedAuthorityProjectionAccount(tx, a.journal, report.Binding.ClientID)
 		if err != nil {
-			return err
-		}
-		if err := validateAuthorityProjectionClient(tx, account); err != nil {
 			return err
 		}
 		if _, err := checkedAuthorityProjection(tx, a.journal, account); err != nil {
@@ -206,14 +203,17 @@ func (a *authorityExecution) Renew(ctx context.Context, grantID string, sequence
 	// Validate after obtaining the core's monotonic challenge: any in-flight
 	// renewal for a retired boot was born before its retirement boundary.
 	if err := runSerializedTxContextForDatabase(ctx, a.db, func(tx *gorm.DB) error {
+		if err := validateManagedCoordinatorSourceTx(tx, a.journal, grant.Request.Binding.ClientID); err != nil {
+			return err
+		}
 		if err := a.journal.CheckActiveGrant(grantID, a.boot); err != nil {
 			return err
 		}
-		account, err := a.journal.Account(grant.Request.Binding.ClientID)
+		account, err := lockedAuthorityProjectionAccount(tx, a.journal, grant.Request.Binding.ClientID)
 		if err != nil {
 			return err
 		}
-		if err := validateAuthorityProjectionClient(tx, account); err != nil {
+		if err := validateManagedAuthorityPolicyTx(tx, a.journal, grant.Request.Binding); err != nil {
 			return err
 		}
 		_, err = checkedAuthorityProjection(tx, a.journal, account)

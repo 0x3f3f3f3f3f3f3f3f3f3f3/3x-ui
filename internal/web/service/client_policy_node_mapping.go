@@ -126,6 +126,9 @@ func (s *ClientPolicyNodeMappingService) currentPolicy(tx *gorm.DB, request pane
 	if request.Validate() != nil || identity.AuthorityID != request.Binding.AuthorityID || identity.Generation != request.Binding.Generation {
 		return ErrClientPolicyLedger
 	}
+	if err := validateManagedCoordinatorSourceTx(tx, s.journal, request.GlobalClientID); err != nil {
+		return err
+	}
 	account, err := s.journal.Account(request.GlobalClientID)
 	if err != nil {
 		return err

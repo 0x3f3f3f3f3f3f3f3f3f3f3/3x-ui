@@ -26,19 +26,24 @@ type controllerGrant struct {
 	renewalSequence uint64
 }
 
+type authorityAllocationStrategy interface {
+	Allocate(policyauthority.Account, policyauthority.NodeBoot) (uint64, policyauthority.Direction, policyauthority.Direction, error)
+}
+
 type authorityController struct {
-	mu               sync.Mutex
-	execution        *authorityExecution
-	api              authorityDemandAPI
-	active           map[string]*controllerGrant
-	pending          map[string]*command.AuthorityRequest
-	suspended        map[string]bool
-	retirementCursor map[string]string
-	stateMu          sync.Mutex
-	cancel           context.CancelFunc
-	done             chan struct{}
-	stopped          bool
-	lastError        error
+	mu                 sync.Mutex
+	execution          *authorityExecution
+	api                authorityDemandAPI
+	allocationStrategy authorityAllocationStrategy
+	active             map[string]*controllerGrant
+	pending            map[string]*command.AuthorityRequest
+	suspended          map[string]bool
+	retirementCursor   map[string]string
+	stateMu            sync.Mutex
+	cancel             context.CancelFunc
+	done               chan struct{}
+	stopped            bool
+	lastError          error
 }
 
 func (c *authorityController) Start() error {
@@ -152,6 +157,10 @@ func (c *authorityController) checkNotStopped() error {
 }
 
 func newAuthorityController(ctx context.Context, db *gorm.DB, journal *policyauthority.Journal, nodeID string, api authorityDemandAPI) (*authorityController, error) {
+	return newAuthorityControllerWithStrategy(ctx, db, journal, nodeID, api, nil)
+}
+
+func newAuthorityControllerWithStrategy(ctx context.Context, db *gorm.DB, journal *policyauthority.Journal, nodeID string, api authorityDemandAPI, strategy authorityAllocationStrategy) (*authorityController, error) {
 	if api == nil || api.Capabilities() == nil || !slices.Contains(api.Capabilities().Capabilities, "on-demand-authority-requests-v1") {
 		return nil, ErrClientPolicyLedger
 	}
@@ -163,7 +172,7 @@ func newAuthorityController(ctx context.Context, db *gorm.DB, journal *policyaut
 	if err := api.EnableAuthorityRequests(ctx, &command.AuthorityBinding{AuthorityId: id.AuthorityID, Generation: id.Generation, NodeId: nodeID}); err != nil {
 		return nil, err
 	}
-	return &authorityController{execution: execution, api: api, active: make(map[string]*controllerGrant), pending: make(map[string]*command.AuthorityRequest), suspended: make(map[string]bool), retirementCursor: make(map[string]string)}, nil
+	return &authorityController{execution: execution, api: api, allocationStrategy: strategy, active: make(map[string]*controllerGrant), pending: make(map[string]*command.AuthorityRequest), suspended: make(map[string]bool), retirementCursor: make(map[string]string)}, nil
 }
 
 func controllerCapacity(account policyauthority.Account) uint64 {
@@ -299,10 +308,17 @@ func (c *authorityController) handleRequestLocked(ctx context.Context, r *comman
 			}
 		}
 		capacity := controllerCapacity(account)
+		upload, download := account.Policy.Upload, account.Policy.Download
+		if c.allocationStrategy != nil {
+			capacity, upload, download, err = c.allocationStrategy.Allocate(account, c.execution.boot)
+			if err != nil {
+				return err
+			}
+		}
 		if capacity == 0 {
 			return policyauthority.ErrCapacity
 		}
-		intent = authorityAllocation{ClientID: r.ClientId, RequestID: r.RequestId, Capacity: capacity, Upload: account.Policy.Upload, Download: account.Policy.Download, LeaseDuration: policyauthority.MaxLeaseDuration}
+		intent = authorityAllocation{ClientID: r.ClientId, RequestID: r.RequestId, Capacity: capacity, Upload: upload, Download: download, LeaseDuration: policyauthority.MaxLeaseDuration}
 	} else {
 		return err
 	}

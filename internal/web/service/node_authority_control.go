@@ -7,6 +7,7 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	panelruntime "github.com/mhsanaei/3x-ui/v3/internal/web/runtime"
+	panelxray "github.com/mhsanaei/3x-ui/v3/internal/xray"
 	command "github.com/xtls/xray-core/app/clientpolicy/command"
 	"google.golang.org/protobuf/proto"
 	"gorm.io/gorm"
@@ -61,19 +62,33 @@ func withOwnedNodeAuthoritySQL(ctx context.Context, binding panelruntime.NodeAut
 }
 
 func (*ClientPolicyNodeService) ReadAuthorityRequests(ctx context.Context, request panelruntime.NodeAuthorityRequestsRequest) (*panelruntime.NodeAuthorityRequestsResult, error) {
-	if request.Validate() != nil {
+	if ctx == nil || request.Validate() != nil {
 		return nil, panelruntime.ErrNodeAuthorityDiscovery
 	}
-	var result *panelruntime.NodeAuthorityRequestsResult
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	var captured *managedAuthority
+	var api *panelxray.ClientPolicyAPI
+	var pinned panelruntime.NodeAuthorityControlIdentity
 	err := withOwnedNodeAuthority(ctx, request.Binding, func(ctx context.Context, owner *managedAuthority, identity panelruntime.NodeAuthorityControlIdentity) error {
-		page, err := owner.api.ReadAuthorityRequests(ctx, owner.delegatedBinding(), request.Limit)
-		if err != nil {
-			return err
+		captured, api, pinned = owner, owner.api, identity
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	// An empty demand read long-polls the core. Keep its immutable API and boot
+	// snapshot without holding lifecycle, owner or SQL locks during the wait.
+	page, err := api.ReadAuthorityRequests(ctx, &command.AuthorityBinding{AuthorityId: request.Binding.AuthorityID, Generation: request.Binding.Generation, NodeId: request.Binding.NodeID}, request.Limit)
+	if err != nil {
+		return nil, err
+	}
+	var result *panelruntime.NodeAuthorityRequestsResult
+	err = withOwnedNodeAuthority(ctx, request.Binding, func(ctx context.Context, owner *managedAuthority, identity panelruntime.NodeAuthorityControlIdentity) error {
+		if owner != captured || owner.api != api || identity != pinned {
+			return panelruntime.ErrNodeAuthorityDiscovery
 		}
-		result = &panelruntime.NodeAuthorityRequestsResult{NodeAuthorityControlIdentity: identity}
-		if page != nil {
-			result.Requests = proto.Clone(page).(*command.AuthorityRequests)
-		}
+		result = &panelruntime.NodeAuthorityRequestsResult{NodeAuthorityControlIdentity: identity, Requests: proto.Clone(page).(*command.AuthorityRequests)}
 		return result.Validate(request)
 	})
 	if err != nil {

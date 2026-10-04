@@ -16,7 +16,7 @@ const clientMappingBucket = "client-mappings"
 func stringIdentityGeneration(generation uint64) string { return strconv.FormatUint(generation, 10) }
 
 func resetJournalSchema(meta metadata) uint64 {
-	if meta.Schema == 7 {
+	if meta.Schema >= 7 {
 		return meta.MappingBaseSchema
 	}
 	return meta.Schema
@@ -24,16 +24,16 @@ func resetJournalSchema(meta metadata) uint64 {
 
 func mappingMetadata(tx *bolt.Tx, meta metadata) (*bolt.Bucket, error) {
 	b := tx.Bucket([]byte(clientMappingBucket))
-	if meta.Schema < 4 || meta.Schema > 7 {
+	if meta.Schema < 4 || meta.Schema > 8 {
 		return nil, ErrJournal
 	}
-	if meta.Schema != 7 {
+	if meta.Schema < 7 {
 		if b != nil || meta.MappingBaseSchema != 0 {
 			return nil, ErrJournal
 		}
 		return nil, nil
 	}
-	if meta.MappingBaseSchema < 4 || meta.MappingBaseSchema > 6 || b == nil || b.Sequence() == 0 || b.Sequence() > maxRecords {
+	if meta.MappingBaseSchema < 4 || meta.MappingBaseSchema > 6 || b == nil || meta.Schema == 7 && b.Sequence() == 0 || b.Sequence() > maxRecords {
 		return nil, ErrJournal
 	}
 	return b, nil
@@ -105,6 +105,9 @@ func mappingNodeKey(side ClientMappingSide, m ClientMapping) string {
 }
 
 func mappingAccount(tx *bolt.Tx, meta metadata, side ClientMappingSide, m ClientMapping, fresh bool) error {
+	if err := managedMappingOrigin(tx, meta, side, m); err != nil {
+		return err
+	}
 	client, version := m.GlobalClientID, m.GlobalPolicyVersion
 	if side == ClientMappingNode {
 		if meta.Identity != m.NodeAnchor || meta.MigrationSource != m.SourceID {
@@ -166,7 +169,7 @@ func (j *Journal) RecordClientMapping(side ClientMappingSide, m ClientMapping) e
 		if err := get(tx, "metadata", "state", &meta); err != nil {
 			return err
 		}
-		if meta.Identity != j.id || meta.Schema < 4 || meta.Schema > 7 {
+		if meta.Identity != j.id || meta.Schema < 4 || meta.Schema > 8 {
 			return ErrJournal
 		}
 		b, err := mappingMetadata(tx, meta)

@@ -28,11 +28,14 @@ func issueClientPolicyAuthority(ctx context.Context, expected *gorm.DB, journal 
 	}
 	var grant policyauthority.Grant
 	err := runSerializedTxContextForDatabase(ctx, expected, func(tx *gorm.DB) error {
-		account, err := journal.Account(request.Binding.ClientID)
+		if err := validateManagedCoordinatorSourceTx(tx, journal, request.Binding.ClientID); err != nil {
+			return err
+		}
+		account, err := lockedAuthorityProjectionAccount(tx, journal, request.Binding.ClientID)
 		if err != nil {
 			return err
 		}
-		if err := validateAuthorityProjectionClient(tx, account); err != nil {
+		if err := validateManagedAuthorityPolicyTx(tx, journal, request.Binding); err != nil {
 			return err
 		}
 		if _, err := checkedAuthorityProjection(tx, journal, account); err != nil {
@@ -68,18 +71,50 @@ func validateAuthorityProjectionClient(tx *gorm.DB, account policyauthority.Acco
 		return ErrClientPolicyLedger
 	}
 	var client model.ClientRecord
-	return tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("stable_id").First(&client, "stable_id = ?", account.Seed.ClientID).Error
+	err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("stable_id").First(&client, "stable_id = ?", account.Seed.ClientID).Error
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	var node model.ClientPolicyNodeAccount
+	if err := tx.First(&node, "client_id = ?", account.Seed.ClientID).Error; err != nil {
+		return err
+	}
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("stable_id").First(&client, "stable_id = ?", node.ParentClientID).Error; err != nil {
+		return err
+	}
+	var locked model.ClientPolicyNodeAccount
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&locked, "client_id = ?", node.ClientID).Error; err != nil {
+		return err
+	}
+	if locked.ParentClientID != node.ParentClientID || locked.NodeID != node.NodeID || locked.SourceID != node.SourceID {
+		return ErrClientPolicyLedger
+	}
+	return rejectDeletedClientPolicies(tx, []string{node.ParentClientID})
+}
+
+func lockedAuthorityProjectionAccount(tx *gorm.DB, journal *policyauthority.Journal, clientID string) (policyauthority.Account, error) {
+	account, err := journal.Account(clientID)
+	if err != nil {
+		return account, err
+	}
+	if err := validateAuthorityProjectionClient(tx, account); err != nil {
+		return account, err
+	}
+	if err := validateManagedAuthorityOriginTx(tx, journal, account); err != nil {
+		return account, err
+	}
+	// PostgreSQL can wait for another issuer's parent lock. Read the journal
+	// again after that lock so its committed projection is compared with the
+	// current account rather than a snapshot taken before the wait.
+	return journal.Account(clientID)
 }
 
 func projectClientPolicyAuthorityTx(tx *gorm.DB, journal *policyauthority.Journal, clientID string) error {
 	if !isSerializedTx(tx) {
 		return ErrClientPolicyLedger
 	}
-	account, err := journal.Account(clientID)
+	account, err := lockedAuthorityProjectionAccount(tx, journal, clientID)
 	if err != nil {
-		return err
-	}
-	if err := validateAuthorityProjectionClient(tx, account); err != nil {
 		return err
 	}
 	identity := journal.Identity()

@@ -1,0 +1,21 @@
+{
+  "base": "33584f04d443b513c3dff8e608524c4dacf9dd73",
+  "maximumJournalSchema": 7,
+  "files": {
+    "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+    "cmd/old-writer-probe/main.go": "c274f82fe60d8de361837ccd43d52289d977ae7c45fe1d2e9fb5dc1e1d88b4b6",
+    "go.mod": "b44d07beabb913c508a284d7e4129a1eecf96246258268b655b03a97c1c8df2d",
+    "go.sum": "fa8adbe6ca2f188230316312d4e504a6f747e07d98736dc26ebd328f1378fb62",
+    "internal/policyauthority/amount.go": "68590803f955909ca4151ee53cd562826604a217d675df9f9c86883fdd404b73",
+    "internal/policyauthority/change.go": "10d82ba18d182e0ac279b373805c564fe6d33553a2803f377f906191325643bb",
+    "internal/policyauthority/client_mapping.go": "b5e6cfacb68ffd4103b8eda349c7bef91aaf07d4507dc8c0cb715e488ad3d458",
+    "internal/policyauthority/journal.go": "f16a57b1648baede29c46c045d96dddebe84ec38eed0e8a908da085f0db17e1d",
+    "internal/policyauthority/migration.go": "0c77ec01aa8bab38ec6fae54fb3975709c3bdb910eb6cad9eb6ac5544cabfc73",
+    "internal/policyauthority/query.go": "2109f1c11ac863d2024c17f57ed5ce61b012164d8023dbcb8e7a9f2c9ee06e5d",
+    "internal/policyauthority/reset_operation.go": "a530ce5931f87bf92f58e9519ca936d46c3bb9479399dff359c4fcc943a5e8e5",
+    "internal/policyauthority/reset_operation_progress.go": "eff54c50a8a0d7199da6017f39557d6df61155360b3e5dbedfc333631613b533",
+    "internal/policyauthority/retirement.go": "2c0d4120f46bf3a2aa09439d3f7828e1d3506d520218c99dd5b901e4843a3d96",
+    "internal/policyauthority/types.go": "5e9d028881d83f3994374bae76ed1ab8c99dbd61c08e1a5e563d43d38291feee",
+    "internal/policyauthority/validate.go": "986ed03c2e0b8f934eedea9df9c58ccd6425c84c265aa58a820c76d37dec243c"
+  }
+}

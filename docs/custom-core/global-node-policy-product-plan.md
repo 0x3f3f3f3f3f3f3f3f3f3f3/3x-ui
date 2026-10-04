@@ -15,10 +15,10 @@ Add `node|global` scope to client policy model/API/generated frontend schemas, w
 
 Create/open the independently anchored coordinator journal under existing original database/lifecycle admission. Reuse original migration snapshot/dedup evidence; never seed an empty balance from SQL projection or reinitialize missing activated state. Manage pinned mapped TLS controllers, bounded source discovery/reconnect and context-safe stop/drain. Add explicit managed share strategy while retaining the local controller default: stable membership splits each limited rate/burst, assigns integer remainders once and fairly bounds quota request capacity. The original journal still serializes grants and rejects overlapping held resources. Preserve lost replies, retired uncertain shares and consumed fractions. Own races for two controllers, tiny/zero shares, changed/deleted membership, nil/cancel/busy/current-DB/restore, restart and account non-reinitialization; both backends, full owning journal/runtime suites and vet.
 
-- [ ] Own original anchored coordinator lifecycle and current-database admission; obtain meaningful RED.
-- [ ] Implement bounded nonoverlapping member quota/rate/burst strategy and retained uncertain shares.
-- [ ] Own actual controller races, restoration, source/role/boot and no-reinitialization faults on both backends.
-- [ ] Current owning suites, journal/runtime/vet and hashes pass; commit/task completion.
+- [x] Own original anchored coordinator lifecycle and current-database admission; obtain meaningful RED.
+- [x] Implement bounded nonoverlapping member quota/rate/burst strategy and retained uncertain shares.
+- [x] Own actual controller races, restoration, source/role/boot and no-reinitialization faults on both backends.
+- [x] Current owning suites, journal/runtime/vet and hashes pass; commit/task completion.
 
 ## Task 3: Protected product APIs, scope UI and two isolated actual nodes
 

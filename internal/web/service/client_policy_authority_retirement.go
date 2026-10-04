@@ -18,11 +18,8 @@ func limitedAuthorityRatesHeld(account policyauthority.Account) bool {
 func (c *authorityController) reconcileRetiredClientRatesLocked(ctx context.Context, client string) error {
 	var next string
 	err := runSerializedTxContextForDatabase(ctx, c.execution.db, func(tx *gorm.DB) error {
-		account, err := c.execution.journal.Account(client)
+		account, err := lockedAuthorityProjectionAccount(tx, c.execution.journal, client)
 		if err != nil {
-			return err
-		}
-		if err := validateAuthorityProjectionClient(tx, account); err != nil {
 			return err
 		}
 		if _, err := checkedAuthorityProjection(tx, c.execution.journal, account); err != nil {

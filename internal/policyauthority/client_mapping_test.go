@@ -233,8 +233,11 @@ func mappingOldWriterProbe(t *testing.T, name string) string {
 	if probe := os.Getenv(name); probe != "" {
 		return probe
 	}
-	schema := map[string]int{"RESET_OPERATION_OLD_WRITER_PROBE": 4, "RESET_OPERATION_SCHEMA5_WRITER_PROBE": 5, "CLIENT_MAPPING_SCHEMA6_WRITER_PROBE": 6}[name]
+	schema := map[string]int{"RESET_OPERATION_OLD_WRITER_PROBE": 4, "RESET_OPERATION_SCHEMA5_WRITER_PROBE": 5, "CLIENT_MAPPING_SCHEMA6_WRITER_PROBE": 6, "MANAGED_ACCOUNT_SCHEMA7_WRITER_PROBE": 7}[name]
 	fixture := filepath.Join("..", "..", "tools", "fixtures", "client-mapping-schema"+strconv.Itoa(schema)+"-writer")
+	if schema == 7 {
+		fixture = filepath.Join("..", "..", "tools", "fixtures", "managed-account-schema7-writer")
+	}
 	raw, err := os.ReadFile(filepath.Join(fixture, "SOURCE.json"))
 	if err != nil {
 		t.Fatal(err)
