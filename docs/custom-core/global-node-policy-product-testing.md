@@ -99,4 +99,19 @@ The single whole-phase review completed at339929e9. Its author correction preser
 
 Original local accounts still require a sealed handoff before independent managed enrollment, including zero-use original accounts. Managed policy-version/scope changes on used accounts remain refused until their separate original migration proof exists. The protected enrollment API remains the setup path. These limits must remain visible when assessing this feature branch. Ordinary-accounting's global pending warning is a recorded minor UI limitation.
 
-The latest user direction limits completion work to the requested native Snell/mieru/SSH support, multiplier billing, directional limits and Tunnel TCP/UDP forwarding. Unrelated protocol, sidecar, platform and extended load campaigns are not added to this delivery. Existing evidence for the unchanged core is retained; the modified panel/UI and clean native pair are being verified before the already authorized feature push.
+The corrected source checkpoint is `ff07251a4d1c99e561d0c9ec62918377b5bd64bb`. It was pushed normally to `feature/custom-xray-unified-policy`; an independent remote read confirmed the exact same full SHA. The final documentation update changes only this validation document and the product plan; runtime and frontend sources retain the verified checkpoint bytes.
+
+| Author correction final gate | Actual result |
+| --- | --- |
+| SQLite and PostgreSQL source-matched package | Each backend:14 exact physical/native owners and11 protected product/query/contract owners-race, zero failures/skips |
+| Combined SQLite managed correction owners |30 exact parents across3 packages-race, zero failures/skips |
+| PostgreSQL managed corrections and actual restore |26 exact parents-race, including5 actual restore owners, zero failures/skips |
+| Complete panel Go regression |58 completed packages,51 tested packages,3151 passed parents, zero failures |
+| Complete frontend |206 files,1942 tests passed, zero failures/skips,740.69s |
+| Go vet / TypeScript / production frontend build |Passed |
+| Repository completion-verifier negative fixtures |3 groups passed; literal inventory matches14 physical and11 product parents |
+| Current source and package closure |4202 tracked input hashes unchanged throughout clean package/backend gates;821 frontend build-input hashes unchanged through full UI tests |
+
+The actual packaged panel SHA256 is `e1716495679ec3079f54684d25ae18b90aef60ec17621a4744251cf81c3a44d8`; packaged core SHA256 is `c0904ccc06dd3598882f22e764e2bbf51cb4228876cf30a5f140ec263543edc9`. Both report the full source checkpoint, Linux arm64 and Go1.27.1. Independent package verification, both locked module checks, frontend source/notice/asset closure and corresponding-source archive verification passed. All failed regression/fixture/race logs remain retained beside the final receipts under the execution evidence directory. The complete panel suite retains100 individually recorded conditional skipped cases; they provide no mandatory acceptance. The unchanged core has no source difference from the preceding complete929-parent/core-vet verification and was not rerun as a separate full suite.
+
+Delivered validation covers native Snell/mieru/SSH, exact multiplier billing, directional limits and Tunnel TCP/UDP forwarding. Proprietary Surge-device Snell interoperability remains unverified. Existing consumed local accounts and managed scope/version transitions still require the separate sealed handoff/version proof; refusal of an unproven migration is deliberate. Unrelated protocol/sidecar, additional platform and extended-load campaigns are outside this checkpoint. This validation does not claim those open boundaries are completed.
