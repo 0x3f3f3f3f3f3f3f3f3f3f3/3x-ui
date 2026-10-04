@@ -94,6 +94,7 @@ func allModels() []any {
 		&model.ClientPolicySource{},
 		&model.ClientPolicyTotal{},
 		&model.ClientPolicyAuthorityProjection{},
+		&model.ClientPolicyNodeMapping{},
 		&model.ClientPolicyReceipt{},
 		&model.ClientPolicyReset{},
 		&model.ClientTrafficResetBatch{},
