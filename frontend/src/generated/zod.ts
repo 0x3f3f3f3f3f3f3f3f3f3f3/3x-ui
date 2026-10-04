@@ -970,6 +970,32 @@ export const ManagedPolicyAccountStatusSchema = z.object({
 });
 export type ManagedPolicyAccountStatus = z.infer<typeof ManagedPolicyAccountStatusSchema>;
 
+export const ManagedPolicyContributionSchema = z.object({
+  bootId: z.string(),
+  grantId: z.string(),
+  grantSequence: z.string(),
+  nodeId: z.string(),
+  reportSequence: z.string(),
+  sealed: z.boolean(),
+  sourceId: z.string(),
+  usage: z.lazy(() => ClientPolicyUsageSchema),
+});
+export type ManagedPolicyContribution = z.infer<typeof ManagedPolicyContributionSchema>;
+
+export const ManagedPolicyContributionPageSchema = z.object({
+  contributions: z.array(z.lazy(() => ManagedPolicyContributionSchema)),
+  nextGrant: z.string(),
+});
+export type ManagedPolicyContributionPage = z.infer<typeof ManagedPolicyContributionPageSchema>;
+
+export const ManagedPolicyContributionRequestSchema = z.object({
+  afterGrant: z.string(),
+  clientId: z.string(),
+  limit: z.number().int(),
+  parentClientId: z.string(),
+});
+export type ManagedPolicyContributionRequest = z.infer<typeof ManagedPolicyContributionRequestSchema>;
+
 export const ManagedPolicyCoordinatorStatusSchema = z.object({
   active: z.boolean(),
   authorityId: z.string(),

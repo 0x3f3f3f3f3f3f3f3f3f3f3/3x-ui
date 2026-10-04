@@ -1,15 +1,18 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ThemeProvider } from '@/hooks/useTheme';
 import ClientFormModal from '@/pages/clients/ClientFormModal';
 import { ClientRecordSchema } from '@/schemas/client';
+import { HttpUtil, Msg } from '@/utils';
+
+afterEach(() => vi.restoreAllMocks());
 
 function openPolicyForm(
   policy?: Record<string, unknown>,
   mode: 'add' | 'edit' = 'edit',
-  bindings?: { nodeId?: number; attachedIds?: number[] },
+  bindings?: { nodeId?: number; attachedIds?: number[]; clientId?: string },
 ) {
   const save = vi.fn().mockResolvedValue({ success: true });
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -26,6 +29,7 @@ function openPolicyForm(
                   email: 'shared-policy',
                   uuid: '11111111-1111-1111-1111-111111111111',
                   enable: true,
+                  clientId: bindings?.clientId,
                   policy,
                 })
           }
@@ -56,6 +60,42 @@ async function submitPolicyForm(save: ReturnType<typeof vi.fn>) {
 }
 
 describe('client shared traffic policy form', () => {
+  it('shows enrolled default-node balances while preserving omitted scope on save', async () => {
+    const parentClientId = '11111111-1111-4111-8111-111111111111';
+    vi.spyOn(HttpUtil, 'post').mockResolvedValue(
+      new Msg(true, '', {
+        scope: 'node',
+        pendingEnrollment: false,
+        nextNode: '',
+        accounts: [
+          {
+            clientId: '22222222-2222-4222-8222-222222222222',
+            scope: 'node',
+            nodeId: 'enrolled-node-a',
+            policyVersion: '1',
+            enrolled: true,
+            policyPending: false,
+            deleted: false,
+            quotaUnlimited: false,
+            quotaBytes: '128',
+            usage: { upload: '1', download: '0', billed: '1.5', uncertain: '0' },
+            windowUsed: '1.5',
+            remaining: '126.5',
+            budget: { allocated: '62.5', frozen: '0', unallocated: '64' },
+          },
+        ],
+      }),
+    );
+    const save = openPolicyForm(
+      { uploadBytesPerSecond: 0, downloadBytesPerSecond: 0, multiplier: '1.5' },
+      'edit',
+      { clientId: parentClientId },
+    );
+    expect(await screen.findByText('enrolled-node-a')).toBeTruthy();
+    expect(screen.getByText('62.5 B')).toBeTruthy();
+    const saved = await submitPolicyForm(save);
+    expect(saved.policy).not.toHaveProperty('scope');
+  });
   it('preserves an explicit global scope through the save boundary', async () => {
     const policy = {
       scope: 'global',

@@ -3859,6 +3859,86 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "ManagedPolicyContribution": {
+    "properties": {
+      "bootId": {
+        "type": "string"
+      },
+      "grantId": {
+        "type": "string"
+      },
+      "grantSequence": {
+        "type": "string"
+      },
+      "nodeId": {
+        "type": "string"
+      },
+      "reportSequence": {
+        "type": "string"
+      },
+      "sealed": {
+        "type": "boolean"
+      },
+      "sourceId": {
+        "type": "string"
+      },
+      "usage": {
+        "$ref": "#/components/schemas/ClientPolicyUsage"
+      }
+    },
+    "required": [
+      "bootId",
+      "grantId",
+      "grantSequence",
+      "nodeId",
+      "reportSequence",
+      "sealed",
+      "sourceId",
+      "usage"
+    ],
+    "type": "object"
+  },
+  "ManagedPolicyContributionPage": {
+    "properties": {
+      "contributions": {
+        "items": {
+          "$ref": "#/components/schemas/ManagedPolicyContribution"
+        },
+        "type": "array"
+      },
+      "nextGrant": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contributions",
+      "nextGrant"
+    ],
+    "type": "object"
+  },
+  "ManagedPolicyContributionRequest": {
+    "properties": {
+      "afterGrant": {
+        "type": "string"
+      },
+      "clientId": {
+        "type": "string"
+      },
+      "limit": {
+        "type": "integer"
+      },
+      "parentClientId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "afterGrant",
+      "clientId",
+      "limit",
+      "parentClientId"
+    ],
+    "type": "object"
+  },
   "ManagedPolicyCoordinatorStatus": {
     "description": "ManagedPolicyCoordinatorStatus describes the explicitly activated owner.\nGenerations use decimal strings to preserve all integer bits in web clients.",
     "properties": {

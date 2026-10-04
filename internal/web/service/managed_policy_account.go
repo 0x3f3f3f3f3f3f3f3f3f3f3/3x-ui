@@ -103,12 +103,22 @@ func validateManagedAuthorityPolicyTx(tx *gorm.DB, journal *policyauthority.Jour
 }
 
 func (c *managedPolicyCoordinator) PrepareAccount(ctx context.Context, parentID string, member managedAuthorityMember) (policyauthority.ManagedAccountOrigin, *clientpolicy.PolicyConfig, error) {
+	return c.prepareAccount(ctx, parentID, member, nil)
+}
+
+func (c *managedPolicyCoordinator) prepareAccount(ctx context.Context, parentID string, member managedAuthorityMember, preflight func(*gorm.DB) error) (policyauthority.ManagedAccountOrigin, *clientpolicy.PolicyConfig, error) {
 	var origin policyauthority.ManagedAccountOrigin
 	if c == nil || ctx == nil || !validPolicySourceKey(member.NodeID) || !validPolicySourceKey(member.SourceID) {
 		return origin, nil, ErrClientPolicyLedger
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+	// Local preparation, restore and source admission use this same lifecycle
+	// owner. Hold it before the coordinator/SQL locks and never across peer RPC.
+	if !lock.TryLock() {
+		return origin, nil, ErrClientPolicyLedger
+	}
+	defer lock.Unlock()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.closed {
@@ -116,6 +126,11 @@ func (c *managedPolicyCoordinator) PrepareAccount(ctx context.Context, parentID 
 	}
 	var parent model.ClientRecord
 	err := c.withCurrent(ctx, func(tx *gorm.DB) error {
+		if preflight != nil {
+			if err := preflight(tx); err != nil {
+				return err
+			}
+		}
 		return tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&parent, "stable_id = ?", parentID).Error
 	})
 	if err != nil {
@@ -140,6 +155,11 @@ func (c *managedPolicyCoordinator) PrepareAccount(ctx context.Context, parentID 
 	// final SQL acknowledgement can then retry the same canonical UUID.
 	var policy *clientpolicy.PolicyConfig
 	err = c.withCurrent(ctx, func(tx *gorm.DB) error {
+		if preflight != nil {
+			if err := preflight(tx); err != nil {
+				return err
+			}
+		}
 		var current model.ClientRecord
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&current, "stable_id = ?", parentID).Error; err != nil {
 			return err
@@ -174,6 +194,9 @@ func (c *managedPolicyCoordinator) PrepareAccount(ctx context.Context, parentID 
 		}
 		retained, err := c.state.Journal.ManagedAccountOrigin(clientID)
 		if errors.Is(err, policyauthority.ErrNotFound) {
+			if err := checkManagedOriginalLocalAdmission(ctx, c.db, tx, parentID, clientID); err != nil {
+				return err
+			}
 			var historical int64
 			for _, table := range []string{"client_traffics", "node_client_traffics", "client_global_traffics"} {
 				if err := tx.Table(table).Where("email = ? AND (up <> 0 OR down <> 0)", current.Email).Count(&historical).Error; err != nil {

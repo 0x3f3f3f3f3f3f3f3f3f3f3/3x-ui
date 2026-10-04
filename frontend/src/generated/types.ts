@@ -907,6 +907,29 @@ export interface ManagedPolicyAccountStatus {
   windowUsed: string;
 }
 
+export interface ManagedPolicyContribution {
+  bootId: string;
+  grantId: string;
+  grantSequence: string;
+  nodeId: string;
+  reportSequence: string;
+  sealed: boolean;
+  sourceId: string;
+  usage: ClientPolicyUsage;
+}
+
+export interface ManagedPolicyContributionPage {
+  contributions: ManagedPolicyContribution[];
+  nextGrant: string;
+}
+
+export interface ManagedPolicyContributionRequest {
+  afterGrant: string;
+  clientId: string;
+  limit: number;
+  parentClientId: string;
+}
+
 export interface ManagedPolicyCoordinatorStatus {
   active: boolean;
   authorityId: string;

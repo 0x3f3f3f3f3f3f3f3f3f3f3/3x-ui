@@ -1025,6 +1025,47 @@ export const EXAMPLES: Record<string, unknown> = {
     },
     "windowUsed": ""
   },
+  "ManagedPolicyContribution": {
+    "bootId": "",
+    "grantId": "",
+    "grantSequence": "",
+    "nodeId": "",
+    "reportSequence": "",
+    "sealed": false,
+    "sourceId": "",
+    "usage": {
+      "billed": "4718592.5",
+      "download": "2097152",
+      "uncertain": "0",
+      "upload": "1048576"
+    }
+  },
+  "ManagedPolicyContributionPage": {
+    "contributions": [
+      {
+        "bootId": "",
+        "grantId": "",
+        "grantSequence": "",
+        "nodeId": "",
+        "reportSequence": "",
+        "sealed": false,
+        "sourceId": "",
+        "usage": {
+          "billed": "4718592.5",
+          "download": "2097152",
+          "uncertain": "0",
+          "upload": "1048576"
+        }
+      }
+    ],
+    "nextGrant": ""
+  },
+  "ManagedPolicyContributionRequest": {
+    "afterGrant": "",
+    "clientId": "",
+    "limit": 0,
+    "parentClientId": ""
+  },
   "ManagedPolicyCoordinatorStatus": {
     "active": false,
     "authorityId": "",

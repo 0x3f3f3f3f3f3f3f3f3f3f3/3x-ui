@@ -126,6 +126,14 @@ func TestManagedPolicyAccountProvisioningUsesOriginalScope(t *testing.T) {
 		if err != nil || account.Usage != (policyauthority.Usage{}) || account.HeldCapacity != 0 || account.Policy.QuotaBytes != 128 {
 			t.Fatalf("provisioning minted grants/history: %+v/%v", account, err)
 		}
+		if o.Scope == "global" {
+			for _, member := range []managedAuthorityMember{a, b} {
+				proof := policyauthority.ClientMapping{Authority: c.state.Journal.Identity(), NodeAnchor: policyauthority.Identity{AuthorityID: "original-" + member.NodeID, Generation: 1}, NodeID: member.NodeID, SourceID: member.SourceID, GlobalClientID: o.ClientID, LocalClientID: uuid.NewString(), GlobalPolicyVersion: o.InitialPolicyVersion, LocalPolicyVersion: 1, PolicyDigest: o.PolicyDigest}
+				if err := c.state.Journal.RecordClientMapping(policyauthority.ClientMappingCoordinator, proof); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
 		strategy, err := newManagedJournalAllocationStrategy(c.state.Journal, []managedAuthorityMember{a, b})
 		if err != nil {
 			t.Fatal(err)

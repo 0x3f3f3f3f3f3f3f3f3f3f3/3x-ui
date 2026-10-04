@@ -3885,6 +3885,86 @@
         ],
         "type": "object"
       },
+      "ManagedPolicyContribution": {
+        "properties": {
+          "bootId": {
+            "type": "string"
+          },
+          "grantId": {
+            "type": "string"
+          },
+          "grantSequence": {
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "reportSequence": {
+            "type": "string"
+          },
+          "sealed": {
+            "type": "boolean"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/ClientPolicyUsage"
+          }
+        },
+        "required": [
+          "bootId",
+          "grantId",
+          "grantSequence",
+          "nodeId",
+          "reportSequence",
+          "sealed",
+          "sourceId",
+          "usage"
+        ],
+        "type": "object"
+      },
+      "ManagedPolicyContributionPage": {
+        "properties": {
+          "contributions": {
+            "items": {
+              "$ref": "#/components/schemas/ManagedPolicyContribution"
+            },
+            "type": "array"
+          },
+          "nextGrant": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "contributions",
+          "nextGrant"
+        ],
+        "type": "object"
+      },
+      "ManagedPolicyContributionRequest": {
+        "properties": {
+          "afterGrant": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "parentClientId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "afterGrant",
+          "clientId",
+          "limit",
+          "parentClientId"
+        ],
+        "type": "object"
+      },
       "ManagedPolicyCoordinatorStatus": {
         "description": "ManagedPolicyCoordinatorStatus describes the explicitly activated owner.\nGenerations use decimal strings to preserve all integer bits in web clients.",
         "properties": {
@@ -9745,6 +9825,72 @@
                     "nextNode": "",
                     "pendingEnrollment": false,
                     "scope": "node"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/server/clientPolicyCoordinator/contributions": {
+      "post": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Read original per-node cumulative grant contributions.",
+        "operationId": "post_panel_api_server_clientPolicyCoordinator_contributions",
+        "description": "Requires HTTPS and an admin token or an authenticated session with CSRF protection. Each page examines at most 16 original grants; continue using nextGrant even if the page has no matching contributions. Counters and fractional billing are original cumulative receipts, without multiplying again or adding account seeds. Source, boot and grant/report sequences remain available after restart and deletion.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagedPolicyContributionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/ManagedPolicyContributionPage"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "contributions": [
+                      {
+                        "bootId": "",
+                        "grantId": "",
+                        "grantSequence": "",
+                        "nodeId": "",
+                        "reportSequence": "",
+                        "sealed": false,
+                        "sourceId": "",
+                        "usage": {
+                          "billed": "4718592.5",
+                          "download": "2097152",
+                          "uncertain": "0",
+                          "upload": "1048576"
+                        }
+                      }
+                    ],
+                    "nextGrant": ""
                   }
                 }
               }

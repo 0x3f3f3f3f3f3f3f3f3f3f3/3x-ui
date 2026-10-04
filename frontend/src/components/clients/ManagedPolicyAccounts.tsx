@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { ManagedPolicyAccountPageSchema } from '@/generated/zod';
 import { HttpUtil } from '@/utils';
+import ManagedPolicyContributions from './ManagedPolicyContributions';
 
 export default function ManagedPolicyAccounts({ parentClientId }: { parentClientId: string }) {
   const { t } = useTranslation();
@@ -50,6 +51,21 @@ export default function ManagedPolicyAccounts({ parentClientId }: { parentClient
               column={1}
               items={[
                 {
+                  key: 'upload',
+                  label: t('pages.clients.accounting.lifetimeUpload'),
+                  children: `${account.usage.upload} B`,
+                },
+                {
+                  key: 'download',
+                  label: t('pages.clients.accounting.lifetimeDownload'),
+                  children: `${account.usage.download} B`,
+                },
+                {
+                  key: 'lifetimeBilled',
+                  label: t('pages.clients.accounting.lifetimeBilled'),
+                  children: `${account.usage.billed} B`,
+                },
+                {
                   key: 'billed',
                   label: t('pages.clients.accounting.periodBilled'),
                   children: `${account.windowUsed} B`,
@@ -84,6 +100,12 @@ export default function ManagedPolicyAccounts({ parentClientId }: { parentClient
                 },
               ]}
             />
+            {(account.enrolled || account.deleted) && (
+              <ManagedPolicyContributions
+                parentClientId={parentClientId}
+                clientId={account.clientId}
+              />
+            )}
           </Card>
         ))}
       {query.hasNextPage && (

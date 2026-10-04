@@ -16,6 +16,10 @@ func (c *managedPolicyCoordinator) ConnectNode(ctx context.Context, inventoryID 
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
+	if err := c.acquireConnection(ctx); err != nil {
+		return nil, err
+	}
+	defer c.connectionMu.Unlock()
 	api, err := c.DiscoverNode(ctx, inventoryID, member)
 	if err != nil {
 		return nil, err

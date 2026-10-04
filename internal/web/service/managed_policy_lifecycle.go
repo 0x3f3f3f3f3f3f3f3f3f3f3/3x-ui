@@ -52,6 +52,7 @@ func getManagedPolicyCoordinator(ctx context.Context, activate bool) (*managedPo
 		return nil, err
 	}
 	managedCoordinatorOwner.coordinator = c
+	c.startReconciler()
 	return c, nil
 }
 

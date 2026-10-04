@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,6 +15,8 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/policyauthority"
+	"github.com/mhsanaei/3x-ui/v3/internal/web/entity"
+	panelruntime "github.com/mhsanaei/3x-ui/v3/internal/web/runtime"
 )
 
 func TestManagedPolicyProductStatusRequiresExplicitOriginalActivation(t *testing.T) {
@@ -118,6 +122,17 @@ func TestManagedPolicyProductAccountPagesPreserveOriginalFractionAndScope(t *tes
 	if got.ClientID != origin.ClientID || got.Scope != "global" || got.PolicyVersion != strconv.FormatUint(origin.InitialPolicyVersion, 10) || got.Usage.Billed != "1.5" || got.Budget.Allocated != "62.5" || got.Budget.Unallocated == nil || *got.Budget.Unallocated != "64" || got.Remaining == nil || *got.Remaining != "126.5" {
 		t.Fatalf("original fraction/budget lost: %+v", got)
 	}
+	contributions, err := svc.Contributions(ctx, ManagedPolicyContributionRequest{ParentClientID: parent.StableID, ClientID: origin.ClientID, Limit: 16})
+	if err != nil || len(contributions.Contributions) != 1 {
+		t.Fatal("original contribution unavailable", err)
+	}
+	contribution := contributions.Contributions[0]
+	if contribution.NodeID != a.NodeID || contribution.SourceID != a.SourceID || contribution.BootID != boot.BootID || contribution.GrantID != grant.GrantID || contribution.GrantSequence != "1" || contribution.ReportSequence != "1" || contribution.Usage.Upload != "1" || contribution.Usage.Download != "0" || contribution.Usage.Billed != "1.5" {
+		t.Fatalf("original contribution changed: %+v", contribution)
+	}
+	if _, err := svc.Contributions(ctx, ManagedPolicyContributionRequest{ParentClientID: nodeParent.StableID, ClientID: origin.ClientID, Limit: 16}); err == nil {
+		t.Fatal("another parent disclosed original contributions")
+	}
 	page, err = svc.Accounts(ctx, ManagedPolicyAccountPageRequest{ParentClientID: nodeParent.StableID, Limit: 1})
 	if err != nil || len(page.Accounts) != 1 || page.Accounts[0].ClientID != na.ClientID || page.NextNode != a.NodeID {
 		t.Fatal("first independent node account lost", err)
@@ -155,4 +170,56 @@ func TestManagedPolicyProductEnrollmentRejectsInactiveAndMalformedRequests(t *te
 	if result, err := svc.Enroll(nil, request); err == nil || result != nil {
 		t.Fatal("nil enrollment context admitted")
 	}
+}
+
+func TestManagedPolicyProductMaximumAccountPageContinuesWithinEnvelope(t *testing.T) {
+	setupPolicyLedgerDB(t)
+	ctx := context.Background()
+	t.Cleanup(func() { _ = StopManagedPolicyCoordinator(ctx) })
+	parent := model.ClientRecord{Email: "maximum-node-page", Enable: true, TotalGB: 128}
+	if err := database.GetDB().Create(&parent).Error; err != nil {
+		t.Fatal(err)
+	}
+	c, err := getManagedPolicyCoordinator(ctx, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for n := 0; n < 128; n++ {
+		member := managedAuthorityMember{NodeID: fmt.Sprintf("maximum-node-%03d", n), SourceID: fmt.Sprintf("maximum-source-%03d", n)}
+		if _, _, err := c.PrepareAccount(ctx, parent.StableID, member); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seen := map[string]bool{}
+	cursor := ""
+	for n := 0; n < 129; n++ {
+		page, err := (&ManagedPolicyCoordinatorService{}).Accounts(ctx, ManagedPolicyAccountPageRequest{ParentClientID: parent.StableID, AfterNode: cursor, Limit: 128})
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := json.Marshal(entity.Msg{Success: true, Obj: page})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(raw) > panelruntime.NodeAuthorityMessageLimit {
+			t.Fatalf("valid maximum page exceeded envelope: %d", len(raw))
+		}
+		for _, a := range page.Accounts {
+			if seen[a.NodeID] || a.Usage.Upload != "0" || a.Usage.Download != "0" || a.Usage.Billed != "0" || a.Budget.Allocated != "0" {
+				t.Fatalf("duplicated or fabricated balance: %+v", a)
+			}
+			seen[a.NodeID] = true
+		}
+		if page.NextNode == "" {
+			break
+		}
+		if page.NextNode == cursor || len(page.Accounts) == 0 {
+			t.Fatal("continuation made no progress")
+		}
+		cursor = page.NextNode
+	}
+	if len(seen) != 128 {
+		t.Fatalf("continuation lost original accounts: %d", len(seen))
+	}
+	t.Logf("managed policy maximum page backend: %s", database.GetDB().Dialector.Name())
 }

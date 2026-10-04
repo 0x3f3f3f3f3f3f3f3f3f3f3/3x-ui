@@ -19,13 +19,20 @@ import (
 const managedCoordinatorSourceKey = "managed-coordinator"
 
 type managedPolicyCoordinator struct {
-	mu          sync.Mutex
-	db          *gorm.DB
-	dir         string
-	state       *durableAuthorityState
-	controllers map[string]*authorityController
-	discovered  map[string]managedNodeDiscovery
-	closed      bool
+	mu                       sync.Mutex
+	connectionMu             sync.Mutex
+	db                       *gorm.DB
+	dir                      string
+	state                    *durableAuthorityState
+	controllers              map[string]*authorityController
+	discovered               map[string]managedNodeDiscovery
+	closed                   bool
+	reconcileMu              sync.Mutex
+	reconcileCancel          context.CancelFunc
+	reconcileDone            chan struct{}
+	deletionParentCursor     string
+	deletionNodeCursor       string
+	deletionControllerCursor string
 }
 
 func openManagedPolicyCoordinator(ctx context.Context, expected *gorm.DB, dir string) (*managedPolicyCoordinator, error) {
@@ -34,7 +41,7 @@ func openManagedPolicyCoordinator(ctx context.Context, expected *gorm.DB, dir st
 	}
 	var source model.ClientPolicyCoordinatorSource
 	err := runSerializedTxContextForDatabase(ctx, expected, func(tx *gorm.DB) error {
-		if err := os.MkdirAll(dir, 0700); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return err
 		}
 		if err := checkAuthorityDirectory(dir); err != nil {
@@ -143,6 +150,9 @@ func (c *managedPolicyCoordinator) Close(ctx context.Context) error {
 		return ErrClientPolicyLedger
 	}
 	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := c.stopReconciler(ctx); err != nil {
 		return err
 	}
 	c.mu.Lock()

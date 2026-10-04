@@ -17,6 +17,7 @@ PARENTS = {
         'TestManagedPolicyTwoPhysicalNodesActualDirectionalRateAndBurst',
         'TestManagedPolicyTwoPhysicalNodesActualPartitionExpiryAndCoordinatorRecovery',
         'TestManagedPolicyTwoPhysicalNodesActualRestartRetainsUnsealedBudget',
+        'TestManagedPolicyTwoPhysicalNodesActualAutomaticRecovery',
         'TestManagedPolicyTwoPhysicalNodesActualDeletionClosesOriginalAccounts',
         'TestManagedPolicyTwoPhysicalNodesActualPartitionedDeletionRecovery',
         'TestMieruHTTPExportRealCoreLifecycle',
@@ -29,6 +30,7 @@ PARENTS = {
         PREFIX + 'internal/web/service': (
             'TestManagedPolicyProductStatusRequiresExplicitOriginalActivation',
             'TestManagedPolicyProductAccountPagesPreserveOriginalFractionAndScope',
+            'TestManagedPolicyProductMaximumAccountPageContinuesWithinEnvelope',
             'TestManagedPolicyProductEnrollmentRejectsInactiveAndMalformedRequests',
         ),
         PREFIX + 'internal/web/controller': (

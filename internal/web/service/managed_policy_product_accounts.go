@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strconv"
 	"time"
@@ -104,6 +105,7 @@ func (s *ManagedPolicyCoordinatorService) Accounts(ctx context.Context, request 
 			if len(connections) > 1000 {
 				return ErrClientPolicyLedger
 			}
+			encodedBytes := 0
 			for _, snapshot := range page {
 				origin, account := snapshot.Origin, snapshot.Account
 				if parentErr != nil && !account.Deleted {
@@ -149,6 +151,19 @@ func (s *ManagedPolicyCoordinatorService) Accounts(ctx context.Context, request 
 					}
 					row.Enrolled = true
 				}
+				encoded, err := json.Marshal(row)
+				if err != nil {
+					return err
+				}
+				// Reserve room for the outer message, metadata and continuation cursor.
+				if encodedBytes+len(encoded)+1 > panelruntime.NodeAuthorityMessageLimit-1024 {
+					if len(result.Accounts) == 0 {
+						return ErrClientPolicyLedger
+					}
+					result.NextNode = result.Accounts[len(result.Accounts)-1].NodeID
+					break
+				}
+				encodedBytes += len(encoded) + 1
 				result.Scope = origin.Scope
 				result.Accounts = append(result.Accounts, row)
 				if origin.Scope == "node" && len(page) == request.Limit {

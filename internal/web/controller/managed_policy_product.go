@@ -31,6 +31,7 @@ func NewManagedPolicyAPIController(g *gin.RouterGroup) {
 	api.GET("", managedPolicyStatus)
 	api.POST("/activate", activateManagedPolicy)
 	api.POST("/accounts", managedPolicyAccounts)
+	api.POST("/contributions", managedPolicyContributions)
 	api.POST("/enroll", enrollManagedPolicy)
 }
 
@@ -87,4 +88,16 @@ func writeManagedPolicyResult(c *gin.Context, result any, err error) {
 		return
 	}
 	c.Data(http.StatusOK, "application/json; charset=utf-8", raw)
+}
+
+func managedPolicyContributions(c *gin.Context) {
+	fields, err := panelruntime.DecodeNodeAuthorityObject(c.Request.Body, "parentClientId", "clientId", "afterGrant", "limit")
+	raw, encodeErr := json.Marshal(fields)
+	var request service.ManagedPolicyContributionRequest
+	if err != nil || encodeErr != nil || json.Unmarshal(raw, &request) != nil || request.Validate() != nil {
+		pureJsonMsg(c, http.StatusBadRequest, false, errManagedPolicyUnavailable.Error())
+		return
+	}
+	result, err := (&service.ManagedPolicyCoordinatorService{}).Contributions(c.Request.Context(), request)
+	writeManagedPolicyResult(c, result, err)
 }

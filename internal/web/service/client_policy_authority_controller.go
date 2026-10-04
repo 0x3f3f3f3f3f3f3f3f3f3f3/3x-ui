@@ -31,19 +31,20 @@ type authorityAllocationStrategy interface {
 }
 
 type authorityController struct {
-	mu                 sync.Mutex
-	execution          *authorityExecution
-	api                authorityDemandAPI
-	allocationStrategy authorityAllocationStrategy
-	active             map[string]*controllerGrant
-	pending            map[string]*command.AuthorityRequest
-	suspended          map[string]bool
-	retirementCursor   map[string]string
-	stateMu            sync.Mutex
-	cancel             context.CancelFunc
-	done               chan struct{}
-	stopped            bool
-	lastError          error
+	mu                  sync.Mutex
+	execution           *authorityExecution
+	api                 authorityDemandAPI
+	allocationStrategy  authorityAllocationStrategy
+	active              map[string]*controllerGrant
+	pending             map[string]*command.AuthorityRequest
+	suspended           map[string]bool
+	retirementCursor    map[string]string
+	deletionGrantCursor string
+	stateMu             sync.Mutex
+	cancel              context.CancelFunc
+	done                chan struct{}
+	stopped             bool
+	lastError           error
 }
 
 func (c *authorityController) Start() error {
@@ -85,6 +86,7 @@ func (c *authorityController) run(ctx context.Context, done chan struct{}) {
 		}
 	}
 }
+
 func (c *authorityController) join(ctx context.Context) error {
 	if c == nil || ctx == nil {
 		return ErrClientPolicyLedger
@@ -193,6 +195,7 @@ func controllerCapacity(account policyauthority.Account) uint64 {
 	}
 	return min(left-fraction, 2<<20)
 }
+
 func (c *authorityController) ProcessRequests(ctx context.Context) error {
 	if c == nil || ctx == nil {
 		return ErrClientPolicyLedger
@@ -219,6 +222,7 @@ func (c *authorityController) ProcessRequests(ctx context.Context) error {
 	}
 	return errors.Join(pendingErr, c.HandleRequests(ctx, page))
 }
+
 func (c *authorityController) HandleRequests(ctx context.Context, page *command.AuthorityRequests) error {
 	if c == nil || ctx == nil || page == nil || page.InstanceId != c.execution.boot.SourceID || page.BootId != c.execution.boot.BootID || len(page.Requests) > 128 {
 		return ErrClientPolicyLedger
@@ -349,6 +353,7 @@ func (c *authorityController) rememberPendingLocked(request *command.AuthorityRe
 	c.pending[request.RequestId] = proto.Clone(request).(*command.AuthorityRequest)
 	return nil
 }
+
 func (c *authorityController) SettleAndRenew(ctx context.Context) error {
 	if c == nil || ctx == nil {
 		return ErrClientPolicyLedger

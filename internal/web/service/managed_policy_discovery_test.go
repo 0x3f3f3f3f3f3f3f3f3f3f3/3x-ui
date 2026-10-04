@@ -121,9 +121,37 @@ func TestManagedPolicyDiscoveryPinsActualInventorySourceRoleAndBoot(t *testing.T
 		t.Fatal(err)
 	}
 	member := managedAuthorityMember{NodeID: "managed-actual-node", SourceID: caps.InstanceId}
+	c.startReconciler()
 	api, err := c.DiscoverNode(ctx, inventory.Id, member)
 	if err != nil || api == nil || api.Capabilities().InstanceId != caps.InstanceId || api.Capabilities().BootId != caps.BootId {
 		t.Fatalf("actual TLS source/boot unavailable: %v", err)
+	}
+	// An unproved first source must not consume the immutable parent/node
+	// binding. Both failures must leave a correct-source retry possible.
+	for _, fault := range []string{"wrong-source", "unavailable-inventory"} {
+		t.Run("first-enrollment-"+fault, func(t *testing.T) {
+			parent := model.ClientRecord{Email: "preflight-" + fault, Enable: true, TotalGB: local.TotalGB, Policy: local.Policy.Clone()}
+			if err := db.Create(&parent).Error; err != nil {
+				t.Fatal(err)
+			}
+			bad, inventoryID := member, inventory.Id
+			if fault == "wrong-source" {
+				bad.SourceID = "mistyped-source"
+			} else {
+				inventoryID = inventory.Id + 100000
+			}
+			if proof, err := c.EnrollAccount(ctx, inventoryID, parent.StableID, bad, local.StableID, 1); err == nil || proof != nil {
+				t.Fatal("unproved inventory/source enrolled")
+			}
+			page, err := c.state.Journal.ManagedAccountPage(parent.StableID, "", 1)
+			if err != nil || len(page) != 0 {
+				t.Fatalf("failed discovery permanently bound original node origin: %+v/%v", page, err)
+			}
+			origin, _, err := c.PrepareAccount(ctx, parent.StableID, member)
+			if err != nil || origin.SourceID != caps.InstanceId || origin.NodeID != member.NodeID {
+				t.Fatalf("proved-source retry remains poisoned: %+v/%v", origin, err)
+			}
+		})
 	}
 	scope := model.ClientPolicyScopeGlobal
 	global := model.ClientRecord{StableID: uuid.NewString(), Email: "managed-actual-global", Enable: true, TotalGB: local.TotalGB, Policy: local.Policy.Clone(), DesiredPolicyVersion: 7}
@@ -296,6 +324,9 @@ func TestManagedPolicyDiscoveryPinsActualInventorySourceRoleAndBoot(t *testing.T
 	}
 	// Lose the process-local controller after traffic without sealing its
 	// original allocation. Reopening must reconcile the same actual core boot.
+	if err := c.stopReconciler(ctx); err != nil {
+		t.Fatal(err)
+	}
 	if err := controller.join(ctx); err != nil {
 		t.Fatal(err)
 	}

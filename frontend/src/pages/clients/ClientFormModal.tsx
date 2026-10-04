@@ -1117,7 +1117,7 @@ export default function ClientFormModal({
                           ]}
                         />
                       </FormField>
-                      {isEdit && client?.clientId && client.policy?.scope != null && (
+                      {isEdit && client?.clientId && !policyUnsupported && (
                         <ManagedPolicyAccounts parentClientId={client.clientId} />
                       )}
                       <Row gutter={16}>

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"slices"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/policyauthority"
@@ -86,6 +87,26 @@ func (s *managedAllocationStrategy) Allocate(account policyauthority.Account, bo
 			member := managedAuthorityMember{NodeID: origin.NodeID, SourceID: origin.SourceID}
 			return (&managedAllocationStrategy{members: []managedAuthorityMember{member}}).Allocate(account, boot)
 		}
+		// Original enrollment, rather than other customers' configured nodes,
+		// chooses this canonical account's stable allocation seats.
+		var members []managedAuthorityMember
+		for _, member := range s.members {
+			proof, err := s.journal.LookupClientMappingAccount(policyauthority.ClientMappingCoordinator, member.SourceID, account.Seed.ClientID)
+			if errors.Is(err, policyauthority.ErrNotFound) {
+				continue
+			}
+			if err != nil {
+				return 0, policyauthority.Direction{}, policyauthority.Direction{}, err
+			}
+			if proof.NodeID != member.NodeID {
+				return 0, policyauthority.Direction{}, policyauthority.Direction{}, policyauthority.ErrIdentity
+			}
+			members = append(members, member)
+		}
+		if len(members) == 0 {
+			return 0, policyauthority.Direction{}, policyauthority.Direction{}, policyauthority.ErrNotFound
+		}
+		return (&managedAllocationStrategy{members: members}).Allocate(account, boot)
 	}
 	count := uint64(len(s.members))
 	upload := managedDirectionShare(account.Policy.Upload, uint64(rank), count)

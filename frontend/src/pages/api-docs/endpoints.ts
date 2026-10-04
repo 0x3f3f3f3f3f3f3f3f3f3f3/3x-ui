@@ -842,6 +842,15 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'POST',
+        path: '/panel/api/server/clientPolicyCoordinator/contributions',
+        summary: 'Read original per-node cumulative grant contributions.',
+        description:
+          'Requires HTTPS and an admin token or an authenticated session with CSRF protection. Each page examines at most 16 original grants; continue using nextGrant even if the page has no matching contributions. Counters and fractional billing are original cumulative receipts, without multiplying again or adding account seeds. Source, boot and grant/report sequences remain available after restart and deletion.',
+        requestSchema: { $ref: '#/components/schemas/ManagedPolicyContributionRequest' },
+        responseSchema: 'ManagedPolicyContributionPage',
+      },
+      {
+        method: 'POST',
         path: '/panel/api/server/clientPolicyCoordinator/enroll',
         summary:
           'Enroll a fresh client on an authenticated inventory node and connect its traffic controller.',
