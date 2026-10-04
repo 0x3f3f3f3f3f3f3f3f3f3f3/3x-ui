@@ -35,7 +35,7 @@ Actual coordinator outage, partition/lease expiry, duplicate/out-of-order report
 
 - [x] Own actual outage/partition/expiry/restart/delete/original-source recovery without budget replenishment or duplicate billing.
 - [x] Exact CI/backend parents, zero mandatory skips and final frozen source/binary/probe hashes pass.
-- [ ] Full Go/old writers/vet/frontend/YAML/paired checks pass; commit/task completion.
+- [x] Full Go/old writers/vet/frontend/YAML/paired checks pass; commit/task completion.
 - [ ] One phase review and one author correction, normal authorized feature push and exact remote SHA; continue original handoff/version/reset/sidecar/distribution/scale/final work.
 
 ## Mandatory following handoff/version boundary
